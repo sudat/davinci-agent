@@ -1,0 +1,12 @@
+.omo/
+private/
+video-pipeline/.venv/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+video-pipeline/jobs/
+*.mp4
+*.mov
+*.mkv
+.DS_Store
