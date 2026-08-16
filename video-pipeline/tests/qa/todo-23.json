@@ -1,0 +1,238 @@
+[
+  {
+    "case_id": "happy-cfr-identity",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "build",
+      "--manifest",
+      "tests/fixtures/manifests/phase-0b/p0b-rotate90.json",
+      "--fixture-id",
+      "p0b-rotate90",
+      "--lock",
+      "config/toolchains/phase-0b-v1.json",
+      "--ffmpeg",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/ffmpeg-7.1.1/bin/ffmpeg",
+      "--ffprobe",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/ffmpeg-7.1.1/bin/ffprobe",
+      "--media-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/fixtures",
+      "--work-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/work",
+      "--out",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/maps/p0b-rotate90.conform-map.json",
+      "--replay"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/maps/p0b-rotate90.conform-map.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/work/records/p0b-rotate90.normalize-record.json"
+    ],
+    "expected_observation": "conform-map: committed"
+  },
+  {
+    "case_id": "happy-vfr-table",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "build",
+      "--manifest",
+      "tests/fixtures/manifests/phase-0b/p0b-vfr-2-3-cadence.json",
+      "--fixture-id",
+      "p0b-vfr-2-3-cadence",
+      "--lock",
+      "config/toolchains/phase-0b-v1.json",
+      "--ffmpeg",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/ffmpeg-7.1.1/bin/ffmpeg",
+      "--ffprobe",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/ffmpeg-7.1.1/bin/ffprobe",
+      "--media-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/fixtures",
+      "--work-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/work",
+      "--out",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/maps/p0b-vfr-2-3-cadence.conform-map.json",
+      "--replay"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/maps/p0b-vfr-2-3-cadence.conform-map.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/work/records/p0b-vfr-2-3-cadence.normalize-record.json"
+    ],
+    "expected_observation": "conform-map: committed"
+  },
+  {
+    "case_id": "happy-audio-offset",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "build",
+      "--manifest",
+      "tests/fixtures/manifests/phase-0b/p0b-audio-offset1024.json",
+      "--fixture-id",
+      "p0b-audio-offset1024",
+      "--lock",
+      "config/toolchains/phase-0b-v1.json",
+      "--ffmpeg",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/ffmpeg-7.1.1/bin/ffmpeg",
+      "--ffprobe",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/ffmpeg-7.1.1/bin/ffprobe",
+      "--media-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/fixtures",
+      "--work-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/work",
+      "--out",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/maps/p0b-audio-offset1024.conform-map.json",
+      "--audio-content-offset",
+      "1024",
+      "--replay"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/maps/p0b-audio-offset1024.conform-map.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/work/records/p0b-audio-offset1024.normalize-record.json"
+    ],
+    "expected_observation": "conform-map: committed"
+  },
+  {
+    "case_id": "failure-gap",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "fault",
+      "--scenario",
+      "video-table-gap",
+      "--write",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/video-table-gap.conform-map.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 2,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/video-table-gap.conform-map.json"
+    ],
+    "expected_observation": "reason=coverage_gap"
+  },
+  {
+    "case_id": "failure-duplicate-without-report",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "fault",
+      "--scenario",
+      "unreported-duplicate",
+      "--write",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/unreported-duplicate.conform-map.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 2,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/unreported-duplicate.conform-map.json"
+    ],
+    "expected_observation": "reason=unreported_duplicate"
+  },
+  {
+    "case_id": "failure-non-monotonic-mapping",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "fault",
+      "--scenario",
+      "non-monotonic-table",
+      "--write",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/non-monotonic-table.conform-map.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 2,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/non-monotonic-table.conform-map.json"
+    ],
+    "expected_observation": "reason=non_monotonic_table"
+  },
+  {
+    "case_id": "failure-wrong-source-id",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "fault",
+      "--scenario",
+      "wrong-source-id",
+      "--write",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/wrong-source-id.conform-map.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 2,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/wrong-source-id.conform-map.json"
+    ],
+    "expected_observation": "reason=identity_mismatch"
+  },
+  {
+    "case_id": "failure-out-of-range-query",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.conform.map_cli",
+      "fault",
+      "--scenario",
+      "out-of-range-query",
+      "--write",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/out-of-range-query.conform-map.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 2,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-23/faults/out-of-range-query.conform-map.json"
+    ],
+    "expected_observation": "reason=coordinate_range"
+  }
+]
