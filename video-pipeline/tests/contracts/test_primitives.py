@@ -96,7 +96,25 @@ def test_discriminated_parse_when_build_report_tag_is_known() -> None:
         + SHA256
         + '","output_hash":"'
         + SHA256
-        + '","warnings":[],"failures":[]}'
+        + '","render_job":{"job_id":"job-1","created_at":"2026-01-01T00:00:00.000+00:00",'
+        '"started_at":"2026-01-01T00:00:01.000+00:00",'
+        '"completed_at":"2026-01-01T00:00:02.000+00:00","poll_count":1,'
+        '"completion_percentage":100,"completion_source":"CompletionPercentage",'
+        '"note":"completion via CompletionPercentage only"},'
+        '"render_output":{"output_path":"/renders/out.mp4","byte_size":1,'
+        '"ffprobe":{"streams":[]},"decode":{"argv":["ffmpeg","-f","null"],'
+        '"exit_code":0,"stderr_tail":""}},'
+        '"bindings":{"host_report_path":"/host.json","host_report_sha256":"'
+        + SHA256
+        + '","resolve_product":"DaVinci Resolve Studio","resolve_version":"21.0.4",'
+        '"resolve_build":"21.0.40005","adapter_module":"services.resolve_bridge",'
+        '"adapter_version":"git:abc","manifest_path":"/manifest.json","manifest_sha256":"'
+        + SHA256
+        + '","ffmpeg_path":"/ffmpeg","ffmpeg_sha256":"'
+        + SHA256
+        + '","ffprobe_path":"/ffprobe","ffprobe_sha256":"'
+        + SHA256
+        + '"},"warnings":[],"failures":[]}'
     )
 
     evidence = EVIDENCE_0A_ADAPTER.validate_json(raw)

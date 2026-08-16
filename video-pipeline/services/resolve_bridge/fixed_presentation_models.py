@@ -15,6 +15,7 @@ the origin silently hides them from the render engine.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal, Protocol
 
 from pydantic import Field
@@ -32,10 +33,27 @@ READBACK_NAME: Final = "readback-table.json"
 FFPROBE_NAME: Final = "render-ffprobe.json"
 SHA_NAME: Final = "render-sha256.txt"
 
+
+@dataclass(frozen=True, slots=True)
+class SpikeRunOutcome:
+    """Raw consolidation of one fixed-presentation spike run.
+
+    Carries the human-readable report plus the raw readback snapshot and
+    comparison outcome the item-level Build-Report writer consumes.
+    """
+
+    report: FixedPresentationReport
+    render_summary: str
+    snapshot: TimelineSnapshot
+    outcome: CompareOutcome
+
+
 if TYPE_CHECKING:
+    from services.resolve_bridge.base_cut_compare import CompareOutcome
     from services.resolve_bridge.base_cut_models import (
         BaseCutMediaPoolItemApi,
         BaseCutTimelineItemApi,
+        TimelineSnapshot,
     )
 
 StrategyRung = Literal["direct", "interchange", "template", "external"]
@@ -191,6 +209,11 @@ class RenderEvidence(StrictModel):
     report: FfprobeReport
     marks_in: int | None
     marks_out: int | None
+    job_created_at: str = ""
+    job_started_at: str = ""
+    job_completed_at: str = ""
+    poll_count: int = 0
+    completion_percentage: int = -1
 
 
 class FixedPresentationMismatch(StrictModel):

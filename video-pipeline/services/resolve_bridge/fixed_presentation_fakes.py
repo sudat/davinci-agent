@@ -25,13 +25,21 @@ from services.resolve_bridge.fixed_presentation_models import (
     FfprobeReport,
     FfprobeStream,
 )
-from services.resolve_bridge.fixed_presentation_tools import RenderError, SubtitlePacket
+from services.resolve_bridge.fixed_presentation_tools import (
+    DecodeOutcome,
+    RenderError,
+    SubtitlePacket,
+)
 
 if TYPE_CHECKING:
     from services.resolve_bridge.base_cut_models import (
         BaseCutMediaPoolItemApi,
         BaseCutTimelineItemApi,
     )
+
+MISSING_AUDIO_RECORD_FRAME = 330 + 108000
+AUDIO_MEDIA_TYPE = 2
+FAKE_RENDER_MAGIC = b"fake-render-output"
 
 
 class FakeFpTimeline(FakeBaseCutTimeline):
@@ -57,8 +65,9 @@ class FakeFpTimeline(FakeBaseCutTimeline):
 
 
 class FakeFpMediaPool(FakeBaseCutMediaPool):
-    def __init__(self) -> None:
-        super().__init__("")
+    def __init__(self, fault: str = "") -> None:
+        super().__init__(fault)
+        self._fp_fault = fault
         self._srt_items: set[str] = set()
 
     def CreateEmptyTimeline(self, name: str) -> FakeFpTimeline:
@@ -79,7 +88,18 @@ class FakeFpMediaPool(FakeBaseCutMediaPool):
     def AppendToTimeline(self, clip_infos: list[dict[str, object]]) -> list[BaseCutTimelineItemApi]:
         if any(self._is_srt(info) for info in clip_infos):
             return []
-        return super().AppendToTimeline(clip_infos)
+        added = super().AppendToTimeline(clip_infos)
+        if self._fp_fault == "missing_item":
+            for info, item in zip(clip_infos, added, strict=True):
+                if self._is_missing_item_target(info):
+                    timeline = self._timeline
+                    if timeline is not None:
+                        timeline.drop_item(item.GetUniqueId())
+        return added
+
+    def _is_missing_item_target(self, info: dict[str, object]) -> bool:
+        record = info.get("recordFrame")
+        return info.get("mediaType") == AUDIO_MEDIA_TYPE and record == MISSING_AUDIO_RECORD_FRAME
 
     def _is_srt(self, info: dict[str, object]) -> bool:
         raw = info.get("mediaPoolItem")
@@ -94,7 +114,6 @@ class FakeFpProject(FakeBaseCutProject):
         super().__init__(name, pool)
         self._render_dir = render_dir
         self._jobs: list[dict[str, object]] = []
-
     def SetCurrentRenderFormatAndCodec(self, video_format: str, codec: str) -> bool:
         return True
 
@@ -131,13 +150,14 @@ class FakeFpProject(FakeBaseCutProject):
 
 
 class FakeFpManager(FakeBaseCutManager):
-    def __init__(self, render_dir: Path) -> None:
+    def __init__(self, render_dir: Path, fault: str = "") -> None:
         super().__init__("")
         self._render_dir = render_dir
+        self._fault = fault
 
     def CreateProject(self, project_name: str) -> FakeFpProject:
         self._names.add(project_name)
-        project = FakeFpProject(project_name, FakeFpMediaPool(), self._render_dir)
+        project = FakeFpProject(project_name, FakeFpMediaPool(self._fault), self._render_dir)
         self._projects[project_name] = project
         self._current = project
         return project
@@ -192,5 +212,17 @@ class FakeTools:
 
     def sha256(self, path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def decode(self, path: Path) -> DecodeOutcome:
+        argv = (f"ffmpeg({path.name})", "-f", "null")
+        try:
+            decodable = path.read_bytes().startswith(FAKE_RENDER_MAGIC)
+        except OSError:
+            decodable = False
+        return DecodeOutcome(
+            argv=argv,
+            exit_code=0 if decodable else 1,
+            stderr_tail="" if decodable else "corrupt render bytes",
+        )
 
 

@@ -35,6 +35,7 @@ from services.resolve_bridge.fixed_presentation_models import (
     FixedPresentationReport,
     FixedProjectApi,
     FixedTimelineApi,
+    SpikeRunOutcome,
 )
 from services.resolve_bridge.fixed_presentation_render import compare_render, render_timeline
 from services.resolve_bridge.fixed_presentation_subtitle import resolve_subtitle
@@ -133,7 +134,7 @@ def run_fixed_presentation(
     srt_path: Path,
     *,
     direct_allowed: bool,
-) -> tuple[FixedPresentationReport, str]:
+) -> SpikeRunOutcome:
     manager = connection.project_manager()
     mismatches = Mismatches()
     try:
@@ -198,7 +199,12 @@ def run_fixed_presentation(
             mismatches=tuple(mismatches.rows),
             passed=passed,
         )
-        return report, render_summary
+        return SpikeRunOutcome(
+            report=report,
+            render_summary=render_summary,
+            snapshot=snapshot,
+            outcome=outcome,
+        )
     finally:
         cleanup_owned_projects(manager)
 

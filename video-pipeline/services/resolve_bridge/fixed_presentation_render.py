@@ -16,6 +16,7 @@ by half a second rather than exact equality.
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from fractions import Fraction
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -35,6 +36,12 @@ RENDER_DEADLINE_SECONDS: Final = 300.0
 MAX_CONTAINER_PADDING_SECONDS: Final = Fraction(1, 2)
 VIDEO_FORMAT_KEY: Final = "MP4"
 VIDEO_CODEC_KEY: Final = "H264"
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds")
+
+
 def render_timeline(
     project: FixedProjectApi,
     render_dir: Path,
@@ -58,19 +65,28 @@ def render_timeline(
     }
     if not project.SetRenderSettings(settings):
         raise RenderError("SetRenderSettings failed")
+    created_at = _utc_now()
     job_id = project.AddRenderJob()
     if not isinstance(job_id, str) or not job_id:
         raise RenderError("AddRenderJob returned no job id")
     entry = _job_entry(project, job_id)
+    started_at = _utc_now()
     if not project.StartRendering(job_id):
         raise RenderError("StartRendering failed")
     deadline = time.monotonic() + RENDER_DEADLINE_SECONDS
     status = "incomplete"
+    polls = 0
+    percentage_seen = -1
+    completed_at = ""
     while time.monotonic() < deadline:
         raw = project.GetRenderJobStatus(job_id)
+        polls += 1
         percentage = raw.get("CompletionPercentage")
+        if isinstance(percentage, int | float) and not isinstance(percentage, bool):
+            percentage_seen = int(percentage)
         if isinstance(percentage, int | float) and percentage == 100:
             status = "complete"
+            completed_at = _utc_now()
             break
         time.sleep(RENDER_POLL_SECONDS)
     if status != "complete":
@@ -87,6 +103,11 @@ def render_timeline(
         report=tools.probe(output),
         marks_in=_optional_int(entry.get("MarkIn")),
         marks_out=_optional_int(entry.get("MarkOut")),
+        job_created_at=created_at,
+        job_started_at=started_at,
+        job_completed_at=completed_at,
+        poll_count=polls,
+        completion_percentage=percentage_seen,
     )
 
 

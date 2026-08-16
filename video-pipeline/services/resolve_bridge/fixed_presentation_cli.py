@@ -82,7 +82,7 @@ def run_cli(
         return 1
     try:
         connection = connect(load_host_report(report_path))
-        report, render_summary = run_fixed_presentation(
+        run = run_fixed_presentation(
             connection=connection,
             request=request,
             expected=expected,
@@ -93,6 +93,7 @@ def run_cli(
             srt_path=srt_path,
             direct_allowed=False,
         )
+        report, render_summary = run.report, run.render_summary
     except BridgeConnectionError as error:
         stdout = f"{MARKER} needs-live SKIPPED reason={error}\n"
         print(stdout, end="")

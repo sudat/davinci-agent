@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
-from typing import Never
+from typing import TYPE_CHECKING, Never
 
-from pydantic import BaseModel
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+
+GENESIS_SHA256 = "0" * 64
 
 
 class CanonicalJsonFloatError(ValueError):
@@ -36,3 +40,16 @@ def canonical_json_bytes(model: BaseModel) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     ).encode()
+
+
+def artifact_content_hash(model: BaseModel) -> str:
+    """sha256 over canonical bytes with ``content_hash`` set to the genesis value.
+
+    The self-referential content hash cannot cover itself, so the convention
+    (mirrored by the evidence ledger) zeroes the field before hashing;
+    verifiers recompute it exactly this way. ``model`` must be an
+    ``ArtifactEnvelope`` subclass whose ``content_hash`` field is a sha256.
+    """
+
+    payload = model.model_copy(update={"content_hash": GENESIS_SHA256})
+    return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()

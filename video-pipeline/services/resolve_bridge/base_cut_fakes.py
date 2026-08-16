@@ -71,7 +71,11 @@ class FakeBaseCutItem:
         return [self.kind, self.track_index]
 
     def GetLinkedItems(self) -> list[BaseCutTimelineItemApi]:
-        return [self.registry[uid] for uid in sorted(self.links.get(self.unique_id, set()))]
+        return [
+            self.registry[uid]
+            for uid in sorted(self.links.get(self.unique_id, set()))
+            if uid in self.registry
+        ]
 
     def GetMediaPoolItem(self) -> FakeBaseCutPoolItem:
         return self.pool_item
@@ -84,6 +88,7 @@ class FakeBaseCutTimeline:
         self._items: list[FakeBaseCutItem] = []
         self._registry: dict[str, BaseCutTimelineItemApi] = {}
         self._links: dict[str, set[str]] = {}
+        self._serial = 0
 
     def GetName(self) -> str:
         return self._name
@@ -130,11 +135,23 @@ class FakeBaseCutTimeline:
     def GetEndFrame(self) -> int:
         return max((item.GetEnd(False) for item in self._items), default=0)
 
+    def drop_item(self, unique_id: str) -> None:
+        """Remove a placed item so readback no longer observes it (fault hook)."""
+
+        self._items = [item for item in self._items if item.unique_id != unique_id]
+        self._registry.pop(unique_id, None)
+        for uid in list(self._links):
+            links = self._links[uid]
+            links.discard(unique_id)
+            if not links:
+                self._links.pop(uid)
+
     def append(
         self, kind: str, track_index: int, record_start: int, record_end: int,
         source_start: int, source_end: int, pool_item: FakeBaseCutPoolItem,
     ) -> BaseCutTimelineItemApi:
-        unique_id = f"fake-{len(self._items) + 1:03d}"
+        self._serial += 1
+        unique_id = f"fake-{self._serial:03d}"
         item = FakeBaseCutItem(
             kind,
             track_index,

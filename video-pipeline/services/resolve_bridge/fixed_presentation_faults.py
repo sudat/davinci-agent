@@ -112,7 +112,7 @@ def run_fault_cli(spec_path: Path, manifest_path: Path, fixture_dir: Path) -> in
             ),
         )
         try:
-            report, render_summary = run_fixed_presentation(
+            run = run_fixed_presentation(
                 connection=connection,
                 request=request,
                 expected=expected,
@@ -123,7 +123,7 @@ def run_fault_cli(spec_path: Path, manifest_path: Path, fixture_dir: Path) -> in
                 srt_path=srt_path,
                 direct_allowed=True,
             )
-            text = stdout_lines(report, render_summary)
+            text = stdout_lines(run.report, run.render_summary)
         except (BaseCutError, RenderError, SubtitleTextError, OSError) as error:
             print(f"{MARKER} mismatch code=api-error {error}", file=sys.stderr)
             return _cleanup_exit(manager)

@@ -28,6 +28,13 @@ class SubtitlePacket:
     duration: float
 
 
+@dataclass(frozen=True, slots=True)
+class DecodeOutcome:
+    argv: tuple[str, ...]
+    exit_code: int
+    stderr_tail: str
+
+
 class MediaToolsApi(Protocol):
     def probe(self, path: Path) -> FfprobeReport: ...
 
@@ -38,6 +45,8 @@ class MediaToolsApi(Protocol):
     def demux_subtitle(self, path: Path) -> bytes: ...
 
     def sha256(self, path: Path) -> str: ...
+
+    def decode(self, path: Path) -> DecodeOutcome: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +145,15 @@ class MediaTools:
         if result.returncode != 0:
             raise RenderError(f"ffmpeg srt demux failed: {result.stderr.strip()}")
         return result.stdout.encode()
+
+    def decode(self, path: Path) -> DecodeOutcome:
+        argv = ["-nostdin", "-v", "error", "-i", str(path), "-f", "null", "-"]
+        result = self._run(argv)
+        return DecodeOutcome(
+            argv=(str(self.ffmpeg_bin), *argv),
+            exit_code=result.returncode,
+            stderr_tail=result.stderr[-2000:],
+        )
 
     def sha256(self, path: Path) -> str:
         digest = hashlib.sha256()

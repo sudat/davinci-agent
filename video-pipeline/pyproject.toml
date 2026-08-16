@@ -79,6 +79,12 @@ ignore = [
 ]
 "services/resolve_bridge/fixed_presentation_cli.py" = ["PLR0913", "PLR0917"]
 "services/resolve_bridge/launch.py" = ["N818"]
+"services/resolve_bridge/build_report.py" = ["PLR0913", "PLR0917"]
+"services/resolve_bridge/build_report_cli.py" = ["PLR0911", "PLR0913"]
+"services/resolve_bridge/build_report_verify.py" = ["PLR0912", "PLR0913", "PLR0915", "PLR0917"]
+"services/resolve_bridge/build_report_fakes.py" = ["N802", "PLR0913"]
+"services/resolve_bridge/build_report_faults.py" = ["PLR0913"]
+"services/resolve_bridge/build_report_models.py" = ["PLR0913"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
