@@ -1,0 +1,95 @@
+[
+  {
+    "case_id": "happy-preview-and-trace-reproduce",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.preview.cli",
+      "--fixture-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0a/fixture",
+      "--out-dir",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/preview.mp4",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/preview-trace.json"
+    ],
+    "expected_observation": "preview: complete"
+  },
+  {
+    "case_id": "failure-missing-audio-source",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/preview/test_failures.py::test_missing_audio_binding_is_a_structured_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-duration-drift",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/preview/test_failures.py::test_duration_drift_is_detected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-wrong-decision-mapping",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/preview/test_trace.py::test_coverage_gap_is_rejected",
+      "tests/preview/test_trace.py::test_unknown_decision_reference_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-resolve-dependency",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/preview/test_resolve_guard.py::test_preview_package_never_imports_resolve_bridge",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
