@@ -1,0 +1,60 @@
+[project]
+name = "video-pipeline"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pydantic>=2.7,<3",
+]
+
+[dependency-groups]
+dev = [
+    "basedpyright",
+    "duckdb",
+    "hypothesis",
+    "pytest",
+    "ruff",
+    "semgrep==1.120.0",
+]
+
+[tool.uv]
+package = false
+constraint-dependencies = ["setuptools<81"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",
+    "CPY001",
+    "D",
+    "EM",
+    "ISC001",
+    "S603",
+    "S607",
+    "T201",
+    "TC002",
+    "TC003",
+    "TRY003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN", "ARG", "D", "PLR2004", "S101", "S603", "S607", "SLF001"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+pythonVersion = "3.12"
+include = ["services", "tests"]
+exclude = [".venv", "**/__pycache__"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
+filterwarnings = ["error"]

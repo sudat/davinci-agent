@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "case_id",
+      "kind",
+      "argv",
+      "stdin_fixture",
+      "environment",
+      "fault_fixture",
+      "expected_exit",
+      "expected_artifacts",
+      "expected_observation"
+    ],
+    "properties": {
+      "case_id": {"type": "string", "minLength": 1},
+      "kind": {"enum": ["happy", "failure"]},
+      "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+      "stdin_fixture": {"type": ["string", "null"]},
+      "environment": {"type": "object", "additionalProperties": {"type": "string"}},
+      "fault_fixture": {"type": ["string", "null"]},
+      "expected_exit": {"type": "integer"},
+      "expected_artifacts": {"type": "array", "items": {"type": "string"}},
+      "expected_observation": {"type": "string"}
+    }
+  }
+}
