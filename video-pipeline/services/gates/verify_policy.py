@@ -8,9 +8,15 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from services.execution.preflight import ExecutionContract
-from services.fixtures.models import FreezeReceipt, SourceSnapshot
+from services.fixtures.models import (
+    FreezeReceipt,
+    Phase0BFreezeReceipt,
+    SourceSnapshot,
+)
 from services.foundation_io import canonical_model_bytes, sha256_file
 from services.gates import GatePolicy, canonical_gate_bytes
+
+type AnyFreezeReceipt = FreezeReceipt | Phase0BFreezeReceipt
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,9 +27,12 @@ class PolicyVerificationError(Exception):
         return self.detail
 
 
-def _load_receipt(path: Path) -> FreezeReceipt:
+def _load_receipt(path: Path) -> AnyFreezeReceipt:
     raw = path.read_bytes()
-    receipt = FreezeReceipt.model_validate_json(raw)
+    try:
+        receipt = FreezeReceipt.model_validate_json(raw)
+    except ValidationError:
+        receipt = Phase0BFreezeReceipt.model_validate_json(raw)
     if raw != canonical_model_bytes(receipt):
         raise PolicyVerificationError("freeze receipt is noncanonical")
     return receipt
@@ -37,14 +46,32 @@ def _load_snapshot(path: Path) -> SourceSnapshot:
     return snapshot
 
 
-def _verify_referenced_bytes(policy: GatePolicy, receipt: FreezeReceipt) -> None:
+def _manifest_sha256s(receipt: AnyFreezeReceipt) -> tuple[tuple[str | None, str], ...]:
+    if isinstance(receipt, Phase0BFreezeReceipt):
+        return tuple((binding.path, binding.sha256) for binding in receipt.fixture_manifests)
+    return ((receipt.fixture_manifest_path, receipt.fixture_manifest_sha256),)
+
+
+def _verify_manifest_bindings(policy: GatePolicy, receipt: AnyFreezeReceipt) -> None:
+    if isinstance(receipt, Phase0BFreezeReceipt):
+        combined = hashlib.sha256()
+        for binding in receipt.fixture_manifests:
+            combined.update(Path(binding.path).read_bytes())
+        if policy.fixture_manifest_sha256 != receipt.fixture_manifests_combined_sha256:
+            raise PolicyVerificationError("policy manifest binding differs from freeze receipt")
+        if combined.hexdigest() != receipt.fixture_manifests_combined_sha256:
+            raise PolicyVerificationError("freeze receipt manifest bytes drift")
+    elif policy.fixture_manifest_sha256 != receipt.fixture_manifest_sha256:
+        raise PolicyVerificationError("policy referenced hash differs from freeze receipt")
+    for source_path, receipt_hash in _manifest_sha256s(receipt):
+        if source_path is not None and sha256_file(Path(source_path)) != receipt_hash:
+            raise PolicyVerificationError("freeze receipt referenced bytes drift")
+
+
+def _verify_referenced_bytes(policy: GatePolicy, receipt: AnyFreezeReceipt) -> None:
+    _verify_manifest_bindings(policy, receipt)
     bindings = (
         (policy.toolchain_lock_sha256, receipt.toolchain_lock_sha256, receipt.toolchain_lock_path),
-        (
-            policy.fixture_manifest_sha256,
-            receipt.fixture_manifest_sha256,
-            receipt.fixture_manifest_path,
-        ),
         (policy.golden_sha256, receipt.golden_hashes.index_sha256, None),
     )
     for policy_hash, receipt_hash, source_path in bindings:
@@ -87,7 +114,7 @@ def verify_policy(
     receipt_path: Path,
     post_source_snapshot: Path | None,
     execution_contract: Path | None,
-) -> None:
+) -> GatePolicy:
     policy_raw = policy_path.read_bytes()
     policy = GatePolicy.model_validate_json(policy_raw)
     if policy_raw != canonical_gate_bytes(policy):
@@ -116,6 +143,7 @@ def verify_policy(
             post_source_snapshot,
             contract_hash,
         )
+    return policy
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -130,7 +158,7 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> int:
     arguments = _parser().parse_args()
     try:
-        verify_policy(
+        verified = verify_policy(
             arguments.policy,
             arguments.freeze_receipt,
             arguments.require_precedes_source_snapshot,
@@ -139,7 +167,7 @@ def main() -> int:
     except (OSError, PolicyVerificationError, ValidationError) as error:
         print(error)
         return 2
-    print("policy verified: phase-0a v1")
+    print(f"policy verified: {verified.gate_id} {verified.gate_version}")
     return 0
 
 

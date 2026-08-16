@@ -153,6 +153,8 @@ def prepare_freeze(request: PrepareRequest) -> FreezeIntent:
     atomic_write(staged_policy, policy_bytes)
     atomic_write(staged_receipt, receipt_bytes)
     intent = FreezeIntent(
+        todo=6,
+        gate_id="phase-0a",
         staged_policy_path=str(staged_policy.resolve(strict=True)),
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,

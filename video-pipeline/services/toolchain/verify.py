@@ -11,16 +11,19 @@ from services.foundation_io import sha256_file
 from services.resolve_bridge.readiness import HostReadinessError, load_host_report
 from services.toolchain.models import (
     FROZEN_CONFIGURE_ARGV,
+    AnyToolchainLock,
     BinaryRecord,
     LockError,
+    Phase0BToolchainLock,
     SmokeRecord,
     ToolchainLock,
     load_lock,
     write_lock,
 )
+from services.toolchain.normalization import run_normalize_smoke
 from services.toolchain.smoke import ProbeAssertionError, run_ffmpeg_probe
 
-type SmokeName = Literal["resolve-readonly", "ffmpeg-probe"]
+type SmokeName = Literal["resolve-readonly", "ffmpeg-probe", "ffmpeg-normalize"]
 
 
 def verify_binary(record: BinaryRecord) -> None:
@@ -29,7 +32,7 @@ def verify_binary(record: BinaryRecord) -> None:
         raise LockError(f"binary hash drift: {path}")
 
 
-def _verify_ffmpeg_provenance(lock: ToolchainLock) -> None:
+def _verify_ffmpeg_provenance(lock: AnyToolchainLock) -> None:
     source = Path(lock.ffmpeg.source.tarball_path)
     if not source.is_file() or sha256_file(source) != lock.ffmpeg.source.tarball_sha256:
         raise LockError("FFmpeg source provenance drift")
@@ -47,7 +50,7 @@ def _verify_ffmpeg_provenance(lock: ToolchainLock) -> None:
         raise LockError("ffprobe version provenance drift")
 
 
-def _verify_resolve_provenance(lock: ToolchainLock) -> None:
+def _verify_resolve_provenance(lock: AnyToolchainLock) -> None:
     report_path = Path(lock.resolve.report_path)
     if not report_path.is_file() or sha256_file(report_path) != lock.resolve.report_sha256:
         raise LockError("Resolve host report hash drift")
@@ -67,14 +70,60 @@ def _verify_resolve_provenance(lock: ToolchainLock) -> None:
             raise LockError(f"Resolve bridge provenance drift: {path}")
 
 
-def _verify_provenance(lock: ToolchainLock) -> None:
+def _verify_provenance(lock: AnyToolchainLock) -> None:
     _verify_ffmpeg_provenance(lock)
     _verify_resolve_provenance(lock)
+    if isinstance(lock, Phase0BToolchainLock):
+        verify_binary(lock.ffmpeg.ffmpeg)
+        verify_binary(lock.ffmpeg.ffprobe)
 
 
-def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> ToolchainLock:
+def _run_normalize_smoke(lock: Phase0BToolchainLock) -> SmokeRecord:
+    prefix = Path(lock.ffmpeg.ffmpeg.path).parent.parent
+    artifacts = run_normalize_smoke(
+        lock.ffmpeg.ffmpeg.path,
+        lock.ffmpeg.ffprobe.path,
+        lock.normalization,
+        prefix.parents[1] / "smoke" / "normalize",
+    )
+    return SmokeRecord(
+        status="passed",
+        evidence_paths=tuple(str(item.resolve()) for item in artifacts),
+        observation=(
+            "generated testsrc2 input, applied the locked normalization recipe, and "
+            "probed the CFR30 roundtrip expectation"
+        ),
+    )
+
+
+def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainLock:
     lock = load_lock(path)
     _verify_provenance(lock)
+    if isinstance(lock, Phase0BToolchainLock) and not _phase0b_smoke_complete(
+        lock, smoke_names
+    ):
+        raise LockError("incomplete Phase 0B toolchain smoke results")
+    match lock:
+        case Phase0BToolchainLock() as phase0b:
+            updates: dict[str, SmokeRecord] = {}
+            if "ffmpeg-normalize" in smoke_names:
+                updates["ffmpeg_normalize"] = _run_normalize_smoke(phase0b)
+            verified = lock.model_copy(update={"smoke": phase0b.smoke.model_copy(update=updates)})
+        case ToolchainLock():
+            verified = _verify_phase0a_smoke(lock, smoke_names)
+    write_lock(path, verified)
+    return verified
+
+
+def _phase0b_smoke_complete(lock: Phase0BToolchainLock, names: tuple[SmokeName, ...]) -> bool:
+    if lock.smoke.ffmpeg_normalize.status == "passed":
+        return True
+    return "ffmpeg-normalize" in names
+
+
+def _verify_phase0a_smoke(
+    lock: ToolchainLock, smoke_names: tuple[SmokeName, ...]
+) -> ToolchainLock:
     smoke = lock.smoke
     for smoke_name in smoke_names:
         match smoke_name:
@@ -93,7 +142,7 @@ def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> ToolchainLock
                         )
                     }
                 )
-            case "ffmpeg-probe":
+            case "ffmpeg-probe" | "ffmpeg-ffprobe":
                 prefix = Path(lock.ffmpeg.ffmpeg.path).parent.parent
                 artifacts = run_ffmpeg_probe(
                     Path(lock.ffmpeg.ffmpeg.path),
@@ -111,9 +160,9 @@ def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> ToolchainLock
                         )
                     }
                 )
-    verified = lock.model_copy(update={"smoke": smoke})
-    write_lock(path, verified)
-    return verified
+            case "ffmpeg-normalize":
+                raise LockError("ffmpeg-normalize smoke requires a phase-0b lock")
+    return lock.model_copy(update={"smoke": smoke})
 
 
 def _smoke_names(raw: str) -> tuple[SmokeName, ...]:
@@ -125,8 +174,10 @@ def _smoke_names(raw: str) -> tuple[SmokeName, ...]:
         match name:
             case "resolve-readonly":
                 parsed.append("resolve-readonly")
-            case "ffmpeg-probe":
+            case "ffmpeg-probe" | "ffmpeg-ffprobe":
                 parsed.append("ffmpeg-probe")
+            case "ffmpeg-normalize":
+                parsed.append("ffmpeg-normalize")
             case _:
                 raise LockError(f"unsupported smoke profile: {raw}")
     return tuple(parsed)

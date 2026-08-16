@@ -3,7 +3,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from services.fixtures.prepare import PrepareRequest, prepare_errors, prepare_freeze
+from services.fixtures.prepare import PrepareError, PrepareRequest, prepare_errors, prepare_freeze
+from services.fixtures.prepare_phase0b import (
+    Phase0BPrepareRequest,
+    prepare_phase0b,
+    prepare_phase0b_errors,
+)
 from services.fixtures.publish import publish_errors, publish_freeze
 
 
@@ -11,9 +16,10 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare")
-    prepare.add_argument("phase", choices=("phase-0a",))
+    prepare.add_argument("phase", choices=("phase-0a", "phase-0b"))
     prepare.add_argument("--toolchain-lock", type=Path, required=True)
     prepare.add_argument("--fixture-ids", required=True)
+    prepare.add_argument("--parent-result", type=Path)
     prepare.add_argument("--pre-source-snapshot", type=Path, required=True)
     prepare.add_argument("--execution-contract", type=Path, required=True)
     prepare.add_argument("--out", type=Path, required=True)
@@ -28,9 +34,28 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _prepare(arguments: argparse.Namespace) -> int:
-    request = PrepareRequest(
+    if arguments.phase == "phase-0a":
+        if arguments.parent_result is not None:
+            raise PrepareError("phase-0a takes no parent result")
+        request = PrepareRequest(
+            toolchain_lock=arguments.toolchain_lock,
+            fixture_ids=tuple(arguments.fixture_ids.split(",")),
+            pre_source_snapshot=arguments.pre_source_snapshot,
+            execution_contract=arguments.execution_contract,
+            policy_out=arguments.out,
+            freeze_receipt=arguments.freeze_receipt,
+            staging=arguments.staging,
+            intent=arguments.intent,
+        )
+        prepare_freeze(request)
+        print("freeze prepared: phase-0a v1")
+        return 0
+    if arguments.parent_result is None:
+        raise PrepareError("phase-0b requires the parent phase-0a gate result")
+    request = Phase0BPrepareRequest(
         toolchain_lock=arguments.toolchain_lock,
         fixture_ids=tuple(arguments.fixture_ids.split(",")),
+        parent_result=arguments.parent_result,
         pre_source_snapshot=arguments.pre_source_snapshot,
         execution_contract=arguments.execution_contract,
         policy_out=arguments.out,
@@ -38,14 +63,14 @@ def _prepare(arguments: argparse.Namespace) -> int:
         staging=arguments.staging,
         intent=arguments.intent,
     )
-    prepare_freeze(request)
-    print("freeze prepared: phase-0a v1")
+    prepare_phase0b(request)
+    print("freeze prepared: phase-0b v1")
     return 0
 
 
 def _publish(arguments: argparse.Namespace) -> int:
     publish_freeze(arguments.intent, arguments.ledger, recover=arguments.recover)
-    print("freeze published: phase-0a v1")
+    print("freeze published")
     return 0
 
 
@@ -55,7 +80,7 @@ def main() -> int:
         if arguments.command == "prepare":
             return _prepare(arguments)
         return _publish(arguments)
-    except (*prepare_errors(), *publish_errors()) as error:
+    except (*prepare_errors(), *prepare_phase0b_errors(), *publish_errors()) as error:
         print(error)
         return 2
 

@@ -13,10 +13,16 @@ from services.evidence.append_event import (
     append_freeze_event,
     require_intent_recorded,
 )
-from services.fixtures.models import FreezeIntent, FreezeReceipt
+from services.fixtures.models import (
+    FreezeIntent,
+    FreezeReceipt,
+    Phase0BFreezeReceipt,
+)
 from services.foundation_io import canonical_model_bytes
 from services.gates import GatePolicy, canonical_gate_bytes
 from services.toolchain.execution_ledger import ExecutionLedgerError
+
+type AnyFreezeReceipt = FreezeReceipt | Phase0BFreezeReceipt
 
 AT_FDCWD = -2
 RENAME_EXCL = 0x00000004
@@ -89,6 +95,13 @@ def _publish_one(source: Path, destination: Path, expected: bytes) -> None:
     _rename_noreplace(temporary, destination)
 
 
+def _load_receipt(raw: bytes) -> AnyFreezeReceipt:
+    try:
+        return FreezeReceipt.model_validate_json(raw)
+    except ValidationError:
+        return Phase0BFreezeReceipt.model_validate_json(raw)
+
+
 def publish_freeze(intent_path: Path, ledger: Path, *, recover: bool) -> None:
     if not recover:
         raise PublishError("publish requires --recover")
@@ -103,10 +116,14 @@ def publish_freeze(intent_path: Path, ledger: Path, *, recover: bool) -> None:
     policy = GatePolicy.model_validate_json(policy_bytes)
     if policy_bytes != canonical_gate_bytes(policy):
         raise PublishError("noncanonical prepared policy")
+    if policy.gate_id != intent.gate_id:
+        raise PublishError("prepared policy gate differs from freeze intent")
     receipt_bytes = receipt_source.read_bytes()
-    receipt = FreezeReceipt.model_validate_json(receipt_bytes)
+    receipt = _load_receipt(receipt_bytes)
     if receipt_bytes != canonical_model_bytes(receipt):
         raise PublishError("noncanonical prepared receipt")
+    if receipt.gate_id != intent.gate_id:
+        raise PublishError("prepared receipt gate differs from freeze intent")
     if hashlib.sha256(policy_bytes).hexdigest() != intent.policy_sha256:
         raise PublishError("prepared policy hash drift")
     if hashlib.sha256(receipt_bytes).hexdigest() != intent.receipt_sha256:

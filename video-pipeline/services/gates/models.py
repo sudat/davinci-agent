@@ -7,6 +7,7 @@ from pydantic_core import PydanticCustomError
 
 from services.contracts.primitives import Identifier, SchemaVersion, Sha256, StrictModel
 from services.gates.phase0a import PHASE_0A_CAPABILITIES, PHASE_0A_CRITERIA
+from services.gates.phase0b import PHASE_0B_CRITERIA
 
 type InputValue = (
     bool
@@ -97,8 +98,13 @@ class GatePolicy(GateModel):
 
     @model_validator(mode="after")
     def validate_phase_policy(self) -> GatePolicy:
-        if self.gate_id != "phase-0a":
-            return self
+        if self.gate_id == "phase-0a":
+            return self._validate_phase_0a()
+        if self.gate_id == "phase-0b":
+            return self._validate_phase_0b()
+        return self
+
+    def _validate_phase_0a(self) -> GatePolicy:
         if self.criteria != PHASE_0A_CRITERIA:
             raise PydanticCustomError(
                 "phase_0a_criteria",
@@ -113,6 +119,29 @@ class GatePolicy(GateModel):
             raise PydanticCustomError(
                 "phase_0a_prerequisites",
                 "Phase 0A requires empty parent and prerequisite binding lists",
+            )
+        return self
+
+    def _validate_phase_0b(self) -> GatePolicy:
+        if self.criteria != PHASE_0B_CRITERIA:
+            raise PydanticCustomError(
+                "phase_0b_criteria",
+                "Phase 0B criteria must match the canonical conform exit criteria",
+            )
+        if self.capability_allowlist:
+            raise PydanticCustomError(
+                "phase_0b_capabilities",
+                "Phase 0B freezes no capability allowlist; capabilities stay bound to 0A",
+            )
+        if self.prerequisite_bindings:
+            raise PydanticCustomError(
+                "phase_0b_prerequisites",
+                "Phase 0B prerequisites are parent gate result hashes only",
+            )
+        if len(self.parent_gate_result_hashes) != 1:
+            raise PydanticCustomError(
+                "phase_0b_parent",
+                "Phase 0B requires exactly one parent Phase 0A gate result hash",
             )
         return self
 

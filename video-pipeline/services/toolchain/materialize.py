@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from services.foundation_io import atomic_write, canonical_model_bytes
+from services.toolchain.models import (
+    LockError,
+    Phase0BSmokeResults,
+    Phase0BToolchainLock,
+    SmokeRecord,
+    ToolchainLock,
+    load_lock,
+)
+from services.toolchain.normalization import NormalizationSection
+
+PINS_ROOT = Path("config/toolchains/pins")
+
+
+class MaterializeError(Exception):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+    def __str__(self) -> str:
+        return self.detail
+
+
+def _load_pin(path: Path) -> NormalizationSection:
+    try:
+        raw = path.read_bytes()
+        section = NormalizationSection.model_validate_json(raw)
+    except (OSError, ValidationError) as error:
+        raise MaterializeError(f"invalid normalization pin: {error}") from error
+    if raw != canonical_model_bytes(section):
+        raise MaterializeError("normalization pin is noncanonical")
+    return section
+
+
+def materialize_phase0b(parent_path: Path, pin_path: Path, out_path: Path) -> None:
+    parent = load_lock(parent_path)
+    if not isinstance(parent, ToolchainLock):
+        raise MaterializeError("phase-0b parent must be the frozen phase-0a lock")
+    parent_smoke_ok = (
+        parent.smoke.resolve_readonly.status == "passed"
+        and parent.smoke.ffmpeg_probe.status == "passed"
+    )
+    if not parent_smoke_ok:
+        raise MaterializeError("parent phase-0a smoke results are incomplete")
+    section = _load_pin(pin_path)
+    inherited_smoke = Phase0BSmokeResults(
+        resolve_readonly=parent.smoke.resolve_readonly,
+        ffmpeg_probe=parent.smoke.ffmpeg_probe,
+        ffmpeg_normalize=SmokeRecord(
+            status="pending",
+            evidence_paths=(),
+            observation="pending ffmpeg-normalize smoke",
+        ),
+    )
+    child = Phase0BToolchainLock(
+        phase="phase-0b",
+        python=parent.python,
+        ffmpeg=parent.ffmpeg,
+        resolve=parent.resolve,
+        normalization=section,
+        smoke=inherited_smoke,
+    )
+    _assert_inheritance(parent, child)
+    payload = canonical_model_bytes(child)
+    if out_path.exists():
+        if out_path.read_bytes() != payload:
+            raise MaterializeError("existing phase-0b lock differs from merged result")
+        return
+    atomic_write(out_path, payload)
+
+
+def _assert_inheritance(parent: ToolchainLock, child: Phase0BToolchainLock) -> None:
+    parent_view = parent.model_dump(mode="json")
+    child_view = child.model_dump(mode="json")
+    for section in ("python", "ffmpeg", "resolve"):
+        if child_view[section] != parent_view[section]:
+            raise MaterializeError(f"phase-0b must inherit the exact 0A {section} section")
+    smoke = child_view["smoke"]
+    if (
+        smoke["resolve_readonly"] != parent_view["smoke"]["resolve_readonly"]
+        or smoke["ffmpeg_probe"] != parent_view["smoke"]["ffmpeg_probe"]
+    ):
+        raise MaterializeError("phase-0b must inherit the exact 0A smoke records")
+    if smoke["ffmpeg_normalize"]["status"] != "pending":
+        raise MaterializeError("merged ffmpeg-normalize smoke must start pending")
+    if child.ffmpeg.ffmpeg.sha256 != parent.ffmpeg.ffmpeg.sha256:
+        raise MaterializeError("ffmpeg binary hash substitution is forbidden")
+    if child.ffmpeg.ffprobe.sha256 != parent.ffmpeg.ffprobe.sha256:
+        raise MaterializeError("ffprobe binary hash substitution is forbidden")
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--parent", type=Path, required=True)
+    parser.add_argument("--phase", choices=("phase-0b",), required=True)
+    parser.add_argument("--pin", required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    return parser
+
+
+def resolve_pin_path(raw: str) -> Path:
+    candidate = Path(raw)
+    if candidate.is_absolute() or candidate.suffix == ".json":
+        return candidate
+    return Path.cwd() / PINS_ROOT / f"{raw}.json"
+
+
+def main() -> int:
+    arguments = _parser().parse_args()
+    try:
+        materialize_phase0b(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
+    except (LockError, MaterializeError, OSError) as error:
+        print(error)
+        return 2
+    print(f"toolchain materialized: {arguments.out} (phase-0b)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

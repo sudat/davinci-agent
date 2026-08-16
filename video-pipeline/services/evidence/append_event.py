@@ -60,13 +60,19 @@ def _read_and_repair(descriptor: int) -> LedgerState:
 def _existing_freeze_event(
     state: LedgerState,
     event_type: Literal["freeze-intent", "freeze-completed"],
+    intent: FreezeIntent,
 ) -> FreezeEventRow | None:
     for line in state.lines:
         try:
             event = FreezeEventRow.model_validate_json(line)
         except ValidationError:
             continue
-        if event.event_type == event_type:
+        if (
+            event.event_type == event_type
+            and event.todo == intent.todo
+            and event.gate_id == intent.gate_id
+            and event.gate_version == intent.gate_version
+        ):
             return event
     return None
 
@@ -78,7 +84,7 @@ def _append_freeze_event(
     event_type: Literal["freeze-intent", "freeze-completed"],
 ) -> FreezeEventRow:
     intent_sha256 = hashlib.sha256(canonical_model_bytes(intent)).hexdigest()
-    existing = _existing_freeze_event(state, event_type)
+    existing = _existing_freeze_event(state, event_type, intent)
     if existing is not None:
         if (
             existing.intent_sha256 == intent_sha256
@@ -86,13 +92,19 @@ def _append_freeze_event(
             and existing.receipt_sha256 == intent.receipt_sha256
         ):
             return existing
-        raise ExecutionLedgerError(f"differing duplicate {event_type} for Todo 6 phase-0a v1")
+        raise ExecutionLedgerError(
+            f"differing duplicate {event_type} for Todo {intent.todo} "
+            f"{intent.gate_id} {intent.gate_version}"
+        )
     head_line = state.lines[-1]
     head = state.rows[-1]
     event = FreezeEventRow(
         sequence=head.sequence + 1,
         previous_event_hash=hashlib.sha256(head_line).hexdigest(),
         event_type=event_type,
+        todo=intent.todo,
+        gate_id=intent.gate_id,
+        gate_version=intent.gate_version,
         intent_sha256=intent_sha256,
         policy_sha256=intent.policy_sha256,
         receipt_sha256=intent.receipt_sha256,
@@ -122,7 +134,7 @@ def require_intent_recorded(ledger: Path, intent: FreezeIntent) -> None:
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         state = _read_and_repair(descriptor)
-        existing = _existing_freeze_event(state, "freeze-intent")
+        existing = _existing_freeze_event(state, "freeze-intent", intent)
         expected_hash = hashlib.sha256(canonical_model_bytes(intent)).hexdigest()
         if existing is None or existing.intent_sha256 != expected_hash:
             raise ExecutionLedgerError("matching freeze intent is not recorded")

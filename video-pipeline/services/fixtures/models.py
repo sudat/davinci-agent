@@ -7,12 +7,21 @@ from pydantic import Field
 from services.contracts.primitives import Sha256, StrictModel
 from services.fixtures.manifest import Phase0AFixtureManifest, Sequence
 
+GateId = Literal["phase-0a", "phase-0b"]
+FreezeTodo = Literal[6, 24]
+
 
 class GoldenHashes(StrictModel):
     derivation_source_sha256: Sha256
     expected_sha256: Sha256
     audit_sha256: Sha256
     index_sha256: Sha256
+
+
+class ManifestBinding(StrictModel):
+    fixture_id: str
+    path: str
+    sha256: Sha256
 
 
 class FreezeReceipt(StrictModel):
@@ -34,11 +43,32 @@ class FreezeReceipt(StrictModel):
     execution_contract_sha256: Sha256
 
 
+class Phase0BFreezeReceipt(StrictModel):
+    schema_version: Literal["freeze-receipt-v1"] = "freeze-receipt-v1"
+    record_type: Literal["freeze_receipt"] = "freeze_receipt"
+    todo: Literal[24] = 24
+    gate_id: Literal["phase-0b"] = "phase-0b"
+    gate_version: Literal["v1"] = "v1"
+    policy_path: str
+    policy_sha256: Sha256
+    toolchain_lock_path: str
+    toolchain_lock_sha256: Sha256
+    fixture_manifests: tuple[ManifestBinding, ...]
+    fixture_manifests_combined_sha256: Sha256
+    parent_gate_result_path: str
+    parent_gate_result_sha256: Sha256
+    golden_hashes: GoldenHashes
+    pre_source_snapshot_path: str
+    pre_source_snapshot_sha256: Sha256
+    execution_contract_path: str
+    execution_contract_sha256: Sha256
+
+
 class FreezeIntent(StrictModel):
     schema_version: Literal["freeze-intent-v1"] = "freeze-intent-v1"
     event_type: Literal["freeze-intent"] = "freeze-intent"
-    todo: Literal[6] = 6
-    gate_id: Literal["phase-0a"] = "phase-0a"
+    todo: FreezeTodo
+    gate_id: GateId
     gate_version: Literal["v1"] = "v1"
     staged_policy_path: str
     policy_path: str
@@ -54,8 +84,8 @@ class FreezeEventRow(StrictModel):
     sequence: int = Field(gt=0, strict=True)
     previous_event_hash: Sha256
     event_type: Literal["freeze-intent", "freeze-completed"]
-    todo: Literal[6] = 6
-    gate_id: Literal["phase-0a"] = "phase-0a"
+    todo: FreezeTodo
+    gate_id: GateId
     gate_version: Literal["v1"] = "v1"
     intent_sha256: Sha256
     policy_sha256: Sha256
@@ -81,6 +111,8 @@ __all__ = [
     "FreezeIntent",
     "FreezeReceipt",
     "GoldenHashes",
+    "ManifestBinding",
     "Phase0AFixtureManifest",
+    "Phase0BFreezeReceipt",
     "SourceSnapshot",
 ]

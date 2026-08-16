@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from services.contracts.primitives import Sha256
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
+from services.toolchain.normalization import (  # noqa: TC001 (pydantic runtime)
+    NormalizationSection,
+)
 
 if TYPE_CHECKING:
     from services.resolve_bridge.models import ResolveHostReport
@@ -120,6 +123,12 @@ class SmokeResults(StrictModel):
     ffmpeg_probe: SmokeRecord
 
 
+class Phase0BSmokeResults(StrictModel):
+    resolve_readonly: SmokeRecord
+    ffmpeg_probe: SmokeRecord
+    ffmpeg_normalize: SmokeRecord
+
+
 class ToolchainLock(StrictModel):
     schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
     phase: Literal["phase-0a"] = "phase-0a"
@@ -129,18 +138,35 @@ class ToolchainLock(StrictModel):
     smoke: SmokeResults
 
 
-def load_lock(path: Path) -> ToolchainLock:
+class Phase0BToolchainLock(StrictModel):
+    schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
+    phase: Literal["phase-0b"]
+    python: PythonToolchain
+    ffmpeg: FfmpegToolchain
+    resolve: ResolveBinding
+    normalization: NormalizationSection
+    smoke: Phase0BSmokeResults
+
+
+type AnyToolchainLock = ToolchainLock | Phase0BToolchainLock
+
+
+def load_lock(path: Path) -> AnyToolchainLock:
     try:
         raw = path.read_bytes()
-        lock = ToolchainLock.model_validate_json(raw)
+        lock: AnyToolchainLock
+        try:
+            lock = ToolchainLock.model_validate_json(raw)
+        except ValidationError:
+            lock = Phase0BToolchainLock.model_validate_json(raw)
+        if raw != canonical_model_bytes(lock):
+            raise LockError("noncanonical toolchain lock")
     except (OSError, ValidationError) as error:
         raise LockError(f"invalid toolchain lock: {error}") from error
-    if raw != canonical_model_bytes(lock):
-        raise LockError("noncanonical toolchain lock")
     return lock
 
 
-def write_lock(path: Path, lock: ToolchainLock) -> None:
+def write_lock(path: Path, lock: AnyToolchainLock) -> None:
     atomic_write(path, canonical_model_bytes(lock))
 
 
