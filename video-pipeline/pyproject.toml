@@ -42,6 +42,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ANN", "ARG", "D", "PLR2004", "S101", "S603", "S607", "SLF001"]
+"services/resolve_bridge/connection.py" = ["N802", "N818"]
+"services/resolve_bridge/faults.py" = ["N802", "N818", "ARG002", "RET501"]
+"services/resolve_bridge/launch.py" = ["N818"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -58,3 +61,6 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
 filterwarnings = ["error"]
+markers = [
+  "resolve_live: live DaVinci Resolve bridge tests; skipped with an explicit reason when Resolve is unreachable",
+]
