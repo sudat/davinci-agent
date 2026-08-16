@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from services.fixtures.prepare import PrepareRequest, prepare_errors, prepare_freeze
+from services.fixtures.publish import publish_errors, publish_freeze
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    commands = parser.add_subparsers(dest="command", required=True)
+    prepare = commands.add_parser("prepare")
+    prepare.add_argument("phase", choices=("phase-0a",))
+    prepare.add_argument("--toolchain-lock", type=Path, required=True)
+    prepare.add_argument("--fixture-ids", required=True)
+    prepare.add_argument("--pre-source-snapshot", type=Path, required=True)
+    prepare.add_argument("--execution-contract", type=Path, required=True)
+    prepare.add_argument("--out", type=Path, required=True)
+    prepare.add_argument("--freeze-receipt", type=Path, required=True)
+    prepare.add_argument("--staging", type=Path, required=True)
+    prepare.add_argument("--intent", type=Path, required=True)
+    publish = commands.add_parser("publish")
+    publish.add_argument("--intent", type=Path, required=True)
+    publish.add_argument("--ledger", type=Path, required=True)
+    publish.add_argument("--recover", action="store_true", required=True)
+    return parser
+
+
+def _prepare(arguments: argparse.Namespace) -> int:
+    request = PrepareRequest(
+        toolchain_lock=arguments.toolchain_lock,
+        fixture_ids=tuple(arguments.fixture_ids.split(",")),
+        pre_source_snapshot=arguments.pre_source_snapshot,
+        execution_contract=arguments.execution_contract,
+        policy_out=arguments.out,
+        freeze_receipt=arguments.freeze_receipt,
+        staging=arguments.staging,
+        intent=arguments.intent,
+    )
+    prepare_freeze(request)
+    print("freeze prepared: phase-0a v1")
+    return 0
+
+
+def _publish(arguments: argparse.Namespace) -> int:
+    publish_freeze(arguments.intent, arguments.ledger, recover=arguments.recover)
+    print("freeze published: phase-0a v1")
+    return 0
+
+
+def main() -> int:
+    arguments = _parser().parse_args()
+    try:
+        if arguments.command == "prepare":
+            return _prepare(arguments)
+        return _publish(arguments)
+    except (*prepare_errors(), *publish_errors()) as error:
+        print(error)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
