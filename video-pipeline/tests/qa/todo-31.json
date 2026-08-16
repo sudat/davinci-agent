@@ -1,0 +1,139 @@
+[
+  {
+    "case_id": "happy-full-clear-ambiguous-suite",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0c",
+      "--policy",
+      "config/gates/phase-0c-v1.json",
+      "--evidence",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/gate-result.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/runs/p0c-remove-clear/preview-1/preview-trace.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/runs/p0c-span-clear/preview-1/preview-trace.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/runs/p0c-subtitle-clear/preview-1/preview-trace.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/runs/p0c-ambiguous-two-targets/preview-0/preview-trace.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0c/runs/p0c-locked-conflict/preview-0/preview-trace.json"
+    ],
+    "expected_observation": "phase-0c: PASS"
+  },
+  {
+    "case_id": "failure-wrong-decision",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0c",
+      "--policy",
+      "config/gates/phase-0c-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0B_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0c-wrong-decision.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=golden-plan-mismatch"
+  },
+  {
+    "case_id": "failure-auto-applied-ambiguous",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0c",
+      "--policy",
+      "config/gates/phase-0c-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0B_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0c-auto-applied-ambiguous.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=ambiguous-auto-applied"
+  },
+  {
+    "case_id": "failure-changed-unrelated-item",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0c",
+      "--policy",
+      "config/gates/phase-0c-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0B_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0c-changed-unrelated-item.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=golden-plan-mismatch"
+  },
+  {
+    "case_id": "failure-stale-event",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0c",
+      "--policy",
+      "config/gates/phase-0c-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0B_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0c-stale-event.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "STOP code=phase-0c-stop-stale-plan-binding"
+  },
+  {
+    "case_id": "failure-resolve-requirement",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0c",
+      "--policy",
+      "config/gates/phase-0c-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0c-resolve-requirement.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=resolve-bridge-refused"
+  }
+]

@@ -59,7 +59,7 @@ DEFAULT_MANIFEST: Final = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixe
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="run_gate")
-    parser.add_argument("gate", choices=("phase-0a", "phase-0b"))
+    parser.add_argument("gate", choices=("phase-0a", "phase-0b", "phase-0c"))
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--host-report", type=Path)
@@ -112,6 +112,12 @@ def main() -> int:
             return gate_phase0b_faults.run_fault_cli(
                 Path(fault_fixture), arguments.policy
             )
+        if arguments.gate == "phase-0c":
+            from services.spike import gate_phase0c_faults  # noqa: PLC0415
+
+            return gate_phase0c_faults.run_fault_cli(
+                Path(fault_fixture), arguments.policy
+            )
         from services.spike import gate_faults  # noqa: PLC0415
 
         return gate_faults.run_fault_cli(
@@ -124,6 +130,10 @@ def main() -> int:
         from services.spike import gate_phase0b_cli  # noqa: PLC0415
 
         return gate_phase0b_cli.run_cli(arguments)
+    if arguments.gate == "phase-0c":
+        from services.spike import gate_phase0c_cli  # noqa: PLC0415
+
+        return gate_phase0c_cli.run_cli(arguments)
 
     try:
         policy_raw = arguments.policy.read_bytes()
