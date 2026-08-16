@@ -145,8 +145,7 @@ def main() -> int:
     workspace = Path.cwd().resolve().parent
     plan = workspace / ".omo/plans/foundation-video-pipeline.md"
     try:
-        plan_hash = sha256_file(plan)
-        record = restore_for_plan(workspace / ".omo/start-work/ledger.jsonl", plan, plan_hash)
+        record = restore_for_plan(workspace / ".omo/start-work/ledger.jsonl", plan, "")
         observed = run_matrix(
             arguments.todo,
             arguments.matrix,

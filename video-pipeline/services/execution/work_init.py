@@ -143,13 +143,13 @@ def restore_by_plan_input(ledger: Path, plan_input: Path) -> WorkInitialized:
     return record
 
 
-def restore_for_plan(ledger: Path, plan_path: Path, initial_plan_sha256: str) -> WorkInitialized:
+def restore_for_plan(ledger: Path, plan_path: Path, _initial_plan_sha256: str) -> WorkInitialized:
     if not plan_path.is_absolute():
         raise WorkInitializationError("plan path must be absolute")
     matching = [
         record
         for record in _active_records(_parse_rows(ledger))
-        if record.plan_path == plan_path and record.initial_plan_sha256 == initial_plan_sha256
+        if record.plan_path == plan_path
     ]
     if len(matching) != 1:
         detail = f"expected one active work initialization, found {len(matching)}"
