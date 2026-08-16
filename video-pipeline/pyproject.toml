@@ -57,6 +57,27 @@ ignore = [
   "PLR0917",
 ]
 "services/resolve_bridge/base_cut_faults.py" = ["N802", "ARG002", "FBT001", "FBT002", "FBT003"]
+"services/resolve_bridge/fixed_presentation.py" = ["C901", "PLR0912", "PLR0913", "PLR0917"]
+"services/resolve_bridge/fixed_presentation_models.py" = ["N802", "FBT001", "FBT002"]
+"services/resolve_bridge/fixed_presentation_render.py" = ["C901", "PLR0912", "PLR2004"]
+"services/resolve_bridge/fixed_presentation_subtitle.py" = ["PLR0913", "PLR2004"]
+"services/resolve_bridge/fixed_presentation_faults.py" = [
+  "N802",
+  "ARG002",
+  "FBT001",
+  "FBT002",
+  "FBT003",
+]
+"services/resolve_bridge/fixed_presentation_fakes.py" = [
+  "N802",
+  "ARG002",
+  "FBT001",
+  "FBT002",
+  "FBT003",
+  "PLR0913",
+  "PLR0917",
+]
+"services/resolve_bridge/fixed_presentation_cli.py" = ["PLR0913", "PLR0917"]
 "services/resolve_bridge/launch.py" = ["N818"]
 
 [tool.ruff.lint.pydocstyle]
