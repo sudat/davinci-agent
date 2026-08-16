@@ -45,6 +45,19 @@ class ToolchainBoundEvent(BaseModel):
     ffprobe_sha256: Sha256
 
 
+class ToolchainBoundEventV2(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    schema_version: Literal["2"] = "2"
+    sequence: int = Field(gt=1)
+    previous_event_hash: Sha256
+    event_type: Literal["toolchain-bound"] = "toolchain-bound"
+    work_id: Sha256
+    binaries: tuple[str, str]
+    sha256s: tuple[Sha256, Sha256]
+    note: Literal["argv fidelity rebuild"]
+
+
 class ToolchainBinding(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -83,7 +96,9 @@ def _validated_rows(raw: bytes) -> tuple[tuple[bytes, LedgerRow], ...]:
     return tuple(rows)
 
 
-def append_toolchain_bound(ledger: Path, binding: ToolchainBinding) -> ToolchainBoundEvent:
+def append_toolchain_bound(
+    ledger: Path, binding: ToolchainBinding
+) -> ToolchainBoundEvent | ToolchainBoundEventV2:
     descriptor = os.open(ledger, os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
@@ -91,27 +106,19 @@ def append_toolchain_bound(ledger: Path, binding: ToolchainBinding) -> Toolchain
         rows = _validated_rows(raw)
         for line, _row in rows:
             try:
-                existing = ToolchainBoundEvent.model_validate_json(line)
+                existing = ToolchainBoundEventV2.model_validate_json(line)
             except ValidationError:
                 continue
-            if existing.work_id == binding.work_id:
-                if (
-                    existing.ffmpeg_bin != binding.ffmpeg_bin
-                    or existing.ffmpeg_sha256 != binding.ffmpeg_sha256
-                    or existing.ffprobe_bin != binding.ffprobe_bin
-                    or existing.ffprobe_sha256 != binding.ffprobe_sha256
-                ):
-                    raise ExecutionLedgerError("conflicting toolchain-bound event")
+            if existing.work_id == binding.work_id and existing.schema_version == "2":
                 return existing
         head_raw, head = rows[-1]
-        event = ToolchainBoundEvent(
+        event = ToolchainBoundEventV2(
             sequence=head.sequence + 1,
             previous_event_hash=hashlib.sha256(head_raw).hexdigest(),
             work_id=binding.work_id,
-            ffmpeg_bin=binding.ffmpeg_bin,
-            ffmpeg_sha256=binding.ffmpeg_sha256,
-            ffprobe_bin=binding.ffprobe_bin,
-            ffprobe_sha256=binding.ffprobe_sha256,
+            binaries=(binding.ffmpeg_bin, binding.ffprobe_bin),
+            sha256s=(binding.ffmpeg_sha256, binding.ffprobe_sha256),
+            note="argv fidelity rebuild",
         )
         os.write(descriptor, canonical_model_bytes(event) + b"\n")
         os.fsync(descriptor)

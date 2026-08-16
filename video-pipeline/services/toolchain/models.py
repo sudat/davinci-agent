@@ -82,6 +82,15 @@ class SourceRecord(StrictModel):
 class BuildRecord(StrictModel):
     configure_argv: tuple[str, ...] = Field(min_length=1)
     compiler: str
+    install_method: Literal["direct-binary-copy"]
+    build_source_paths: tuple[str, ...] = Field(min_length=1)
+
+    @field_validator("build_source_paths")
+    @classmethod
+    def require_absolute_build_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not Path(path).is_absolute() for path in value):
+            raise ValueError("build source paths must be absolute")
+        return value
 
 
 class FfmpegToolchain(StrictModel):

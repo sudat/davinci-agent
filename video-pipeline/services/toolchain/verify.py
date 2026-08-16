@@ -37,9 +37,7 @@ def _verify_ffmpeg_provenance(lock: ToolchainLock) -> None:
     verify_binary(lock.python.python)
     verify_binary(lock.ffmpeg.ffmpeg)
     verify_binary(lock.ffmpeg.ffprobe)
-    prefix = Path(lock.ffmpeg.ffmpeg.path).parent.parent
-    expected_argv = (*FROZEN_CONFIGURE_ARGV, f"--prefix={prefix}")
-    if lock.ffmpeg.build.configure_argv != expected_argv:
+    if lock.ffmpeg.build.configure_argv != FROZEN_CONFIGURE_ARGV:
         raise LockError("FFmpeg configure argv drift")
     if lock.ffmpeg.build.compiler not in lock.ffmpeg.ffmpeg.version_output:
         raise LockError("FFmpeg compiler provenance drift")

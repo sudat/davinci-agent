@@ -86,8 +86,9 @@ def test_malformed_lock_json_is_rejected(tmp_path: Path) -> None:
 def test_phase0a_lock_preserves_frozen_build_and_passed_smokes() -> None:
     lock = load_lock(Path("config/toolchains/phase-0a-v1.json"))
 
-    assert lock.ffmpeg.build.configure_argv[:-1] == FROZEN_CONFIGURE_ARGV
-    assert lock.ffmpeg.build.configure_argv[-1].startswith("--prefix=/Users/")
+    assert lock.ffmpeg.build.configure_argv == FROZEN_CONFIGURE_ARGV
+    assert lock.ffmpeg.build.install_method == "direct-binary-copy"
+    assert all(path.startswith("/") for path in lock.ffmpeg.build.build_source_paths)
     assert lock.ffmpeg.source.tarball_sha256 == (
         "733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1"
     )
