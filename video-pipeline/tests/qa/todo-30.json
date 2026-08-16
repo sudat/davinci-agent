@@ -1,0 +1,133 @@
+[
+  {
+    "case_id": "happy-ordered-commands-produce-expected-plan-ir",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_reducer.py::test_ordered_commands_produce_expected_plan_and_ir",
+      "tests/review_command/test_reducer.py::test_deterministic_replay_twice_identical_hash",
+      "tests/review_command/test_reducer.py::test_atomic_local_versions_immutable_contiguous",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "tests/fixtures/manifests/phase-0c/p0c-span-clear.json",
+      "tests/goldens/reference/phase-0c/expected.json"
+    ],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "happy-idempotent-duplicate-single-application",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_reducer.py::test_idempotent_duplicate_single_application",
+      "tests/review_command/test_reducer.py::test_defer_between_applies_leaves_plan_unchanged",
+      "tests/review_command/test_reducer.py::test_purity_reducer_imports_and_no_io",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-duplicate-same-id-different-bytes-hard-conflict",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_reducer.py::test_duplicate_same_id_different_bytes_hard_conflict",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-reordered-noncommutative-stale-version",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_reducer.py::test_reordered_noncommutative_stale_version",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-stale-version-deferred-without-plan-file",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_reducer.py::test_stale_version_proposal_deferred_without_plan_file",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-lock-conflict-deferred-plan-unchanged",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_reducer.py::test_lock_conflict_deferred_plan_unchanged",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "tests/fixtures/manifests/phase-0c/p0c-locked-conflict.json"
+    ],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-direct-file-edit-foreign-plan",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_reducer.py::test_direct_file_edit_foreign_plan",
+      "tests/review_command/test_reducer.py::test_malformed_event_stream_rejected",
+      "tests/review_command/test_reducer.py::test_event_log_seal_detects_tampering",
+      "tests/review_command/test_reducer.py::test_crash_between_event_and_plan_write_recovers",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "4 passed"
+  }
+]
