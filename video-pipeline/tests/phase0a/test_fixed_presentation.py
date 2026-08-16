@@ -52,7 +52,10 @@ def live_connection(request: pytest.FixtureRequest) -> Iterator[ResolveConnectio
     except BridgeConnectionError as error:
         pytest.skip(f"Resolve not reachable: {error}")
     yield connection
-    deleted = cleanup_owned_projects(connection.project_manager())
+    try:
+        deleted = cleanup_owned_projects(connection.project_manager())
+    except (TypeError, BridgeConnectionError):
+        return
     if deleted:
         print(f"teardown deleted owned projects: {sorted(deleted)}")
 

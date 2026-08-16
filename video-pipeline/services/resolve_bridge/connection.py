@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol, cast
@@ -132,6 +133,22 @@ def _verify_report_files(report: ResolveHostReport) -> None:
 
 
 _loaded_modules: dict[str, ScriptModule] = {}
+
+
+def reset_script_module_cache() -> None:
+    """Drop cached bridge modules so a relaunched Resolve gets a fresh handle.
+
+    A ``DaVinciResolveScript`` module loaded before the application quit
+    keeps returning ``None`` from ``scriptapp`` afterwards; the wrapper
+    replaces itself in ``sys.modules`` with the native ``fusionscript``
+    module, so both entries must be dropped before a fresh load reconnects
+    to the newly launched instance.
+    """
+
+    _loaded_modules.clear()
+    sys.modules.pop("fusionscript", None)
+    for name in [key for key in sys.modules if key.startswith("_fvp_bridge_")]:
+        del sys.modules[name]
 
 
 def load_script_module(report: ResolveHostReport) -> ScriptModule:
