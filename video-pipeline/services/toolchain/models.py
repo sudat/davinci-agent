@@ -10,6 +10,9 @@ from services.foundation_io import atomic_write, canonical_model_bytes, sha256_f
 from services.toolchain.normalization import (  # noqa: TC001 (pydantic runtime)
     NormalizationSection,
 )
+from services.toolchain.preview_review import (  # noqa: TC001 (pydantic runtime)
+    PreviewReviewSection,
+)
 
 if TYPE_CHECKING:
     from services.resolve_bridge.models import ResolveHostReport
@@ -129,6 +132,13 @@ class Phase0BSmokeResults(StrictModel):
     ffmpeg_normalize: SmokeRecord
 
 
+class Phase0CSmokeResults(StrictModel):
+    resolve_readonly: SmokeRecord
+    ffmpeg_probe: SmokeRecord
+    ffmpeg_normalize: SmokeRecord
+    preview_review: SmokeRecord
+
+
 class ToolchainLock(StrictModel):
     schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
     phase: Literal["phase-0a"] = "phase-0a"
@@ -148,7 +158,18 @@ class Phase0BToolchainLock(StrictModel):
     smoke: Phase0BSmokeResults
 
 
-type AnyToolchainLock = ToolchainLock | Phase0BToolchainLock
+class Phase0CToolchainLock(StrictModel):
+    schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
+    phase: Literal["phase-0c"]
+    python: PythonToolchain
+    ffmpeg: FfmpegToolchain
+    resolve: ResolveBinding
+    normalization: NormalizationSection
+    preview_review: PreviewReviewSection
+    smoke: Phase0CSmokeResults
+
+
+type AnyToolchainLock = ToolchainLock | Phase0BToolchainLock | Phase0CToolchainLock
 
 
 def load_lock(path: Path) -> AnyToolchainLock:
@@ -158,7 +179,10 @@ def load_lock(path: Path) -> AnyToolchainLock:
         try:
             lock = ToolchainLock.model_validate_json(raw)
         except ValidationError:
-            lock = Phase0BToolchainLock.model_validate_json(raw)
+            try:
+                lock = Phase0BToolchainLock.model_validate_json(raw)
+            except ValidationError:
+                lock = Phase0CToolchainLock.model_validate_json(raw)
         if raw != canonical_model_bytes(lock):
             raise LockError("noncanonical toolchain lock")
     except (OSError, ValidationError) as error:

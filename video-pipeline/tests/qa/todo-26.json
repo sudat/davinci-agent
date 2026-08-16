@@ -1,0 +1,131 @@
+[
+  {
+    "case_id": "happy-fixed-inputs-policy-then-compiler-pass",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/gates/test_phase0c_policy.py",
+      "tests/compile/test_phase0c_subset.py",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "config/gates/phase-0c-v1.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-26-freeze-receipt.json",
+      "config/toolchains/phase-0c-v1.json",
+      "tests/fixtures/manifests/phase-0c/p0c-remove-clear.json",
+      "tests/goldens/reference/phase-0c/expected.json"
+    ],
+    "expected_observation": "passed"
+  },
+  {
+    "case_id": "failure-observed-output-embedded-in-policy",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/gates/test_phase0c_policy.py::test_observed_compiler_output_embedded_in_policy_is_rejected",
+      "tests/phase0c/test_freeze.py::test_observed_result_field_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-stale-parent",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/gates/test_phase0c_policy.py::test_stale_parent_gate_result_is_rejected_at_prepare_time",
+      "tests/phase0c/test_freeze.py::test_tampered_parent_policy_binding_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-resolve-field",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_phase0c_subset.py::test_resolve_specific_field_in_ir_is_rejected",
+      "tests/compile/test_phase0c_subset.py::test_resolve_specific_field_in_plan_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-float-second",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_phase0c_subset.py::test_float_frame_value_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-unresolved-anchor",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_phase0c_subset.py::test_unresolved_anchor_is_an_explicit_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-overflow",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_phase0c_subset.py::test_record_overflow_is_guarded",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]

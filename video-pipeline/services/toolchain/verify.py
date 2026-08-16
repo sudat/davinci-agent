@@ -15,15 +15,17 @@ from services.toolchain.models import (
     BinaryRecord,
     LockError,
     Phase0BToolchainLock,
+    Phase0CToolchainLock,
     SmokeRecord,
     ToolchainLock,
     load_lock,
     write_lock,
 )
 from services.toolchain.normalization import run_normalize_smoke
+from services.toolchain.preview_review import run_preview_smoke
 from services.toolchain.smoke import ProbeAssertionError, run_ffmpeg_probe
 
-type SmokeName = Literal["resolve-readonly", "ffmpeg-probe", "ffmpeg-normalize"]
+type SmokeName = Literal["resolve-readonly", "ffmpeg-probe", "ffmpeg-normalize", "preview-review"]
 
 
 def verify_binary(record: BinaryRecord) -> None:
@@ -73,7 +75,7 @@ def _verify_resolve_provenance(lock: AnyToolchainLock) -> None:
 def _verify_provenance(lock: AnyToolchainLock) -> None:
     _verify_ffmpeg_provenance(lock)
     _verify_resolve_provenance(lock)
-    if isinstance(lock, Phase0BToolchainLock):
+    if isinstance(lock, Phase0BToolchainLock | Phase0CToolchainLock):
         verify_binary(lock.ffmpeg.ffmpeg)
         verify_binary(lock.ffmpeg.ffprobe)
 
@@ -96,6 +98,30 @@ def _run_normalize_smoke(lock: Phase0BToolchainLock) -> SmokeRecord:
     )
 
 
+def _run_preview_smoke(lock: Phase0CToolchainLock) -> SmokeRecord:
+    prefix = Path(lock.ffmpeg.ffmpeg.path).parent.parent
+    artifacts = run_preview_smoke(
+        lock.ffmpeg.ffmpeg.path,
+        lock.ffmpeg.ffprobe.path,
+        lock.preview_review,
+        prefix.parents[1] / "smoke" / "preview-review",
+    )
+    return SmokeRecord(
+        status="passed",
+        evidence_paths=tuple(str(item.resolve()) for item in artifacts),
+        observation=(
+            "encoded and probed the pinned-ffmpeg preview profile; no external "
+            "model participated"
+        ),
+    )
+
+
+def _phase0c_smoke_complete(lock: Phase0CToolchainLock, names: tuple[SmokeName, ...]) -> bool:
+    if lock.smoke.preview_review.status == "passed":
+        return True
+    return "preview-review" in names
+
+
 def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainLock:
     lock = load_lock(path)
     _verify_provenance(lock)
@@ -103,12 +129,23 @@ def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainL
         lock, smoke_names
     ):
         raise LockError("incomplete Phase 0B toolchain smoke results")
+    if isinstance(lock, Phase0CToolchainLock) and not _phase0c_smoke_complete(
+        lock, smoke_names
+    ):
+        raise LockError("incomplete Phase 0C toolchain smoke results")
     match lock:
         case Phase0BToolchainLock() as phase0b:
             updates: dict[str, SmokeRecord] = {}
             if "ffmpeg-normalize" in smoke_names:
                 updates["ffmpeg_normalize"] = _run_normalize_smoke(phase0b)
             verified = lock.model_copy(update={"smoke": phase0b.smoke.model_copy(update=updates)})
+        case Phase0CToolchainLock() as phase0c:
+            phase0c_updates: dict[str, SmokeRecord] = {}
+            if "preview-review" in smoke_names and phase0c.smoke.preview_review.status != "passed":
+                phase0c_updates["preview_review"] = _run_preview_smoke(phase0c)
+            verified = lock.model_copy(
+                update={"smoke": phase0c.smoke.model_copy(update=phase0c_updates)}
+            )
         case ToolchainLock():
             verified = _verify_phase0a_smoke(lock, smoke_names)
     write_lock(path, verified)
@@ -160,8 +197,8 @@ def _verify_phase0a_smoke(
                         )
                     }
                 )
-            case "ffmpeg-normalize":
-                raise LockError("ffmpeg-normalize smoke requires a phase-0b lock")
+            case "ffmpeg-normalize" | "preview-review":
+                raise LockError(f"{smoke_name} smoke requires a phase-0b/0c lock")
     return lock.model_copy(update={"smoke": smoke})
 
 
@@ -178,6 +215,8 @@ def _smoke_names(raw: str) -> tuple[SmokeName, ...]:
                 parsed.append("ffmpeg-probe")
             case "ffmpeg-normalize":
                 parsed.append("ffmpeg-normalize")
+            case "preview-review":
+                parsed.append("preview-review")
             case _:
                 raise LockError(f"unsupported smoke profile: {raw}")
     return tuple(parsed)

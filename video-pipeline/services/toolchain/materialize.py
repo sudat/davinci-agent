@@ -10,11 +10,14 @@ from services.toolchain.models import (
     LockError,
     Phase0BSmokeResults,
     Phase0BToolchainLock,
+    Phase0CSmokeResults,
+    Phase0CToolchainLock,
     SmokeRecord,
     ToolchainLock,
     load_lock,
 )
 from services.toolchain.normalization import NormalizationSection
+from services.toolchain.preview_review import PreviewReviewSection
 
 PINS_ROOT = Path("config/toolchains/pins")
 
@@ -36,6 +39,17 @@ def _load_pin(path: Path) -> NormalizationSection:
         raise MaterializeError(f"invalid normalization pin: {error}") from error
     if raw != canonical_model_bytes(section):
         raise MaterializeError("normalization pin is noncanonical")
+    return section
+
+
+def _load_preview_pin(path: Path) -> PreviewReviewSection:
+    try:
+        raw = path.read_bytes()
+        section = PreviewReviewSection.model_validate_json(raw)
+    except (OSError, ValidationError) as error:
+        raise MaterializeError(f"invalid preview-review pin: {error}") from error
+    if raw != canonical_model_bytes(section):
+        raise MaterializeError("preview-review pin is noncanonical")
     return section
 
 
@@ -96,10 +110,73 @@ def _assert_inheritance(parent: ToolchainLock, child: Phase0BToolchainLock) -> N
         raise MaterializeError("ffprobe binary hash substitution is forbidden")
 
 
+def materialize_phase0c(parent_path: Path, pin_path: Path, out_path: Path) -> None:
+    parent = load_lock(parent_path)
+    if not isinstance(parent, Phase0BToolchainLock):
+        raise MaterializeError("phase-0c parent must be the frozen phase-0b lock")
+    parent_smoke_ok = (
+        parent.smoke.resolve_readonly.status == "passed"
+        and parent.smoke.ffmpeg_probe.status == "passed"
+        and parent.smoke.ffmpeg_normalize.status == "passed"
+    )
+    if not parent_smoke_ok:
+        raise MaterializeError("parent phase-0b smoke results are incomplete")
+    section = _load_preview_pin(pin_path)
+    inherited_smoke = Phase0CSmokeResults(
+        resolve_readonly=parent.smoke.resolve_readonly,
+        ffmpeg_probe=parent.smoke.ffmpeg_probe,
+        ffmpeg_normalize=parent.smoke.ffmpeg_normalize,
+        preview_review=SmokeRecord(
+            status="pending",
+            evidence_paths=(),
+            observation="pending preview-review smoke",
+        ),
+    )
+    child = Phase0CToolchainLock(
+        phase="phase-0c",
+        python=parent.python,
+        ffmpeg=parent.ffmpeg,
+        resolve=parent.resolve,
+        normalization=parent.normalization,
+        preview_review=section,
+        smoke=inherited_smoke,
+    )
+    _assert_phase0c_inheritance(parent, child)
+    payload = canonical_model_bytes(child)
+    if out_path.exists():
+        if out_path.read_bytes() != payload:
+            raise MaterializeError("existing phase-0c lock differs from merged result")
+        return
+    atomic_write(out_path, payload)
+
+
+def _assert_phase0c_inheritance(
+    parent: Phase0BToolchainLock,
+    child: Phase0CToolchainLock,
+) -> None:
+    parent_view = parent.model_dump(mode="json")
+    child_view = child.model_dump(mode="json")
+    for section in ("python", "ffmpeg", "resolve", "normalization"):
+        if child_view[section] != parent_view[section]:
+            raise MaterializeError(f"phase-0c must inherit the exact 0B {section} section")
+    smoke = child_view["smoke"]
+    for record in ("resolve_readonly", "ffmpeg_probe", "ffmpeg_normalize"):
+        if smoke[record] != parent_view["smoke"][record]:
+            raise MaterializeError(f"phase-0c must inherit the exact 0B {record} smoke record")
+    if smoke["preview_review"]["status"] != "pending":
+        raise MaterializeError("merged preview-review smoke must start pending")
+    if child.ffmpeg.ffmpeg.sha256 != parent.ffmpeg.ffmpeg.sha256:
+        raise MaterializeError("ffmpeg binary hash substitution is forbidden")
+    if child.ffmpeg.ffprobe.sha256 != parent.ffmpeg.ffprobe.sha256:
+        raise MaterializeError("ffprobe binary hash substitution is forbidden")
+    if child.preview_review.external_model != "none":
+        raise MaterializeError("phase-0c pins no external model")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--parent", type=Path, required=True)
-    parser.add_argument("--phase", choices=("phase-0b",), required=True)
+    parser.add_argument("--phase", choices=("phase-0b", "phase-0c"), required=True)
     parser.add_argument("--pin", required=True)
     parser.add_argument("--out", type=Path, required=True)
     return parser
@@ -115,11 +192,14 @@ def resolve_pin_path(raw: str) -> Path:
 def main() -> int:
     arguments = _parser().parse_args()
     try:
-        materialize_phase0b(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
+        if arguments.phase == "phase-0b":
+            materialize_phase0b(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
+        else:
+            materialize_phase0c(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
     except (LockError, MaterializeError, OSError) as error:
         print(error)
         return 2
-    print(f"toolchain materialized: {arguments.out} (phase-0b)")
+    print(f"toolchain materialized: {arguments.out} ({arguments.phase})")
     return 0
 
 

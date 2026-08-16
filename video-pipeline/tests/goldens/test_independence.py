@@ -11,6 +11,7 @@ from services.foundation_io import sha256_file as file_sha256
 
 PHASE_DIR = Path("tests/goldens/reference/phase-0a")
 PHASE_0B_DIR = Path("tests/goldens/reference/phase-0b")
+PHASE_0C_DIR = Path("tests/goldens/reference/phase-0c")
 
 
 def test_derivation_imports_only_stdlib_and_reference_common() -> None:
@@ -88,6 +89,67 @@ def test_self_derived_golden_importing_services_is_rejected(tmp_path: Path) -> N
 def test_phase0b_self_derived_golden_importing_services_is_rejected(tmp_path: Path) -> None:
     source = tmp_path / "derive.py"
     source.write_text("import services.toolchain.models\n")
+
+    with pytest.raises(GoldenAuditError, match="services"):
+        audit_derivation_source(source)
+
+
+def test_phase0c_derivation_imports_only_stdlib_and_reference_common() -> None:
+    audit = audit_derivation_source(PHASE_0C_DIR / "derive.py")
+
+    assert audit.audit_result == "pass"
+    assert audit.forbidden_imports == ()
+    assert audit.produced_outputs_read is False
+
+
+def test_phase0c_frozen_audit_and_index_bindings_are_current() -> None:
+    audit_payload = json.loads((PHASE_0C_DIR / "import-audit.json").read_bytes())
+    index_payload = json.loads((PHASE_0C_DIR / "index.json").read_bytes())
+
+    assert audit_payload["audit_result"] == "pass"
+    assert audit_payload["derivation_source_sha256"] == file_sha256(PHASE_0C_DIR / "derive.py")
+    assert index_payload["derivation_source_sha256"] == file_sha256(PHASE_0C_DIR / "derive.py")
+    assert index_payload["expected_sha256"] == file_sha256(PHASE_0C_DIR / "expected.json")
+    assert index_payload["audit_sha256"] == file_sha256(PHASE_0C_DIR / "import-audit.json")
+    for fixture_id, manifest_hash in index_payload["fixture_manifest_sha256s"].items():
+        manifest = Path("tests/fixtures/manifests/phase-0c") / f"{fixture_id}.json"
+        assert manifest_hash == file_sha256(manifest)
+
+
+def test_phase0c_expected_tables_are_frozen() -> None:
+    expected = json.loads((PHASE_0C_DIR / "expected.json").read_bytes())
+
+    fixtures = expected["fixtures"]
+    assert fixtures["p0c-remove-clear"]["classification"] == "clear"
+    remove_rows = fixtures["p0c-remove-clear"]["record_table"]
+    assert [row["item_id"] for row in remove_rows] == ["v1", "v3", "a1", "a3"]
+    assert remove_rows[1] == {
+        "item_id": "v3",
+        "kind": "video",
+        "record_end": 300,
+        "record_start": 150,
+        "source_end": 450,
+        "source_start": 300,
+        "subtitle_text": None,
+        "track_index": 1,
+    }
+    assert fixtures["p0c-span-clear"]["plan_items"][3]["span"] == {
+        "end_frame": 240,
+        "start_frame": 150,
+    }
+    assert fixtures["p0c-subtitle-clear"]["plan_items"][2]["subtitle_text"] == (
+        "最初のセグメントでした"
+    )
+    assert fixtures["p0c-ambiguous-two-targets"]["classification"] == "ambiguous"
+    assert fixtures["p0c-ambiguous-two-targets"]["decision"] == "defer"
+    assert fixtures["p0c-ambiguous-two-targets"]["resulting_plan_version"] == "v1"
+    assert fixtures["p0c-locked-conflict"]["classification"] == "conflict"
+    assert fixtures["p0c-locked-conflict"]["decision"] == "defer"
+
+
+def test_phase0c_self_derived_golden_importing_services_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "derive.py"
+    source.write_text("from services.compile.phase0c import compile_plan\n")
 
     with pytest.raises(GoldenAuditError, match="services"):
         audit_derivation_source(source)

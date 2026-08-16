@@ -17,12 +17,13 @@ from services.fixtures.models import (
     FreezeIntent,
     FreezeReceipt,
     Phase0BFreezeReceipt,
+    Phase0CFreezeReceipt,
 )
 from services.foundation_io import canonical_model_bytes
 from services.gates import GatePolicy, canonical_gate_bytes
 from services.toolchain.execution_ledger import ExecutionLedgerError
 
-type AnyFreezeReceipt = FreezeReceipt | Phase0BFreezeReceipt
+type AnyFreezeReceipt = FreezeReceipt | Phase0BFreezeReceipt | Phase0CFreezeReceipt
 
 AT_FDCWD = -2
 RENAME_EXCL = 0x00000004
@@ -99,7 +100,10 @@ def _load_receipt(raw: bytes) -> AnyFreezeReceipt:
     try:
         return FreezeReceipt.model_validate_json(raw)
     except ValidationError:
-        return Phase0BFreezeReceipt.model_validate_json(raw)
+        try:
+            return Phase0BFreezeReceipt.model_validate_json(raw)
+        except ValidationError:
+            return Phase0CFreezeReceipt.model_validate_json(raw)
 
 
 def publish_freeze(intent_path: Path, ledger: Path, *, recover: bool) -> None:

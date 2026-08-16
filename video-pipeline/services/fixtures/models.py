@@ -7,8 +7,8 @@ from pydantic import Field
 from services.contracts.primitives import Sha256, StrictModel
 from services.fixtures.manifest import Phase0AFixtureManifest, Sequence
 
-GateId = Literal["phase-0a", "phase-0b"]
-FreezeTodo = Literal[6, 24]
+GateId = Literal["phase-0a", "phase-0b", "phase-0c"]
+FreezeTodo = Literal[6, 24, 26]
 
 
 class GoldenHashes(StrictModel):
@@ -48,6 +48,27 @@ class Phase0BFreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[24] = 24
     gate_id: Literal["phase-0b"] = "phase-0b"
+    gate_version: Literal["v1"] = "v1"
+    policy_path: str
+    policy_sha256: Sha256
+    toolchain_lock_path: str
+    toolchain_lock_sha256: Sha256
+    fixture_manifests: tuple[ManifestBinding, ...]
+    fixture_manifests_combined_sha256: Sha256
+    parent_gate_result_path: str
+    parent_gate_result_sha256: Sha256
+    golden_hashes: GoldenHashes
+    pre_source_snapshot_path: str
+    pre_source_snapshot_sha256: Sha256
+    execution_contract_path: str
+    execution_contract_sha256: Sha256
+
+
+class Phase0CFreezeReceipt(StrictModel):
+    schema_version: Literal["freeze-receipt-v1"] = "freeze-receipt-v1"
+    record_type: Literal["freeze_receipt"] = "freeze_receipt"
+    todo: Literal[26] = 26
+    gate_id: Literal["phase-0c"] = "phase-0c"
     gate_version: Literal["v1"] = "v1"
     policy_path: str
     policy_sha256: Sha256
@@ -114,5 +135,6 @@ __all__ = [
     "ManifestBinding",
     "Phase0AFixtureManifest",
     "Phase0BFreezeReceipt",
+    "Phase0CFreezeReceipt",
     "SourceSnapshot",
 ]

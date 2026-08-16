@@ -30,6 +30,38 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
+def reject_resolve_keys(value: object) -> object:
+    """Reject Resolve-specific field names anywhere in an inbound payload.
+
+    Timeline IR and Edit Plan artifacts are NLE-independent by contract; any
+    inbound key carrying ``resolve`` (e.g. ``resolve_track_index``) is a
+    validation failure even before unknown-key handling.
+    """
+
+    stack: list[object] = [value]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            for key, child in node.items():
+                if isinstance(key, str) and "resolve" in key.lower():
+                    raise PydanticCustomError(
+                        "resolve_field_forbidden",
+                        "Resolve-specific fields are forbidden in NLE-independent artifacts: {key}",
+                        {"key": key},
+                    )
+                stack.append(child)
+        elif isinstance(node, list | tuple):
+            stack.extend(node)
+    return value
+
+
+class ResolveFreeModel(StrictModel):
+    @model_validator(mode="before")
+    @classmethod
+    def reject_resolve_fields(cls, value: object) -> object:
+        return reject_resolve_keys(value)
+
+
 class RationalFrameRate(StrictModel):
     num: PositiveInteger
     den: PositiveInteger
@@ -106,3 +138,10 @@ class ArtifactEnvelope[ArtifactKind: str](StrictModel):
     content_hash: Sha256
     producer: Producer
     inputs: tuple[ArtifactRef, ...]
+
+
+class ResolveFreeEnvelope[ArtifactKind: str](ArtifactEnvelope[ArtifactKind]):
+    @model_validator(mode="before")
+    @classmethod
+    def reject_resolve_fields(cls, value: object) -> object:
+        return reject_resolve_keys(value)

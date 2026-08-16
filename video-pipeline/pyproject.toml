@@ -42,7 +42,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ANN", "ARG", "D", "PLR2004", "S101", "S603", "S607", "SLF001"]
-"tests/goldens/reference/**/derive.py" = ["PLR0913", "PLR0917"]
+"tests/goldens/reference/**/derive.py" = ["E501", "PLR0913", "PLR0917"]
 "services/resolve_bridge/connection.py" = ["N802", "N818"]
 "services/resolve_bridge/faults.py" = ["N802", "N818", "ARG002", "RET501"]
 "services/resolve_bridge/base_cut.py" = ["N802", "FBT003"]
@@ -110,7 +110,10 @@ convention = "google"
 typeCheckingMode = "standard"
 pythonVersion = "3.12"
 include = ["services", "tests"]
-exclude = [".venv", "**/__pycache__"]
+# Golden derivation scripts are frozen evidence artifacts (byte-bound by their
+# Gate policy); they are validated by the AST/import audit and frozen expected
+# tables, and cannot be edited post-freeze to satisfy the type checker.
+exclude = [".venv", "**/__pycache__", "tests/goldens/reference/**/derive.py"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

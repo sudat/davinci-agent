@@ -11,12 +11,13 @@ from services.execution.preflight import ExecutionContract
 from services.fixtures.models import (
     FreezeReceipt,
     Phase0BFreezeReceipt,
+    Phase0CFreezeReceipt,
     SourceSnapshot,
 )
 from services.foundation_io import canonical_model_bytes, sha256_file
 from services.gates import GatePolicy, canonical_gate_bytes
 
-type AnyFreezeReceipt = FreezeReceipt | Phase0BFreezeReceipt
+type AnyFreezeReceipt = FreezeReceipt | Phase0BFreezeReceipt | Phase0CFreezeReceipt
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +33,10 @@ def _load_receipt(path: Path) -> AnyFreezeReceipt:
     try:
         receipt = FreezeReceipt.model_validate_json(raw)
     except ValidationError:
-        receipt = Phase0BFreezeReceipt.model_validate_json(raw)
+        try:
+            receipt = Phase0BFreezeReceipt.model_validate_json(raw)
+        except ValidationError:
+            receipt = Phase0CFreezeReceipt.model_validate_json(raw)
     if raw != canonical_model_bytes(receipt):
         raise PolicyVerificationError("freeze receipt is noncanonical")
     return receipt
@@ -47,13 +51,13 @@ def _load_snapshot(path: Path) -> SourceSnapshot:
 
 
 def _manifest_sha256s(receipt: AnyFreezeReceipt) -> tuple[tuple[str | None, str], ...]:
-    if isinstance(receipt, Phase0BFreezeReceipt):
+    if isinstance(receipt, Phase0BFreezeReceipt | Phase0CFreezeReceipt):
         return tuple((binding.path, binding.sha256) for binding in receipt.fixture_manifests)
     return ((receipt.fixture_manifest_path, receipt.fixture_manifest_sha256),)
 
 
 def _verify_manifest_bindings(policy: GatePolicy, receipt: AnyFreezeReceipt) -> None:
-    if isinstance(receipt, Phase0BFreezeReceipt):
+    if isinstance(receipt, Phase0BFreezeReceipt | Phase0CFreezeReceipt):
         combined = hashlib.sha256()
         for binding in receipt.fixture_manifests:
             combined.update(Path(binding.path).read_bytes())

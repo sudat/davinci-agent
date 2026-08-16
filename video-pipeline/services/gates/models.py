@@ -8,6 +8,7 @@ from pydantic_core import PydanticCustomError
 from services.contracts.primitives import Identifier, SchemaVersion, Sha256, StrictModel
 from services.gates.phase0a import PHASE_0A_CAPABILITIES, PHASE_0A_CRITERIA
 from services.gates.phase0b import PHASE_0B_CRITERIA
+from services.gates.phase0c import PHASE_0C_CRITERIA
 
 type InputValue = (
     bool
@@ -102,6 +103,8 @@ class GatePolicy(GateModel):
             return self._validate_phase_0a()
         if self.gate_id == "phase-0b":
             return self._validate_phase_0b()
+        if self.gate_id == "phase-0c":
+            return self._validate_phase_0c()
         return self
 
     def _validate_phase_0a(self) -> GatePolicy:
@@ -142,6 +145,29 @@ class GatePolicy(GateModel):
             raise PydanticCustomError(
                 "phase_0b_parent",
                 "Phase 0B requires exactly one parent Phase 0A gate result hash",
+            )
+        return self
+
+    def _validate_phase_0c(self) -> GatePolicy:
+        if self.criteria != PHASE_0C_CRITERIA:
+            raise PydanticCustomError(
+                "phase_0c_criteria",
+                "Phase 0C criteria must match the canonical review/compiler exit criteria",
+            )
+        if self.capability_allowlist:
+            raise PydanticCustomError(
+                "phase_0c_capabilities",
+                "Phase 0C freezes no capability allowlist; capabilities stay bound to 0A",
+            )
+        if self.prerequisite_bindings:
+            raise PydanticCustomError(
+                "phase_0c_prerequisites",
+                "Phase 0C prerequisites are parent gate result hashes only",
+            )
+        if len(self.parent_gate_result_hashes) != 1:
+            raise PydanticCustomError(
+                "phase_0c_parent",
+                "Phase 0C requires exactly one parent Phase 0B gate result hash",
             )
         return self
 
