@@ -44,6 +44,19 @@ ignore = [
 "tests/**/*.py" = ["ANN", "ARG", "D", "PLR2004", "S101", "S603", "S607", "SLF001"]
 "services/resolve_bridge/connection.py" = ["N802", "N818"]
 "services/resolve_bridge/faults.py" = ["N802", "N818", "ARG002", "RET501"]
+"services/resolve_bridge/base_cut.py" = ["N802", "FBT003"]
+"services/resolve_bridge/base_cut_models.py" = ["N802", "FBT001", "FBT002"]
+"services/resolve_bridge/base_cut_fakes.py" = [
+  "N802",
+  "ARG001",
+  "ARG002",
+  "FBT001",
+  "FBT002",
+  "FBT003",
+  "PLR0913",
+  "PLR0917",
+]
+"services/resolve_bridge/base_cut_faults.py" = ["N802", "ARG002", "FBT001", "FBT002", "FBT003"]
 "services/resolve_bridge/launch.py" = ["N818"]
 
 [tool.ruff.lint.pydocstyle]
