@@ -94,6 +94,14 @@ ignore = [
 "services/spike/gate_faults.py" = ["PLR0913"]
 "services/spike/gate_matrix.py" = ["PLR0913"]
 "services/spike/run_gate.py" = ["PLR0911", "C901", "PLR0912", "PLR0915"]
+"services/spike/gate_phase0b_checks.py" = ["PLR0912", "PLR0913", "PLR0917", "C901"]
+"services/spike/gate_phase0b_cli.py" = ["PLR0911", "PLR0912", "PLR0915", "C901"]
+"services/spike/gate_phase0b_driver.py" = ["PLR0913", "PLR0917"]
+"services/spike/gate_phase0b_evaluate.py" = ["C901"]
+"services/spike/gate_phase0b_fakes.py" = ["PLR0913", "PLR0917"]
+"services/spike/gate_phase0b_readback.py" = ["FBT003", "N802", "PLR0913", "PLR0917"]
+"services/spike/gate_phase0b_sync.py" = ["PLR0913", "PLR0917"]
+"services/spike/gate_phase0b_verify.py" = ["PLR0912", "PLR0913", "PLR0917", "C901"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

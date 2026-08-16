@@ -41,10 +41,15 @@ def stop_recorded(evidence_dir: Path) -> GateStopRecord | None:
     return load_stop(marker)
 
 
-def record_stop(evidence_dir: Path, criterion_id: str, reason: str) -> Path:
+def record_stop(
+    evidence_dir: Path,
+    criterion_id: str,
+    reason: str,
+    gate_id: str = GATE_ID,
+) -> Path:
     marker = stop_marker_path(evidence_dir)
     record = GateStopRecord(
-        gate_id=GATE_ID,
+        gate_id=gate_id,
         criterion_id=criterion_id,
         reason=reason,
         recorded_at=datetime.now(UTC).isoformat(timespec="milliseconds"),

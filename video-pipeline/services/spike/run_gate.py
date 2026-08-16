@@ -41,7 +41,6 @@ from services.spike.gate_models import (
     EXIT_PASS,
     EXIT_STOP,
     EXIT_UNAVAILABLE,
-    GATE_ID,
     MARKER,
     MATRIX_NAME,
     PROBES_DIR,
@@ -60,7 +59,7 @@ DEFAULT_MANIFEST: Final = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixe
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="run_gate")
-    parser.add_argument("gate", choices=(GATE_ID,))
+    parser.add_argument("gate", choices=("phase-0a", "phase-0b"))
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--host-report", type=Path)
@@ -70,6 +69,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--ffprobe", type=Path)
     parser.add_argument("--capabilities-dir", type=Path, default=Path("capabilities"))
     parser.add_argument("--budget", type=float, default=DEFAULT_BUDGET_SECONDS)
+    parser.add_argument("--lock", type=Path)
+    parser.add_argument("--parent-result", dest="parent_result", type=Path)
     return parser
 
 
@@ -105,12 +106,24 @@ def main() -> int:
     arguments = _parser().parse_args()
     fault_fixture = os.environ.get("QA_FAULT_FIXTURE")
     if fault_fixture is not None:
-        from services.spike.gate_faults import run_fault_cli  # noqa: PLC0415
+        if arguments.gate == "phase-0b":
+            from services.spike import gate_phase0b_faults  # noqa: PLC0415
 
-        return run_fault_cli(Path(fault_fixture), arguments.policy, arguments.manifest)
+            return gate_phase0b_faults.run_fault_cli(
+                Path(fault_fixture), arguments.policy
+            )
+        from services.spike import gate_faults  # noqa: PLC0415
+
+        return gate_faults.run_fault_cli(
+            Path(fault_fixture), arguments.policy, arguments.manifest
+        )
     if arguments.evidence is None:
         print("--evidence is required outside fault mode", file=sys.stderr)
         return 2
+    if arguments.gate == "phase-0b":
+        from services.spike import gate_phase0b_cli  # noqa: PLC0415
+
+        return gate_phase0b_cli.run_cli(arguments)
 
     try:
         policy_raw = arguments.policy.read_bytes()

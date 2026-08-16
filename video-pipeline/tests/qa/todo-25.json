@@ -1,0 +1,143 @@
+[
+  {
+    "case_id": "happy-all-variants-and-live-readbacks",
+    "kind": "happy",
+    "argv": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/bin/uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0b",
+      "--policy",
+      "config/gates/phase-0b-v1.json",
+      "--evidence",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b",
+      "--host-report",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/resolve-host.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "RESOLVE_HOST_REPORT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/resolve-host.json"
+    },
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/gate-result.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/sync-measurements.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/capability-matrix-0b.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/runs/p0b-cfr24/live-readback/readback-report.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0b/runs/p0b-vfr-2-3-cadence/live-readback/readback-report.json",
+      "capabilities/resolve-21.0.4/capability-matrix.json"
+    ],
+    "expected_observation": "phase-0b: PASS"
+  },
+  {
+    "case_id": "failure-off-by-one-golden",
+    "kind": "failure",
+    "argv": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/bin/uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0b",
+      "--policy",
+      "config/gates/phase-0b-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0A_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0a/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0b-off-by-one-golden.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=off-by-one-golden"
+  },
+  {
+    "case_id": "failure-missing-duplicate-report",
+    "kind": "failure",
+    "argv": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/bin/uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0b",
+      "--policy",
+      "config/gates/phase-0b-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0A_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0a/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0b-missing-duplicate-report.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=missing-duplicate-report"
+  },
+  {
+    "case_id": "failure-sync-over-one-frame",
+    "kind": "failure",
+    "argv": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/bin/uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0b",
+      "--policy",
+      "config/gates/phase-0b-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0A_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0a/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0b-sync-over-one-frame.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=sync-over-one-frame"
+  },
+  {
+    "case_id": "failure-stale-resolve-build",
+    "kind": "failure",
+    "argv": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/bin/uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0b",
+      "--policy",
+      "config/gates/phase-0b-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {
+      "PHASE0A_RESULT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-0a/gate-result.json"
+    },
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0b-stale-resolve-build.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "STOP code=phase-0b-stop-stale-binding"
+  },
+  {
+    "case_id": "failure-direct-vfr-original-edit",
+    "kind": "failure",
+    "argv": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/bootstrap/bin/uv",
+      "run",
+      "python",
+      "-m",
+      "services.spike.run_gate",
+      "phase-0b",
+      "--policy",
+      "config/gates/phase-0b-v1.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": "tests/fixtures/resolve-bridge-faults/gate0b-vfr-original-edit.json",
+    "expected_exit": 2,
+    "expected_artifacts": [],
+    "expected_observation": "code=original_refused_for_resolve_edit"
+  }
+]
