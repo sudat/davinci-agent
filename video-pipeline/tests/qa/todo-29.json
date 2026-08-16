@@ -1,0 +1,165 @@
+[
+  {
+    "case_id": "happy-replay-clear-commands-produce-strict-proposals",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_clear_replays_produce_strict_proposals",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "tests/fixtures/manifests/phase-0c/p0c-remove-clear.json",
+      "tests/fixtures/manifests/phase-0c/p0c-span-clear.json",
+      "tests/fixtures/manifests/phase-0c/p0c-subtitle-clear.json"
+    ],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "happy-live-lane-skips-without-policy-env",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "-m",
+      "cloud_fixture",
+      "tests/review_command/test_translator_live.py",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed, 2 skipped"
+  },
+  {
+    "case_id": "failure-local-only-denial-before-transport",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_local_only_denial_happens_before_transport",
+      "tests/review_command/test_translator.py::test_wrong_policy_profile_is_denied",
+      "tests/review_command/test_translator.py::test_unreadable_toolchain_pin_fails_closed",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-prompt-injection-cannot-approve",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_prompt_injection_probe_rides_as_data",
+      "tests/review_command/test_translator.py::test_human_only_kind_is_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-refusal-no-commit",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_refusal_replay_is_structured_refusal_not_proposal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-truncation-cannot-commit",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_truncated_response_is_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-malformed-json-cannot-commit",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_malformed_json_is_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-unknown-command-cannot-commit",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_unknown_command_kind_is_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-api-error-cannot-commit",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/review_command/test_translator.py::test_api_error_replay_is_structured_error",
+      "tests/review_command/test_translator.py::test_replay_hash_drift_is_mismatch_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  }
+]

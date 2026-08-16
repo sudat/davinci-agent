@@ -123,4 +123,5 @@ addopts = ["-ra", "--strict-config", "--strict-markers"]
 filterwarnings = ["error"]
 markers = [
   "resolve_live: live DaVinci Resolve bridge tests; skipped with an explicit reason when Resolve is unreachable",
+  "cloud_fixture: synthetic Cloud-model fixture tests; run only with the explicit synthetic-data policy env, skipped with an explicit reason otherwise",
 ]
