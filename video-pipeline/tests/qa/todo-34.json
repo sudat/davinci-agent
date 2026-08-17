@@ -1,0 +1,107 @@
+[
+  {
+    "case_id": "happy-designed-pauses-fillers-clipping-detected",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_audio_candidates.py::test_designed_pauses_fillers_clipping_detected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "config/toolchains/phase-1-technical-v1.json",
+      "tests/fixtures/manifests/phase-1-technical/p1-ref-02-pauses-fillers.json"
+    ],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-decode-failure",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_audio_candidates.py::test_corrupt_wav_structured_decode_failure",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-time-base-confusion-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_audio_candidates.py::test_time_base_confusion_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-all-fillers-auto-delete-impossible",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_audio_candidates.py::test_all_fillers_auto_delete_impossible",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-missing-confidence-version-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_audio_candidates.py::test_missing_confidence_or_version_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-dialogue-ambient-conflation-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_audio_candidates.py::test_dialogue_ambient_conflation_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
