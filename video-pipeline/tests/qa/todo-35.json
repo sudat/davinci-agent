@@ -1,0 +1,57 @@
+[
+  {
+    "case_id": "happy-black-blur-exposure-contact-fixture-passes",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_visual_minimum.py::test_minimum_checks_on_designed_fixture",
+      "tests/analyze/test_visual_minimum.py::test_contact_sheet_deterministic_png",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "config/toolchains/phase-1-technical-v1.json"
+    ],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-prohibited-analyzer-import-flagged",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_visual_minimum.py::test_prohibited_analyzer_import_flagged",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-untraceable-frame-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_visual_minimum.py::test_untraceable_frame_rejected",
+      "tests/analyze/test_visual_minimum.py::test_stale_media_binding_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  }
+]
