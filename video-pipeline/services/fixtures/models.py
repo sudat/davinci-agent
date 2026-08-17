@@ -7,8 +7,8 @@ from pydantic import Field
 from services.contracts.primitives import Sha256, StrictModel
 from services.fixtures.manifest import Phase0AFixtureManifest, Sequence
 
-GateId = Literal["phase-0a", "phase-0b", "phase-0c", "control-plane-baseline"]
-FreezeTodo = Literal[6, 7, 24, 26]
+GateId = Literal["phase-0a", "phase-0b", "phase-0c", "control-plane-baseline", "phase-1-technical"]
+FreezeTodo = Literal[6, 7, 24, 26, 32]
 
 
 class GoldenHashes(StrictModel):
@@ -105,6 +105,32 @@ class ControlPlaneFreezeReceipt(StrictModel):
     execution_contract_sha256: Sha256
 
 
+class ParentResultLink(StrictModel):
+    gate_id: str
+    path: str
+    sha256: Sha256
+
+
+class Phase1TechnicalFreezeReceipt(StrictModel):
+    schema_version: Literal["freeze-receipt-v1"] = "freeze-receipt-v1"
+    record_type: Literal["freeze_receipt"] = "freeze_receipt"
+    todo: Literal[32] = 32
+    gate_id: Literal["phase-1-technical"] = "phase-1-technical"
+    gate_version: Literal["v1"] = "v1"
+    policy_path: str
+    policy_sha256: Sha256
+    toolchain_lock_path: str
+    toolchain_lock_sha256: Sha256
+    fixture_manifests: tuple[ManifestBinding, ...]
+    fixture_manifests_combined_sha256: Sha256
+    parent_gate_results: tuple[ParentResultLink, ...]
+    golden_hashes: GoldenHashes
+    pre_source_snapshot_path: str
+    pre_source_snapshot_sha256: Sha256
+    execution_contract_path: str
+    execution_contract_sha256: Sha256
+
+
 class FreezeIntent(StrictModel):
     schema_version: Literal["freeze-intent-v1"] = "freeze-intent-v1"
     event_type: Literal["freeze-intent"] = "freeze-intent"
@@ -154,8 +180,10 @@ __all__ = [
     "FreezeReceipt",
     "GoldenHashes",
     "ManifestBinding",
+    "ParentResultLink",
     "Phase0AFixtureManifest",
     "Phase0BFreezeReceipt",
     "Phase0CFreezeReceipt",
+    "Phase1TechnicalFreezeReceipt",
     "SourceSnapshot",
 ]

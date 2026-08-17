@@ -7,11 +7,18 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from services.contracts.primitives import Sha256
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
+from services.toolchain.binaries import BinaryRecord  # noqa: TC001 (re-exported API)
+from services.toolchain.editorial_model import (  # noqa: TC001 (pydantic runtime)
+    EditorialModelSection,
+)
 from services.toolchain.normalization import (  # noqa: TC001 (pydantic runtime)
     NormalizationSection,
 )
 from services.toolchain.preview_review import (  # noqa: TC001 (pydantic runtime)
     PreviewReviewSection,
+)
+from services.toolchain.whisper_ja import (  # noqa: TC001 (pydantic runtime)
+    WhisperJaSection,
 )
 
 if TYPE_CHECKING:
@@ -51,19 +58,6 @@ class LockError(Exception):
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-
-class BinaryRecord(StrictModel):
-    path: str
-    sha256: Sha256Value
-    version_output: str
-
-    @field_validator("path")
-    @classmethod
-    def require_absolute(cls, value: str) -> str:
-        if not Path(value).is_absolute():
-            raise ValueError("binary path must be absolute")
-        return value
 
 
 class PythonToolchain(StrictModel):
@@ -139,6 +133,15 @@ class Phase0CSmokeResults(StrictModel):
     preview_review: SmokeRecord
 
 
+class Phase1TechnicalSmokeResults(StrictModel):
+    resolve_readonly: SmokeRecord
+    ffmpeg_probe: SmokeRecord
+    ffmpeg_normalize: SmokeRecord
+    preview_review: SmokeRecord
+    whisper_ja: SmokeRecord
+    editorial_model: SmokeRecord
+
+
 class ToolchainLock(StrictModel):
     schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
     phase: Literal["phase-0a"] = "phase-0a"
@@ -169,7 +172,25 @@ class Phase0CToolchainLock(StrictModel):
     smoke: Phase0CSmokeResults
 
 
-type AnyToolchainLock = ToolchainLock | Phase0BToolchainLock | Phase0CToolchainLock
+class Phase1TechnicalToolchainLock(StrictModel):
+    schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
+    phase: Literal["phase-1-technical"]
+    python: PythonToolchain
+    ffmpeg: FfmpegToolchain
+    resolve: ResolveBinding
+    normalization: NormalizationSection
+    preview_review: PreviewReviewSection
+    whisper_ja: WhisperJaSection
+    editorial_model: EditorialModelSection
+    smoke: Phase1TechnicalSmokeResults
+
+
+type AnyToolchainLock = (
+    ToolchainLock
+    | Phase0BToolchainLock
+    | Phase0CToolchainLock
+    | Phase1TechnicalToolchainLock
+)
 
 
 def load_lock(path: Path) -> AnyToolchainLock:
@@ -182,7 +203,10 @@ def load_lock(path: Path) -> AnyToolchainLock:
             try:
                 lock = Phase0BToolchainLock.model_validate_json(raw)
             except ValidationError:
-                lock = Phase0CToolchainLock.model_validate_json(raw)
+                try:
+                    lock = Phase0CToolchainLock.model_validate_json(raw)
+                except ValidationError:
+                    lock = Phase1TechnicalToolchainLock.model_validate_json(raw)
         if raw != canonical_model_bytes(lock):
             raise LockError("noncanonical toolchain lock")
     except (OSError, ValidationError) as error:

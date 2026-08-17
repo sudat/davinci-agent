@@ -10,6 +10,10 @@ from services.gates.control_plane import PHASE_1_CONTROL_PLANE_CRITERIA
 from services.gates.phase0a import PHASE_0A_CAPABILITIES, PHASE_0A_CRITERIA
 from services.gates.phase0b import PHASE_0B_CRITERIA
 from services.gates.phase0c import PHASE_0C_CRITERIA
+from services.gates.phase1_technical import (
+    PHASE_1_PARENT_COUNT,
+    PHASE_1_TECHNICAL_CRITERIA,
+)
 
 type InputValue = (
     bool
@@ -108,6 +112,8 @@ class GatePolicy(GateModel):
             return self._validate_phase_0c()
         if self.gate_id == "control-plane-baseline":
             return self._validate_control_plane()
+        if self.gate_id == "phase-1-technical":
+            return self._validate_phase_1_technical()
         return self
 
     def _validate_phase_0a(self) -> GatePolicy:
@@ -200,6 +206,45 @@ class GatePolicy(GateModel):
             raise PydanticCustomError(
                 "phase_1_control_plane_golden",
                 "Control Plane fixtures carry no media/model Golden derivation",
+            )
+        return self
+
+
+    def _validate_phase_1_technical(self) -> GatePolicy:
+        if self.criteria != PHASE_1_TECHNICAL_CRITERIA:
+            raise PydanticCustomError(
+                "phase_1_technical_criteria",
+                "Phase-1 technical criteria must match the canonical fixture/rule criteria",
+            )
+        contract_out = any(
+            "kpi" in criterion or "active-human-time" in criterion for criterion in self.criteria
+        )
+        if contract_out:
+            raise PydanticCustomError(
+                "phase_1_technical_kpi_contract_out",
+                "Technical fixtures prove deterministic mechanics only; "
+                "KPI criteria are contract-out",
+            )
+        if self.capability_allowlist:
+            raise PydanticCustomError(
+                "phase_1_technical_capabilities",
+                "Phase-1 technical freezes no capability allowlist; capabilities stay bound to 0A",
+            )
+        if self.prerequisite_bindings:
+            raise PydanticCustomError(
+                "phase_1_technical_prerequisites",
+                "Phase-1 technical prerequisites are parent gate result hashes only",
+            )
+        if len(self.parent_gate_result_hashes) != PHASE_1_PARENT_COUNT:
+            raise PydanticCustomError(
+                "phase_1_technical_parent",
+                "Phase-1 technical requires exactly two parent gate result hashes "
+                "(phase-0c and control-plane-baseline)",
+            )
+        if self.golden_sha256 is None:
+            raise PydanticCustomError(
+                "phase_1_technical_golden",
+                "Phase-1 technical fixtures require the independent Golden index binding",
             )
         return self
 

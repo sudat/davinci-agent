@@ -176,7 +176,9 @@ def _assert_phase0c_inheritance(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--parent", type=Path, required=True)
-    parser.add_argument("--phase", choices=("phase-0b", "phase-0c"), required=True)
+    parser.add_argument(
+        "--phase", choices=("phase-0b", "phase-0c", "phase-1-technical"), required=True
+    )
     parser.add_argument("--pin", required=True)
     parser.add_argument("--out", type=Path, required=True)
     return parser
@@ -189,13 +191,32 @@ def resolve_pin_path(raw: str) -> Path:
     return Path.cwd() / PINS_ROOT / f"{raw}.json"
 
 
+def resolve_pin_paths(raw: str) -> tuple[Path, Path]:
+    names = raw.split(",")
+    if names != ["whisper-ja", "editorial-model"]:
+        raise MaterializeError("phase-1-technical pins exactly whisper-ja,editorial-model")
+    return (
+        Path.cwd() / PINS_ROOT / "whisper-ja.json",
+        Path.cwd() / PINS_ROOT / "editorial-model.json",
+    )
+
+
 def main() -> int:
     arguments = _parser().parse_args()
     try:
         if arguments.phase == "phase-0b":
             materialize_phase0b(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
-        else:
+        elif arguments.phase == "phase-0c":
             materialize_phase0c(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
+        else:
+            from services.toolchain.materialize_phase1 import (  # noqa: PLC0415 (module cycle)
+                materialize_phase1_technical,
+            )
+
+            whisper_pin, editorial_pin = resolve_pin_paths(arguments.pin)
+            materialize_phase1_technical(
+                arguments.parent, whisper_pin, editorial_pin, arguments.out
+            )
     except (LockError, MaterializeError, OSError) as error:
         print(error)
         return 2

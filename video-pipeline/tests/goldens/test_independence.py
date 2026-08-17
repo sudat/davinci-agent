@@ -12,6 +12,7 @@ from services.foundation_io import sha256_file as file_sha256
 PHASE_DIR = Path("tests/goldens/reference/phase-0a")
 PHASE_0B_DIR = Path("tests/goldens/reference/phase-0b")
 PHASE_0C_DIR = Path("tests/goldens/reference/phase-0c")
+PHASE_1_DIR = Path("tests/goldens/reference/phase-1-technical")
 
 
 def test_derivation_imports_only_stdlib_and_reference_common() -> None:
@@ -153,6 +154,72 @@ def test_phase0c_self_derived_golden_importing_services_is_rejected(tmp_path: Pa
 
     with pytest.raises(GoldenAuditError, match="services"):
         audit_derivation_source(source)
+
+
+def test_phase1_self_derived_golden_importing_services_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "derive.py"
+    source.write_text(
+        "from services.fixtures.prepare_phase1_technical "
+        "import prepare_phase1_technical\n"
+    )
+
+    with pytest.raises(GoldenAuditError, match="services"):
+        audit_derivation_source(source)
+
+
+def test_phase1_derivation_imports_only_stdlib_and_reference_common() -> None:
+    audit = audit_derivation_source(PHASE_1_DIR / "derive.py")
+
+    assert audit.audit_result == "pass"
+    assert audit.forbidden_imports == ()
+    assert audit.produced_outputs_read is False
+
+
+def test_phase1_frozen_audit_and_index_bindings_are_current() -> None:
+    audit_payload = json.loads((PHASE_1_DIR / "import-audit.json").read_bytes())
+    index_payload = json.loads((PHASE_1_DIR / "index.json").read_bytes())
+
+    assert audit_payload["audit_result"] == "pass"
+    assert audit_payload["derivation_source_sha256"] == file_sha256(PHASE_1_DIR / "derive.py")
+    assert index_payload["derivation_source_sha256"] == file_sha256(PHASE_1_DIR / "derive.py")
+    assert index_payload["expected_sha256"] == file_sha256(PHASE_1_DIR / "expected.json")
+    assert index_payload["audit_sha256"] == file_sha256(PHASE_1_DIR / "import-audit.json")
+    for fixture_id, manifest_hash in index_payload["fixture_manifest_sha256s"].items():
+        manifest = Path("tests/fixtures/manifests/phase-1-technical") / f"{fixture_id}.json"
+        assert manifest_hash == file_sha256(manifest)
+
+
+def test_phase1_expected_tables_are_frozen() -> None:
+    expected = json.loads((PHASE_1_DIR / "expected.json").read_bytes())
+
+    fixtures = expected["fixtures"]
+    assert [row["segment_id"] for row in fixtures["p1-ref-01-clean-ja"]["candidate_table"]] == [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+    ]
+    assert fixtures["p1-ref-01-clean-ja"]["selection"]["total_selected_frames"] == 600
+    pause_rows = fixtures["p1-ref-02-pauses-fillers"]["analyzer_expectations"]["pauses"]
+    assert [(row["boundary"], row["action"]) for row in pause_rows] == [
+        ("below", "retain"),
+        ("at", "delete"),
+        ("above", "delete"),
+    ]
+    selection_03 = fixtures["p1-ref-03-multi-take-must-include"]["selection"]
+    assert "t2a" in selection_03["selected_ids"]
+    assert selection_03["budget_applied"] is True
+    assert selection_03["budget_dropped"] == ["m7"]
+    assert fixtures["p1-ref-04-linked-av-offset"]["analyzer_expectations"]["conform_map"][0][
+        "offset_frames"
+    ] == 8
+    outcomes_05 = fixtures["p1-ref-05-review-mix"]["review_outcomes"]
+    assert [(o["classification"], o["decision"]) for o in outcomes_05] == [
+        ("clear", "apply"),
+        ("clear", "apply"),
+        ("clear", "apply"),
+        ("ambiguous", "defer"),
+    ]
 
 
 def test_import_audit_is_ast_based() -> None:

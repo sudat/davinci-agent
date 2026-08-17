@@ -8,7 +8,17 @@ from typing import Final, assert_never
 from services.foundation_io import sha256_file
 
 ALLOWED_ROOTS: Final = frozenset(
-    {"__future__", "ast", "common", "fractions", "hashlib", "json", "pathlib", "sys"}
+    {
+        "__future__",
+        "ast",
+        "common",
+        "fractions",
+        "hashlib",
+        "json",
+        "pathlib",
+        "sys",
+        "typing",
+    }
 )
 
 

@@ -19,6 +19,11 @@ from services.fixtures.prepare_phase0c import (
     prepare_phase0c,
     prepare_phase0c_errors,
 )
+from services.fixtures.prepare_phase1_technical import (
+    Phase1PrepareRequest,
+    prepare_phase1_errors,
+    prepare_phase1_technical,
+)
 from services.fixtures.publish import publish_errors, publish_freeze
 
 
@@ -27,11 +32,13 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare")
     prepare.add_argument(
-        "phase", choices=("phase-0a", "phase-0b", "phase-0c", "control-plane")
+        "phase",
+        choices=("phase-0a", "phase-0b", "phase-0c", "control-plane", "phase-1-technical"),
     )
     prepare.add_argument("--toolchain-lock", type=Path, required=True)
     prepare.add_argument("--fixture-ids", required=True)
     prepare.add_argument("--parent-result", type=Path)
+    prepare.add_argument("--parent-results")
     prepare.add_argument("--pre-source-snapshot", type=Path, required=True)
     prepare.add_argument("--execution-contract", type=Path, required=True)
     prepare.add_argument("--out", type=Path, required=True)
@@ -45,27 +52,83 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+PHASE_1_PARENT_COUNT = 2
+
+
+def _prepare_phase1(arguments: argparse.Namespace) -> int:
+    if arguments.parent_result is not None:
+        raise PrepareError("phase-1-technical takes no single parent result")
+    if arguments.parent_results is None:
+        raise PrepareError("phase-1-technical requires --parent-results (two paths)")
+    parents = tuple(Path(item) for item in arguments.parent_results.split(","))
+    if len(parents) != PHASE_1_PARENT_COUNT:
+        raise PrepareError("phase-1-technical requires exactly two parent results")
+    request = Phase1PrepareRequest(
+        toolchain_lock=arguments.toolchain_lock,
+        fixture_ids=tuple(arguments.fixture_ids.split(",")),
+        parent_results=(parents[0], parents[1]),
+        pre_source_snapshot=arguments.pre_source_snapshot,
+        execution_contract=arguments.execution_contract,
+        policy_out=arguments.out,
+        freeze_receipt=arguments.freeze_receipt,
+        staging=arguments.staging,
+        intent=arguments.intent,
+    )
+    prepare_phase1_technical(request)
+    print("freeze prepared: phase-1-technical v1")
+    return 0
+
+
+def _prepare_phase0a(arguments: argparse.Namespace) -> int:
+    if arguments.parent_result is not None:
+        raise PrepareError("phase-0a takes no parent result")
+    request = PrepareRequest(
+        toolchain_lock=arguments.toolchain_lock,
+        fixture_ids=tuple(arguments.fixture_ids.split(",")),
+        pre_source_snapshot=arguments.pre_source_snapshot,
+        execution_contract=arguments.execution_contract,
+        policy_out=arguments.out,
+        freeze_receipt=arguments.freeze_receipt,
+        staging=arguments.staging,
+        intent=arguments.intent,
+    )
+    prepare_freeze(request)
+    print("freeze prepared: phase-0a v1")
+    return 0
+
+
+def _prepare_phase0b(arguments: argparse.Namespace) -> int:
+    if arguments.parent_result is None:
+        raise PrepareError("phase-0b requires the parent phase-0a gate result")
+    request = Phase0BPrepareRequest(
+        toolchain_lock=arguments.toolchain_lock,
+        fixture_ids=tuple(arguments.fixture_ids.split(",")),
+        parent_result=arguments.parent_result,
+        pre_source_snapshot=arguments.pre_source_snapshot,
+        execution_contract=arguments.execution_contract,
+        policy_out=arguments.out,
+        freeze_receipt=arguments.freeze_receipt,
+        staging=arguments.staging,
+        intent=arguments.intent,
+    )
+    prepare_phase0b(request)
+    print("freeze prepared: phase-0b v1")
+    return 0
+
+
 def _prepare(arguments: argparse.Namespace) -> int:
+    if arguments.phase != "phase-1-technical" and arguments.parent_results is not None:
+        raise PrepareError("--parent-results is reserved for phase-1-technical")
+    if arguments.phase == "phase-1-technical":
+        return _prepare_phase1(arguments)
     if arguments.phase == "phase-0a":
-        if arguments.parent_result is not None:
-            raise PrepareError("phase-0a takes no parent result")
-        request = PrepareRequest(
-            toolchain_lock=arguments.toolchain_lock,
-            fixture_ids=tuple(arguments.fixture_ids.split(",")),
-            pre_source_snapshot=arguments.pre_source_snapshot,
-            execution_contract=arguments.execution_contract,
-            policy_out=arguments.out,
-            freeze_receipt=arguments.freeze_receipt,
-            staging=arguments.staging,
-            intent=arguments.intent,
-        )
-        prepare_freeze(request)
-        print("freeze prepared: phase-0a v1")
-        return 0
+        return _prepare_phase0a(arguments)
     if arguments.phase == "phase-0b":
+        return _prepare_phase0b(arguments)
+    if arguments.phase == "control-plane":
         if arguments.parent_result is None:
-            raise PrepareError("phase-0b requires the parent phase-0a gate result")
-        request = Phase0BPrepareRequest(
+            raise PrepareError("control-plane requires the parent phase-0c gate result")
+        request = ControlPlanePrepareRequest(
             toolchain_lock=arguments.toolchain_lock,
             fixture_ids=tuple(arguments.fixture_ids.split(",")),
             parent_result=arguments.parent_result,
@@ -76,8 +139,8 @@ def _prepare(arguments: argparse.Namespace) -> int:
             staging=arguments.staging,
             intent=arguments.intent,
         )
-        prepare_phase0b(request)
-        print("freeze prepared: phase-0b v1")
+        prepare_control_plane(request)
+        print("freeze prepared: control-plane-baseline v1")
         return 0
     if arguments.phase == "control-plane":
         if arguments.parent_result is None:
@@ -131,6 +194,7 @@ def main() -> int:
         *prepare_phase0b_errors(),
         *prepare_phase0c_errors(),
         *prepare_control_plane_errors(),
+        *prepare_phase1_errors(),
         *publish_errors()
     ) as error:
         print(error)

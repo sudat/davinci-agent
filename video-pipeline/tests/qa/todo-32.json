@@ -1,0 +1,112 @@
+[
+  {
+    "case_id": "happy-five-fixtures-and-rules-freeze-pass",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/gates/test_phase1_inputs.py",
+      "tests/eligibility",
+      "tests/goldens/test_independence.py",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "config/gates/phase-1-technical-v1.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-32-freeze-receipt.json",
+      "config/toolchains/phase-1-technical-v1.json",
+      "tests/fixtures/manifests/phase-1-technical/p1-ref-01-clean-ja.json",
+      "tests/goldens/reference/phase-1-technical/expected.json"
+    ],
+    "expected_observation": "passed"
+  },
+  {
+    "case_id": "failure-missing-tool-model-hash",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/gates/test_phase1_inputs.py::test_missing_tool_or_model_hash_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-self-derived-outcome",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/goldens/test_independence.py::test_phase1_self_derived_golden_importing_services_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-stale-parent",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/gates/test_phase1_inputs.py::test_stale_parent_gate_result_is_rejected_at_prepare_time",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-automated-privacy-detector",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/eligibility/test_classify.py::test_no_automated_privacy_detection",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-contract-out-kpi-inclusion",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/gates/test_phase1_inputs.py::test_contract_out_kpi_criterion_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]

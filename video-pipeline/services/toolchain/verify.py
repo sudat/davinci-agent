@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from services.foundation_io import sha256_file
 from services.resolve_bridge.readiness import HostReadinessError, load_host_report
+from services.toolchain.editorial_model import EditorialModelSmokeError
 from services.toolchain.models import (
     FROZEN_CONFIGURE_ARGV,
     AnyToolchainLock,
@@ -16,6 +17,7 @@ from services.toolchain.models import (
     LockError,
     Phase0BToolchainLock,
     Phase0CToolchainLock,
+    Phase1TechnicalToolchainLock,
     SmokeRecord,
     ToolchainLock,
     load_lock,
@@ -23,9 +25,23 @@ from services.toolchain.models import (
 )
 from services.toolchain.normalization import run_normalize_smoke
 from services.toolchain.preview_review import run_preview_smoke
-from services.toolchain.smoke import ProbeAssertionError, run_ffmpeg_probe
+from services.toolchain.smoke import ProbeAssertionError
+from services.toolchain.verify_phase0a import verify_phase0a_smoke
+from services.toolchain.verify_phase1 import (
+    phase1_smoke_complete,
+    run_phase1_smokes,
+    verify_phase1_provenance,
+)
+from services.toolchain.whisper_ja import WhisperSmokeError
 
-type SmokeName = Literal["resolve-readonly", "ffmpeg-probe", "ffmpeg-normalize", "preview-review"]
+type SmokeName = Literal[
+    "resolve-readonly",
+    "ffmpeg-probe",
+    "ffmpeg-normalize",
+    "preview-review",
+    "whisper-ja",
+    "editorial-model",
+]
 
 
 def verify_binary(record: BinaryRecord) -> None:
@@ -78,6 +94,8 @@ def _verify_provenance(lock: AnyToolchainLock) -> None:
     if isinstance(lock, Phase0BToolchainLock | Phase0CToolchainLock):
         verify_binary(lock.ffmpeg.ffmpeg)
         verify_binary(lock.ffmpeg.ffprobe)
+    if isinstance(lock, Phase1TechnicalToolchainLock):
+        verify_phase1_provenance(lock)
 
 
 def _run_normalize_smoke(lock: Phase0BToolchainLock) -> SmokeRecord:
@@ -133,6 +151,10 @@ def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainL
         lock, smoke_names
     ):
         raise LockError("incomplete Phase 0C toolchain smoke results")
+    if isinstance(lock, Phase1TechnicalToolchainLock) and not phase1_smoke_complete(
+        lock, smoke_names
+    ):
+        raise LockError("incomplete Phase 1 toolchain smoke results")
     match lock:
         case Phase0BToolchainLock() as phase0b:
             updates: dict[str, SmokeRecord] = {}
@@ -146,8 +168,10 @@ def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainL
             verified = lock.model_copy(
                 update={"smoke": phase0c.smoke.model_copy(update=phase0c_updates)}
             )
+        case Phase1TechnicalToolchainLock():
+            verified = run_phase1_smokes(lock, smoke_names)
         case ToolchainLock():
-            verified = _verify_phase0a_smoke(lock, smoke_names)
+            verified = verify_phase0a_smoke(lock, smoke_names)
     write_lock(path, verified)
     return verified
 
@@ -156,50 +180,6 @@ def _phase0b_smoke_complete(lock: Phase0BToolchainLock, names: tuple[SmokeName, 
     if lock.smoke.ffmpeg_normalize.status == "passed":
         return True
     return "ffmpeg-normalize" in names
-
-
-def _verify_phase0a_smoke(
-    lock: ToolchainLock, smoke_names: tuple[SmokeName, ...]
-) -> ToolchainLock:
-    smoke = lock.smoke
-    for smoke_name in smoke_names:
-        match smoke_name:
-            case "resolve-readonly":
-                report = load_host_report(Path(lock.resolve.report_path))
-                smoke = smoke.model_copy(
-                    update={
-                        "resolve_readonly": SmokeRecord(
-                            status="passed",
-                            evidence_paths=(lock.resolve.report_path,),
-                            observation=(
-                                "loopback-only policy confirmed; probe performed no network "
-                                f"access; live preference check required="
-                                f"{report.scripting.needs_live_verification}"
-                            ),
-                        )
-                    }
-                )
-            case "ffmpeg-probe" | "ffmpeg-ffprobe":
-                prefix = Path(lock.ffmpeg.ffmpeg.path).parent.parent
-                artifacts = run_ffmpeg_probe(
-                    Path(lock.ffmpeg.ffmpeg.path),
-                    Path(lock.ffmpeg.ffprobe.path),
-                    prefix.parents[1] / "smoke",
-                )
-                smoke = smoke.model_copy(
-                    update={
-                        "ffmpeg_probe": SmokeRecord(
-                            status="passed",
-                            evidence_paths=tuple(str(item.resolve()) for item in artifacts),
-                            observation=(
-                                "encoded, decoded, and probed 30 frames at 30/1 for 1000 ms"
-                            ),
-                        )
-                    }
-                )
-            case "ffmpeg-normalize" | "preview-review":
-                raise LockError(f"{smoke_name} smoke requires a phase-0b/0c lock")
-    return lock.model_copy(update={"smoke": smoke})
 
 
 def _smoke_names(raw: str) -> tuple[SmokeName, ...]:
@@ -217,6 +197,10 @@ def _smoke_names(raw: str) -> tuple[SmokeName, ...]:
                 parsed.append("ffmpeg-normalize")
             case "preview-review":
                 parsed.append("preview-review")
+            case "whisper-ja":
+                parsed.append("whisper-ja")
+            case "editorial-model":
+                parsed.append("editorial-model")
             case _:
                 raise LockError(f"unsupported smoke profile: {raw}")
     return tuple(parsed)
@@ -240,7 +224,10 @@ def main() -> int:
         OSError,
         ProbeAssertionError,
         subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
         ValidationError,
+        WhisperSmokeError,
+        EditorialModelSmokeError,
     ) as error:
         print(error)
         return 2
