@@ -6,6 +6,7 @@ from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from services.contracts.primitives import Identifier, SchemaVersion, Sha256, StrictModel
+from services.gates.control_plane import PHASE_1_CONTROL_PLANE_CRITERIA
 from services.gates.phase0a import PHASE_0A_CAPABILITIES, PHASE_0A_CRITERIA
 from services.gates.phase0b import PHASE_0B_CRITERIA
 from services.gates.phase0c import PHASE_0C_CRITERIA
@@ -105,6 +106,8 @@ class GatePolicy(GateModel):
             return self._validate_phase_0b()
         if self.gate_id == "phase-0c":
             return self._validate_phase_0c()
+        if self.gate_id == "control-plane-baseline":
+            return self._validate_control_plane()
         return self
 
     def _validate_phase_0a(self) -> GatePolicy:
@@ -168,6 +171,35 @@ class GatePolicy(GateModel):
             raise PydanticCustomError(
                 "phase_0c_parent",
                 "Phase 0C requires exactly one parent Phase 0B gate result hash",
+            )
+        return self
+
+
+    def _validate_control_plane(self) -> GatePolicy:
+        if self.criteria != PHASE_1_CONTROL_PLANE_CRITERIA:
+            raise PydanticCustomError(
+                "phase_1_control_plane_criteria",
+                "Control Plane criteria must match the canonical baseline exit criteria",
+            )
+        if self.capability_allowlist:
+            raise PydanticCustomError(
+                "phase_1_control_plane_capabilities",
+                "Control Plane baseline freezes no capability allowlist",
+            )
+        if self.prerequisite_bindings:
+            raise PydanticCustomError(
+                "phase_1_control_plane_prerequisites",
+                "Control Plane baseline prerequisites are parent gate result hashes only",
+            )
+        if len(self.parent_gate_result_hashes) != 1:
+            raise PydanticCustomError(
+                "phase_1_control_plane_parent",
+                "Control Plane baseline requires exactly one parent Phase 0C gate result hash",
+            )
+        if self.golden_sha256 is not None:
+            raise PydanticCustomError(
+                "phase_1_control_plane_golden",
+                "Control Plane fixtures carry no media/model Golden derivation",
             )
         return self
 

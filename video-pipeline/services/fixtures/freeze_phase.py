@@ -4,6 +4,11 @@ import argparse
 from pathlib import Path
 
 from services.fixtures.prepare import PrepareError, PrepareRequest, prepare_errors, prepare_freeze
+from services.fixtures.prepare_control_plane import (
+    ControlPlanePrepareRequest,
+    prepare_control_plane,
+    prepare_control_plane_errors,
+)
 from services.fixtures.prepare_phase0b import (
     Phase0BPrepareRequest,
     prepare_phase0b,
@@ -21,7 +26,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     prepare = commands.add_parser("prepare")
-    prepare.add_argument("phase", choices=("phase-0a", "phase-0b", "phase-0c"))
+    prepare.add_argument(
+        "phase", choices=("phase-0a", "phase-0b", "phase-0c", "control-plane")
+    )
     prepare.add_argument("--toolchain-lock", type=Path, required=True)
     prepare.add_argument("--fixture-ids", required=True)
     prepare.add_argument("--parent-result", type=Path)
@@ -72,6 +79,23 @@ def _prepare(arguments: argparse.Namespace) -> int:
         prepare_phase0b(request)
         print("freeze prepared: phase-0b v1")
         return 0
+    if arguments.phase == "control-plane":
+        if arguments.parent_result is None:
+            raise PrepareError("control-plane requires the parent phase-0c gate result")
+        request = ControlPlanePrepareRequest(
+            toolchain_lock=arguments.toolchain_lock,
+            fixture_ids=tuple(arguments.fixture_ids.split(",")),
+            parent_result=arguments.parent_result,
+            pre_source_snapshot=arguments.pre_source_snapshot,
+            execution_contract=arguments.execution_contract,
+            policy_out=arguments.out,
+            freeze_receipt=arguments.freeze_receipt,
+            staging=arguments.staging,
+            intent=arguments.intent,
+        )
+        prepare_control_plane(request)
+        print("freeze prepared: control-plane-baseline v1")
+        return 0
     if arguments.parent_result is None:
         raise PrepareError("phase-0c requires the parent phase-0b gate result")
     request = Phase0CPrepareRequest(
@@ -106,6 +130,7 @@ def main() -> int:
         *prepare_errors(),
         *prepare_phase0b_errors(),
         *prepare_phase0c_errors(),
+        *prepare_control_plane_errors(),
         *publish_errors()
     ) as error:
         print(error)

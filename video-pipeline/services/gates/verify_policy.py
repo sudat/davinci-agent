@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from services.execution.preflight import ExecutionContract
 from services.fixtures.models import (
+    ControlPlaneFreezeReceipt,
     FreezeReceipt,
     Phase0BFreezeReceipt,
     Phase0CFreezeReceipt,
@@ -17,7 +18,9 @@ from services.fixtures.models import (
 from services.foundation_io import canonical_model_bytes, sha256_file
 from services.gates import GatePolicy, canonical_gate_bytes
 
-type AnyFreezeReceipt = FreezeReceipt | Phase0BFreezeReceipt | Phase0CFreezeReceipt
+type AnyFreezeReceipt = (
+    FreezeReceipt | Phase0BFreezeReceipt | Phase0CFreezeReceipt | ControlPlaneFreezeReceipt
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +39,10 @@ def _load_receipt(path: Path) -> AnyFreezeReceipt:
         try:
             receipt = Phase0BFreezeReceipt.model_validate_json(raw)
         except ValidationError:
-            receipt = Phase0CFreezeReceipt.model_validate_json(raw)
+            try:
+                receipt = Phase0CFreezeReceipt.model_validate_json(raw)
+            except ValidationError:
+                receipt = ControlPlaneFreezeReceipt.model_validate_json(raw)
     if raw != canonical_model_bytes(receipt):
         raise PolicyVerificationError("freeze receipt is noncanonical")
     return receipt
@@ -51,13 +57,19 @@ def _load_snapshot(path: Path) -> SourceSnapshot:
 
 
 def _manifest_sha256s(receipt: AnyFreezeReceipt) -> tuple[tuple[str | None, str], ...]:
-    if isinstance(receipt, Phase0BFreezeReceipt | Phase0CFreezeReceipt):
+    if isinstance(
+        receipt,
+        Phase0BFreezeReceipt | Phase0CFreezeReceipt | ControlPlaneFreezeReceipt,
+    ):
         return tuple((binding.path, binding.sha256) for binding in receipt.fixture_manifests)
     return ((receipt.fixture_manifest_path, receipt.fixture_manifest_sha256),)
 
 
 def _verify_manifest_bindings(policy: GatePolicy, receipt: AnyFreezeReceipt) -> None:
-    if isinstance(receipt, Phase0BFreezeReceipt | Phase0CFreezeReceipt):
+    if isinstance(
+        receipt,
+        Phase0BFreezeReceipt | Phase0CFreezeReceipt | ControlPlaneFreezeReceipt,
+    ):
         combined = hashlib.sha256()
         for binding in receipt.fixture_manifests:
             combined.update(Path(binding.path).read_bytes())
@@ -74,10 +86,19 @@ def _verify_manifest_bindings(policy: GatePolicy, receipt: AnyFreezeReceipt) -> 
 
 def _verify_referenced_bytes(policy: GatePolicy, receipt: AnyFreezeReceipt) -> None:
     _verify_manifest_bindings(policy, receipt)
-    bindings = (
-        (policy.toolchain_lock_sha256, receipt.toolchain_lock_sha256, receipt.toolchain_lock_path),
-        (policy.golden_sha256, receipt.golden_hashes.index_sha256, None),
+    toolchain_binding = (
+        policy.toolchain_lock_sha256,
+        receipt.toolchain_lock_sha256,
+        receipt.toolchain_lock_path,
     )
+    bindings: tuple[tuple[str | None, str, str | None], ...]
+    if isinstance(receipt, ControlPlaneFreezeReceipt):
+        if policy.golden_sha256 is not None:
+            raise PolicyVerificationError("control-plane policy must not bind Golden hashes")
+        bindings = (toolchain_binding,)
+    else:
+        golden_binding = (policy.golden_sha256, receipt.golden_hashes.index_sha256, None)
+        bindings = (toolchain_binding, golden_binding)
     for policy_hash, receipt_hash, source_path in bindings:
         if policy_hash != receipt_hash:
             raise PolicyVerificationError("policy referenced hash differs from freeze receipt")

@@ -1,0 +1,164 @@
+[
+  {
+    "case_id": "happy-publish-then-reopen-verified",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_manifest_scenarios.py::test_cp_atomic_publish",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "config/gates/phase-1-control-plane-v1.json",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-7-freeze-receipt.json",
+      "tests/fixtures/manifests/control-plane/cp-atomic-publish.json",
+      "tests/fixtures/manifests/control-plane/cp-lease-expiry.json",
+      "tests/fixtures/manifests/control-plane/cp-path-symlink-denial.json"
+    ],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-kill-before-rename-recovered",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_manifest_scenarios.py::test_cp_crash_before_rename",
+      "tests/artifact_store/test_manifest_scenarios.py::test_cp_crash_before_rename_resumes_without_reconcile",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-kill-after-rename-reconciled",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_reconcile.py::test_crash_after_rename_before_meta_recovers_idempotently",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-overwrite-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_store_guards.py::test_republish_after_tamper_is_refused",
+      "tests/artifact_store/test_store_guards.py::test_artifact_id_reuse_with_different_content_is_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-path-escape-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_store_guards.py::test_path_escape_components_are_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-symlink-path-denied",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_manifest_scenarios.py::test_cp_path_symlink_denial",
+      "tests/artifact_store/test_store_guards.py::test_symlinked_objects_dir_denies_publication",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-stale-cas-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_manifest_scenarios.py::test_cp_stale_cas",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-orphan-temp-discarded",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_manifest_scenarios.py::test_cp_orphan_reconcile",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-lease-expiry-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/artifact_store/test_manifest_scenarios.py::test_cp_lease_expiry",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]

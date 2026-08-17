@@ -129,7 +129,7 @@ def _verify_parent_gate_result(path: Path, root: Path) -> tuple[str, str]:
     return result_sha256, policy_sha256
 
 
-def _verify_toolchain(lock_path: Path) -> Phase0CToolchainLock:
+def verify_phase0c_toolchain(lock_path: Path) -> Phase0CToolchainLock:
     try:
         lock = load_lock(lock_path)
         if not isinstance(lock, Phase0CToolchainLock):
@@ -162,7 +162,7 @@ def prepare_phase0c(request: Phase0CPrepareRequest) -> FreezeIntent:
     for fixture_id in request.fixture_ids:
         _manifest, raw = _load_manifest(root, fixture_id)
         manifests[fixture_id] = raw
-    _verify_toolchain(request.toolchain_lock)
+    verify_phase0c_toolchain(request.toolchain_lock)
     parent_sha256, _policy_sha256 = _verify_parent_gate_result(request.parent_result, root)
     contract_raw, _contract = _load_canonical(request.execution_contract, ExecutionContract)
     snapshot_raw, snapshot = _load_canonical(request.pre_source_snapshot, SourceSnapshot)
