@@ -1,0 +1,166 @@
+[
+  {
+    "case_id": "happy-fixture-record-exercises-automated-tests",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/approvals",
+      "tests/control_plane_gate",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "passed"
+  },
+  {
+    "case_id": "happy-cp-gate-tty-fixture-passes",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.job_runner.run_gate",
+      "control-plane-baseline",
+      "--policy",
+      "config/gates/phase-1-control-plane-v1.json",
+      "--evidence",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/control-plane-qa",
+      "--tty-fixture",
+      "--freeze-receipt",
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/task-7-freeze-receipt.json"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/control-plane-qa/gate-result.json"
+    ],
+    "expected_observation": "cp-gate: PASS"
+  },
+  {
+    "case_id": "failure-ai-invocation-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/approvals/test_ingress.py::test_automation_runner_class_refused_even_on_real_tty",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-non-tty-invocation-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/approvals/test_ingress.py::test_operator_ingress_requires_real_tty",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-wrong-target-purpose-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/approvals/test_models.py::test_purpose_target_binding_rejects_wrong_target_type",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-reused-editorial-as-presentation-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/approvals/test_verify.py::test_editorial_record_cannot_authorize_presentation_target",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-superseded-record-no-longer-authorizes",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/approvals/test_verify.py::test_superseded_record_no_longer_authorizes",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-state-artifact-inconsistency-fails",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/control_plane_gate/test_scenarios.py::test_cp_stale_cas_state_artifact_inconsistency_fails_closed",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-concurrent-authority-superseded",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/control_plane_gate/test_serialized_authority.py::test_two_writers_one_commits_loser_superseded",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
