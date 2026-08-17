@@ -1,10 +1,13 @@
 """Deny-by-default Spike authorization for the phase-0C Review Translator.
 
 SUNSET (SPIKE_ALLOWLIST_SUNSET_NOTE): this adapter-local allowlist exists only
-because the post-0C Control Plane policy service is not built yet. It may
+because the post-0C Control Plane policy service was not built yet. It may
 authorize ONLY the frozen synthetic phase-0C Cloud fixtures, never Production
-Episode data, and it stops being the authority once Control Plane policy lands
-with Todo 12; it must then be removed in favor of that policy service.
+Episode data. As of Todo 12 the episode-level transport decision is DELEGATED
+to the Control Plane successor ``services.policy.data_policy`` (via a minimal
+resolved configuration in this module); this adapter now only adds the frozen
+toolchain-pin bindings (policy profile + schema version) on top, and its
+deny-by-default outcome is unchanged.
 
 What the frozen pin actually freezes for the translator
 (``config/toolchains/phase-0c-v1.json`` → ``preview_review``):
@@ -29,17 +32,63 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from services.config.models import (
+    BudgetPolicy,
+    CloudAllowlistEntry,
+    DataClass,
+    EpisodeConfig,
+    NetworkPosture,
+    PathAllowlist,
+    ResolvedConfig,
+    RetentionPolicy,
+    StageDataClasses,
+    SystemConfig,
+)
+from services.config.resolver import resolve
 from services.contracts.primitives import StrictModel
 from services.fixtures.manifest_phase0c import PHASE_0C_FIXTURE_IDS
+from services.policy.data_policy import authorize_cloud_transport
 
 SPIKE_ALLOWLIST_SUNSET_NOTE = (
-    "TEMPORARY SPIKE AUTHORITY: this adapter-local allowlist exists only before the "
-    "post-0C Control Plane exists. It may authorize ONLY the frozen synthetic "
-    "phase-0C Cloud fixtures, never Production Episode data, and is superseded by "
-    "Control Plane policy after Todo 12, at which point it must be removed."
+    "SPIKE AUTHORITY: the episode-level decision is delegated to Control Plane "
+    "policy (services.policy.data_policy, Todo 12); only the frozen toolchain-pin "
+    "bindings remain adapter-local. It may authorize ONLY the frozen synthetic "
+    "phase-0C Cloud fixtures, never Production Episode data."
 )
 DEFAULT_TOOLCHAIN_LOCK = Path("config/toolchains/phase-0c-v1.json")
 SYNTHETIC_FIXTURE_EPISODE_IDS: frozenset[str] = frozenset(PHASE_0C_FIXTURE_IDS)
+TRANSLATOR_DATA_CLASS: DataClass = "review_instruction_text"
+TRANSLATOR_STAGE = "review_translate"
+
+
+def _resolved_translator_policy() -> ResolvedConfig:
+    """Minimal Control-Plane policy view for this Spike: fixture-only text."""
+    system = SystemConfig(
+        schema_version="system-config-v1",
+        retention=RetentionPolicy(authoritative="permanent", rebuildable_days=30),
+        data_classes=(
+            StageDataClasses(stage=TRANSLATOR_STAGE, classes=(TRANSLATOR_DATA_CLASS,)),
+        ),
+        cloud_allowlist=(
+            CloudAllowlistEntry(
+                data_class=TRANSLATOR_DATA_CLASS, stage=TRANSLATOR_STAGE, fixture_only=True
+            ),
+        ),
+        network=NetworkPosture(
+            builder="loopback", builder_endpoint="unix:///run/davinci-agent/translator.sock"
+        ),
+        path_allowlist=PathAllowlist(roots=("/video-pipeline/jobs",)),
+        budget=BudgetPolicy(
+            transient_max_attempts=3,
+            permanent_max_attempts=1,
+            blocking_human_max_attempts=1,
+            max_stage_cost_units=1000,
+            max_job_cost_units=10000,
+        ),
+    )
+    return resolve(
+        system, episode=EpisodeConfig(episode_id="phase-0c-translator-spike")
+    )
 
 
 class PolicySourceError(Exception):
@@ -92,16 +141,23 @@ def authorize(
 ) -> str | None:
     """Return a denial reason unless the request binds the frozen synthetic fixture.
 
-    Deny-by-default: every mismatch (episode, policy profile, schema version)
-    is reported; ``None`` means the Spike allowlist grants the request. This
-    never authorizes Production Episode data.
+    Deny-by-default. DELEGATION (Todo 12): the episode-level transport decision
+    is delegated to ``services.policy.data_policy.authorize_cloud_transport``
+    over this Spike's fixture-only resolved policy; only the frozen toolchain
+    bindings (policy profile, schema version) are still checked here. Every
+    mismatch is reported; ``None`` means the request is granted. This never
+    authorizes Production Episode data.
     """
 
     reasons: list[str] = []
-    if episode_id not in SYNTHETIC_FIXTURE_EPISODE_IDS:
-        reasons.append(
-            f"episode '{episode_id}' is not one of the frozen synthetic phase-0C Cloud fixtures"
-        )
+    decision = authorize_cloud_transport(
+        _resolved_translator_policy(),
+        data_class=TRANSLATOR_DATA_CLASS,
+        stage=TRANSLATOR_STAGE,
+        episode_id=episode_id,
+    )
+    if not decision.allowed:
+        reasons.append(decision.reason)
     if policy_profile_id != contract.policy_profile_id:
         reasons.append(
             f"policy profile '{policy_profile_id}' does not match the frozen translator "
