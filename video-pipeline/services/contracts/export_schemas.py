@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from services.contracts.build_report import BuildReport0A
 from services.contracts.evidence import EVIDENCE_0A_ADAPTER
 from services.contracts.primitives import ArtifactEnvelope
-from services.contracts.timeline_ir import TimelineIr0A
+from services.contracts.timeline_ir import TimelineIr0A, TimelineIrProduction
 from services.foundation_io import atomic_write
 from services.gates.models import GatePolicy, GateResult
 
@@ -49,6 +49,7 @@ def schema_documents() -> tuple[SchemaDocument, ...]:
         _model_schema_document("build-report-0a.json", BuildReport0A),
         SchemaDocument(filename="evidence-0a.json", payload=evidence_payload),
         _model_schema_document("timeline-ir-0a.json", TimelineIr0A),
+        _model_schema_document("timeline-ir-production.json", TimelineIrProduction),
     )
 
 

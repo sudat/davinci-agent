@@ -1,0 +1,128 @@
+[
+  {
+    "case_id": "happy-five-fixture-plans-compile",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_production_compiler.py::test_five_fixture_plans_match_golden_record_tables",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "5 passed"
+  },
+  {
+    "case_id": "failure-unresolved-anchor",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_production_compiler.py::test_unresolved_anchor_is_a_typed_error",
+      "tests/compile/test_production_compiler.py::test_unresolved_anchor_for_transcript_span_beyond_extent",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-gap-overlap",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_production_compiler.py::test_overlapping_cues_on_one_track_error",
+      "tests/compile/test_production_compiler.py::test_overlapping_placements_on_one_track_error",
+      "tests/compile/test_production_compiler.py::test_explicit_record_gaps_are_legal_and_represented",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-sample-rounding",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_production_compiler.py::test_lossy_sample_conversion_is_refused",
+      "tests/compile/test_production_compiler.py::test_sample_rate_mismatch_is_a_typed_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-too-short-overlapping-cue",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_subtitle_cues.py::test_min_duration_pieces_are_dropped_deterministically",
+      "tests/compile/test_ir_qc.py::test_min_duration_violation_is_typed",
+      "tests/compile/test_ir_qc.py::test_overlapping_cues_violation_is_typed",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-unsafe-layout",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_subtitle_cues.py::test_unsafe_layout_fails_closed_at_compile",
+      "tests/compile/test_ir_qc.py::test_safe_area_violation_is_typed",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-resolve-leakage",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/compile/test_production_compiler.py::test_resolve_field_injected_into_production_ir_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
