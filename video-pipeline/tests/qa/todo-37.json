@@ -1,0 +1,128 @@
+[
+  {
+    "case_id": "happy-allowed-bounded-evidence-query",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_api.py::test_search_transcripts_exact_substring_and_pagination",
+      "tests/media_query/test_api.py::test_silence_ranges_span_and_pagination",
+      "tests/media_query/test_api.py::test_quality_ranges_span_and_pagination",
+      "tests/media_query/test_api.py::test_contact_sheets_bounded_refs",
+      "tests/media_query/test_api.py::test_candidate_frames_indexes_and_refs_only",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "5 passed"
+  },
+  {
+    "case_id": "failure-review-example-retrieval-absent",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/security/test_query_boundary.py::test_api_surface_is_frozen_allowlist",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-arbitrary-sql-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/security/test_query_boundary.py::test_sql_and_sql_like_text_is_literal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-write-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/security/test_query_boundary.py::test_no_write_path_exists",
+      "tests/media_query/test_api.py::test_api_is_read_only_and_never_mutates",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-path-network-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/security/test_query_boundary.py::test_path_and_network_source_ids_refused",
+      "tests/media_query/test_api.py::test_malformed_requests_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-oversized-result-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_api.py::test_row_budget_exceeded_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-evidence-free-content-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_api.py::test_episode_summary_rows_carry_lineage_and_no_paths",
+      "tests/media_query/test_api.py::test_range_statistics_deterministic_per_artifact",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  }
+]
