@@ -1,0 +1,124 @@
+[
+ {
+  "case_id": "happy-evidence-backed-replay-proposal-passes",
+  "kind": "happy",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/editorial/test_director_boundary.py::test_replay_proposals_match_frozen_golden_tables_exactly",
+   "tests/editorial/test_director_boundary.py::test_metadata_is_recorded_exactly",
+   "tests/editorial/test_boundary.py",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "18 passed"
+ },
+ {
+  "case_id": "failure-hallucinated-source-span",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/editorial/test_director_boundary.py::test_hallucinated_segment_reference_is_rejected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-prompt-injection",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/editorial/test_director_boundary.py::test_prompt_injection_in_transcript_evidence_rides_as_data",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-arbitrary-tool",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/editorial/test_director_boundary.py::test_response_claiming_tool_use_is_rejected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-local-only-cloud-request",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/editorial/test_director_boundary.py::test_production_episode_is_denied_before_transport",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-refusal-incomplete-response",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/editorial/test_director_boundary.py::test_refusal_and_truncated_responses_yield_no_proposal",
+   "tests/editorial/test_director_boundary.py::test_malformed_json_response_is_error",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "2 passed"
+ },
+ {
+  "case_id": "failure-direct-commit",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/editorial/test_director_boundary.py::test_direct_commit_fields_in_response_are_rejected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ }
+]
