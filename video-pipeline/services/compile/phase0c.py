@@ -68,17 +68,36 @@ def _require_anchor(plan: EditPlan0C, item_id: str) -> EditPlanItem0C:
 
 
 def _bumped_version(version: str) -> str:
-    return "v2" if version == "v1" else version
+    return f"v{int(version[1:]) + 1}"
+
+
+def _segment_scope(plan: EditPlan0C, target: EditPlanItem0C) -> tuple[EditPlanItem0C, ...]:
+    """The whole linked segment of ``target``: its A/V link group plus every
+    subtitle sharing the exact source span (the segment's subtitle cue).
+
+    Phase-1 review planes carry one subtitle per segment whose span equals the
+    A/V span, so segment-scoped remove/adjust semantics fall out of link
+    identity plus span equality without a segment concept in the 0C model.
+    """
+
+    group = tuple(
+        item
+        for item in plan.plan.items
+        if target.av_link_id is not None and item.av_link_id == target.av_link_id
+    )
+    subtitles = tuple(
+        item
+        for item in plan.plan.items
+        if item.kind == "subtitle" and item.span == target.span
+    )
+    if target not in group and target not in subtitles:
+        return (target, *group, *subtitles)
+    return tuple(dict.fromkeys((*group, *subtitles, target)))
 
 
 def _apply_remove(plan: EditPlan0C, target: EditPlanItem0C) -> tuple[EditPlanItem0C, ...]:
-    link = target.av_link_id
-    kept = tuple(
-        item
-        for item in plan.plan.items
-        if item.item_id != target.item_id
-        and not (link is not None and item.av_link_id == link)
-    )
+    scope_ids = {item.item_id for item in _segment_scope(plan, target)}
+    kept = tuple(item for item in plan.plan.items if item.item_id not in scope_ids)
     if not kept:
         raise CompileError("remove would empty the plan")
     return kept
@@ -93,18 +112,13 @@ def _apply_span(
         raise CompileError("adjust_source_span requires new_span")
     if command.new_span.end_frame > plan.plan.edit_source.total_frames:
         raise CompileError("adjusted span exceeds the edit source length")
-    updated: list[EditPlanItem0C] = []
-    for item in plan.plan.items:
-        same_group = (
-            target.av_link_id is not None
-            and item.av_link_id == target.av_link_id
-            and item.span == target.span
-        )
-        if item.item_id == target.item_id or same_group:
-            updated.append(item.model_copy(update={"span": command.new_span}))
-        else:
-            updated.append(item)
-    return tuple(updated)
+    scope_ids = {item.item_id for item in _segment_scope(plan, target)}
+    return tuple(
+        item.model_copy(update={"span": command.new_span})
+        if item.item_id in scope_ids
+        else item
+        for item in plan.plan.items
+    )
 
 
 def _apply_text(

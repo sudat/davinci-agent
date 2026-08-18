@@ -47,7 +47,7 @@ class EditSourceRef0C(ResolveFreeModel):
 
 
 class EditPlanBody0C(ResolveFreeModel):
-    plan_version: Literal["v1", "v2"]
+    plan_version: str = Field(pattern=r"^v[1-9][0-9]*$", strict=True)
     edit_source: EditSourceRef0C
     items: tuple[EditPlanItem0C, ...] = Field(min_length=1)
 
@@ -91,7 +91,7 @@ class ReviewCommand0C(ResolveFreeModel):
     language: Literal["ja", "en"]
     instruction: str = Field(min_length=1)
     operation: Literal["remove_segment", "adjust_source_span", "correct_subtitle"]
-    base_plan_version: Literal["v1", "v2"]
+    base_plan_version: str = Field(pattern=r"^v[1-9][0-9]*$", strict=True)
     target: TargetSelector0C
     new_span: SourceFrameSpan | None = None
     new_text: str | None = None
@@ -117,8 +117,8 @@ class Decision0C(ResolveFreeModel):
     command_id: Identifier
     classification: Classification0C
     action: Literal["apply", "defer"]
-    base_plan_version: Literal["v1", "v2"]
-    resulting_plan_version: Literal["v1", "v2"]
+    base_plan_version: str = Field(pattern=r"^v[1-9][0-9]*$", strict=True)
+    resulting_plan_version: str = Field(pattern=r"^v[1-9][0-9]*$", strict=True)
     conflict: ConflictRecord0C | None = None
     target_candidate_item_ids: tuple[Identifier, ...] = Field(min_length=1)
 

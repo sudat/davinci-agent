@@ -55,7 +55,7 @@ SYSTEM_PROMPT_PHASE_0C = (
 
 _ENVELOPE_PROPERTIES: dict[str, object] = {
     "proposal_id": {"type": "string", "minLength": 1},
-    "base_plan_version": {"type": "string", "enum": ["v1", "v2"]},
+    "base_plan_version": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
     "actor_intent": {"const": "model"},
     "sequence": {"type": "integer", "minimum": 0},
     "confidence": {

@@ -88,7 +88,7 @@ class ProposalAmbiguity0C(ResolveFreeModel):
 
 class ProposalEnvelope0C(ResolveFreeModel):
     proposal_id: Identifier
-    base_plan_version: Literal["v1", "v2"]
+    base_plan_version: str = Field(pattern=r"^v[1-9][0-9]*$", strict=True)
     actor_intent: ActorIntent0C
     sequence: int = Field(ge=0, strict=True)
     confidence: Confidence0C

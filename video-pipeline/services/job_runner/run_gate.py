@@ -39,7 +39,7 @@ DEFAULT_TOOLCHAIN_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="run_gate")
-    parser.add_argument("gate", choices=("control-plane-baseline",))
+    parser.add_argument("gate", choices=("control-plane-baseline", "phase-1-technical"))
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--tty-fixture", action="store_true")
@@ -47,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--freeze-receipt", type=Path)
     parser.add_argument("--manifest-dir", type=Path, default=MANIFEST_DIR)
     parser.add_argument("--toolchain-lock", type=Path, default=DEFAULT_TOOLCHAIN_LOCK)
+    parser.add_argument("--work-id", default=None, help="phase-1-technical only")
     return parser
 
 
@@ -139,7 +140,28 @@ def run_gate(arguments: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    return run_gate(_parser().parse_args())
+    arguments = _parser().parse_args()
+    if arguments.gate == "phase-1-technical":
+        import os  # noqa: PLC0415
+
+        fault_fixture = os.environ.get("QA_FAULT_FIXTURE")
+        if fault_fixture is not None:
+            from services.job_runner import gate_p1_faults  # noqa: PLC0415
+
+            return gate_p1_faults.run_fault_cli(Path(fault_fixture), arguments.policy)
+        from services.job_runner import gate_phase1  # noqa: PLC0415
+
+        gate_arguments = gate_phase1.parser().parse_args(
+            [
+                "--policy",
+                str(arguments.policy),
+                "--evidence",
+                str(arguments.evidence),
+                *(["--work-id", arguments.work_id] if arguments.work_id else []),
+            ]
+        )
+        return gate_phase1.run_phase1_gate(gate_arguments)
+    return run_gate(arguments)
 
 
 if __name__ == "__main__":

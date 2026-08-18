@@ -88,8 +88,7 @@ def decide(plan: EditPlan0C, command: ReviewCommand0C) -> Decision0C:
         action=action,
         base_plan_version=command.base_plan_version,
         resulting_plan_version=(
-            "v2"
-            if action == "apply" and command.base_plan_version == "v1"
+            f"v{int(command.base_plan_version[1:]) + 1}" if action == "apply"
             else command.base_plan_version
         ),
         conflict=result.conflict,

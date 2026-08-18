@@ -1,8 +1,11 @@
 """Strict ffprobe verification of a produced preview (drift detection).
 
 The renderer trusts no exit code; the pinned ffprobe re-reads the file and
-asserts codec, size, frame rate, decoded frame count, exact millisecond video
-duration, stream layout, and the AAC container padding tolerance from Todo 17.
+asserts codec, size, frame rate, decoded frame count, video duration within
+``MAX_DURATION_DRIFT_MS`` of the frame-exact RATIONAL duration (integer-frame
+timelines at 30 fps are not whole milliseconds — e.g. 614 frames — so exact
+integer-ms equality would reject correct outputs), stream layout, and the AAC
+container padding tolerance from Todo 17.
 """
 
 from __future__ import annotations
@@ -23,15 +26,13 @@ PREVIEW_HEIGHT: Final = 360
 AUDIO_SAMPLE_RATE_HZ: Final = 48000
 AUDIO_SAMPLE_RATE_TEXT: Final = "48000"
 MAX_CONTAINER_PADDING_MS: Final = 500
+MAX_DURATION_DRIFT_MS: Final = Fraction(2)
 
 
-def _duration_ms(text: str | None, label: str) -> int:
+def _duration_fraction(text: str | None, label: str) -> Fraction:
     if text is None:
         raise PreviewVerificationError(f"{label} duration missing from ffprobe")
-    value = Fraction(text) * 1000
-    if value.denominator != 1:
-        raise PreviewVerificationError(f"{label} duration is not exact milliseconds: {text}")
-    return int(value)
+    return Fraction(text) * 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,13 +41,13 @@ class _ProbeFacts:
     audio: ProbeStream
     subtitle: ProbeStream | None
     stream_count: int
-    video_ms: int
-    container_ms: int
+    video_ms: Fraction
+    container_ms: Fraction
     frame_count: str | None
 
 
 def _video_mismatches(
-    facts: _ProbeFacts, rate_text: str, total_frames: int, expected_ms: int
+    facts: _ProbeFacts, rate_text: str, total_frames: int, expected_ms: Fraction
 ) -> list[str]:
     video = facts.video
     mismatches: list[str] = []
@@ -58,8 +59,11 @@ def _video_mismatches(
         mismatches.append(f"frame rate {video.r_frame_rate}/{video.avg_frame_rate} != {rate_text}")
     if facts.frame_count != str(total_frames):
         mismatches.append(f"frame count {facts.frame_count} != {total_frames}")
-    if facts.video_ms != expected_ms:
-        mismatches.append(f"video duration {facts.video_ms}ms != {expected_ms}ms")
+    if abs(facts.video_ms - expected_ms) > MAX_DURATION_DRIFT_MS:
+        mismatches.append(
+            f"video duration {float(facts.video_ms):.3f}ms != expected "
+            f"{float(expected_ms):.3f}ms (±{float(MAX_DURATION_DRIFT_MS):.0f}ms)"
+        )
     return mismatches
 
 
@@ -89,7 +93,7 @@ def _stream_mismatches(
     facts: _ProbeFacts,
     rate_text: str,
     total_frames: int,
-    expected_ms: int,
+    expected_ms: Fraction,
     *,
     subtitle_expected: bool,
 ) -> list[str]:
@@ -97,11 +101,12 @@ def _stream_mismatches(
     mismatches += _audio_subtitle_mismatches(
         facts.audio, facts.subtitle, facts.stream_count, subtitle_expected=subtitle_expected
     )
-    if not expected_ms <= facts.container_ms <= expected_ms + MAX_CONTAINER_PADDING_MS:
+    lower = expected_ms - MAX_DURATION_DRIFT_MS
+    upper = expected_ms + MAX_CONTAINER_PADDING_MS + MAX_DURATION_DRIFT_MS
+    if not lower <= facts.container_ms <= upper:
         mismatches.append(
-            f"container duration {facts.container_ms}ms outside "
-            f"[{expected_ms}, {expected_ms + MAX_CONTAINER_PADDING_MS}]ms "
-            "(AAC container padding tolerance)"
+            f"container duration {float(facts.container_ms):.3f}ms outside "
+            f"[{float(lower):.3f}, {float(upper):.3f}]ms (AAC container padding tolerance)"
         )
     return mismatches
 
@@ -121,17 +126,14 @@ def verify_preview_output(
     subtitle = next((s for s in report.streams if s.codec_type == "subtitle"), None)
     if video is None or audio is None:
         raise PreviewVerificationError(f"preview lacks a video/audio stream: {output}")
-    expected_ms_fraction = Fraction(total_frames * 1000 * rate.den, rate.num)
-    if expected_ms_fraction.denominator != 1:
-        raise PreviewVerificationError("expected duration is not exact milliseconds")
-    expected_ms = int(expected_ms_fraction)
+    expected_ms = Fraction(total_frames * 1000 * rate.den, rate.num)
     facts = _ProbeFacts(
         video=video,
         audio=audio,
         subtitle=subtitle,
         stream_count=len(report.streams),
-        video_ms=_duration_ms(video.duration, "video"),
-        container_ms=_duration_ms(
+        video_ms=_duration_fraction(video.duration, "video"),
+        container_ms=_duration_fraction(
             report.format.duration if report.format is not None else None, "container"
         ),
         frame_count=video.nb_read_frames or video.nb_frames,
@@ -153,8 +155,8 @@ def verify_preview_output(
         r_frame_rate=video.r_frame_rate or "",
         avg_frame_rate=video.avg_frame_rate or "",
         nb_read_frames=int(facts.frame_count or "0"),
-        video_duration_ms=facts.video_ms,
-        container_duration_ms=facts.container_ms,
+        video_duration_ms=round(facts.video_ms),
+        container_duration_ms=round(facts.container_ms),
         audio_codec=audio.codec_name or "",
         audio_sample_rate=int(audio.sample_rate or "0"),
         audio_channels=audio.channels or 0,

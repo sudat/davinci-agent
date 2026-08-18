@@ -1,0 +1,163 @@
+[
+  {
+    "case_id": "happy-all-five-pass-and-stop-at-h1",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/phase1/test_gate.py",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "8 passed"
+  },
+  {
+    "case_id": "failure-incomplete-flow",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.job_runner.run_gate",
+      "phase-1-technical",
+      "--policy",
+      "config/gates/phase-1-technical-v1.json",
+      "--evidence",
+      "/tmp/phase1-qa-fault-evidence"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": "tests/fixtures/phase1-gate-faults/incomplete_flow.json",
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "detected=true expected_code=evidence-incomplete"
+  },
+  {
+    "case_id": "failure-must-include-miss",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.job_runner.run_gate",
+      "phase-1-technical",
+      "--policy",
+      "config/gates/phase-1-technical-v1.json",
+      "--evidence",
+      "/tmp/phase1-qa-fault-evidence"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": "tests/fixtures/phase1-gate-faults/must_include_miss.json",
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "detected=true expected_code=must-include-miss"
+  },
+  {
+    "case_id": "failure-coordinate-defect",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.job_runner.run_gate",
+      "phase-1-technical",
+      "--policy",
+      "config/gates/phase-1-technical-v1.json",
+      "--evidence",
+      "/tmp/phase1-qa-fault-evidence"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": "tests/fixtures/phase1-gate-faults/coordinate_defect.json",
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "detected=true expected_code=coordinate-defect"
+  },
+  {
+    "case_id": "failure-coverage-below-80",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.job_runner.run_gate",
+      "phase-1-technical",
+      "--policy",
+      "config/gates/phase-1-technical-v1.json",
+      "--evidence",
+      "/tmp/phase1-qa-fault-evidence"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": "tests/fixtures/phase1-gate-faults/coverage_below_80.json",
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "detected=true expected_code=coverage-below-80"
+  },
+  {
+    "case_id": "failure-auto-created-operator-record",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "-m",
+      "services.job_runner.run_gate",
+      "phase-1-technical",
+      "--policy",
+      "config/gates/phase-1-technical-v1.json",
+      "--evidence",
+      "/tmp/phase1-qa-fault-evidence"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": "tests/fixtures/phase1-gate-faults/auto_created_operator_record.json",
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "detected=true expected_code=operator-record-auto-created"
+  },
+  {
+    "case_id": "failure-synthetic-as-real-claim",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/phase1/test_gate_units.py::test_verify_refuses_synthetic_episode_claimed_as_real",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "happy-h1-waiting-marker-schema",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/phase1/test_gate_units.py::test_fault_is_detected_from_recomputed_evidence",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "5 passed"
+  }
+]

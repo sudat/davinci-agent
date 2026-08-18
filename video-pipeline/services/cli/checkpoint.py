@@ -61,6 +61,22 @@ def _parser() -> argparse.ArgumentParser:
     export.add_argument("--display-receipt", type=Path, required=True)
     export.add_argument("--operation-record", type=Path, required=True)
     export.add_argument("--out", type=Path, required=True)
+    verify = sub.add_parser(
+        "verify", help="rehash and validate an exported operator checkpoint (H1 gate)"
+    )
+    verify.add_argument("--checkpoint", type=Path, required=True)
+    verify.add_argument("--display-receipt", type=Path, required=True)
+    verify.add_argument(
+        "--require-purpose", choices=["EDITORIAL_APPROVED"], required=True
+    )
+    verify.add_argument(
+        "--require-real-episode",
+        action="store_true",
+        help="refuse synthetic fixture episodes claimed as real",
+    )
+    verify.add_argument(
+        "--recompute", action="store_true", help="rehash every bound target before accepting"
+    )
     return parser
 
 
@@ -180,12 +196,86 @@ def _export(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _verify(arguments: argparse.Namespace) -> int:  # noqa: PLR0911 (one typed refusal per drift)
+    from services.cli.checkpoint_models import OperatorCheckpoint  # noqa: PLC0415
+    from services.gates.phase1_technical import PHASE_1_TECHNICAL_FIXTURES  # noqa: PLC0415
+
+    try:
+        raw = arguments.checkpoint.read_bytes()
+        checkpoint = OperatorCheckpoint.model_validate_json(raw)
+        receipt = DisplayReceipt.model_validate_json(arguments.display_receipt.read_bytes())
+    except OSError as error:
+        print(f"verify_failed: checkpoint_unreadable: {error}", file=sys.stderr)
+        return 1
+    except ValidationError as error:
+        first = error.errors()[0]
+        print(
+            f"verify_failed: checkpoint_invalid: {first.get('type')}: "
+            "a synthetic (fixture-marked) checkpoint can never verify as a real "
+            "operator checkpoint",
+            file=sys.stderr,
+        )
+        return 1
+    if arguments.require_purpose != checkpoint.purpose or receipt.purpose != checkpoint.purpose:
+        print(
+            f"verify_failed: purpose_mismatch: checkpoint is {checkpoint.purpose}, "
+            f"required {arguments.require_purpose}",
+            file=sys.stderr,
+        )
+        return 1
+    if arguments.require_real_episode and (
+        checkpoint.fixture_only or checkpoint.episode_id in PHASE_1_TECHNICAL_FIXTURES
+    ):
+        print(
+            "verify_failed: synthetic-episode-rejected: "
+            f"episode {checkpoint.episode_id} is a frozen synthetic fixture; a real "
+            "owner-supplied episode is required",
+            file=sys.stderr,
+        )
+        return 1
+    if arguments.recompute:
+        receipt_sha = hashlib.sha256(receipt.canonical_bytes()).hexdigest()
+        if receipt_sha != checkpoint.display_receipt_sha256:
+            print(
+                "verify_failed: receipt_drift: the display receipt no longer hashes to "
+                "the checkpoint binding",
+                file=sys.stderr,
+            )
+            return 1
+        if receipt.target_bundle_sha256 != checkpoint.displayed_target_sha256:
+            print(
+                "verify_failed: displayed_target_drift: the receipt target set differs "
+                "from the checkpoint binding",
+                file=sys.stderr,
+            )
+            return 1
+        if receipt.target_digest() != receipt.target_bundle_sha256:
+            print(
+                "verify_failed: receipt_self_inconsistent: the receipt digest does not "
+                "match its own targets",
+                file=sys.stderr,
+            )
+            return 1
+        if receipt.targets.episode_id != checkpoint.episode_id:
+            print(
+                "verify_failed: episode_drift: the receipt displays a different episode",
+                file=sys.stderr,
+            )
+            return 1
+    print(f"verify: purpose={checkpoint.purpose}")
+    print(f"verify: episode={checkpoint.episode_id} real_episode={not checkpoint.fixture_only}")
+    print(f"verify: displayed_target={checkpoint.displayed_target_sha256}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     if arguments.command == "show":
         return _show(arguments)
     if arguments.command == "record":
         return _record(arguments)
+    if arguments.command == "verify":
+        return _verify(arguments)
     return _export(arguments)
 
 
