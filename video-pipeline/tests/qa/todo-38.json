@@ -1,0 +1,89 @@
+[
+  {
+    "case_id": "happy-independent-analyzers-parallelize-and-reuse-cache",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_orchestrator.py::test_happy_two_analyzers_publish_and_rebuild_index",
+      "tests/analyze/test_orchestrator.py::test_second_identical_run_is_all_cache_hits",
+      "tests/analyze/test_orchestrator.py::test_parallel_run_overlaps_and_matches_serial",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-parent-change-mid-run-superseded",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_orchestrator.py::test_parent_change_mid_run_supersedes_not_adopts",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-conflicting-cache-key",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_orchestrator.py::test_conflicting_cache_binding_raises_explicit_error",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-analyzer-failure-isolated",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_orchestrator.py::test_analyzer_failure_is_isolated",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-duplicate-completion-single-publish",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/analyze/test_orchestrator.py::test_duplicate_completion_publishes_once",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
