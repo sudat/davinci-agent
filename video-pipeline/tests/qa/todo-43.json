@@ -1,0 +1,121 @@
+[
+  {
+    "case_id": "happy-valid-committed-edit-plan",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_edit_commit.py::test_valid_edit_plan_commits_immutable_version_with_state_adoption",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "5 passed"
+  },
+  {
+    "case_id": "failure-stale-selection",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_edit_commit.py::test_stale_selection_base_conflict_publishes_nothing_partial",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-broken-link",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_edit_commit.py::test_broken_link_is_refused_without_publish",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-invalid-span",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_edit_commit.py::test_invalid_record_span_is_refused_without_publish",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-lock-conflict",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_edit_commit.py::test_lock_conflict_is_deferred_and_recorded",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-resolve-field-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_edit_commit.py::test_resolve_and_uuid_field_injection_is_refused_without_publish",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-crash-cannot-partially-commit",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_edit_commit.py::test_crash_cannot_partially_commit",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
