@@ -12,6 +12,7 @@ shell, file-write, or network handle. Commit authority belongs to Todo 41.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
 from services.contracts.editorial_model import EditorialRequestEnvelope
@@ -21,6 +22,7 @@ from services.editorial.models import (
     DirectorRunResult,
     EditorialErrorRecord,
     EditorialMetadata,
+    EditorialPolicyEnvelope,
 )
 from services.editorial.parse import ParsedProposal, parse_response
 from services.editorial.pin import EditorialDirectorPin, load_pin
@@ -40,28 +42,38 @@ from services.editorial.transport import (
 )
 
 if TYPE_CHECKING:
-    from services.editorial.models import EditorialPolicyEnvelope
     from services.media_query.api import MediaQueryApi
 
 type _Status = Literal["proposal", "refusal", "error"]
+type PolicyDecider = Callable[[str], EditorialPolicyEnvelope]
 
 
 class EditorialDirector:
     """Proposal-only adapter over one transport and one concrete model pin."""
 
-    __slots__ = ("_pin", "_transport", "_transport_kind")
+    __slots__ = ("_pin", "_policy_decider", "_transport", "_transport_kind")
 
     def __init__(
-        self, *, transport: EditorialTransport, pin: EditorialDirectorPin | None = None
+        self,
+        *,
+        transport: EditorialTransport,
+        pin: EditorialDirectorPin | None = None,
+        policy_decider: PolicyDecider | None = None,
+        transport_kind: Literal["replay", "live-stub", "live-http"] | None = None,
     ) -> None:
         self._transport = transport
         self._pin = pin if pin is not None else load_pin()
-        self._transport_kind: Literal["replay", "live-stub"] = (
-            "live-stub" if isinstance(transport, LiveTransport) else "replay"
+        self._policy_decider = policy_decider if policy_decider is not None else (
+            decide_transport_policy
+        )
+        self._transport_kind: Literal["replay", "live-stub", "live-http"] = (
+            transport_kind
+            if transport_kind is not None
+            else ("live-stub" if isinstance(transport, LiveTransport) else "replay")
         )
 
     def run(self, request: DirectorRequest, *, api: MediaQueryApi) -> DirectorRunResult:
-        policy = decide_transport_policy(request.episode_id)
+        policy = self._policy_decider(request.episode_id)
         bundle_hash = prompt_bundle_hash(build_prompt(request))
         if not policy.allowed:
             return self._result(
@@ -188,7 +200,9 @@ class EditorialDirector:
             request_hash=key,
             response_hash=response_hash,
             status=status,
-            external_credentials="none",
+            external_credentials=(
+                "env-var-not-recorded" if self._transport_kind == "live-http" else "none"
+            ),
         )
 
     def _result(

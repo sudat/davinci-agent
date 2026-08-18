@@ -53,7 +53,7 @@ class EditorialRequestEnvelope(StrictModel):
     request_hash: str
     response_hash: str | None
     status: Literal["proposal", "refusal", "error"]
-    external_credentials: Literal["none"]
+    external_credentials: Literal["none", "env-var-not-recorded"]
 
 
 class EditorialReplayFixture(StrictModel):

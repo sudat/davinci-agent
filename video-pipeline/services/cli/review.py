@@ -15,11 +15,13 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from services.cli.bundle import BundleDriftError, load_bundle
+from services.cli.bundle import BundleDriftError, ReviewBundle, load_bundle
 from services.cli.project import plan_sha256
 from services.cli.review_apply import ApplyError, apply_proposal
+from services.cli.review_freeform import propose_freeform
 from services.cli.review_replay import (
     PlanView,
+    ProposalOutcome,
     ReviewTranslateError,
     propose_review_command,
 )
@@ -51,9 +53,6 @@ def _parser() -> argparse.ArgumentParser:
 def _propose(arguments: argparse.Namespace) -> int:
     try:
         bundle = load_bundle(arguments.bundle)
-        manifest = Phase1TechnicalFixtureManifest.model_validate_json(
-            (arguments.bundle.parent / bundle.fixture_manifest_path).read_bytes()
-        )
         policy = ResolvedConfig.model_validate_json(arguments.production_policy.read_bytes())
         head = load_head(
             arguments.bundle.parent / bundle.events_log,
@@ -66,7 +65,7 @@ def _propose(arguments: argparse.Namespace) -> int:
         bundle.fixture_manifest_sha256
     ):
         print(
-            "manifest_drift: the bundle's fixture manifest no longer hashes to its seal",
+            "manifest_drift: the bundle's episode manifest no longer hashes to its seal",
             file=sys.stderr,
         )
         return 1
@@ -77,14 +76,7 @@ def _propose(arguments: argparse.Namespace) -> int:
     )
     try:
         instruction = arguments.instruction_file.read_text(encoding="utf-8")
-        outcome = propose_review_command(
-            manifest,
-            instruction,
-            current,
-            policy,
-            policy_sha=sha256_file(arguments.production_policy),
-            translator_sha=sha256_file(arguments.translator_policy),
-        )
+        outcome = _translate(arguments, bundle, instruction, current, policy)
     except (OSError, ReviewTranslateError) as error:
         print(f"propose_failed: {error}", file=sys.stderr)
         return 1
@@ -99,6 +91,37 @@ def _propose(arguments: argparse.Namespace) -> int:
     print(f"classification: {outcome.classification}")
     print(f"base: {outcome.base_plan_hash[:12]}")
     return 0
+
+
+def _translate(
+    arguments: argparse.Namespace,
+    bundle: ReviewBundle,
+    instruction: str,
+    current: PlanView,
+    policy: ResolvedConfig,
+) -> ProposalOutcome:
+    """Fixture bundles replay declared corrections; REAL bundles go free-form."""
+
+    if bundle.fixture_only:
+        manifest = Phase1TechnicalFixtureManifest.model_validate_json(
+            (arguments.bundle.parent / bundle.fixture_manifest_path).read_bytes()
+        )
+        return propose_review_command(
+            manifest,
+            instruction,
+            current,
+            policy,
+            policy_sha=sha256_file(arguments.production_policy),
+            translator_sha=sha256_file(arguments.translator_policy),
+        )
+    return propose_freeform(
+        episode_id=bundle.episode_id,
+        instruction=instruction,
+        current=current,
+        policy=policy,
+        policy_sha=sha256_file(arguments.production_policy),
+        translator_sha=sha256_file(arguments.translator_policy),
+    )
 
 
 def _apply(arguments: argparse.Namespace) -> int:

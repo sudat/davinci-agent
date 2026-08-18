@@ -189,15 +189,23 @@ def _analysis_rows(artifact: AnalysisArtifact, artifact_sha: str) -> IndexRowSet
         )
         for segment in transcript_map.segments
     )
-    token_spans = tuple(
-        _sample_span_row(
-            "token", token.segment_index, token.span, token.text,
-            version, artifact_sha, experimental=True,
+    # experimental token timing may repeat a (segment, start) lattice point;
+    # the index key allows one row per point — first token wins, index-only
+    token_spans: list[SampleSpanRow] = []
+    seen_token_keys: set[tuple[int, int]] = set()
+    for token in transcript_map.token_spans:
+        key = (token.segment_index, token.span.start_sample)
+        if key in seen_token_keys:
+            continue
+        seen_token_keys.add(key)
+        token_spans.append(
+            _sample_span_row(
+                "token", token.segment_index, token.span, token.text,
+                version, artifact_sha, experimental=True,
+            )
         )
-        for token in transcript_map.token_spans
-    )
     return IndexRowSet(
-        sources=(source,), sample_spans=segment_spans + token_spans,
+        sources=(source,), sample_spans=(*segment_spans, *token_spans),
         silence_ranges=_pause_rows(artifact, artifact_sha),
         statistics=_statistics_rows(artifact, artifact_sha))
 

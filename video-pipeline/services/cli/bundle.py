@@ -166,6 +166,45 @@ def assemble_initial_bundle(  # noqa: PLR0913 (bundle fields are the H1 contract
     )
 
 
+def assemble_real_bundle(  # noqa: PLR0913 (bundle fields are the H1 contract)
+    *,
+    episode_id: str,
+    eligibility_status: Literal["supported", "assisted", "unsupported"],
+    mezzanine_sha256: str,
+    edit_source_world_sha256: str,
+    episode_manifest_sha256: str,
+    policy_sha256: str,
+    target: ReviewTarget,
+) -> ReviewBundle:
+    """Assemble the PREVIEW_READY review bundle for a freshly run REAL episode."""
+
+    return ReviewBundle(
+        schema_version="review-bundle-v1",
+        episode_id=episode_id,
+        fixture_only=False,
+        stage="PREVIEW_READY",
+        eligibility_status=eligibility_status,
+        store_dir="review-store",
+        events_log="review-store/events.jsonl",
+        media=(
+            MediaFileInfo(
+                role="edit-source",
+                path="media/edit-source.mov",
+                sha256=mezzanine_sha256,
+            ),
+        ),
+        edit_source_world_sha256=edit_source_world_sha256,
+        fixture_manifest_sha256=episode_manifest_sha256,
+        toolchain_lock_sha256=sha256_file(Path("config/toolchains/phase-1-technical-v1.json")),
+        translator_policy_sha256=sha256_file(Path("config/gates/phase-0c-v1.json")),
+        production_policy_sha256=policy_sha256,
+        fixture_manifest_path="episode.json",
+        initial=target,
+        current=target,
+        applied_event_ids=(),
+    )
+
+
 __all__ = [
     "BUNDLE_NAME",
     "PREVIEW_FILE",
@@ -175,6 +214,7 @@ __all__ = [
     "ReviewBundle",
     "ReviewTarget",
     "assemble_initial_bundle",
+    "assemble_real_bundle",
     "bundle_path",
     "load_bundle",
     "rehash_bundle_targets",

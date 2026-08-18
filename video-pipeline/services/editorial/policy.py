@@ -94,9 +94,38 @@ def decide_transport_policy(episode_id: str) -> EditorialPolicyEnvelope:
     )
 
 
+def decide_production_transport_policy(
+    episode_id: str, policy: ResolvedConfig
+) -> EditorialPolicyEnvelope:
+    """The production-path envelope: the resolved production policy decides.
+
+    The episode is by definition NOT a fixture here, so the frozen fixture
+    binding stays honestly ``denied``; the granting authority is the Todo-12
+    gate over the operator's resolved production snapshot, deny-by-default.
+    """
+
+    decision = authorize_cloud_transport(
+        policy,
+        data_class=EDITORIAL_DATA_CLASS,
+        stage=EDITORIAL_STAGE,
+        episode_id=episode_id,
+    )
+    return EditorialPolicyEnvelope(
+        fixture_binding="denied",
+        binding_reason=(
+            "real episode: the frozen toolchain fixture binding does not apply; "
+            "transport authorization is decided by the resolved production policy"
+        ),
+        control_plane_decision="allow" if decision.allowed else "deny",
+        control_plane_reason=decision.reason,
+        binding_scope="production-policy",
+    )
+
+
 __all__ = [
     "EDITORIAL_DATA_CLASS",
     "EDITORIAL_POLICY_PROFILE_ID",
     "EDITORIAL_STAGE",
+    "decide_production_transport_policy",
     "decide_transport_policy",
 ]

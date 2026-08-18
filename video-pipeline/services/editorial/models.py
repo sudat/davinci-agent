@@ -57,15 +57,24 @@ class DirectorRequest(StrictModel):
 
 
 class EditorialPolicyEnvelope(StrictModel):
-    """Explicit data-policy envelope recorded with every run (Todo 12 + pin)."""
+    """Explicit data-policy envelope recorded with every run (Todo 12 + pin).
+
+    ``binding_scope`` distinguishes the frozen spike adapter (fixture binding;
+    only the five Phase-1 synthetic episodes may leave the local lane) from
+    the production path (the operator's resolved production policy is the
+    granting authority; deny-by-default through the Todo-12 gate).
+    """
 
     fixture_binding: Literal["granted", "denied"]
     binding_reason: str = Field(min_length=1)
     control_plane_decision: Literal["allow", "deny"]
     control_plane_reason: str = Field(min_length=1)
+    binding_scope: Literal["fixture-binding", "production-policy"] = "fixture-binding"
 
     @property
     def allowed(self) -> bool:
+        if self.binding_scope == "production-policy":
+            return self.control_plane_decision == "allow"
         return self.fixture_binding == "granted" and self.control_plane_decision == "allow"
 
 
@@ -75,7 +84,7 @@ class EditorialMetadata(StrictModel):
     pin_version: str
     requested_model: str
     observed_model: str | None = None
-    transport_kind: Literal["replay", "live-stub"]
+    transport_kind: Literal["replay", "live-stub", "live-http"]
     prompt_bundle_hash: str
     evidence_lineage: tuple[str, ...] = ()
 

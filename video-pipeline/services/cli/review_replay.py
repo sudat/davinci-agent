@@ -100,7 +100,7 @@ _PROPOSAL_ADAPTER = TypeAdapter(ReviewCommandProposal0C)
 _IDENTIFIER = TypeAdapter(Identifier)
 
 
-def _policy_gate(
+def review_policy_gate(
     policy: ResolvedConfig,
     *,
     episode_id: str,
@@ -139,7 +139,7 @@ def propose_review_command(  # noqa: PLR0913 (translator adapter contract)
     policy_sha: str,
     translator_sha: str,
 ) -> ProposalOutcome:
-    gate = _policy_gate(
+    gate = review_policy_gate(
         policy, episode_id=manifest.fixture_id, policy_sha=policy_sha, translator_sha=translator_sha
     )
     text = instruction.strip()
@@ -221,4 +221,5 @@ __all__ = [
     "canonical_instruction",
     "declared_proposal_payload",
     "propose_review_command",
+    "review_policy_gate",
 ]
