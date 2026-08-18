@@ -1,0 +1,107 @@
+[
+  {
+    "case_id": "happy-structured-and-ambiguous-fixture-flows",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/e2e/test_phase1_review_loop.py",
+      "tests/cli/test_review_commands.py",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "16 passed"
+  },
+  {
+    "case_id": "happy-h1-checkpoint-display-and-fixture-record",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/cli/test_h1_checkpoint.py",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "8 passed"
+  },
+  {
+    "case_id": "failure-schema-gap-silently-coerced-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/e2e/test_phase1_review_loop.py::test_11_schema_gap_instruction_is_refused_with_typed_reason",
+      "tests/cli/test_review_commands.py::test_50_schema_gap_instruction_exits_nonzero_with_typed_code",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-ui-dependency-absent",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/cli/test_h1_checkpoint.py::test_60_cli_package_has_no_ui_dependency",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-unmeasured-exclusion",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/cli/test_review_commands.py::test_70_unmeasured_events_are_excluded_not_counted",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-fixture-approval-mislabeled-real",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/cli/test_h1_checkpoint.py::test_40_fixture_record_presented_as_real_is_rejected_by_export",
+      "tests/cli/test_h1_checkpoint.py::test_70_real_tty_record_and_fixture_lineage_checkpoint_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  }
+]
