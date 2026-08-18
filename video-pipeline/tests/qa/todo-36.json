@@ -1,0 +1,96 @@
+[
+  {
+    "case_id": "happy-rebuild-query-fixture-index",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_index.py::test_rebuild_indexes_all_rows_with_lineage",
+      "tests/media_query/test_index.py::test_transcript_overlap_query_exact",
+      "tests/media_query/test_index.py::test_silence_range_query_exact",
+      "tests/media_query/test_index.py::test_quality_ranges_and_contact_refs_exact",
+      "tests/media_query/test_index.py::test_statistics_are_int_encoded",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [
+      "config/toolchains/phase-1-technical-v1.json"
+    ],
+    "expected_observation": "5 passed"
+  },
+  {
+    "case_id": "failure-interrupted-transaction-rollback",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_index.py::test_interrupted_rebuild_transaction_rolls_back",
+      "tests/media_query/test_index.py::test_interrupted_migration_rolls_back",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-stale-analyzer-version-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_index.py::test_stale_analyzer_version_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-parameter-injection-survives",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_index.py::test_parameter_injection_probe_survives",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-missing-artifact-parent-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/media_query/test_index.py::test_missing_artifact_parent_refused",
+      "tests/media_query/test_index.py::test_tampered_artifact_bytes_refused",
+      "tests/media_query/test_index.py::test_corrupt_index_file_refuses_to_open",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  }
+]
