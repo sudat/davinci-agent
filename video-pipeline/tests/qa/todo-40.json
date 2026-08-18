@@ -1,0 +1,109 @@
+[
+  {
+    "case_id": "happy-evidence-backed-candidates-reconcile",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/editorial/test_selection_proposal.py::test_reconciled_candidates_are_stable_and_evidence_backed",
+      "tests/editorial/test_selection_proposal.py::test_reconciled_intents_match_golden_selection",
+      "tests/editorial/test_selection_proposal.py::test_adjusted_spans_create_parent_chains",
+      "tests/editorial/test_selection_proposal.py::test_redundancy_groups_are_deterministic",
+      "tests/editorial/test_selection_proposal.py::test_builder_enforces_must_include",
+      "tests/editorial/test_selection_proposal.py::test_builder_produces_strict_proposal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "18 passed"
+  },
+  {
+    "case_id": "failure-model-uuid-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/editorial/test_selection_proposal.py::test_model_uuid_injection_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-absent-evidence-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/editorial/test_selection_proposal.py::test_absent_evidence_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-out-of-source-span-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/editorial/test_selection_proposal.py::test_out_of_source_span_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-id-collision-conflict",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/editorial/test_selection_proposal.py::test_identity_conflict_on_same_id_different_content",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-unsupported-intent-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/editorial/test_selection_proposal.py::test_unsupported_intent_is_rejected",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
