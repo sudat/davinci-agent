@@ -1,0 +1,138 @@
+[
+  {
+    "case_id": "happy-valid-proposal-commits",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_valid_proposal_commits_immutable_version_with_state_adoption",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "5 passed"
+  },
+  {
+    "case_id": "failure-schema-float-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_schema_float_refusal_records_event_without_publish",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-semantic-id-mismatch-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_semantic_identity_mismatch_is_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-lock-conflict-deferred",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_lock_conflict_is_deferred_and_recorded",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-capability-missing-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_capability_missing_is_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-evidence-absent-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_absent_evidence_is_refused_at_schema",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-stale-parent-conflict",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_stale_base_conflict_publishes_nothing_partial",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-crash-between-publish-and-state-reconciles",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/validate/test_selection_commit.py::test_crash_between_publish_and_state_recovers",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
