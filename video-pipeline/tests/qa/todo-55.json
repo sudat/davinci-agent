@@ -1,0 +1,138 @@
+[
+    {
+        "case_id": "happy-approved-generated-assets-resolve-and-compile",
+        "kind": "happy",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_manifest.py::test_approved_generated_assets_resolve_and_compile",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    },
+    {
+        "case_id": "failure-missing-rights-blocks",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_profiles_registry.py::test_missing_asset_blocks",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    },
+    {
+        "case_id": "failure-expired-rights-blocks",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_profiles_registry.py::test_expired_asset_blocks",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    },
+    {
+        "case_id": "failure-wrong-use-rights-blocks",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_profiles_registry.py::test_wrong_use_blocks",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    },
+    {
+        "case_id": "failure-changed-file-blocks",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_manifest.py::test_changed_asset_after_snapshot_blocks",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    },
+    {
+        "case_id": "failure-automatic-learning-blocks",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_profiles_registry.py::test_no_profile_self_update_path_exists",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    },
+    {
+        "case_id": "failure-internet-fetch-blocks",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_profiles_registry.py::test_no_internet_fetch_code_exists",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    },
+    {
+        "case_id": "failure-observed-output-expectation-mutation-blocks",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/presentation/test_manifest.py::test_mutated_golden_expectations_are_refused",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "1 passed"
+    }
+]

@@ -152,7 +152,15 @@ def _request(tmp_path: Path, **overrides: object) -> Phase3PrepareRequest:
     return Phase3PrepareRequest(**base)  # type: ignore[arg-type]
 
 
-def test_stale_parent_gate_result_is_refused_at_prepare_time(tmp_path: Path) -> None:
+def test_stale_parent_gate_result_is_refused_at_prepare_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Phase-3 product code legitimately exists since Todo 55; bypass only the
+    # pre-implementation guard so this test still reaches the stale-parent refusal.
+    monkeypatch.setattr(
+        "services.fixtures.prepare_phase3.PHASE_3_PRODUCT_MODULE",
+        Path("services/__absent_since_todo_55__"),
+    )
     parent: dict[str, object] = json.loads(PHASE2_RESULT.read_bytes())
     parent["policy_sha256"] = "0" * 64
     stale = tmp_path / "stale-parent.json"
@@ -162,7 +170,13 @@ def test_stale_parent_gate_result_is_refused_at_prepare_time(tmp_path: Path) -> 
         prepare_phase3(_request(tmp_path, parent_result=stale))
 
 
-def test_same_version_refreeze_is_refused(tmp_path: Path) -> None:
+def test_same_version_refreeze_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "services.fixtures.prepare_phase3.PHASE_3_PRODUCT_MODULE",
+        Path("services/__absent_since_todo_55__"),
+    )
     existing_policy = tmp_path / "policy.json"
     existing_policy.write_bytes(POLICY.read_bytes())
 

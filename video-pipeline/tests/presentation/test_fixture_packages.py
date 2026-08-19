@@ -88,8 +88,19 @@ def _records_of(payload: dict[str, object]) -> list[dict[str, object]]:
     return rows
 
 
-def test_no_phase3_product_module_exists() -> None:
-    assert not (Path.cwd().resolve() / "services" / "presentation").exists()
+def test_phase3_product_module_follows_the_frozen_inputs() -> None:
+    """Post-implementation successor of the pre-freeze module guard (Todo 55).
+
+    At freeze time (Todo 56) no Phase-3 product module was allowed to exist.
+    Implementation has since landed, so the durable invariant is that the
+    module exists ONLY on top of the still-unchanged frozen inputs.
+    """
+
+    assert (Path.cwd().resolve() / "services" / "presentation").is_dir()
+    for fixture_id in PHASE_3_FIXTURE_IDS:
+        manifest = _load(fixture_id)
+        assert manifest.fixture_only is True
+        assert manifest.expectation_basis == "pre-registered-declared-presentation-diff"
 
 
 def test_both_fixture_manifests_validate_and_are_canonical() -> None:
