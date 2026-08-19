@@ -178,7 +178,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--parent", type=Path, required=True)
     parser.add_argument(
         "--phase",
-        choices=("phase-0b", "phase-0c", "phase-1-technical", "phase-2"),
+        choices=("phase-0b", "phase-0c", "phase-1-technical", "phase-2", "phase-3"),
         required=True,
     )
     parser.add_argument("--pin", required=True)
@@ -220,15 +220,19 @@ def main() -> int:
             materialize_phase0b(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
         elif arguments.phase == "phase-0c":
             materialize_phase0c(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
+        elif arguments.phase == "phase-3":
+            from services.toolchain.materialize_phase3 import (  # noqa: PLC0415 (module cycle)
+                materialize_phase3,
+            )
+
+            materialize_phase3(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
         elif arguments.phase == "phase-2":
             from services.toolchain.materialize_phase2 import (  # noqa: PLC0415 (module cycle)
                 materialize_phase2,
             )
 
             resolve_package_pin, render_qc_pin = resolve_phase2_pin_paths(arguments.pin)
-            materialize_phase2(
-                arguments.parent, resolve_package_pin, render_qc_pin, arguments.out
-            )
+            materialize_phase2(arguments.parent, resolve_package_pin, render_qc_pin, arguments.out)
         else:
             from services.toolchain.materialize_phase1 import (  # noqa: PLC0415 (module cycle)
                 materialize_phase1_technical,

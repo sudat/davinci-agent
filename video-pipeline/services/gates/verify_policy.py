@@ -15,6 +15,7 @@ from services.fixtures.models import (
     Phase0CFreezeReceipt,
     Phase1TechnicalFreezeReceipt,
     Phase2FreezeReceipt,
+    Phase3FreezeReceipt,
     SourceSnapshot,
 )
 from services.foundation_io import canonical_model_bytes, sha256_file
@@ -28,6 +29,7 @@ type AnyFreezeReceipt = (
     | ControlPlaneFreezeReceipt
     | Phase1TechnicalFreezeReceipt
     | Phase2FreezeReceipt
+    | Phase3FreezeReceipt
 )
 
 
@@ -39,24 +41,27 @@ class PolicyVerificationError(Exception):
         return self.detail
 
 
+_RECEIPT_MODELS: tuple[type[AnyFreezeReceipt], ...] = (
+    FreezeReceipt,
+    Phase0BFreezeReceipt,
+    Phase0CFreezeReceipt,
+    ControlPlaneFreezeReceipt,
+    Phase1TechnicalFreezeReceipt,
+    Phase2FreezeReceipt,
+    Phase3FreezeReceipt,
+)
+
+
 def _load_receipt(path: Path) -> AnyFreezeReceipt:
     raw = path.read_bytes()
-    try:
-        receipt = FreezeReceipt.model_validate_json(raw)
-    except ValidationError:
+    for model in _RECEIPT_MODELS:
         try:
-            receipt = Phase0BFreezeReceipt.model_validate_json(raw)
+            receipt = model.model_validate_json(raw)
+            break
         except ValidationError:
-            try:
-                receipt = Phase0CFreezeReceipt.model_validate_json(raw)
-            except ValidationError:
-                try:
-                    receipt = ControlPlaneFreezeReceipt.model_validate_json(raw)
-                except ValidationError:
-                    try:
-                        receipt = Phase1TechnicalFreezeReceipt.model_validate_json(raw)
-                    except ValidationError:
-                        receipt = Phase2FreezeReceipt.model_validate_json(raw)
+            continue
+    else:
+        raise PolicyVerificationError("freeze receipt matches no known receipt type")
     if raw != canonical_model_bytes(receipt):
         raise PolicyVerificationError("freeze receipt is noncanonical")
     return receipt
@@ -77,7 +82,8 @@ def _manifest_sha256s(receipt: AnyFreezeReceipt) -> tuple[tuple[str | None, str]
         | Phase0CFreezeReceipt
         | ControlPlaneFreezeReceipt
         | Phase1TechnicalFreezeReceipt
-        | Phase2FreezeReceipt,
+        | Phase2FreezeReceipt
+        | Phase3FreezeReceipt,
     ):
         return tuple((binding.path, binding.sha256) for binding in receipt.fixture_manifests)
     return ((receipt.fixture_manifest_path, receipt.fixture_manifest_sha256),)
@@ -90,7 +96,8 @@ def _verify_manifest_bindings(policy: GatePolicy, receipt: AnyFreezeReceipt) -> 
         | Phase0CFreezeReceipt
         | ControlPlaneFreezeReceipt
         | Phase1TechnicalFreezeReceipt
-        | Phase2FreezeReceipt,
+        | Phase2FreezeReceipt
+        | Phase3FreezeReceipt,
     ):
         combined = hashlib.sha256()
         for binding in receipt.fixture_manifests:
@@ -126,7 +133,7 @@ def _verify_phase2_prerequisite(policy: GatePolicy, receipt: Phase2FreezeReceipt
 
 def _verify_parent_results(
     policy: GatePolicy,
-    receipt: Phase1TechnicalFreezeReceipt | Phase2FreezeReceipt,
+    receipt: Phase1TechnicalFreezeReceipt | Phase2FreezeReceipt | Phase3FreezeReceipt,
 ) -> None:
     parent_hashes = tuple(link.sha256 for link in receipt.parent_gate_results)
     if tuple(policy.parent_gate_result_hashes) != parent_hashes:
@@ -143,6 +150,8 @@ def _verify_referenced_bytes(policy: GatePolicy, receipt: AnyFreezeReceipt) -> N
     if isinstance(receipt, Phase2FreezeReceipt):
         _verify_parent_results(policy, receipt)
         _verify_phase2_prerequisite(policy, receipt)
+    if isinstance(receipt, Phase3FreezeReceipt):
+        _verify_parent_results(policy, receipt)
     toolchain_binding = (
         policy.toolchain_lock_sha256,
         receipt.toolchain_lock_sha256,

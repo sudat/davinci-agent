@@ -14,6 +14,7 @@ PHASE_0B_DIR = Path("tests/goldens/reference/phase-0b")
 PHASE_0C_DIR = Path("tests/goldens/reference/phase-0c")
 PHASE_1_DIR = Path("tests/goldens/reference/phase-1-technical")
 PHASE_2_DIR = Path("tests/goldens/reference/phase-2")
+PHASE_3_DIR = Path("tests/goldens/reference/phase-3")
 
 
 def test_derivation_imports_only_stdlib_and_reference_common() -> None:
@@ -280,6 +281,66 @@ def test_phase2_expected_tables_are_frozen() -> None:
 def test_phase2_self_derived_golden_importing_services_is_rejected(tmp_path: Path) -> None:
     source = tmp_path / "derive.py"
     source.write_text("from services.resolve_adapter.package import compile_resolve_package\n")
+
+    with pytest.raises(GoldenAuditError, match="services"):
+        audit_derivation_source(source)
+
+
+def test_phase3_derivation_imports_only_stdlib_and_reference_common() -> None:
+    audit = audit_derivation_source(PHASE_3_DIR / "derive.py")
+
+    assert audit.audit_result == "pass"
+    assert audit.forbidden_imports == ()
+    assert audit.produced_outputs_read is False
+
+
+def test_phase3_frozen_audit_and_index_bindings_are_current() -> None:
+    audit_payload = json.loads((PHASE_3_DIR / "import-audit.json").read_bytes())
+    index_payload = json.loads((PHASE_3_DIR / "index.json").read_bytes())
+
+    assert audit_payload["audit_result"] == "pass"
+    assert audit_payload["derivation_source_sha256"] == file_sha256(PHASE_3_DIR / "derive.py")
+    assert index_payload["derivation_source_sha256"] == file_sha256(PHASE_3_DIR / "derive.py")
+    assert index_payload["expected_sha256"] == file_sha256(PHASE_3_DIR / "expected.json")
+    assert index_payload["audit_sha256"] == file_sha256(PHASE_3_DIR / "import-audit.json")
+    for fixture_id, manifest_hash in index_payload["fixture_manifest_sha256s"].items():
+        manifest = Path("tests/fixtures/manifests/phase-3") / f"{fixture_id}.json"
+        assert manifest_hash == file_sha256(manifest)
+    assert index_payload["phase2_lineage_manifest_sha256"] == file_sha256(
+        Path("tests/fixtures/manifests/phase-2/p2-stale-capability.json")
+    )
+
+
+def test_phase3_expected_tables_are_frozen() -> None:
+    expected = json.loads((PHASE_3_DIR / "expected.json").read_bytes())
+
+    ab_diff = expected["ab_diff"]
+    assert ab_diff["dimension_check"] == "all-declared-differ-no-undeclared-difference"
+    assert all(row["differ"] for row in ab_diff["asset_sha256"].values())
+    assert ab_diff["audio"]["tone_hz"]["p3-brand-a"] == 440
+    assert ab_diff["audio"]["tone_hz"]["p3-brand-b"] == 330
+    assert ab_diff["style"]["font_size_px"] == {
+        "differ": True,
+        "p3-brand-a": 54,
+        "p3-brand-b": 42,
+    }
+    assert ab_diff["color"]["primary_hex"]["p3-brand-a"] == "#1B4DFF"
+    assert ab_diff["color"]["primary_hex"]["p3-brand-b"] == "#FF7A00"
+    invariants = expected["invariants"]
+    assert invariants["editorial_equal"] is True
+    assert invariants["placement"]["logo_anchor"] == "bottom-right"
+    assert invariants["audio_invariants"]["sample_rate_hz"] == 48000
+    assert invariants["style_invariants"]["style_id"] == "style-presentation-default"
+    assert expected["pinned"]["edit_source_sha256"] == (
+        "52ff0a8610e81e5294a10efe2b27b4c28706fd9a5c6b563d3822198025d0210d"
+    )
+    assert expected["pinned"]["phase2_fixture"] == "p2-stale-capability"
+    assert expected["fixtures"]["p3-brand-a"]["derived_from"] == "p1-ref-01-clean-ja"
+
+
+def test_phase3_self_derived_golden_importing_services_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "derive.py"
+    source.write_text("from services.presentation.manifest import compile_manifest\n")
 
     with pytest.raises(GoldenAuditError, match="services"):
         audit_derivation_source(source)

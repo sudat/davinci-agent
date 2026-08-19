@@ -20,6 +20,10 @@ from services.gates.phase2 import (
     PHASE_2_CRITERIA,
     PHASE_2_PARENT_COUNT,
 )
+from services.gates.phase3 import (
+    PHASE_3_CRITERIA,
+    PHASE_3_PARENT_COUNT,
+)
 
 type InputValue = (
     bool
@@ -118,6 +122,7 @@ class GatePolicy(GateModel):
             "control-plane-baseline": self._validate_control_plane,
             "phase-1-technical": self._validate_phase_1_technical,
             "phase-2": self._validate_phase_2,
+            "phase-3": self._validate_phase_3,
         }
         validator = phase_validators.get(self.gate_id)
         if validator is None:
@@ -188,7 +193,6 @@ class GatePolicy(GateModel):
             )
         return self
 
-
     def _validate_control_plane(self) -> GatePolicy:
         if self.criteria != PHASE_1_CONTROL_PLANE_CRITERIA:
             raise PydanticCustomError(
@@ -216,7 +220,6 @@ class GatePolicy(GateModel):
                 "Control Plane fixtures carry no media/model Golden derivation",
             )
         return self
-
 
     def _validate_phase_1_technical(self) -> GatePolicy:
         if self.criteria != PHASE_1_TECHNICAL_CRITERIA:
@@ -298,6 +301,40 @@ class GatePolicy(GateModel):
             raise PydanticCustomError(
                 "phase_2_bindings",
                 "Phase-2 requires the toolchain lock and fixture manifest bindings",
+            )
+        return self
+
+    def _validate_phase_3(self) -> GatePolicy:
+        if self.criteria != PHASE_3_CRITERIA:
+            raise PydanticCustomError(
+                "phase_3_criteria",
+                "Phase-3 criteria must match the canonical A/B profile-swap exit criteria",
+            )
+        if self.capability_allowlist:
+            raise PydanticCustomError(
+                "phase_3_capabilities",
+                "Phase-3 freezes no new capability allowlist; the gate re-runs the "
+                "frozen phase-2 capabilities through its parent binding",
+            )
+        if self.prerequisite_bindings:
+            raise PydanticCustomError(
+                "phase_3_prerequisites",
+                "Phase-3 prerequisites are parent gate result hashes only",
+            )
+        if len(self.parent_gate_result_hashes) != PHASE_3_PARENT_COUNT:
+            raise PydanticCustomError(
+                "phase_3_parent",
+                "Phase-3 requires exactly one parent gate result hash (phase-2)",
+            )
+        if self.golden_sha256 is None:
+            raise PydanticCustomError(
+                "phase_3_golden",
+                "Phase-3 fixtures require the independent Golden index binding",
+            )
+        if self.toolchain_lock_sha256 is None or self.fixture_manifest_sha256 is None:
+            raise PydanticCustomError(
+                "phase_3_bindings",
+                "Phase-3 requires the toolchain lock and fixture manifest bindings",
             )
         return self
 

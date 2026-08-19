@@ -29,6 +29,11 @@ from services.fixtures.prepare_phase2 import (
     prepare_phase2,
     prepare_phase2_errors,
 )
+from services.fixtures.prepare_phase3 import (
+    Phase3PrepareRequest,
+    prepare_phase3,
+    prepare_phase3_errors,
+)
 from services.fixtures.publish import publish_errors, publish_freeze
 
 
@@ -45,6 +50,7 @@ def _parser() -> argparse.ArgumentParser:
             "control-plane",
             "phase-1-technical",
             "phase-2",
+            "phase-3",
         ),
     )
     prepare.add_argument("--toolchain-lock", type=Path, required=True)
@@ -176,6 +182,25 @@ def _prepare_control_plane(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _prepare_phase3(arguments: argparse.Namespace) -> int:
+    if arguments.parent_result is None:
+        raise PrepareError("phase-3 requires the parent phase-2 gate result")
+    request = Phase3PrepareRequest(
+        toolchain_lock=arguments.toolchain_lock,
+        fixture_ids=tuple(arguments.fixture_ids.split(",")),
+        parent_result=arguments.parent_result,
+        pre_source_snapshot=arguments.pre_source_snapshot,
+        execution_contract=arguments.execution_contract,
+        policy_out=arguments.out,
+        freeze_receipt=arguments.freeze_receipt,
+        staging=arguments.staging,
+        intent=arguments.intent,
+    )
+    prepare_phase3(request)
+    print("freeze prepared: phase-3 v1")
+    return 0
+
+
 def _prepare(arguments: argparse.Namespace) -> int:
     if arguments.phase not in ("phase-1-technical", "phase-2") and (
         arguments.parent_results is not None
@@ -188,6 +213,7 @@ def _prepare(arguments: argparse.Namespace) -> int:
         "phase-1-technical": _prepare_phase1,
         "phase-0a": _prepare_phase0a,
         "phase-0b": _prepare_phase0b,
+        "phase-3": _prepare_phase3,
         "control-plane": _prepare_control_plane,
     }
     preparer = preparers.get(arguments.phase)
@@ -230,7 +256,8 @@ def main() -> int:
         *prepare_control_plane_errors(),
         *prepare_phase1_errors(),
         *prepare_phase2_errors(),
-        *publish_errors()
+        *prepare_phase3_errors(),
+        *publish_errors(),
     ) as error:
         print(error)
         return 2

@@ -6,6 +6,7 @@ import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 from pydantic import ValidationError
 
@@ -21,6 +22,7 @@ from services.fixtures.models import (
     Phase0CFreezeReceipt,
     Phase1TechnicalFreezeReceipt,
     Phase2FreezeReceipt,
+    Phase3FreezeReceipt,
 )
 from services.foundation_io import canonical_model_bytes
 from services.gates import GatePolicy, canonical_gate_bytes
@@ -33,6 +35,7 @@ type AnyFreezeReceipt = (
     | ControlPlaneFreezeReceipt
     | Phase1TechnicalFreezeReceipt
     | Phase2FreezeReceipt
+    | Phase3FreezeReceipt
 )
 
 AT_FDCWD = -2
@@ -106,23 +109,24 @@ def _publish_one(source: Path, destination: Path, expected: bytes) -> None:
     _rename_noreplace(temporary, destination)
 
 
+_RECEIPT_MODELS: Final[tuple[type[AnyFreezeReceipt], ...]] = (
+    FreezeReceipt,
+    Phase0BFreezeReceipt,
+    Phase0CFreezeReceipt,
+    ControlPlaneFreezeReceipt,
+    Phase1TechnicalFreezeReceipt,
+    Phase2FreezeReceipt,
+    Phase3FreezeReceipt,
+)
+
+
 def _load_receipt(raw: bytes) -> AnyFreezeReceipt:
-    try:
-        return FreezeReceipt.model_validate_json(raw)
-    except ValidationError:
+    for model in _RECEIPT_MODELS[:-1]:
         try:
-            return Phase0BFreezeReceipt.model_validate_json(raw)
+            return model.model_validate_json(raw)
         except ValidationError:
-            try:
-                return Phase0CFreezeReceipt.model_validate_json(raw)
-            except ValidationError:
-                try:
-                    return ControlPlaneFreezeReceipt.model_validate_json(raw)
-                except ValidationError:
-                    try:
-                        return Phase1TechnicalFreezeReceipt.model_validate_json(raw)
-                    except ValidationError:
-                        return Phase2FreezeReceipt.model_validate_json(raw)
+            continue
+    return _RECEIPT_MODELS[-1].model_validate_json(raw)
 
 
 def publish_freeze(intent_path: Path, ledger: Path, *, recover: bool) -> None:

@@ -23,6 +23,10 @@ from services.gates.phase2 import (
     PHASE_2_CRITERIA,
     PHASE_2_FIXTURES,
 )
+from services.gates.phase3 import (
+    PHASE_3_CRITERIA,
+    PHASE_3_FIXTURES,
+)
 from services.gates.serialization import canonical_gate_bytes
 
 __all__ = [
@@ -39,6 +43,8 @@ __all__ = [
     "PHASE_2_CAPABILITIES",
     "PHASE_2_CRITERIA",
     "PHASE_2_FIXTURES",
+    "PHASE_3_CRITERIA",
+    "PHASE_3_FIXTURES",
     "CriterionResult",
     "EvidenceBundleRef",
     "GatePolicy",

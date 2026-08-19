@@ -19,12 +19,14 @@ from services.toolchain.models import (
     Phase0CToolchainLock,
     Phase1TechnicalToolchainLock,
     Phase2ToolchainLock,
+    Phase3ToolchainLock,
     SmokeRecord,
     ToolchainLock,
     load_lock,
     write_lock,
 )
 from services.toolchain.normalization import run_normalize_smoke
+from services.toolchain.presentation_assets import PresentationAssetsSmokeError
 from services.toolchain.preview_review import run_preview_smoke
 from services.toolchain.render_qc import RenderQcSmokeError
 from services.toolchain.resolve_package import ResolvePackageSmokeError
@@ -40,6 +42,11 @@ from services.toolchain.verify_phase2 import (
     run_phase2_smokes,
     verify_phase2_provenance,
 )
+from services.toolchain.verify_phase3 import (
+    phase3_smoke_complete,
+    run_phase3_smokes,
+    verify_phase3_provenance,
+)
 from services.toolchain.whisper_ja import WhisperSmokeError
 
 type SmokeName = Literal[
@@ -51,6 +58,7 @@ type SmokeName = Literal[
     "editorial-model",
     "resolve-package",
     "render-qc",
+    "presentation-assets",
 ]
 
 
@@ -108,6 +116,8 @@ def _verify_provenance(lock: AnyToolchainLock) -> None:
         verify_phase1_provenance(lock)
     if isinstance(lock, Phase2ToolchainLock):
         verify_phase2_provenance(lock, Path.cwd().resolve())
+    if isinstance(lock, Phase3ToolchainLock):
+        verify_phase3_provenance(lock, Path.cwd().resolve())
 
 
 def _run_normalize_smoke(lock: Phase0BToolchainLock) -> SmokeRecord:
@@ -140,8 +150,7 @@ def _run_preview_smoke(lock: Phase0CToolchainLock) -> SmokeRecord:
         status="passed",
         evidence_paths=tuple(str(item.resolve()) for item in artifacts),
         observation=(
-            "encoded and probed the pinned-ffmpeg preview profile; no external "
-            "model participated"
+            "encoded and probed the pinned-ffmpeg preview profile; no external model participated"
         ),
     )
 
@@ -152,9 +161,7 @@ def _phase0c_smoke_complete(lock: Phase0CToolchainLock, names: tuple[SmokeName, 
     return "preview-review" in names
 
 
-def _apply_smokes(
-    lock: AnyToolchainLock, smoke_names: tuple[SmokeName, ...]
-) -> AnyToolchainLock:
+def _apply_smokes(lock: AnyToolchainLock, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainLock:
     match lock:
         case Phase0BToolchainLock() as phase0b:
             updates: dict[str, SmokeRecord] = {}
@@ -172,6 +179,8 @@ def _apply_smokes(
             return run_phase1_smokes(lock, smoke_names)
         case Phase2ToolchainLock():
             return run_phase2_smokes(lock, smoke_names)
+        case Phase3ToolchainLock():
+            return run_phase3_smokes(lock, smoke_names)
         case ToolchainLock():
             return verify_phase0a_smoke(lock, smoke_names)
 
@@ -179,22 +188,18 @@ def _apply_smokes(
 def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainLock:
     lock = load_lock(path)
     _verify_provenance(lock)
-    if isinstance(lock, Phase0BToolchainLock) and not _phase0b_smoke_complete(
-        lock, smoke_names
-    ):
+    if isinstance(lock, Phase0BToolchainLock) and not _phase0b_smoke_complete(lock, smoke_names):
         raise LockError("incomplete Phase 0B toolchain smoke results")
-    if isinstance(lock, Phase0CToolchainLock) and not _phase0c_smoke_complete(
-        lock, smoke_names
-    ):
+    if isinstance(lock, Phase0CToolchainLock) and not _phase0c_smoke_complete(lock, smoke_names):
         raise LockError("incomplete Phase 0C toolchain smoke results")
     if isinstance(lock, Phase1TechnicalToolchainLock) and not phase1_smoke_complete(
         lock, smoke_names
     ):
         raise LockError("incomplete Phase 1 toolchain smoke results")
-    if isinstance(lock, Phase2ToolchainLock) and not phase2_smoke_complete(
-        lock, smoke_names
-    ):
+    if isinstance(lock, Phase2ToolchainLock) and not phase2_smoke_complete(lock, smoke_names):
         raise LockError("incomplete Phase 2 toolchain smoke results")
+    if isinstance(lock, Phase3ToolchainLock) and not phase3_smoke_complete(lock, smoke_names):
+        raise LockError("incomplete Phase 3 toolchain smoke results")
     verified = _apply_smokes(lock, smoke_names)
     write_lock(path, verified)
     return verified
@@ -210,6 +215,7 @@ KNOWN_SMOKES: Final[frozenset[str]] = frozenset(
         "editorial-model",
         "resolve-package",
         "render-qc",
+        "presentation-assets",
     }
 )
 SMOKE_ALIASES: Final[dict[str, str]] = {"ffmpeg-ffprobe": "ffmpeg-probe"}
@@ -250,6 +256,7 @@ def main() -> int:
         HostReadinessError,
         LockError,
         OSError,
+        PresentationAssetsSmokeError,
         ProbeAssertionError,
         RenderQcSmokeError,
         ResolvePackageSmokeError,
