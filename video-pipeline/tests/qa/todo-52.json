@@ -1,0 +1,187 @@
+[
+  {
+    "case_id": "happy-clean-fixture-qc-passes",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_run_cli.py::test_cli_clean_render_passes_and_is_byte_deterministic",
+      "tests/qc/test_run_cli.py::test_cli_build_policy_authors_canonical_passing_policy",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "happy-declared-privacy-blocks-pending",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_run_cli.py::test_cli_declared_privacy_issue_blocks_pending_operator",
+      "tests/qc/test_run_cli.py::test_cli_resolved_privacy_issue_passes",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-ir-gap",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_ir_checks.py::test_record_gap_blocks",
+      "tests/qc/test_run_cli.py::test_cli_ir_gap_binding_blocks",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-unsupported-capability",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_run_cli.py::test_cli_unsupported_capability_marker_blocks",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-decode",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_video_checks.py::test_corrupt_render_fails_decode",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-black-and-freeze",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_video_checks.py::test_black_segment_blocks",
+      "tests/qc/test_video_checks.py::test_frozen_segment_blocks",
+      "tests/qc/test_run_cli.py::test_cli_black_render_exits_blocked",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-peak-and-loudness",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_audio_checks.py::test_peak_over_blocks",
+      "tests/qc/test_audio_checks.py::test_loudness_out_of_range_blocks",
+      "tests/qc/test_audio_checks.py::test_real_loud_render_measures_out_of_range",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-silence-and-channel",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_audio_checks.py::test_silence_excess_blocks",
+      "tests/qc/test_audio_checks.py::test_wrong_channels_block",
+      "tests/qc/test_audio_checks.py::test_real_mono_render_flags_channel_mismatch",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-subtitle-faults",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_subtitle_checks.py::test_short_cue_blocks_min_duration",
+      "tests/qc/test_subtitle_checks.py::test_overlap_blocks",
+      "tests/qc/test_subtitle_checks.py::test_overlong_lines_and_safe_area_block",
+      "tests/qc/test_subtitle_checks.py::test_timing_drift_vs_committed_blocks",
+      "tests/qc/test_subtitle_checks.py::test_missing_track_blocks_only_when_required",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "5 passed"
+  },
+  {
+    "case_id": "failure-automated-privacy-detector-rejected",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/qc/test_privacy_gate.py::test_scope_guard_rejects_detector_imports_in_probe_modules",
+      "tests/qc/test_privacy_gate.py::test_scope_guard_rejects_detector_definitions_in_probe_modules",
+      "tests/qc/test_privacy_gate.py::test_scope_guard_accepts_the_qc_package_itself",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  }
+]
