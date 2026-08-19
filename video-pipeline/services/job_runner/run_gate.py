@@ -39,7 +39,9 @@ DEFAULT_TOOLCHAIN_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="run_gate")
-    parser.add_argument("gate", choices=("control-plane-baseline", "phase-1-technical"))
+    parser.add_argument(
+        "gate", choices=("control-plane-baseline", "phase-1-technical", "phase-2")
+    )
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--tty-fixture", action="store_true")
@@ -48,6 +50,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest-dir", type=Path, default=MANIFEST_DIR)
     parser.add_argument("--toolchain-lock", type=Path, default=DEFAULT_TOOLCHAIN_LOCK)
     parser.add_argument("--work-id", default=None, help="phase-1-technical only")
+    parser.add_argument("--offline", action="store_true", help="phase-2 only")
     return parser
 
 
@@ -161,6 +164,31 @@ def main() -> int:
             ]
         )
         return gate_phase1.run_phase1_gate(gate_arguments)
+    if arguments.gate == "phase-2":
+        import os  # noqa: PLC0415
+
+        fault_fixture = os.environ.get("QA_FAULT_FIXTURE")
+        if fault_fixture is not None:
+            from services.job_runner import gate_p2_faults  # noqa: PLC0415
+
+            return gate_p2_faults.run_fault_cli(Path(fault_fixture), arguments.policy)
+        from services.job_runner import gate_phase2  # noqa: PLC0415
+
+        gate_arguments = gate_phase2.parser().parse_args(
+            [
+                "--policy",
+                str(arguments.policy),
+                "--evidence",
+                str(arguments.evidence),
+                *(
+                    ["--freeze-receipt", str(arguments.freeze_receipt)]
+                    if arguments.freeze_receipt
+                    else []
+                ),
+                *(["--offline"] if arguments.offline else []),
+            ]
+        )
+        return gate_phase2.run_phase2_gate(gate_arguments)
     return run_gate(arguments)
 
 

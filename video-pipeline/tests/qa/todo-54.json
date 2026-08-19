@@ -1,0 +1,177 @@
+[
+    {
+        "case_id": "happy-five-normal-paths-plus-injected-failures-route-expectedly",
+        "kind": "happy",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/phase2/test_gate_units.py",
+            "-q",
+            "-m",
+            "not resolve_live and not cloud_fixture"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "16 passed"
+    },
+    {
+        "case_id": "happy-live-gate-passes-with-fixture-only-label",
+        "kind": "happy",
+        "argv": [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "services.job_runner.run_gate",
+            "phase-2",
+            "--policy",
+            "config/gates/phase-2-v1.json",
+            "--evidence",
+            "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/phase-2"
+        ],
+        "stdin_fixture": null,
+        "environment": {
+            "RESOLVE_HOST_REPORT": "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/resolve-host.json"
+        },
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "fixture_final_records=fixture_only publication_decisions=false"
+    },
+    {
+        "case_id": "failure-missing-approval",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "services.job_runner.run_gate",
+            "phase-2",
+            "--policy",
+            "config/gates/phase-2-v1.json",
+            "--evidence",
+            "/tmp/phase2-qa-fault-evidence"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": "tests/fixtures/phase2-gate-faults/missing_approval.json",
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "detected=true expected_code=final-approval-missing"
+    },
+    {
+        "case_id": "failure-missing-qc-readback",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "services.job_runner.run_gate",
+            "phase-2",
+            "--policy",
+            "config/gates/phase-2-v1.json",
+            "--evidence",
+            "/tmp/phase2-qa-fault-evidence"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": "tests/fixtures/phase2-gate-faults/missing_qc_readback.json",
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "detected=true expected_code=qc-evidence-missing"
+    },
+    {
+        "case_id": "failure-item-mismatch",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "services.job_runner.run_gate",
+            "phase-2",
+            "--policy",
+            "config/gates/phase-2-v1.json",
+            "--evidence",
+            "/tmp/phase2-qa-fault-evidence"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": "tests/fixtures/phase2-gate-faults/item_mismatch.json",
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "detected=true expected_code=item-conformance-defect"
+    },
+    {
+        "case_id": "failure-manual-ui-dependency",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "services.job_runner.run_gate",
+            "phase-2",
+            "--policy",
+            "config/gates/phase-2-v1.json",
+            "--evidence",
+            "/tmp/phase2-qa-fault-evidence"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": "tests/fixtures/phase2-gate-faults/manual_ui_dependency.json",
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "detected=true expected_code=manual-ui-dependency"
+    },
+    {
+        "case_id": "failure-unbounded-retry",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "services.job_runner.run_gate",
+            "phase-2",
+            "--policy",
+            "config/gates/phase-2-v1.json",
+            "--evidence",
+            "/tmp/phase2-qa-fault-evidence"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": "tests/fixtures/phase2-gate-faults/unbounded_retry.json",
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "detected=true expected_code=unbounded-retry"
+    },
+    {
+        "case_id": "failure-synthetic-as-real-approval",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "services.job_runner.run_gate",
+            "phase-2",
+            "--policy",
+            "config/gates/phase-2-v1.json",
+            "--evidence",
+            "/tmp/phase2-qa-fault-evidence"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": "tests/fixtures/phase2-gate-faults/synthetic_as_real_approval.json",
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "detected=true expected_code=synthetic-as-real-approval"
+    }
+]
