@@ -22,6 +22,9 @@ from services.contracts.primitives import (
     Sha256,
     StrictModel,
 )
+from services.presentation.overlay_models import (
+    OverlaySection,
+)
 from services.presentation.styling_models import (  # noqa: TC001 (pydantic resolves annotations at runtime)
     StyledPresentation,
 )
@@ -193,6 +196,7 @@ class ResolvePackage(ArtifactEnvelope[Literal["resolve_package_v1"]]):
     inputs_view: InputsView
     presentation: PresentationSection | None = None
     styled_presentation: StyledPresentation | None = None
+    overlay_paths: OverlaySection | None = None
 
 
 __all__ = [
@@ -204,6 +208,7 @@ __all__ = [
     "InputsView",
     "LinkGroup",
     "MediaBinding",
+    "OverlaySection",
     "RenderCompletionRule",
     "RenderJobSpec",
     "ResolvePackage",

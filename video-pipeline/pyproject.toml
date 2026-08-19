@@ -80,6 +80,19 @@ ignore = [
   "PLR0917",
 ]
 "services/resolve_bridge/fixed_presentation_cli.py" = ["PLR0913", "PLR0917"]
+"services/resolve_bridge/title_probe.py" = ["N802", "FBT003", "PLR0913"]
+"services/resolve_bridge/title_probe_models.py" = ["N802", "FBT001", "FBT002", "PLR0913"]
+"services/presentation/overlay_render.py" = ["PLR0913"]
+"services/presentation/overlay_live_media.py" = [
+  "N802",
+  "ANN401",
+  "FBT001",
+  "FBT002",
+  "FBT003",
+  "PLR0913",
+]
+"services/presentation/overlay_live_fusion.py" = ["N802", "FBT003"]
+"services/presentation/overlay_live_flow.py" = ["PLR0913", "PLR0917"]
 "services/resolve_bridge/launch.py" = ["N818"]
 "services/resolve_bridge/build_report.py" = ["PLR0913", "PLR0917"]
 "services/resolve_bridge/build_report_cli.py" = ["PLR0911", "PLR0913"]

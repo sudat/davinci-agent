@@ -1,0 +1,104 @@
+[
+ {
+  "case_id": "happy-supported-fusion-or-external-fallback",
+  "kind": "happy",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_overlay_paths.py::test_supported_fusion_or_external_fallback_passes",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-api-only-success-without-render",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_overlay_paths.py::test_api_only_success_without_render_fails",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-missing-font-template",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_overlay_paths.py::test_missing_font_or_template_binding_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-wrong-track-duration",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_overlay_paths.py::test_wrong_track_or_duration_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-unsupported-control-falls-back-explicitly",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_overlay_paths.py::test_unsupported_control_falls_back_explicitly",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-complex-graph-blocked",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_overlay_paths.py::test_complex_graph_request_is_blocked",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ }
+]

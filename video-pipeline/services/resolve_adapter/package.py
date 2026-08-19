@@ -39,6 +39,9 @@ from services.resolve_adapter.models import (
     TimelineView,
     TrackMapEntry,
 )
+from services.resolve_adapter.overlay_section import (
+    overlay_placements,
+)
 from services.resolve_adapter.presentation_baseline import (
     AppliedPresentation,
     apply_presentation,
@@ -48,6 +51,7 @@ from services.resolve_adapter.presentation_styled import attach_styled_presentat
 from services.resolve_adapter.validate import verify_compile_inputs
 
 if TYPE_CHECKING:
+    from services.presentation.overlay_models import OverlaySection
     from services.presentation.styling_models import StyledPresentation
     from services.resolve_adapter.presentation_models import PresentationSection
     from services.toolchain.models import Phase2ToolchainLock
@@ -69,6 +73,7 @@ class PackageCompileRequest:
     intro_outro_source_ids: frozenset[str] = frozenset()
     presentation: PresentationSection | None = None
     styled_presentation: StyledPresentation | None = None
+    overlay_paths: OverlaySection | None = None
 
     def resolved_presented_media(self) -> tuple[MediaBinding, ...]:
         return self.declared_media if self.presented_media is None else self.presented_media
@@ -161,6 +166,25 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
         else None
     )
     placements = _placements(request, applied)
+    if request.overlay_paths is not None:
+        overlay_extra = overlay_placements(
+            request.overlay_paths, frame_origin=FRAME_ORIGIN
+        )
+        presented_ids = {
+            binding.source_id
+            for binding in request.resolved_presented_media()
+        }
+        missing = [
+            placement.clip_info.media_source_id
+            for placement in overlay_extra
+            if placement.clip_info.media_source_id not in presented_ids
+        ]
+        if missing:
+            raise PackageCompileError(
+                WRONG_TRACK_MAP,
+                f"overlay placements have no presented media binding: {missing}",
+            )
+        placements = (*placements, *overlay_extra)
     track_map: tuple[TrackMapEntry, ...] = (
         AppendTrackMapEntry(
             logical_kind="video",
@@ -231,6 +255,7 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
             if request.styled_presentation is not None
             else None
         ),
+        overlay_paths=request.overlay_paths,
     )
     digest = hashlib.sha256(canonical_model_bytes(package)).hexdigest()
     return package.model_copy(update={"content_hash": digest})
