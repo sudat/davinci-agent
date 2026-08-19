@@ -13,6 +13,7 @@ PHASE_DIR = Path("tests/goldens/reference/phase-0a")
 PHASE_0B_DIR = Path("tests/goldens/reference/phase-0b")
 PHASE_0C_DIR = Path("tests/goldens/reference/phase-0c")
 PHASE_1_DIR = Path("tests/goldens/reference/phase-1-technical")
+PHASE_2_DIR = Path("tests/goldens/reference/phase-2")
 
 
 def test_derivation_imports_only_stdlib_and_reference_common() -> None:
@@ -226,3 +227,59 @@ def test_import_audit_is_ast_based() -> None:
     source = (PHASE_DIR / "derive.py").read_text()
 
     assert isinstance(ast.parse(source), ast.Module)
+
+
+def test_phase2_derivation_imports_only_stdlib_and_reference_common() -> None:
+    audit = audit_derivation_source(PHASE_2_DIR / "derive.py")
+
+    assert audit.audit_result == "pass"
+    assert audit.forbidden_imports == ()
+    assert audit.produced_outputs_read is False
+
+
+def test_phase2_frozen_audit_and_index_bindings_are_current() -> None:
+    audit_payload = json.loads((PHASE_2_DIR / "import-audit.json").read_bytes())
+    index_payload = json.loads((PHASE_2_DIR / "index.json").read_bytes())
+
+    assert audit_payload["audit_result"] == "pass"
+    assert audit_payload["derivation_source_sha256"] == file_sha256(PHASE_2_DIR / "derive.py")
+    assert index_payload["derivation_source_sha256"] == file_sha256(PHASE_2_DIR / "derive.py")
+    assert index_payload["expected_sha256"] == file_sha256(PHASE_2_DIR / "expected.json")
+    assert index_payload["audit_sha256"] == file_sha256(PHASE_2_DIR / "import-audit.json")
+    for fixture_id, manifest_hash in index_payload["fixture_manifest_sha256s"].items():
+        manifest = Path("tests/fixtures/manifests/phase-2") / f"{fixture_id}.json"
+        assert manifest_hash == file_sha256(manifest)
+    for p1_id, manifest_hash in index_payload["phase1_fixture_manifest_sha256s"].items():
+        manifest = Path("tests/fixtures/manifests/phase-1-technical") / f"{p1_id}.json"
+        assert manifest_hash == file_sha256(manifest)
+
+
+def test_phase2_expected_tables_are_frozen() -> None:
+    expected = json.loads((PHASE_2_DIR / "expected.json").read_bytes())
+
+    fixtures = expected["fixtures"]
+    stale = fixtures["p2-stale-capability"]
+    assert stale["derived_from"] == "p1-ref-01-clean-ja"
+    assert stale["expected_route"]["failure_code"] == "capability-matrix-stale"
+    assert stale["expected_route"]["human_route"] == "refresh-capability-matrix"
+    restart = fixtures["p2-partial-build-restart"]
+    assert restart["fault"]["interrupt_after_placed_items"] == 3
+    assert restart["expected_route"]["retry"] == "clean-rebuild-restart"
+    wrong_media = fixtures["p2-same-duration-wrong-media"]
+    assert wrong_media["expected_route"]["failure_code"] == "media-hash-drift"
+    false_render = fixtures["p2-false-render-complete"]
+    assert false_render["fault"]["reported_completion_percentage"] == 99
+    assert false_render["expected_route"]["render"] == "refused-incomplete"
+    privacy = fixtures["p2-blocking-qc-privacy"]
+    assert privacy["expected_route"]["human_route"] == "privacy-dismissal-required"
+    assert privacy["package"]["subtitle_step"]["mux_operation"] == "ffmpeg-mov-text"
+    assert expected["pinned"]["frame_origin"] == 108000
+    assert expected["pinned"]["completion_value"] == 100
+
+
+def test_phase2_self_derived_golden_importing_services_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "derive.py"
+    source.write_text("from services.resolve_adapter.package import compile_resolve_package\n")
+
+    with pytest.raises(GoldenAuditError, match="services"):
+        audit_derivation_source(source)

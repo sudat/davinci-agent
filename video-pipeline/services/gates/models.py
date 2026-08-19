@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal, assert_never
+from collections.abc import Callable
+from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
@@ -13,6 +14,11 @@ from services.gates.phase0c import PHASE_0C_CRITERIA
 from services.gates.phase1_technical import (
     PHASE_1_PARENT_COUNT,
     PHASE_1_TECHNICAL_CRITERIA,
+)
+from services.gates.phase2 import (
+    PHASE_2_CAPABILITIES,
+    PHASE_2_CRITERIA,
+    PHASE_2_PARENT_COUNT,
 )
 
 type InputValue = (
@@ -54,8 +60,9 @@ def _reject_floats(value: InputValue) -> InputValue:
             return {key: _reject_floats(item) for key, item in value.items()}
         case None | bool() | int() | str():
             return value
-        case unreachable:
-            assert_never(unreachable)
+        case object():
+            # strict submodels forbid floats in their own fields, so pass through
+            return value
 
 
 class GateModel(StrictModel):
@@ -104,17 +111,18 @@ class GatePolicy(GateModel):
 
     @model_validator(mode="after")
     def validate_phase_policy(self) -> GatePolicy:
-        if self.gate_id == "phase-0a":
-            return self._validate_phase_0a()
-        if self.gate_id == "phase-0b":
-            return self._validate_phase_0b()
-        if self.gate_id == "phase-0c":
-            return self._validate_phase_0c()
-        if self.gate_id == "control-plane-baseline":
-            return self._validate_control_plane()
-        if self.gate_id == "phase-1-technical":
-            return self._validate_phase_1_technical()
-        return self
+        phase_validators: dict[str, Callable[[], GatePolicy]] = {
+            "phase-0a": self._validate_phase_0a,
+            "phase-0b": self._validate_phase_0b,
+            "phase-0c": self._validate_phase_0c,
+            "control-plane-baseline": self._validate_control_plane,
+            "phase-1-technical": self._validate_phase_1_technical,
+            "phase-2": self._validate_phase_2,
+        }
+        validator = phase_validators.get(self.gate_id)
+        if validator is None:
+            return self
+        return validator()
 
     def _validate_phase_0a(self) -> GatePolicy:
         if self.criteria != PHASE_0A_CRITERIA:
@@ -245,6 +253,51 @@ class GatePolicy(GateModel):
             raise PydanticCustomError(
                 "phase_1_technical_golden",
                 "Phase-1 technical fixtures require the independent Golden index binding",
+            )
+        return self
+
+    def _validate_phase_2(self) -> GatePolicy:
+        if self.criteria != PHASE_2_CRITERIA:
+            raise PydanticCustomError(
+                "phase_2_criteria",
+                "Phase-2 criteria must match the canonical finalization exit criteria",
+            )
+        if self.capability_allowlist != PHASE_2_CAPABILITIES:
+            raise PydanticCustomError(
+                "phase_2_capabilities",
+                "Phase-2 freezes exactly the five live-verified package capabilities",
+            )
+        if len(self.parent_gate_result_hashes) != PHASE_2_PARENT_COUNT:
+            raise PydanticCustomError(
+                "phase_2_parent",
+                "Phase-2 requires exactly three parent gate result hashes "
+                "(phase-0a, phase-0b, phase-1-technical)",
+            )
+        if len(self.prerequisite_bindings) != 1:
+            raise PydanticCustomError(
+                "phase_2_prerequisites",
+                "Phase-2 requires exactly one operator-checkpoint prerequisite binding",
+            )
+        binding = self.prerequisite_bindings[0]
+        if not isinstance(binding, OperatorCheckpointBinding):
+            raise PydanticCustomError(
+                "phase_2_prerequisites",
+                "the Phase-2 prerequisite must be the H1 operator checkpoint",
+            )
+        if binding.purpose != "EDITORIAL_APPROVED":
+            raise PydanticCustomError(
+                "phase_2_prerequisites",
+                "the Phase-2 prerequisite purpose must be EDITORIAL_APPROVED",
+            )
+        if self.golden_sha256 is None:
+            raise PydanticCustomError(
+                "phase_2_golden",
+                "Phase-2 fixtures require the independent Golden index binding",
+            )
+        if self.toolchain_lock_sha256 is None or self.fixture_manifest_sha256 is None:
+            raise PydanticCustomError(
+                "phase_2_bindings",
+                "Phase-2 requires the toolchain lock and fixture manifest bindings",
             )
         return self
 

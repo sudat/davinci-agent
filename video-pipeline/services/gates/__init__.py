@@ -18,6 +18,11 @@ from services.gates.phase1_technical import (
     PHASE_1_TECHNICAL_CRITERIA,
     PHASE_1_TECHNICAL_FIXTURES,
 )
+from services.gates.phase2 import (
+    PHASE_2_CAPABILITIES,
+    PHASE_2_CRITERIA,
+    PHASE_2_FIXTURES,
+)
 from services.gates.serialization import canonical_gate_bytes
 
 __all__ = [
@@ -31,6 +36,9 @@ __all__ = [
     "PHASE_1_CONTROL_PLANE_CRITERIA",
     "PHASE_1_TECHNICAL_CRITERIA",
     "PHASE_1_TECHNICAL_FIXTURES",
+    "PHASE_2_CAPABILITIES",
+    "PHASE_2_CRITERIA",
+    "PHASE_2_FIXTURES",
     "CriterionResult",
     "EvidenceBundleRef",
     "GatePolicy",

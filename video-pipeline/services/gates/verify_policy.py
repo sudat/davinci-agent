@@ -14,10 +14,12 @@ from services.fixtures.models import (
     Phase0BFreezeReceipt,
     Phase0CFreezeReceipt,
     Phase1TechnicalFreezeReceipt,
+    Phase2FreezeReceipt,
     SourceSnapshot,
 )
 from services.foundation_io import canonical_model_bytes, sha256_file
 from services.gates import GatePolicy, canonical_gate_bytes
+from services.gates.prerequisite import PrerequisiteError, verify_editorial_approved_checkpoint
 
 type AnyFreezeReceipt = (
     FreezeReceipt
@@ -25,6 +27,7 @@ type AnyFreezeReceipt = (
     | Phase0CFreezeReceipt
     | ControlPlaneFreezeReceipt
     | Phase1TechnicalFreezeReceipt
+    | Phase2FreezeReceipt
 )
 
 
@@ -50,7 +53,10 @@ def _load_receipt(path: Path) -> AnyFreezeReceipt:
                 try:
                     receipt = ControlPlaneFreezeReceipt.model_validate_json(raw)
                 except ValidationError:
-                    receipt = Phase1TechnicalFreezeReceipt.model_validate_json(raw)
+                    try:
+                        receipt = Phase1TechnicalFreezeReceipt.model_validate_json(raw)
+                    except ValidationError:
+                        receipt = Phase2FreezeReceipt.model_validate_json(raw)
     if raw != canonical_model_bytes(receipt):
         raise PolicyVerificationError("freeze receipt is noncanonical")
     return receipt
@@ -70,7 +76,8 @@ def _manifest_sha256s(receipt: AnyFreezeReceipt) -> tuple[tuple[str | None, str]
         Phase0BFreezeReceipt
         | Phase0CFreezeReceipt
         | ControlPlaneFreezeReceipt
-        | Phase1TechnicalFreezeReceipt,
+        | Phase1TechnicalFreezeReceipt
+        | Phase2FreezeReceipt,
     ):
         return tuple((binding.path, binding.sha256) for binding in receipt.fixture_manifests)
     return ((receipt.fixture_manifest_path, receipt.fixture_manifest_sha256),)
@@ -82,7 +89,8 @@ def _verify_manifest_bindings(policy: GatePolicy, receipt: AnyFreezeReceipt) -> 
         Phase0BFreezeReceipt
         | Phase0CFreezeReceipt
         | ControlPlaneFreezeReceipt
-        | Phase1TechnicalFreezeReceipt,
+        | Phase1TechnicalFreezeReceipt
+        | Phase2FreezeReceipt,
     ):
         combined = hashlib.sha256()
         for binding in receipt.fixture_manifests:
@@ -98,15 +106,43 @@ def _verify_manifest_bindings(policy: GatePolicy, receipt: AnyFreezeReceipt) -> 
             raise PolicyVerificationError("freeze receipt referenced bytes drift")
 
 
+def _verify_phase2_prerequisite(policy: GatePolicy, receipt: Phase2FreezeReceipt) -> None:
+    binding = receipt.prerequisite_checkpoint
+    policy_binding = (
+        policy.prerequisite_bindings[0] if len(policy.prerequisite_bindings) == 1 else None
+    )
+    if policy_binding is None or policy_binding != binding:
+        raise PolicyVerificationError("policy prerequisite binding differs from receipt")
+    checkpoint_path = Path(receipt.prerequisite_checkpoint_path)
+    if sha256_file(checkpoint_path) != binding.checkpoint_sha256:
+        raise PolicyVerificationError("freeze receipt checkpoint bytes drift")
+    try:
+        verify_editorial_approved_checkpoint(checkpoint_path)
+    except PrerequisiteError as error:
+        raise PolicyVerificationError(
+            f"freeze receipt prerequisite no longer verifies: {error}"
+        ) from error
+
+
+def _verify_parent_results(
+    policy: GatePolicy,
+    receipt: Phase1TechnicalFreezeReceipt | Phase2FreezeReceipt,
+) -> None:
+    parent_hashes = tuple(link.sha256 for link in receipt.parent_gate_results)
+    if tuple(policy.parent_gate_result_hashes) != parent_hashes:
+        raise PolicyVerificationError("policy parent hashes differ from freeze receipt")
+    for link in receipt.parent_gate_results:
+        if sha256_file(Path(link.path)) != link.sha256:
+            raise PolicyVerificationError("freeze receipt parent result bytes drift")
+
+
 def _verify_referenced_bytes(policy: GatePolicy, receipt: AnyFreezeReceipt) -> None:
     _verify_manifest_bindings(policy, receipt)
     if isinstance(receipt, Phase1TechnicalFreezeReceipt):
-        parent_hashes = tuple(link.sha256 for link in receipt.parent_gate_results)
-        if tuple(policy.parent_gate_result_hashes) != parent_hashes:
-            raise PolicyVerificationError("policy parent hashes differ from freeze receipt")
-        for link in receipt.parent_gate_results:
-            if sha256_file(Path(link.path)) != link.sha256:
-                raise PolicyVerificationError("freeze receipt parent result bytes drift")
+        _verify_parent_results(policy, receipt)
+    if isinstance(receipt, Phase2FreezeReceipt):
+        _verify_parent_results(policy, receipt)
+        _verify_phase2_prerequisite(policy, receipt)
     toolchain_binding = (
         policy.toolchain_lock_sha256,
         receipt.toolchain_lock_sha256,

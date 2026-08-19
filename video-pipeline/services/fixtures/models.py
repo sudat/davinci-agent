@@ -6,9 +6,17 @@ from pydantic import Field
 
 from services.contracts.primitives import Sha256, StrictModel
 from services.fixtures.manifest import Phase0AFixtureManifest, Sequence
+from services.gates.models import OperatorCheckpointBinding
 
-GateId = Literal["phase-0a", "phase-0b", "phase-0c", "control-plane-baseline", "phase-1-technical"]
-FreezeTodo = Literal[6, 7, 24, 26, 32]
+GateId = Literal[
+    "phase-0a",
+    "phase-0b",
+    "phase-0c",
+    "control-plane-baseline",
+    "phase-1-technical",
+    "phase-2",
+]
+FreezeTodo = Literal[6, 7, 24, 26, 32, 47]
 
 
 class GoldenHashes(StrictModel):
@@ -131,6 +139,28 @@ class Phase1TechnicalFreezeReceipt(StrictModel):
     execution_contract_sha256: Sha256
 
 
+class Phase2FreezeReceipt(StrictModel):
+    schema_version: Literal["freeze-receipt-v1"] = "freeze-receipt-v1"
+    record_type: Literal["freeze_receipt"] = "freeze_receipt"
+    todo: Literal[47] = 47
+    gate_id: Literal["phase-2"] = "phase-2"
+    gate_version: Literal["v1"] = "v1"
+    policy_path: str
+    policy_sha256: Sha256
+    toolchain_lock_path: str
+    toolchain_lock_sha256: Sha256
+    fixture_manifests: tuple[ManifestBinding, ...]
+    fixture_manifests_combined_sha256: Sha256
+    parent_gate_results: tuple[ParentResultLink, ...]
+    prerequisite_checkpoint_path: str
+    prerequisite_checkpoint: OperatorCheckpointBinding
+    golden_hashes: GoldenHashes
+    pre_source_snapshot_path: str
+    pre_source_snapshot_sha256: Sha256
+    execution_contract_path: str
+    execution_contract_sha256: Sha256
+
+
 class FreezeIntent(StrictModel):
     schema_version: Literal["freeze-intent-v1"] = "freeze-intent-v1"
     event_type: Literal["freeze-intent"] = "freeze-intent"
@@ -180,10 +210,12 @@ __all__ = [
     "FreezeReceipt",
     "GoldenHashes",
     "ManifestBinding",
+    "OperatorCheckpointBinding",
     "ParentResultLink",
     "Phase0AFixtureManifest",
     "Phase0BFreezeReceipt",
     "Phase0CFreezeReceipt",
     "Phase1TechnicalFreezeReceipt",
+    "Phase2FreezeReceipt",
     "SourceSnapshot",
 ]

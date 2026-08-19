@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import ValidationError
 
@@ -18,6 +18,7 @@ from services.toolchain.models import (
     Phase0BToolchainLock,
     Phase0CToolchainLock,
     Phase1TechnicalToolchainLock,
+    Phase2ToolchainLock,
     SmokeRecord,
     ToolchainLock,
     load_lock,
@@ -25,12 +26,19 @@ from services.toolchain.models import (
 )
 from services.toolchain.normalization import run_normalize_smoke
 from services.toolchain.preview_review import run_preview_smoke
+from services.toolchain.render_qc import RenderQcSmokeError
+from services.toolchain.resolve_package import ResolvePackageSmokeError
 from services.toolchain.smoke import ProbeAssertionError
 from services.toolchain.verify_phase0a import verify_phase0a_smoke
 from services.toolchain.verify_phase1 import (
     phase1_smoke_complete,
     run_phase1_smokes,
     verify_phase1_provenance,
+)
+from services.toolchain.verify_phase2 import (
+    phase2_smoke_complete,
+    run_phase2_smokes,
+    verify_phase2_provenance,
 )
 from services.toolchain.whisper_ja import WhisperSmokeError
 
@@ -41,6 +49,8 @@ type SmokeName = Literal[
     "preview-review",
     "whisper-ja",
     "editorial-model",
+    "resolve-package",
+    "render-qc",
 ]
 
 
@@ -96,6 +106,8 @@ def _verify_provenance(lock: AnyToolchainLock) -> None:
         verify_binary(lock.ffmpeg.ffprobe)
     if isinstance(lock, Phase1TechnicalToolchainLock):
         verify_phase1_provenance(lock)
+    if isinstance(lock, Phase2ToolchainLock):
+        verify_phase2_provenance(lock, Path.cwd().resolve())
 
 
 def _run_normalize_smoke(lock: Phase0BToolchainLock) -> SmokeRecord:
@@ -140,6 +152,30 @@ def _phase0c_smoke_complete(lock: Phase0CToolchainLock, names: tuple[SmokeName, 
     return "preview-review" in names
 
 
+def _apply_smokes(
+    lock: AnyToolchainLock, smoke_names: tuple[SmokeName, ...]
+) -> AnyToolchainLock:
+    match lock:
+        case Phase0BToolchainLock() as phase0b:
+            updates: dict[str, SmokeRecord] = {}
+            if "ffmpeg-normalize" in smoke_names:
+                updates["ffmpeg_normalize"] = _run_normalize_smoke(phase0b)
+            return lock.model_copy(update={"smoke": phase0b.smoke.model_copy(update=updates)})
+        case Phase0CToolchainLock() as phase0c:
+            phase0c_updates: dict[str, SmokeRecord] = {}
+            if "preview-review" in smoke_names and phase0c.smoke.preview_review.status != "passed":
+                phase0c_updates["preview_review"] = _run_preview_smoke(phase0c)
+            return lock.model_copy(
+                update={"smoke": phase0c.smoke.model_copy(update=phase0c_updates)}
+            )
+        case Phase1TechnicalToolchainLock():
+            return run_phase1_smokes(lock, smoke_names)
+        case Phase2ToolchainLock():
+            return run_phase2_smokes(lock, smoke_names)
+        case ToolchainLock():
+            return verify_phase0a_smoke(lock, smoke_names)
+
+
 def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainLock:
     lock = load_lock(path)
     _verify_provenance(lock)
@@ -155,25 +191,28 @@ def verify_lock(path: Path, smoke_names: tuple[SmokeName, ...]) -> AnyToolchainL
         lock, smoke_names
     ):
         raise LockError("incomplete Phase 1 toolchain smoke results")
-    match lock:
-        case Phase0BToolchainLock() as phase0b:
-            updates: dict[str, SmokeRecord] = {}
-            if "ffmpeg-normalize" in smoke_names:
-                updates["ffmpeg_normalize"] = _run_normalize_smoke(phase0b)
-            verified = lock.model_copy(update={"smoke": phase0b.smoke.model_copy(update=updates)})
-        case Phase0CToolchainLock() as phase0c:
-            phase0c_updates: dict[str, SmokeRecord] = {}
-            if "preview-review" in smoke_names and phase0c.smoke.preview_review.status != "passed":
-                phase0c_updates["preview_review"] = _run_preview_smoke(phase0c)
-            verified = lock.model_copy(
-                update={"smoke": phase0c.smoke.model_copy(update=phase0c_updates)}
-            )
-        case Phase1TechnicalToolchainLock():
-            verified = run_phase1_smokes(lock, smoke_names)
-        case ToolchainLock():
-            verified = verify_phase0a_smoke(lock, smoke_names)
+    if isinstance(lock, Phase2ToolchainLock) and not phase2_smoke_complete(
+        lock, smoke_names
+    ):
+        raise LockError("incomplete Phase 2 toolchain smoke results")
+    verified = _apply_smokes(lock, smoke_names)
     write_lock(path, verified)
     return verified
+
+
+KNOWN_SMOKES: Final[frozenset[str]] = frozenset(
+    {
+        "resolve-readonly",
+        "ffmpeg-probe",
+        "ffmpeg-normalize",
+        "preview-review",
+        "whisper-ja",
+        "editorial-model",
+        "resolve-package",
+        "render-qc",
+    }
+)
+SMOKE_ALIASES: Final[dict[str, str]] = {"ffmpeg-ffprobe": "ffmpeg-probe"}
 
 
 def _phase0b_smoke_complete(lock: Phase0BToolchainLock, names: tuple[SmokeName, ...]) -> bool:
@@ -188,21 +227,10 @@ def _smoke_names(raw: str) -> tuple[SmokeName, ...]:
         raise LockError(f"unsupported smoke profile: {raw}")
     parsed: list[SmokeName] = []
     for name in names:
-        match name:
-            case "resolve-readonly":
-                parsed.append("resolve-readonly")
-            case "ffmpeg-probe" | "ffmpeg-ffprobe":
-                parsed.append("ffmpeg-probe")
-            case "ffmpeg-normalize":
-                parsed.append("ffmpeg-normalize")
-            case "preview-review":
-                parsed.append("preview-review")
-            case "whisper-ja":
-                parsed.append("whisper-ja")
-            case "editorial-model":
-                parsed.append("editorial-model")
-            case _:
-                raise LockError(f"unsupported smoke profile: {raw}")
+        canonical = SMOKE_ALIASES.get(name, name)
+        if canonical not in KNOWN_SMOKES:
+            raise LockError(f"unsupported smoke profile: {raw}")
+        parsed.append(canonical)  # type: ignore[arg-type]
     return tuple(parsed)
 
 
@@ -223,6 +251,8 @@ def main() -> int:
         LockError,
         OSError,
         ProbeAssertionError,
+        RenderQcSmokeError,
+        ResolvePackageSmokeError,
         subprocess.CalledProcessError,
         subprocess.TimeoutExpired,
         ValidationError,

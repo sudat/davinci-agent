@@ -17,6 +17,10 @@ from services.toolchain.normalization import (  # noqa: TC001 (pydantic runtime)
 from services.toolchain.preview_review import (  # noqa: TC001 (pydantic runtime)
     PreviewReviewSection,
 )
+from services.toolchain.render_qc import RenderQcSection  # noqa: TC001 (pydantic runtime)
+from services.toolchain.resolve_package import (  # noqa: TC001 (pydantic runtime)
+    ResolvePackageSection,
+)
 from services.toolchain.whisper_ja import (  # noqa: TC001 (pydantic runtime)
     WhisperJaSection,
 )
@@ -142,6 +146,17 @@ class Phase1TechnicalSmokeResults(StrictModel):
     editorial_model: SmokeRecord
 
 
+class Phase2SmokeResults(StrictModel):
+    resolve_readonly: SmokeRecord
+    ffmpeg_probe: SmokeRecord
+    ffmpeg_normalize: SmokeRecord
+    preview_review: SmokeRecord
+    whisper_ja: SmokeRecord
+    editorial_model: SmokeRecord
+    resolve_package: SmokeRecord
+    render_qc: SmokeRecord
+
+
 class ToolchainLock(StrictModel):
     schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
     phase: Literal["phase-0a"] = "phase-0a"
@@ -185,11 +200,27 @@ class Phase1TechnicalToolchainLock(StrictModel):
     smoke: Phase1TechnicalSmokeResults
 
 
+class Phase2ToolchainLock(StrictModel):
+    schema_version: Literal["phase-toolchain-lock-v1"] = "phase-toolchain-lock-v1"
+    phase: Literal["phase-2"]
+    python: PythonToolchain
+    ffmpeg: FfmpegToolchain
+    resolve: ResolveBinding
+    normalization: NormalizationSection
+    preview_review: PreviewReviewSection
+    whisper_ja: WhisperJaSection
+    editorial_model: EditorialModelSection
+    resolve_package: ResolvePackageSection
+    render_qc: RenderQcSection
+    smoke: Phase2SmokeResults
+
+
 type AnyToolchainLock = (
     ToolchainLock
     | Phase0BToolchainLock
     | Phase0CToolchainLock
     | Phase1TechnicalToolchainLock
+    | Phase2ToolchainLock
 )
 
 
@@ -206,7 +237,10 @@ def load_lock(path: Path) -> AnyToolchainLock:
                 try:
                     lock = Phase0CToolchainLock.model_validate_json(raw)
                 except ValidationError:
-                    lock = Phase1TechnicalToolchainLock.model_validate_json(raw)
+                    try:
+                        lock = Phase1TechnicalToolchainLock.model_validate_json(raw)
+                    except ValidationError:
+                        lock = Phase2ToolchainLock.model_validate_json(raw)
         if raw != canonical_model_bytes(lock):
             raise LockError("noncanonical toolchain lock")
     except (OSError, ValidationError) as error:

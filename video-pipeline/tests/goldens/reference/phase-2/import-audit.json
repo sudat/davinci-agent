@@ -1,0 +1,1 @@
+{"allowed_roots":["__future__","ast","common","hashlib","json","pathlib","sys"],"audit_result":"pass","derivation_source_sha256":"3b57ea447890d67be85ffc0e2cfddc82889228e7c13d6c02830ec5658822e588","forbidden_imports":[],"observed_imports":["__future__","ast","common","hashlib","json","pathlib","sys"],"produced_outputs_read":false,"stdlib_and_common_only":true}

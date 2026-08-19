@@ -1,0 +1,109 @@
+[
+  {
+    "case_id": "happy-valid-phase2-packages-compile",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/resolve_adapter/test_package_compile.py",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "13 passed"
+  },
+  {
+    "case_id": "failure-missing-matrix-evidence",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/resolve_adapter/test_package_failures.py::test_missing_matrix_evidence_is_a_typed_refusal",
+      "tests/resolve_adapter/test_package_failures.py::test_stale_capability_matrix_fault_is_a_typed_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-unsupported-retime-transition",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/resolve_adapter/test_package_failures.py::test_unsupported_retime_is_a_typed_refusal",
+      "tests/resolve_adapter/test_package_failures.py::test_implied_transition_is_a_typed_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-wrong-track-map",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/resolve_adapter/test_package_failures.py::test_wrong_track_map_is_a_typed_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-stale-ir",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/resolve_adapter/test_package_failures.py::test_stale_ir_content_hash_is_a_typed_refusal",
+      "tests/resolve_adapter/test_package_failures.py::test_media_extent_overflow_is_a_typed_refusal",
+      "tests/resolve_adapter/test_package_failures.py::test_missing_media_binding_is_a_typed_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "3 passed"
+  },
+  {
+    "case_id": "failure-resolve-field-in-ir",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/resolve_adapter/test_package_failures.py::test_resolve_field_injected_into_ir_is_rejected_at_the_model_level",
+      "tests/resolve_adapter/test_package_failures.py::test_same_duration_wrong_media_fault_is_a_typed_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  }
+]

@@ -177,7 +177,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--parent", type=Path, required=True)
     parser.add_argument(
-        "--phase", choices=("phase-0b", "phase-0c", "phase-1-technical"), required=True
+        "--phase",
+        choices=("phase-0b", "phase-0c", "phase-1-technical", "phase-2"),
+        required=True,
     )
     parser.add_argument("--pin", required=True)
     parser.add_argument("--out", type=Path, required=True)
@@ -201,6 +203,16 @@ def resolve_pin_paths(raw: str) -> tuple[Path, Path]:
     )
 
 
+def resolve_phase2_pin_paths(raw: str) -> tuple[Path, Path]:
+    names = raw.split(",")
+    if names != ["resolve-package", "render-qc"]:
+        raise MaterializeError("phase-2 pins exactly resolve-package,render-qc")
+    return (
+        Path.cwd() / PINS_ROOT / "resolve-package.json",
+        Path.cwd() / PINS_ROOT / "render-qc.json",
+    )
+
+
 def main() -> int:
     arguments = _parser().parse_args()
     try:
@@ -208,6 +220,15 @@ def main() -> int:
             materialize_phase0b(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
         elif arguments.phase == "phase-0c":
             materialize_phase0c(arguments.parent, resolve_pin_path(arguments.pin), arguments.out)
+        elif arguments.phase == "phase-2":
+            from services.toolchain.materialize_phase2 import (  # noqa: PLC0415 (module cycle)
+                materialize_phase2,
+            )
+
+            resolve_package_pin, render_qc_pin = resolve_phase2_pin_paths(arguments.pin)
+            materialize_phase2(
+                arguments.parent, resolve_package_pin, render_qc_pin, arguments.out
+            )
         else:
             from services.toolchain.materialize_phase1 import (  # noqa: PLC0415 (module cycle)
                 materialize_phase1_technical,
