@@ -32,6 +32,22 @@ from services.build.conformance import ConformanceChecker, verify_built_conforma
 from services.build.conformance_capture import ReadbackRow, TimelineReadback, capture_readback
 from services.build.conformance_models import ConformanceTable, ItemVerdict
 from services.build.drift import DriftDetector, DriftReport, StagingDriftGuard
+from services.build.render_jobs import RenderJobRunner
+from services.build.render_models import (
+    OutputAllowlist,
+    RenderCancel,
+    RenderJobFailure,
+    RenderJobRecord,
+    RenderJobRequest,
+    RenderPresetExpectation,
+    RenderProjectApi,
+    ValidatedRenderOutput,
+    preset_sha256,
+)
+from services.build.render_validate import (
+    PinnedRenderInspectionTools,
+    validate_render_output,
+)
 
 __all__ = [
     "BuildFailure",
@@ -50,14 +66,26 @@ __all__ = [
     "ItemVerdict",
     "LeaseHeld",
     "NoopSeams",
+    "OutputAllowlist",
     "PackageRegistry",
     "PinnedBuildTools",
+    "PinnedRenderInspectionTools",
     "ReadbackRow",
+    "RenderCancel",
+    "RenderJobFailure",
+    "RenderJobRecord",
+    "RenderJobRequest",
+    "RenderJobRunner",
+    "RenderPresetExpectation",
+    "RenderProjectApi",
     "RenderResult",
     "RenderTiming",
     "StagingDriftGuard",
     "SubtitleResult",
     "TimelineReadback",
+    "ValidatedRenderOutput",
     "capture_readback",
+    "preset_sha256",
+    "validate_render_output",
     "verify_built_conformance",
 ]
