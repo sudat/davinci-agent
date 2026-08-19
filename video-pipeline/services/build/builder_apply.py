@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from services.build.builder_models import BuildFailure, ItemReadbackRow, as_frame
-from services.resolve_adapter.models import AppendTrackMapEntry
+from services.resolve_adapter.models import AppendTrackMapEntry, RoleTrackMapEntry
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -66,7 +66,8 @@ def ensure_track_layout(timeline: FixedTimelineApi, package: ResolvePackage) -> 
         indexes = [
             entry.resolve_track_index
             for entry in package.track_map
-            if isinstance(entry, AppendTrackMapEntry) and entry.resolve_track_type == kind
+            if isinstance(entry, AppendTrackMapEntry | RoleTrackMapEntry)
+            and entry.resolve_track_type == kind
         ]
         want = max(indexes, default=1)
         while timeline.GetTrackCount(kind) < want:

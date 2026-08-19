@@ -22,6 +22,9 @@ from services.contracts.primitives import (
     Sha256,
     StrictModel,
 )
+from services.resolve_adapter.presentation_models import (  # noqa: TC001 (pydantic resolves annotations at runtime)
+    PresentationSection,
+)
 
 type TrackType = Literal["video", "audio"]
 
@@ -140,7 +143,18 @@ class ExternalTrackMapEntry(StrictModel):
     placement: Literal["post-render-external"] = "post-render-external"
 
 
-type TrackMapEntry = AppendTrackMapEntry | ExternalTrackMapEntry
+class RoleTrackMapEntry(StrictModel):
+    """A role-separated audio track: dialogue and ambient never share one."""
+
+    logical_kind: Literal["audio"] = "audio"
+    role: Literal["dialogue", "ambient"]
+    resolve_track_type: Literal["audio"] = "audio"
+    resolve_track_index: int = Field(gt=0, strict=True)
+
+
+type TrackMapEntry = (
+    AppendTrackMapEntry | ExternalTrackMapEntry | RoleTrackMapEntry
+)
 
 
 class TimelineView(StrictModel):
@@ -174,6 +188,7 @@ class ResolvePackage(ArtifactEnvelope[Literal["resolve_package_v1"]]):
     subtitle_step: SubtitlePostRenderStep | None = None
     render_job: RenderJobSpec
     inputs_view: InputsView
+    presentation: PresentationSection | None = None
 
 
 __all__ = [
@@ -188,6 +203,7 @@ __all__ = [
     "RenderCompletionRule",
     "RenderJobSpec",
     "ResolvePackage",
+    "RoleTrackMapEntry",
     "SubtitleCueInstruction",
     "SubtitlePostRenderStep",
     "TimelineView",

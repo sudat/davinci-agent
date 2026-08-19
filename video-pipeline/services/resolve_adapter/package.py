@@ -25,13 +25,8 @@ from services.contracts.timeline_ir import (
     TimelineItem0C,
 )
 from services.foundation_io import canonical_model_bytes
-from services.resolve_adapter.errors import (
-    CUE_TIMING_INEXACT,
-    WRONG_TRACK_MAP,
-    PackageCompileError,
-)
+from services.resolve_adapter.errors import WRONG_TRACK_MAP, PackageCompileError
 from services.resolve_adapter.models import (
-    SUBTITLE_MUX_ARGV,
     AppendPlacement,
     AppendTrackMapEntry,
     ClipInfo,
@@ -41,13 +36,18 @@ from services.resolve_adapter.models import (
     MediaBinding,
     RenderJobSpec,
     ResolvePackage,
-    SubtitleCueInstruction,
-    SubtitlePostRenderStep,
     TimelineView,
+    TrackMapEntry,
+)
+from services.resolve_adapter.presentation_baseline import (
+    AppliedPresentation,
+    apply_presentation,
+    subtitle_step,
 )
 from services.resolve_adapter.validate import verify_compile_inputs
 
 if TYPE_CHECKING:
+    from services.resolve_adapter.presentation_models import PresentationSection
     from services.toolchain.models import Phase2ToolchainLock
 
 PRODUCER: Final = Producer(name="resolve-adapter", version="1")
@@ -65,12 +65,15 @@ class PackageCompileRequest:
     artifact_id: str
     presented_media: tuple[MediaBinding, ...] | None = None
     intro_outro_source_ids: frozenset[str] = frozenset()
+    presentation: PresentationSection | None = None
 
     def resolved_presented_media(self) -> tuple[MediaBinding, ...]:
         return self.declared_media if self.presented_media is None else self.presented_media
 
 
-def _placements(request: PackageCompileRequest) -> tuple[AppendPlacement, ...]:
+def _placements(
+    request: PackageCompileRequest, applied: AppliedPresentation | None
+) -> tuple[AppendPlacement, ...]:
     ordered: list[AppendPlacement] = []
     for track_type in ("video", "audio"):
         for track in request.ir.tracks:
@@ -79,6 +82,9 @@ def _placements(request: PackageCompileRequest) -> tuple[AppendPlacement, ...]:
             for item in track.items:
                 if isinstance(item, TimelineGapItem | SubtitleCueItem):
                     continue
+                track_index = 1
+                if track_type == "audio" and applied is not None:
+                    track_index = applied.audio_track_of(item.source.source_id)
                 ordered.append(
                     AppendPlacement(
                         item_id=item.item_id,
@@ -93,7 +99,7 @@ def _placements(request: PackageCompileRequest) -> tuple[AppendPlacement, ...]:
                             start_frame=item.source.span.start_frame,
                             end_frame=item.source.span.end_frame,
                             track_type=track_type,
-                            track_index=1,
+                            track_index=track_index,
                             record_frame=FRAME_ORIGIN + item.record_span.start_frame,
                         ),
                     )
@@ -120,43 +126,6 @@ def _link_groups(
     )
 
 
-def _ms(frames: int, num: int, den: int) -> int:
-    return (frames * 1000 * den + num // 2) // num
-
-
-def _subtitle_step(ir: TimelineIrProduction) -> SubtitlePostRenderStep | None:
-    cues: list[SubtitleCueInstruction] = []
-    for track in ir.tracks:
-        if track.track.kind != "subtitle":
-            continue
-        for item in track.items:
-            if not isinstance(item, SubtitleCueItem):
-                continue
-            start_ms = _ms(item.record_span.start_frame, ir.rate.num, ir.rate.den)
-            end_ms = _ms(item.record_span.end_frame, ir.rate.num, ir.rate.den)
-            if end_ms <= start_ms:
-                raise PackageCompileError(
-                    CUE_TIMING_INEXACT,
-                    f"{item.item_id}: millisecond rounding collapsed the cue span",
-                )
-            cues.append(
-                SubtitleCueInstruction(
-                    cue_id=item.item_id,
-                    text=item.text,
-                    lines=item.lines,
-                    style_ref=item.style_ref,
-                    min_duration_frames=item.min_duration_frames,
-                    anchor_record_start_frame=item.record_span.start_frame,
-                    anchor_record_end_frame=item.record_span.end_frame,
-                    start_ms=start_ms,
-                    end_ms=end_ms,
-                )
-            )
-    if not cues:
-        return None
-    return SubtitlePostRenderStep(argv=SUBTITLE_MUX_ARGV, cues=tuple(cues))
-
-
 def _extent_frames(ir: TimelineIrProduction) -> int:
     extent = 0
     for track in ir.tracks:
@@ -177,7 +146,39 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
         request.resolved_presented_media(),
     )
     preset = request.lock.render_qc.preset
-    placements = _placements(request)
+    applied = (
+        apply_presentation(
+            request.presentation,
+            request.ir,
+            request.lock,
+            request.declared_media,
+            request.intro_outro_source_ids,
+        )
+        if request.presentation is not None
+        else None
+    )
+    placements = _placements(request, applied)
+    track_map: tuple[TrackMapEntry, ...] = (
+        AppendTrackMapEntry(
+            logical_kind="video",
+            logical_index=1,
+            resolve_track_type="video",
+            resolve_track_index=1,
+        ),
+        AppendTrackMapEntry(
+            logical_kind="audio",
+            logical_index=2,
+            resolve_track_type="audio",
+            resolve_track_index=1,
+        ),
+        ExternalTrackMapEntry(logical_kind="subtitle", logical_index=3),
+    )
+    if applied is not None:
+        track_map = (
+            track_map[0],
+            *applied.audio_tracks,
+            track_map[2],
+        )
     package = ResolvePackage(
         artifact_id=request.artifact_id,
         artifact_type="resolve_package_v1",
@@ -198,24 +199,10 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
             start_timecode=START_TIMECODE,
             frame_origin=FRAME_ORIGIN,
         ),
-        track_map=(
-            AppendTrackMapEntry(
-                logical_kind="video",
-                logical_index=1,
-                resolve_track_type="video",
-                resolve_track_index=1,
-            ),
-            AppendTrackMapEntry(
-                logical_kind="audio",
-                logical_index=2,
-                resolve_track_type="audio",
-                resolve_track_index=1,
-            ),
-            ExternalTrackMapEntry(logical_kind="subtitle", logical_index=3),
-        ),
+        track_map=track_map,
         placements=placements,
         link_groups=_link_groups(placements, request.ir),
-        subtitle_step=_subtitle_step(request.ir),
+        subtitle_step=subtitle_step(request.ir),
         render_job=RenderJobSpec(
             video_format=preset.video_format,
             video_codec=preset.video_codec,
@@ -235,6 +222,7 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
             toolchain_lock_sha256=request.lock_sha256,
             declared_media=request.declared_media,
         ),
+        presentation=request.presentation,
     )
     digest = hashlib.sha256(canonical_model_bytes(package)).hexdigest()
     return package.model_copy(update={"content_hash": digest})
