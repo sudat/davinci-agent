@@ -1,0 +1,127 @@
+[
+    {
+        "case_id": "happy-fixture-final-approval",
+        "kind": "happy",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/final_review/test_routes_approve.py::test_fixture_final_approval_records_against_displayed_target",
+            "tests/final_review/test_routes_approve.py::test_real_operator_record_approves_in_production_mode",
+            "tests/final_review/test_routes_approve.py::test_resolved_privacy_does_not_block_approve",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "3 passed"
+    },
+    {
+        "case_id": "happy-structured-correction-routes",
+        "kind": "happy",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/final_review/test_routes_flow.py::test_correction_creates_new_cycle_and_supersedes_approval",
+            "tests/final_review/test_routes_flow.py::test_transient_routes_to_runner_with_bounded_attempts",
+            "tests/final_review/test_routes_flow.py::test_transient_never_mutates_review_state",
+            "tests/final_review/test_routes_flow.py::test_unsupported_routes_to_complete_freeze_package",
+            "tests/manual_finalization/test_freeze.py::test_complete_package_assembles_with_fixture_freeze_record",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "5 passed"
+    },
+    {
+        "case_id": "failure-ai-role-hash-mismatch",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/final_review/test_routes_approve.py::test_automation_approval_refused_in_production_mode",
+            "tests/final_review/test_routes_approve.py::test_fixture_record_presented_as_real_refused",
+            "tests/final_review/test_routes_approve.py::test_wrong_purpose_record_cannot_authorize_final",
+            "tests/final_review/test_routes_approve.py::test_wrong_target_hash_refused",
+            "tests/final_review/test_routes_approve.py::test_stale_bundle_target_refused_after_bundle_change",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "5 passed"
+    },
+    {
+        "case_id": "failure-unresolved-critical-issue",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/final_review/test_routes_approve.py::test_unresolved_critical_qc_blocks_approve",
+            "tests/final_review/test_routes_approve.py::test_unresolved_privacy_blocks_approve",
+            "tests/final_review/test_bundle.py::test_assemble_refuses_passed_qc_label_over_unresolved_privacy",
+            "tests/manual_finalization/test_freeze.py::test_auto_dismissed_privacy_cannot_reach_freeze_package",
+            "tests/manual_finalization/test_freeze.py::test_todo53_modules_carry_no_automated_privacy_detectors",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "5 passed"
+    },
+    {
+        "case_id": "failure-incomplete-freeze-package",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/manual_finalization/test_freeze.py::test_incomplete_package_missing_drt_drp_refused",
+            "tests/manual_finalization/test_freeze.py::test_incomplete_package_missing_reports_refused",
+            "tests/manual_finalization/test_freeze.py::test_incomplete_package_missing_change_log_refused",
+            "tests/manual_finalization/test_freeze.py::test_missing_manual_freeze_record_refused",
+            "tests/final_review/test_routes_flow.py::test_unsupported_without_freeze_record_refused",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "5 passed"
+    },
+    {
+        "case_id": "failure-build-after-freeze",
+        "kind": "failure",
+        "argv": [
+            "uv",
+            "run",
+            "pytest",
+            "tests/manual_finalization/test_store.py::test_builder_refuses_any_mutation_after_freeze",
+            "tests/manual_finalization/test_store.py::test_unfrozen_job_builds_through_guard",
+            "tests/manual_finalization/test_store.py::test_refreeze_appends_new_version_never_overwrites",
+            "tests/manual_finalization/test_store.py::test_identical_republish_is_idempotent",
+            "tests/manual_finalization/test_store.py::test_frozen_state_tamper_detected",
+            "tests/final_review/test_routes_flow.py::test_correction_refused_for_frozen_job",
+            "-q"
+        ],
+        "stdin_fixture": null,
+        "environment": {},
+        "fault_fixture": null,
+        "expected_exit": 0,
+        "expected_artifacts": [],
+        "expected_observation": "6 passed"
+    }
+]
