@@ -44,9 +44,11 @@ from services.resolve_adapter.presentation_baseline import (
     apply_presentation,
     subtitle_step,
 )
+from services.resolve_adapter.presentation_styled import attach_styled_presentation
 from services.resolve_adapter.validate import verify_compile_inputs
 
 if TYPE_CHECKING:
+    from services.presentation.styling_models import StyledPresentation
     from services.resolve_adapter.presentation_models import PresentationSection
     from services.toolchain.models import Phase2ToolchainLock
 
@@ -66,6 +68,7 @@ class PackageCompileRequest:
     presented_media: tuple[MediaBinding, ...] | None = None
     intro_outro_source_ids: frozenset[str] = frozenset()
     presentation: PresentationSection | None = None
+    styled_presentation: StyledPresentation | None = None
 
     def resolved_presented_media(self) -> tuple[MediaBinding, ...]:
         return self.declared_media if self.presented_media is None else self.presented_media
@@ -223,6 +226,11 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
             declared_media=request.declared_media,
         ),
         presentation=request.presentation,
+        styled_presentation=(
+            attach_styled_presentation(request.styled_presentation, request.ir)
+            if request.styled_presentation is not None
+            else None
+        ),
     )
     digest = hashlib.sha256(canonical_model_bytes(package)).hexdigest()
     return package.model_copy(update={"content_hash": digest})

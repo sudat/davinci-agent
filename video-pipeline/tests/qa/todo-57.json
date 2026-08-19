@@ -1,0 +1,104 @@
+[
+ {
+  "case_id": "happy-evidence-backed-ab-subtitle-title-output",
+  "kind": "happy",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_subtitle_overlay.py::test_ab_styled_output_differs_only_in_the_frozen_declared_dimensions",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-profile-changes-text",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_subtitle_overlay.py::test_profile_text_change_is_a_typed_failure",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-profile-changes-timing",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_subtitle_overlay.py::test_profile_timing_change_is_a_typed_failure",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-factual-overlay-lacks-evidence",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_subtitle_overlay.py::test_factual_overlay_without_evidence_is_a_typed_failure",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-unsafe-overlap",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_subtitle_overlay.py::test_unsafe_and_overlapping_placement_fail_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-encoding-style-mismatch",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_subtitle_overlay.py::test_encoding_and_style_rules_fail_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ }
+]

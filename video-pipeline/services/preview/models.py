@@ -21,8 +21,20 @@ from services.contracts.primitives import (
     SourceFrameSpan,
     StrictModel,
 )
-from services.contracts.timeline_ir import (  # noqa: TC001 (pydantic resolves this at model build)
+from services.contracts.styled_presentation import (  # noqa: TC001 (pydantic runtime)
+    SubtitleStyleParams,
+)
+from services.contracts.timeline_ir import (  # noqa: TC001 (pydantic runtime)
     TimelineItem0C,
+)
+from services.preview.errors import (
+    PreviewBindingError,
+    PreviewError,
+    PreviewLayoutError,
+    PreviewRenderError,
+    PreviewToolchainError,
+    PreviewTraceError,
+    PreviewVerificationError,
 )
 
 
@@ -31,34 +43,6 @@ def _tuple[Value](value: list[Value] | tuple[Value, ...]) -> tuple[Value, ...]:
 
 
 type Sequence[Value] = Annotated[tuple[Value, ...], BeforeValidator(_tuple)]
-
-
-class PreviewError(Exception):
-    """Base class for structured preview failures; the adapter never fails silently."""
-
-
-class PreviewToolchainError(PreviewError):
-    """A pinned binary is missing or its sha256 drifted from the frozen lock."""
-
-
-class PreviewLayoutError(PreviewError):
-    """The Timeline IR does not form a contiguous, renderable record layout."""
-
-
-class PreviewBindingError(PreviewError):
-    """A media binding is missing, its file vanished, or its hash drifted."""
-
-
-class PreviewRenderError(PreviewError):
-    """The bounded ffmpeg render command failed or produced no output file."""
-
-
-class PreviewVerificationError(PreviewError):
-    """ffprobe assertions on the produced preview failed (drift detection)."""
-
-
-class PreviewTraceError(PreviewError):
-    """The trace manifest could not be assembled with full record coverage."""
 
 
 class MediaBinding(StrictModel):
@@ -166,6 +150,22 @@ class TimelineBinding(StrictModel):
     timeline_rate: RationalFrameRate
 
 
+class TraceStyleTable(StrictModel):
+    """The recorded soft-sub style table (Todo 57): metadata only, never burn-in.
+
+    The preview MP4 keeps its ``mov_text`` soft-subtitle track; the profile's
+    resolved style parameters and per-cue style ids are recorded here so the
+    editorial review can see exactly which presentation would be applied at
+    finalization. Pixel content is untouched by styling.
+    """
+
+    style_id: Identifier
+    params: SubtitleStyleParams
+    cue_style_ids: tuple[Identifier, ...]
+    titled_item_ids: tuple[Identifier, ...]
+    styled_presentation_sha256: Sha256
+
+
 class PreviewTraceManifest(StrictModel):
     schema_version: Literal["preview-trace-v1"]
     preview: PreviewFile
@@ -175,6 +175,7 @@ class PreviewTraceManifest(StrictModel):
     record_to_decision: Sequence[RecordDecisionSpan] = Field(min_length=1)
     strategy_notes: StrategyNotes
     ffprobe_summary: FfprobeSummary
+    presentation_style: TraceStyleTable | None = None
 
     @model_validator(mode="after")
     def require_full_record_coverage(self) -> PreviewTraceManifest:
@@ -244,4 +245,5 @@ __all__ = [
     "TimelineBinding",
     "TraceDecision",
     "TraceInput",
+    "TraceStyleTable",
 ]

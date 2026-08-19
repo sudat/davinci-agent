@@ -25,13 +25,15 @@ from services.preview.models import (
     PreviewTraceManifest,
 )
 from services.preview.srt import expected_subtitle_cues, parse_srt, render_srt
+from services.preview.styling import carry_styled
 from services.preview.tools import PinnedTools, decoded_video_sha256, probe_file, run_bounded
-from services.preview.trace import TraceContext, build_trace
+from services.preview.trace import TraceContext, build_trace, plan_version_of
 from services.preview.verify import AUDIO_SAMPLE_RATE_TEXT, verify_preview_output
 
 if TYPE_CHECKING:
     from services.contracts.edit_plan_0c import EditPlan0C
     from services.contracts.timeline_ir import TimelineIr0C, TimelineItem0C
+    from services.presentation.styling_models import StyledPresentation
 
 PREVIEW_NAME: Final = "preview.mp4"
 TRACE_NAME: Final = "preview-trace.json"
@@ -112,10 +114,6 @@ def _assert_plan_agreement(plan: EditPlan0C, ir: TimelineIr0C) -> None:
         raise PreviewLayoutError("timeline IR video items do not match the edit plan")
 
 
-def _plan_version(edit_plan: EditPlan0C | None) -> str:
-    return edit_plan.plan.plan_version if edit_plan is not None else "v1"
-
-
 def _require_binding(bindings: PreviewMediaBindings, item_id: str, kind: str) -> MediaBinding:
     binding = bindings.binding_for(item_id)
     if binding is None:
@@ -181,9 +179,10 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     *,
     tools: PinnedTools,
     decision: AppliedDecision | None = None,
+    styled: StyledPresentation | None = None,
 ) -> PreviewTraceManifest:
     tools.verify_current()
-    plan_version = _plan_version(edit_plan)
+    plan_version = plan_version_of(edit_plan)
     if edit_plan is not None:
         _assert_plan_agreement(edit_plan, timeline_ir)
     if decision is not None and decision.plan_version_after != plan_version:
@@ -191,6 +190,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             f"decision bumps to {decision.plan_version_after} but the plan is {plan_version}"
         )
     layout = extract_layout(timeline_ir)
+    style_table = carry_styled(layout, styled) if styled is not None else None
     for item in (*layout.video_items, *layout.audio_items, *layout.subtitle_items):
         _require_binding(media_bindings, item.item_id, item.kind)
     _verify_av_media(layout, media_bindings, tools)
@@ -230,6 +230,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             bindings=media_bindings,
             plan_version=plan_version,
             decision=decision,
+            styled=style_table,
         )
         manifest = build_trace(context, output, summary, decoded_video_sha256(tools, output))
         atomic_write(out_dir / TRACE_NAME, canonical_model_bytes(manifest))

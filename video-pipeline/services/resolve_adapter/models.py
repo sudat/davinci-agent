@@ -22,6 +22,9 @@ from services.contracts.primitives import (
     Sha256,
     StrictModel,
 )
+from services.presentation.styling_models import (  # noqa: TC001 (pydantic resolves annotations at runtime)
+    StyledPresentation,
+)
 from services.resolve_adapter.presentation_models import (  # noqa: TC001 (pydantic resolves annotations at runtime)
     PresentationSection,
 )
@@ -189,6 +192,7 @@ class ResolvePackage(ArtifactEnvelope[Literal["resolve_package_v1"]]):
     render_job: RenderJobSpec
     inputs_view: InputsView
     presentation: PresentationSection | None = None
+    styled_presentation: StyledPresentation | None = None
 
 
 __all__ = [

@@ -14,8 +14,7 @@ transcript cue sources into the production Timeline IR:
    no cues, cues crossing an item boundary split at exact integer frames;
 4. cue generation under the frozen Japanese formatting table
    (:mod:`services.compile.subtitle_cues`);
-5. fail-closed QC (:mod:`services.compile.ir_qc`) — an IR that violates any
-   rule never leaves the compiler.
+5. fail-closed QC — an IR that violates any rule never leaves the compiler.
 
 No Resolve-specific field can enter the IR: the contracts reject them at the
 model level, and QC re-scans the serialized document.
@@ -56,10 +55,21 @@ from services.contracts.timeline_ir import (
     TrackRef0C,
 )
 from services.foundation_io import canonical_model_bytes
+from services.presentation.styling import apply_presentation_style
 
 if TYPE_CHECKING:
     from services.compile.subtitle_policy import SubtitleQcPolicy, TranscriptCueSource
     from services.plan.edit_plan_models import EditPlan
+    from services.presentation.asset_registry import (
+        IsoDate,
+        RegistrySnapshot,
+        TerritoryCode,
+    )
+    from services.presentation.models import ResolvedPresentationProfile
+    from services.presentation.styling_models import (
+        FactEvidenceContext,
+        TitledItemRequest,
+    )
 
 PRODUCER: Final = Producer(name="production-compiler", version="1")
 VIDEO_TRACK_INDEX: Final = 1
@@ -76,6 +86,18 @@ class CompileProductionResult:
 
     def ir_sha256(self) -> str:
         return hashlib.sha256(canonical_model_bytes(self.ir)).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class StylingInputs:
+    """Optional Phase-3 presentation styling attached after the editorial compile."""
+
+    profile: ResolvedPresentationProfile
+    registry: RegistrySnapshot
+    titled: tuple[TitledItemRequest, ...]
+    evidence: FactEvidenceContext
+    job_date: IsoDate
+    job_territory: TerritoryCode
 
 
 def _placements(plan: EditPlan) -> tuple[AvPlacement, ...]:
@@ -145,13 +167,14 @@ def _content_hash(rate: EditSourceGeometry, tracks: tuple[TimelineTrackProductio
     return digest.hexdigest()
 
 
-def compile_production(
+def compile_production(  # noqa: PLR0913 (signature fixed by the Todo-44 contract)
     plan: EditPlan,
     geometry: EditSourceGeometry,
     transcript: TranscriptCueSource,
     policy: SubtitleQcPolicy,
     *,
     artifact_id: str,
+    styling: StylingInputs | None = None,
 ) -> CompileProductionResult:
     """Deterministically compile the plan + transcript into the production IR."""
 
@@ -204,7 +227,23 @@ def compile_production(
         tracks=tuple(tracks),
     )
     require_ir_qc(ir, policy)
+    if styling is not None:
+        styled = apply_presentation_style(
+            ir,
+            profile=styling.profile,
+            registry=styling.registry,
+            policy=policy,
+            titled=styling.titled,
+            evidence=styling.evidence,
+            job_date=styling.job_date,
+            job_territory=styling.job_territory,
+            artifact_id=f"{artifact_id}-presentation",
+        )
+        editorial_hash = ir.content_hash
+        ir = ir.model_copy(update={"presentation": styled})
+        if ir.content_hash != editorial_hash:
+            raise RuntimeError("presentation attachment must not change the editorial hash")
     return CompileProductionResult(ir=ir, dropped_cues=tuple(dropped))
 
 
-__all__ = ["CompileProductionResult", "compile_production"]
+__all__ = ["CompileProductionResult", "StylingInputs", "compile_production"]

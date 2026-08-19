@@ -19,6 +19,9 @@ from services.contracts.primitives import (
     TrackKind,
     TrackRef,
 )
+from services.contracts.styled_presentation import (  # noqa: TC001 (pydantic runtime)
+    StyledPresentation,
+)
 
 
 class TimelineItem0A(StrictModel):
@@ -154,10 +157,18 @@ class TimelineTrackProduction(ResolveFreeModel):
 
 
 class TimelineIrProduction(ResolveFreeEnvelope[Literal["timeline_ir_v1"]]):
-    """The production Timeline IR: NLE-neutral placements + subtitle cues."""
+    """The production Timeline IR: NLE-neutral placements + subtitle cues.
+
+    ``presentation`` carries the Phase-3 styled output (styled cues + titled
+    items, NLE-neutral style parameters and asset content refs) attached
+    AFTER the editorial compile; it never participates in the editorial
+    ``content_hash``, which stays computed over the tracks alone so profile
+    swaps cannot perturb editorial identity.
+    """
 
     rate: RationalFrameRate
     tracks: tuple[TimelineTrackProduction, ...] = Field(min_length=1)
+    presentation: StyledPresentation | None = None
 
     @model_validator(mode="after")
     def require_unique_track_refs(self) -> TimelineIrProduction:

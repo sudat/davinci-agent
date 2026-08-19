@@ -32,6 +32,7 @@ AUDIO_ROLE_MISSING = "audio-role-missing"
 AUDIO_ROLE_CONFLATION = "audio-role-conflation"
 SUBTITLE_UNSAFE_AREA = "subtitle-unsafe-area"
 RENDER_PRESET_MISMATCH = "render-preset-mismatch"
+STYLED_PRESENTATION_DRIFT = "styled-presentation-drift"
 
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "RENDER_PRESET_MISMATCH",
     "RESOLVE_FIELD_IN_IR",
     "STALE_IR",
+    "STYLED_PRESENTATION_DRIFT",
     "SUBTITLE_UNSAFE_AREA",
     "UNAPPROVED_ASSET",
     "UNSUPPORTED_RETIME",

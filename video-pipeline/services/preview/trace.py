@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Final
 from services.foundation_io import canonical_model_bytes, sha256_file
 
 if TYPE_CHECKING:
+    from services.contracts.edit_plan_0c import EditPlan0C
     from services.contracts.timeline_ir import TimelineIr0C
 
 from services.preview.models import (
@@ -32,6 +33,7 @@ from services.preview.models import (
     TimelineBinding,
     TraceDecision,
     TraceInput,
+    TraceStyleTable,
 )
 
 DETERMINISM_POLICY: Final = "semantic-equivalence-h264-videotoolbox"
@@ -44,6 +46,12 @@ AUDIO_STRATEGY_SINGLE: Final = "item-linked-concat-single-track-no-bgm-binding"
 
 def initial_decision_id(plan_version: str) -> str:
     return f"initial-plan-{plan_version}"
+
+
+def plan_version_of(edit_plan: EditPlan0C | None) -> str:
+    """The plan version a preview renders (Todo-27 default keeps ``v1``)."""
+
+    return edit_plan.plan.plan_version if edit_plan is not None else "v1"
 
 
 def coverage(
@@ -110,6 +118,7 @@ class TraceContext:
     bindings: PreviewMediaBindings
     plan_version: str
     decision: AppliedDecision | None
+    styled: TraceStyleTable | None = None
 
 
 def _trace_inputs(context: TraceContext) -> tuple[TraceInput, ...]:
@@ -169,6 +178,7 @@ def build_trace(
         record_to_decision=coverage_spans,
         strategy_notes=strategy_notes(context),
         ffprobe_summary=summary,
+        presentation_style=context.styled,
     )
 
 
