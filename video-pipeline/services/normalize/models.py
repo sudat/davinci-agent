@@ -91,6 +91,8 @@ class NormalizeRecord(StrictModel):
     tool: ToolIdentity
     target: TargetProfile
     policy: NormalizationPolicy
+    declared_video_pix_fmt: str | None = None
+    declared_conversions: tuple[str, ...] = ()
     drop_dup: DropDupAccounting
     output_semantics: OutputSemantics
     replay: ReplayPolicy

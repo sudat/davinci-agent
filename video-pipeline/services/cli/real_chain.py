@@ -91,6 +91,7 @@ def _normalize(
             output_dir=out_dir / "media",
             record_out=out_dir / "normalize-record.json",
         ),
+        declared_video_pix_fmt="yuv420p",
     )
     mezzanine = out_dir / "media" / MEZZANINE_NAME
     shutil.copyfile(Path(record.output.path), mezzanine)

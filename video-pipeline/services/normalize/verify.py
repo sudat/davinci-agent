@@ -29,6 +29,8 @@ class OutputExpectation:
     target: NormalizeTarget
     source: MediaFacts
     expected_output_frames: int
+    declared_video_pix_fmt: str | None = None
+    declared_conversions: tuple[str, ...] = ()
 
 
 def _loss(field: str, detail: str) -> NormalizeVerificationError:
@@ -70,8 +72,16 @@ def _verify_video_shape(facts: MediaFacts, expectation: OutputExpectation) -> No
             f"expected {source_video.width}x{source_video.height}, "
             f"found {video.width}x{video.height}",
         )
-    if video.pix_fmt != source_video.pix_fmt:
-        raise _loss("pix_fmt", f"expected {source_video.pix_fmt}")
+    declared = expectation.declared_video_pix_fmt
+    if declared is None:
+        if video.pix_fmt != source_video.pix_fmt:
+            raise _loss("pix_fmt", f"expected {source_video.pix_fmt}")
+    else:
+        if video.pix_fmt != declared:
+            raise _loss("pix_fmt", f"expected declared {declared}")
+        conversion = f"pix_fmt:{source_video.pix_fmt}->{declared}"
+        if conversion not in expectation.declared_conversions:
+            raise _loss("pix_fmt", f"declared conversion record missing {conversion}")
     if (video.time_base_num, video.time_base_den) != (1, target.video_track_timescale):
         raise _loss(
             "video_track_timescale",

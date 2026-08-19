@@ -131,6 +131,8 @@ def normalize_one(
     source_manifest: SourceManifest,
     target_profile: str,
     context: NormalizeContext,
+    *,
+    declared_video_pix_fmt: str | None = None,
 ) -> NormalizeRecord:
     """Produce one CFR Edit Mezzanine and commit its NormalizeRecord."""
 
@@ -166,12 +168,19 @@ def normalize_one(
             "source_mutated", "original changed during normalization"
         )
     output_facts = _probe_or_block(context.ffprobe, output, "output")
+    declared_conversions = (
+        (f"pix_fmt:{input_facts.video.pix_fmt}->{declared_video_pix_fmt}",)
+        if declared_video_pix_fmt is not None
+        else ()
+    )
     verify_output(
         output_facts,
         OutputExpectation(
             target=lock.normalization.target,
             source=input_facts,
             expected_output_frames=prediction.output_frames,
+            declared_video_pix_fmt=declared_video_pix_fmt,
+            declared_conversions=declared_conversions,
         ),
     )
 
@@ -189,6 +198,8 @@ def normalize_one(
                 prediction=prediction,
                 output_facts=output_facts,
                 decoded_video_sha256=decoded_video_sha256(context.ffmpeg, output),
+                declared_video_pix_fmt=declared_video_pix_fmt,
+                declared_conversions=declared_conversions,
             )
         )
     )

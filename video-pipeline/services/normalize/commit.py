@@ -49,6 +49,8 @@ class VerifiedRun:
     prediction: CfrConversionReport
     output_facts: MediaFacts
     decoded_video_sha256: str
+    declared_video_pix_fmt: str | None = None
+    declared_conversions: tuple[str, ...] = ()
 
 
 def build_normalize_record(run: VerifiedRun) -> NormalizeRecord:
@@ -85,6 +87,8 @@ def build_normalize_record(run: VerifiedRun) -> NormalizeRecord:
             rotation="noautorotate-rotation-metadata-preserved-v1",
             color="preserve-or-explicit-v1",
         ),
+        declared_video_pix_fmt=run.declared_video_pix_fmt,
+        declared_conversions=run.declared_conversions,
         drop_dup=DropDupAccounting(
             expected=DropDupExpectation(
                 output_frames=run.prediction.output_frames,
