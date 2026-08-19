@@ -81,6 +81,10 @@ def _media_streams(payload: dict[str, object]) -> list[dict[str, object]]:
         stream
         for stream in stream_entries(payload)
         if stream.get("codec_type") in {"video", "audio"}
+        and not (
+            isinstance(disposition := stream.get("disposition"), dict)
+            and disposition.get("attached_pic") == 1
+        )
     ]
 
 
