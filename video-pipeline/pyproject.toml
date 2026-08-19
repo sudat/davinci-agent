@@ -82,6 +82,15 @@ ignore = [
 "services/resolve_bridge/fixed_presentation_cli.py" = ["PLR0913", "PLR0917"]
 "services/resolve_bridge/title_probe.py" = ["N802", "FBT003", "PLR0913"]
 "services/resolve_bridge/title_probe_models.py" = ["N802", "FBT001", "FBT002", "PLR0913"]
+"services/resolve_bridge/audio_preset_probe.py" = ["N802", "FBT003", "PLR0913"]
+"services/resolve_bridge/audio_preset_probe_models.py" = ["N802", "FBT001", "FBT002", "PLR0913"]
+"services/presentation/audio_live_media.py" = [
+  "N802",
+  "FBT001",
+  "FBT003",
+  "PLR0913",
+]
+"services/presentation/audio_live_flow.py" = ["PLR0913", "PLR0917"]
 "services/presentation/overlay_render.py" = ["PLR0913"]
 "services/presentation/overlay_live_media.py" = [
   "N802",

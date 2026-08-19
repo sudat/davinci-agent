@@ -25,6 +25,10 @@ from services.contracts.timeline_ir import (
     TimelineItem0C,
 )
 from services.foundation_io import canonical_model_bytes
+from services.resolve_adapter.audio_section import (
+    audio_placements,
+    require_audio_role_separation,
+)
 from services.resolve_adapter.errors import WRONG_TRACK_MAP, PackageCompileError
 from services.resolve_adapter.models import (
     AppendPlacement,
@@ -51,12 +55,14 @@ from services.resolve_adapter.presentation_styled import attach_styled_presentat
 from services.resolve_adapter.validate import verify_compile_inputs
 
 if TYPE_CHECKING:
+    from services.presentation.audio_models import AudioSection
     from services.presentation.overlay_models import OverlaySection
     from services.presentation.styling_models import StyledPresentation
     from services.resolve_adapter.presentation_models import PresentationSection
     from services.toolchain.models import Phase2ToolchainLock
 
 PRODUCER: Final = Producer(name="resolve-adapter", version="1")
+LINK_GROUP_MIN_MEMBERS: Final = 2
 FRAME_ORIGIN: Final = 108000
 START_TIMECODE: Final = "01:00:00:00"
 ZERO_HASH: Final = "0" * 64
@@ -74,6 +80,7 @@ class PackageCompileRequest:
     presentation: PresentationSection | None = None
     styled_presentation: StyledPresentation | None = None
     overlay_paths: OverlaySection | None = None
+    audio_section: AudioSection | None = None
 
     def resolved_presented_media(self) -> tuple[MediaBinding, ...]:
         return self.declared_media if self.presented_media is None else self.presented_media
@@ -131,6 +138,7 @@ def _link_groups(
     return tuple(
         LinkGroup(av_link_id=link_id, item_ids=tuple(sorted(ids)))
         for link_id, ids in members.items()
+        if len(ids) >= LINK_GROUP_MIN_MEMBERS
     )
 
 
@@ -166,6 +174,15 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
         else None
     )
     placements = _placements(request, applied)
+    replaces_audio = (
+        request.audio_section is not None
+        and request.audio_section.rung == "external_mix_derivative"
+    )
+    if replaces_audio:
+        placements = tuple(
+            placement for placement in placements
+            if placement.clip_info.track_type != "audio"
+        )
     if request.overlay_paths is not None:
         overlay_extra = overlay_placements(
             request.overlay_paths, frame_origin=FRAME_ORIGIN
@@ -185,6 +202,26 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
                 f"overlay placements have no presented media binding: {missing}",
             )
         placements = (*placements, *overlay_extra)
+    if replaces_audio and request.audio_section is not None:
+        require_audio_role_separation(request.audio_section)
+        audio_extra = audio_placements(
+            request.audio_section, frame_origin=FRAME_ORIGIN
+        )
+        presented_ids = {
+            binding.source_id
+            for binding in request.resolved_presented_media()
+        }
+        missing_audio = [
+            placement.clip_info.media_source_id
+            for placement in audio_extra
+            if placement.clip_info.media_source_id not in presented_ids
+        ]
+        if missing_audio:
+            raise PackageCompileError(
+                WRONG_TRACK_MAP,
+                f"audio derivative has no presented media binding: {missing_audio}",
+            )
+        placements = (*placements, *audio_extra)
     track_map: tuple[TrackMapEntry, ...] = (
         AppendTrackMapEntry(
             logical_kind="video",
@@ -200,11 +237,27 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
         ),
         ExternalTrackMapEntry(logical_kind="subtitle", logical_index=3),
     )
-    if applied is not None:
+    if applied is not None and not replaces_audio:
         track_map = (
             track_map[0],
             *applied.audio_tracks,
             track_map[2],
+        )
+    if replaces_audio and request.audio_section is not None:
+        music_index = next(
+            track.resolve_track_index
+            for track in request.audio_section.logical_tracks
+            if track.role == "music"
+        )
+        track_map = (
+            track_map[0],
+            AppendTrackMapEntry(
+                logical_kind="audio",
+                logical_index=2,
+                resolve_track_type="audio",
+                resolve_track_index=music_index,
+            ),
+            track_map[-1],
         )
     package = ResolvePackage(
         artifact_id=request.artifact_id,
@@ -256,6 +309,7 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
             else None
         ),
         overlay_paths=request.overlay_paths,
+        audio=request.audio_section,
     )
     digest = hashlib.sha256(canonical_model_bytes(package)).hexdigest()
     return package.model_copy(update={"content_hash": digest})

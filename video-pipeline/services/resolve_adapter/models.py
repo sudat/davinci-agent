@@ -22,6 +22,9 @@ from services.contracts.primitives import (
     Sha256,
     StrictModel,
 )
+from services.presentation.audio_models import (
+    AudioSection,
+)
 from services.presentation.overlay_models import (
     OverlaySection,
 )
@@ -197,12 +200,14 @@ class ResolvePackage(ArtifactEnvelope[Literal["resolve_package_v1"]]):
     presentation: PresentationSection | None = None
     styled_presentation: StyledPresentation | None = None
     overlay_paths: OverlaySection | None = None
+    audio: AudioSection | None = None
 
 
 __all__ = [
     "SUBTITLE_MUX_ARGV",
     "AppendPlacement",
     "AppendTrackMapEntry",
+    "AudioSection",
     "ClipInfo",
     "ExternalTrackMapEntry",
     "InputsView",

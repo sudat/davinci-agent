@@ -1,0 +1,121 @@
+[
+ {
+  "case_id": "happy-approved-ab-audio-paths",
+  "kind": "happy",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_audio_profile.py::test_approved_ab_audio_sections_differ_only_in_declared_dims",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-expired-music",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_audio_profile.py::test_expired_unapproved_wrong_use_music_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-dialogue-on-ambient",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_audio_profile.py::test_dialogue_processing_on_ambient_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-unavailable-plugin",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_audio_profile.py::test_unavailable_plugin_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-unverified-preset",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_audio_profile.py::test_unverified_preset_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-peak-loudness-channel-violation",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_audio_profile.py::test_peak_loudness_channel_violations_are_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-preview-final-derivative-mismatch",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_audio_profile.py::test_preview_final_derivative_mismatch_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ }
+]

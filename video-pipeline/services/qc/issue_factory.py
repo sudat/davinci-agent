@@ -12,7 +12,10 @@ if TYPE_CHECKING:
 
 
 class HasThresholdVersion(Protocol):
-    threshold_version: str
+    """Read-only structural view; satisfied by any policy-like object."""
+
+    @property
+    def threshold_version(self) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)

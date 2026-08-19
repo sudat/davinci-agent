@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Protocol
 
 from services.analyze.audio_measure import (
     compute_window_stats,
@@ -21,15 +21,29 @@ from services.analyze.audio_measure import (
     read_s16_mono_wav,
 )
 from services.qc.issue_factory import IssueFactory
-from services.qc.models import QcMeasured
+from services.qc.models import AudioThresholds, QcMeasured
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from services.analyze.analysis_models import LoudnessSummary, SampleMsSpan
-    from services.qc.models import QcIssue, QcPolicy
+    from services.qc.models import QcIssue
 
 AUDIO_TOOL_VERSION: Final = "audio-measure-todo34-v1"
+
+
+class AudioPolicyView(Protocol):
+    """Structural policy surface the audio checks evaluate against.
+
+    Satisfied by :class:`services.qc.models.QcPolicy` and by live policy
+    views carrying only the audio thresholds and threshold version.
+    """
+
+    @property
+    def threshold_version(self) -> str: ...
+
+    @property
+    def audio(self) -> AudioThresholds: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +59,7 @@ class AudioMeasure:
 
 
 def evaluate_audio_measurements(
-    measure: AudioMeasure, policy: QcPolicy, inputs: tuple[str, ...]
+    measure: AudioMeasure, policy: AudioPolicyView, inputs: tuple[str, ...]
 ) -> tuple[QcIssue, ...]:
     factory = IssueFactory.for_policy(policy, inputs)
     issues: list[QcIssue] = []
@@ -140,7 +154,7 @@ def measure_audio(
 
 
 def check_audio(
-    measure: AudioMeasure, policy: QcPolicy, inputs: tuple[str, ...]
+    measure: AudioMeasure, policy: AudioPolicyView, inputs: tuple[str, ...]
 ) -> tuple[QcIssue, ...]:
     return evaluate_audio_measurements(measure, policy, inputs)
 
@@ -148,6 +162,7 @@ def check_audio(
 __all__ = [
     "AUDIO_TOOL_VERSION",
     "AudioMeasure",
+    "AudioPolicyView",
     "check_audio",
     "evaluate_audio_measurements",
     "measure_audio",
