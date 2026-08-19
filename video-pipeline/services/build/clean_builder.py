@@ -23,7 +23,6 @@ from services.build.builder_apply import (
     ensure_track_layout,
     import_media,
     place_items,
-    readback_verify,
 )
 from services.build.builder_models import (
     BuildFailure,
@@ -45,6 +44,8 @@ from services.build.builder_session import (
     publish_build_output,
     staging_project_name,
 )
+from services.build.conformance import item_readback_rows, verify_built_conformance
+from services.build.drift import StagingDriftGuard
 from services.resolve_bridge.lifecycle import LifecycleError
 
 if TYPE_CHECKING:
@@ -73,6 +74,10 @@ class CleanBuilder:
     def _build_under_lease(self, package: ResolvePackage) -> BuildOutput:
         verify_package_current(package, self._wiring.registry)
         manager = self._connection.project_manager()
+        # Fresh-vs-blocked: an existing prior build output of this package
+        # must still conform (and match the recorded prior fingerprint)
+        # BEFORE the sweep may dispose it; drift blocks the whole build.
+        StagingDriftGuard().enforce(manager, package, self._wiring)
         swept = sweep_orphan_stagings(manager)
         name = staging_project_name(package.content_hash)
         try:
@@ -105,7 +110,8 @@ class CleanBuilder:
         handles = place_items(pool, package, media)
         apply_link_groups(timeline, package, handles)
         self._wiring.seams.after_place()
-        rows = readback_verify(timeline, package, handles)
+        table = verify_built_conformance(timeline, package, self._wiring.tools.sha256)
+        rows = item_readback_rows(table)
         self._wiring.seams.after_readback()
         render = render_timeline(
             project, package, self._wiring.render_dir, self._wiring.tools, self._wiring.timing
@@ -129,6 +135,7 @@ class CleanBuilder:
             timeline_fingerprint=readback_fingerprint(rows),
             swept_projects=swept,
             items=rows,
+            conformance=table,
             render=render,
             subtitle=subtitle,
         )

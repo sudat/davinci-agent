@@ -1,13 +1,12 @@
-"""Package application on the staging timeline: media, placement, links, readback.
+"""Package application on the staging timeline: media, placement, links.
 
 Placement uses only the verified AppendToTimeline clipInfo path — media
 pool items with source span frames, an explicit Resolve track, and an
 ABSOLUTE record frame at/above the timeline origin — appended one link
-group at a time (the live-verified pair cadence). Every placed item is then
-read back through public timeline APIs and compared field-by-field against
-the package; any mismatch is a typed failure. There is deliberately no code
-path that moves, trims, or otherwise structurally mutates an already placed
-item: structural change means a fresh clean build.
+group at a time (the live-verified pair cadence). Post-placement
+verification lives in :mod:`services.build.conformance`. There is
+deliberately no code path that moves, trims, or otherwise structurally
+mutates an already placed item: structural change means a fresh clean build.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from services.build.builder_models import BuildFailure, ItemReadbackRow, as_frame
+from services.build.builder_models import BuildFailure
 from services.resolve_adapter.models import AppendTrackMapEntry, RoleTrackMapEntry
 
 if TYPE_CHECKING:
@@ -143,99 +142,9 @@ def apply_link_groups(
             raise BuildFailure("link-failed", f"SetClipsLinked failed for {group.av_link_id}")
 
 
-def readback_verify(
-    timeline: FixedTimelineApi,
-    package: ResolvePackage,
-    handles: dict[str, BaseCutTimelineItemApi],
-) -> tuple[ItemReadbackRow, ...]:
-    """Read every placed item back and compare it against the package."""
-
-    del timeline  # items are read through their own handles
-    declared = {
-        binding.source_id: os.path.realpath(binding.path)
-        for binding in package.inputs_view.declared_media
-    }
-    unique_of = {
-        item_id: handles[item_id].GetUniqueId()
-        for item_id in handles
-    }
-    expected_links: dict[str, frozenset[str]] = {}
-    for group in package.link_groups:
-        members = frozenset(unique_of[item_id] for item_id in group.item_ids)
-        for item_id in group.item_ids:
-            expected_links[item_id] = members - {unique_of[item_id]}
-    rows: list[ItemReadbackRow] = []
-    for placement in package.placements:
-        item = handles.get(placement.item_id)
-        if item is None:
-            raise BuildFailure(
-                "readback-mismatch", f"{placement.item_id}: no placed item handle to read back"
-            )
-        rows.append(_verify_one(placement, item, declared, expected_links))
-    failed = [row for row in rows if not row.passed]
-    if failed:
-        detail = "; ".join(f"{row.item_id}: {row.detail}" for row in failed)
-        raise BuildFailure("readback-mismatch", detail)
-    return tuple(rows)
-
-
-def _verify_one(
-    placement: AppendPlacement,
-    item: BaseCutTimelineItemApi,
-    declared: dict[str, str],
-    expected_links: dict[str, frozenset[str]],
-) -> ItemReadbackRow:
-    info = placement.clip_info
-    what = placement.item_id
-    source_start = as_frame(item.GetSourceStartFrame(), f"{what} source start")
-    duration = as_frame(item.GetDuration(False), f"{what} duration")  # noqa: FBT003 (Resolve API flag)
-    source_end = source_start + duration
-    record_start = as_frame(item.GetStart(False), f"{what} record start")  # noqa: FBT003 (Resolve API flag)
-    record_end = as_frame(item.GetEnd(False), f"{what} record end")  # noqa: FBT003 (Resolve API flag)
-    track = item.GetTrackTypeAndIndex()
-    linked = frozenset(link.GetUniqueId() for link in item.GetLinkedItems() or ())
-    prop = item.GetMediaPoolItem().GetClipProperty("File Path")
-    media_path = os.path.realpath(prop) if isinstance(prop, str) else "<non-string path>"
-    problems: list[str] = []
-    expected_record_end = info.record_frame + (info.end_frame - info.start_frame)
-    if record_start != info.record_frame:
-        problems.append(f"record start {record_start} != {info.record_frame}")
-    if record_end != expected_record_end:
-        problems.append(f"record end {record_end} != {expected_record_end}")
-    if source_start != info.start_frame or source_end != info.end_frame:
-        problems.append(
-            f"source span [{source_start},{source_end}) != [{info.start_frame},{info.end_frame})"
-        )
-    if len(track) != PLACEMENT_FIELDS or track[0] != info.track_type:
-        problems.append(f"track type {track!r} != {info.track_type!r}")
-    else:
-        index = track[1]
-        if isinstance(index, bool) or not isinstance(index, int) or index != info.track_index:
-            problems.append(f"track index {index!r} != {info.track_index}")
-    if media_path != declared.get(info.media_source_id):
-        problems.append(f"media {media_path} != declared {declared.get(info.media_source_id)}")
-    wanted_links = expected_links.get(placement.item_id, frozenset())
-    if linked != wanted_links:
-        problems.append(f"links {sorted(linked)} != {sorted(wanted_links)}")
-    return ItemReadbackRow(
-        item_id=placement.item_id,
-        kind=info.track_type,
-        track_index=info.track_index,
-        record_start=record_start,
-        record_end=record_end,
-        source_start=source_start,
-        source_end=source_end,
-        media_path=media_path,
-        linked_ids=tuple(sorted(linked)),
-        passed=not problems,
-        detail="; ".join(problems),
-    )
-
-
 __all__ = [
     "apply_link_groups",
     "ensure_track_layout",
     "import_media",
     "place_items",
-    "readback_verify",
 ]

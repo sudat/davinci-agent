@@ -21,6 +21,9 @@ from pathlib import Path
 from time import sleep
 from typing import TYPE_CHECKING, Final, Protocol
 
+from services.build.conformance_models import (
+    ConformanceTable,  # noqa: TC001 (pydantic resolves annotations at runtime)
+)
 from services.contracts.primitives import Sha256, StrictModel
 
 if TYPE_CHECKING:
@@ -121,6 +124,7 @@ class BuilderWiring:
         evidence_bundle: Path | None = None,
         seams: BuildSeams | None = None,
         timing: RenderTiming | None = None,
+        prior_conformance_fingerprint: str | None = None,
     ) -> None:
         self.registry = registry
         self.tools = tools
@@ -129,6 +133,7 @@ class BuilderWiring:
         self.evidence_bundle = evidence_bundle
         self.seams = seams if seams is not None else NoopSeams()
         self.timing = timing if timing is not None else RenderTiming()
+        self.prior_conformance_fingerprint = prior_conformance_fingerprint
 
 
 class FfprobeSummary(StrictModel):
@@ -199,6 +204,7 @@ class BuildOutput(StrictModel):
     timeline_fingerprint: Sha256
     swept_projects: tuple[str, ...]
     items: tuple[ItemReadbackRow, ...]
+    conformance: ConformanceTable
     render: RenderResult
     subtitle: SubtitleResult | None
 

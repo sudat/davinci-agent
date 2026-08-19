@@ -1,7 +1,9 @@
 """Single-writer Clean Builder over disposable Resolve staging timelines.
 
 Public surface: :class:`CleanBuilder` plus the models, protocols, and
-typed failures from :mod:`services.build.builder_models`. The builder
+typed failures from :mod:`services.build.builder_models`; item-level
+Package↔Resolve conformance from :mod:`services.build.conformance`; and
+pre-overwrite drift detection from :mod:`services.build.drift`. The builder
 promotes only live-verified bridge operations, never mutates human
 timelines, never resumes a partial build, and writes no Job State.
 """
@@ -26,6 +28,10 @@ from services.build.builder_models import (
 )
 from services.build.builder_render import PinnedBuildTools
 from services.build.clean_builder import CleanBuilder
+from services.build.conformance import ConformanceChecker, verify_built_conformance
+from services.build.conformance_capture import ReadbackRow, TimelineReadback, capture_readback
+from services.build.conformance_models import ConformanceTable, ItemVerdict
+from services.build.drift import DriftDetector, DriftReport, StagingDriftGuard
 
 __all__ = [
     "BuildFailure",
@@ -36,12 +42,22 @@ __all__ = [
     "BuildTools",
     "BuilderWiring",
     "CleanBuilder",
+    "ConformanceChecker",
+    "ConformanceTable",
+    "DriftDetector",
+    "DriftReport",
     "ItemReadbackRow",
+    "ItemVerdict",
     "LeaseHeld",
     "NoopSeams",
     "PackageRegistry",
     "PinnedBuildTools",
+    "ReadbackRow",
     "RenderResult",
     "RenderTiming",
+    "StagingDriftGuard",
     "SubtitleResult",
+    "TimelineReadback",
+    "capture_readback",
+    "verify_built_conformance",
 ]

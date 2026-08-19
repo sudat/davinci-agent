@@ -1,0 +1,106 @@
+[
+  {
+    "case_id": "happy-exact-timeline-passes",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_conformance.py::test_offline_build_output_carries_zero_delta_conformance_table",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-same-duration-wrong-media",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_conformance.py::test_offline_drift_fault_shapes_block_without_overwrite[item_media_mismatch]",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-off-by-one",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_conformance.py::test_offline_drift_fault_shapes_block_without_overwrite[off_by_one]",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-wrong-track-link",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_conformance.py::test_offline_drift_fault_shapes_block_without_overwrite[wrong_track]",
+      "tests/build/test_conformance.py::test_offline_drift_fault_shapes_block_without_overwrite[wrong_link]",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-missing-extra-item",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_conformance.py::test_offline_drift_fault_shapes_block_without_overwrite[missing_item]",
+      "tests/build/test_conformance.py::test_offline_drift_fault_shapes_block_without_overwrite[extra_item]",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-human-drift-blocks-without-overwrite",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_conformance.py::test_offline_human_mutation_blocks_full_builder_without_overwrite",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  }
+]
