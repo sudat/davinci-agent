@@ -1,0 +1,106 @@
+[
+  {
+    "case_id": "happy-complete-clean-build-passes",
+    "kind": "happy",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_clean_builder.py::test_offline_happy_clean_build_publishes_and_cleans",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-mid-build-kill-recovers-fresh",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_clean_builder.py::test_offline_mid_build_kill_seams_leave_orphans_recovered_fresh",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-second-builder-lease-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_clean_builder.py::test_offline_second_builder_while_lease_held_is_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-non-owned-timeline-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_clean_builder.py::test_offline_non_owned_timeline_mutation_is_refused",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "1 passed"
+  },
+  {
+    "case_id": "failure-patch-like-mutation-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_clean_builder.py::test_offline_patch_like_structural_mutation_is_refused",
+      "tests/build/test_clean_builder.py::test_offline_builder_writes_no_job_state",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  },
+  {
+    "case_id": "failure-stale-package-refused",
+    "kind": "failure",
+    "argv": [
+      "uv",
+      "run",
+      "pytest",
+      "tests/build/test_clean_builder.py::test_offline_stale_package_is_a_typed_refusal",
+      "tests/build/test_clean_builder.py::test_offline_media_hash_drift_is_a_typed_refusal",
+      "-q"
+    ],
+    "stdin_fixture": null,
+    "environment": {},
+    "fault_fixture": null,
+    "expected_exit": 0,
+    "expected_artifacts": [],
+    "expected_observation": "2 passed"
+  }
+]
