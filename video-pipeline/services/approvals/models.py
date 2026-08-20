@@ -15,6 +15,9 @@ from typing import Final, Literal
 from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
 
+# Runtime import is required: pydantic resolves FinalReviewBinding while
+# building OperationDraft fields, so a TYPE_CHECKING-only import breaks it.
+from services.approvals.global_review_models import FinalReviewBinding  # noqa: TC001
 from services.contracts.primitives import (
     Identifier,
     PositiveInteger,
@@ -70,6 +73,7 @@ class OperationDraft(StrictModel):
     wall_time_unix: int | None = Field(default=None, ge=0, strict=True)
     fixture_only: bool
     runner_class: RunnerClass
+    final_binding: FinalReviewBinding | None = None
 
     @model_validator(mode="after")
     def enforce_class_rules(self) -> OperationDraft:
@@ -88,6 +92,11 @@ class OperationDraft(StrictModel):
                 "purpose_target_mismatch",
                 "purpose {purpose} cannot bind target type {target}",
                 {"purpose": self.purpose, "target": self.target_type},
+            )
+        if self.final_binding is not None and self.purpose != "final":
+            raise PydanticCustomError(
+                "final_binding_presence",
+                "only purpose 'final' may carry a final_review binding",
             )
         return self
 

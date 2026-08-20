@@ -14,9 +14,17 @@ import argparse
 import hashlib
 import sys
 from pathlib import Path
+from typing import Final
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
+from services.approvals.global_review import (
+    DEFAULT_REVOCATIONS_PATH,
+    GlobalReviewError,
+    load_report_set,
+    load_revocations,
+)
+from services.approvals.global_review_models import GitFullSha
 from services.approvals.ingress import (
     IngressRefusalError,
     record_fixture_operation,
@@ -38,6 +46,8 @@ from services.cli.review_common import (
 )
 from services.foundation_io import atomic_write, canonical_model_bytes
 
+_GIT_SHA_ADAPTER: Final[TypeAdapter[GitFullSha]] = TypeAdapter(GitFullSha)
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -49,13 +59,28 @@ def _parser() -> argparse.ArgumentParser:
     show.add_argument("--bundle", type=Path, required=True)
     show.add_argument("--receipt", type=Path, required=True)
     record = sub.add_parser("record", help="record the operator decision (TTY-gated)")
-    record.add_argument("--bundle", type=Path, required=True)
-    record.add_argument("--display-receipt", type=Path, required=True)
-    record.add_argument("--purpose", choices=["EDITORIAL_APPROVED"], required=True)
+    record.add_argument("--bundle", type=Path)
+    record.add_argument("--display-receipt", type=Path)
+    record.add_argument(
+        "--purpose",
+        choices=["EDITORIAL_APPROVED", "FINAL_APPROVED"],
+        required=True,
+    )
     record.add_argument("--decision", choices=["approve", "reject"], required=True)
     record.add_argument("--out", type=Path, required=True)
     record.add_argument("--actor", default="local-operator")
     record.add_argument("--fixture", action="store_true", help="QA seam: fixture-marked record")
+    record.add_argument("--work-id", help="FINAL_APPROVED: execution work id")
+    record.add_argument("--git-sha", help="FINAL_APPROVED: reviewed full commit SHA")
+    record.add_argument("--candidate-id", help="FINAL_APPROVED: release candidate id")
+    record.add_argument(
+        "--report-dir", type=Path, help="FINAL_APPROVED: Global Review Report v1 directory"
+    )
+    record.add_argument(
+        "--revocations",
+        type=Path,
+        help="FINAL_APPROVED: local candidate revocation list (default config path when present)",
+    )
     export = sub.add_parser("export", help="assemble the operator_checkpoint artifact")
     export.add_argument("--bundle", type=Path, required=True)
     export.add_argument("--display-receipt", type=Path, required=True)
@@ -112,6 +137,8 @@ def targets_digest(targets: DisplayTargets) -> str:
 
 
 def _record(arguments: argparse.Namespace) -> int:
+    if arguments.purpose == "FINAL_APPROVED":
+        return _record_final(arguments)
     try:
         bundle = load_bundle(arguments.bundle)
         rehash_bundle_targets(bundle, arguments.bundle)
@@ -148,6 +175,90 @@ def _record(arguments: argparse.Namespace) -> int:
         return 1
     marker = "FIXTURE-MARKED (never a real approval)" if record.fixture_only else "real operator"
     print(f"recorded: {record.record_id} [{marker}]")
+    return 0
+
+
+def _revoked_candidate_ids(arguments: argparse.Namespace) -> frozenset[str]:
+    if arguments.revocations is not None:
+        return load_revocations(arguments.revocations)
+    if DEFAULT_REVOCATIONS_PATH.is_file():
+        return load_revocations(DEFAULT_REVOCATIONS_PATH)
+    return frozenset()
+
+
+def _validated_git_sha(value: str) -> str:
+    try:
+        _GIT_SHA_ADAPTER.validate_python(value)
+    except ValidationError as error:
+        raise GlobalReviewError(
+            "invalid-git-sha",
+            f"--git-sha must be a full 40/64-hex commit SHA: {error}",
+        ) from error
+    return value
+
+
+def _ensure_not_revoked(arguments: argparse.Namespace) -> None:
+    if arguments.candidate_id in _revoked_candidate_ids(arguments):
+        raise GlobalReviewError(
+            "candidate-revoked",
+            f"candidate {arguments.candidate_id} is on the local revocation list",
+        )
+
+
+def _record_final(arguments: argparse.Namespace) -> int:
+    missing = [
+        name
+        for name, value in (
+            ("--work-id", arguments.work_id),
+            ("--git-sha", arguments.git_sha),
+            ("--candidate-id", arguments.candidate_id),
+            ("--report-dir", arguments.report_dir),
+        )
+        if not value
+    ]
+    if missing:
+        print(
+            "record_refused: missing-final-argument: "
+            f"FINAL_APPROVED requires {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        _validated_git_sha(arguments.git_sha)
+        loaded = load_report_set(
+            arguments.report_dir,
+            full_sha=arguments.git_sha,
+            candidate_id=arguments.candidate_id,
+        )
+        _ensure_not_revoked(arguments)
+        binding = loaded.binding(arguments.work_id)
+        if arguments.fixture:
+            draft = record_fixture_operation(
+                purpose="final",
+                target_bundle_hash=loaded.report_set_sha256,
+                decision=arguments.decision,
+                actor_id=arguments.actor,
+                final_binding=binding,
+            )
+        else:
+            draft = record_operation(
+                purpose="final",
+                target_bundle_hash=loaded.report_set_sha256,
+                decision=arguments.decision,
+                actor_id=arguments.actor,
+                tty_fd=0,
+                final_binding=binding,
+            )
+        record = OperationRecordStore(arguments.out).append(draft)
+    except (GlobalReviewError, IngressRefusalError, OSError, ValidationError) as error:
+        print(f"record_refused: {error}", file=sys.stderr)
+        return 1
+    marker = "FIXTURE-MARKED (never a real approval)" if record.fixture_only else "real operator"
+    print(
+        f"recorded: {record.record_id} [{marker}] "
+        f"report_set={loaded.report_set_sha256} candidate={arguments.candidate_id} "
+        f"work={arguments.work_id}"
+    )
     return 0
 
 

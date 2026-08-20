@@ -3,12 +3,20 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from services.approvals.global_review_models import FinalReviewBinding
 from services.approvals.models import ChainedOperationRecord, OperationDraft
 from services.approvals.store import GENESIS_RECORD_HASH, OperationRecordStore
 
 TARGET_A = hashlib.sha256(b"approvals-test-target-a").hexdigest()
 TARGET_B = hashlib.sha256(b"approvals-test-target-b").hexdigest()
 ACTOR = "test-operator"
+
+FINAL_BINDING = FinalReviewBinding(
+    work_id="work-approvals-test",
+    full_sha="1f" * 20,
+    candidate_id="cand-approvals-test",
+    report_set_sha256=hashlib.sha256(b"approvals-test-report-set").hexdigest(),
+)
 
 
 def make_store(tmp_path: Path) -> OperationRecordStore:
@@ -43,6 +51,7 @@ def fixture_draft(
             "wall_time_unix": None,
             "fixture_only": True,
             "runner_class": "automation",
+            "final_binding": FINAL_BINDING if purpose == "final" else None,
         }
     )
 

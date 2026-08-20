@@ -13,7 +13,7 @@ operator record (enforced again at the model layer).
 from __future__ import annotations
 
 import os
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -26,6 +26,9 @@ from services.approvals.models import (
     RunnerClass,
 )
 from services.contracts.primitives import Sha256
+
+if TYPE_CHECKING:
+    from services.approvals.global_review_models import FinalReviewBinding
 
 OPERATOR_CONFIRMATION: Final = "confirm"
 _SHA256_ADAPTER: Final[TypeAdapter[Sha256]] = TypeAdapter(Sha256)
@@ -96,6 +99,7 @@ def record_operation(  # noqa: PLR0913 (TTY ingress contract from the Todo 13 br
     runner_class: RunnerClass = "operator",
     fixture: bool = False,
     wall_time_unix: int | None = None,
+    final_binding: FinalReviewBinding | None = None,
 ) -> OperationDraft:
     """Interactive operator ingress; refuses automation and non-TTY callers."""
 
@@ -128,6 +132,7 @@ def record_operation(  # noqa: PLR0913 (TTY ingress contract from the Todo 13 br
         wall_time_unix=wall_time_unix,
         fixture_only=fixture,
         runner_class="operator",
+        final_binding=final_binding,
     )
 
 
@@ -141,6 +146,7 @@ def record_fixture_operation(  # noqa: PLR0913 (fixture seam mirrors the ingress
     uid: int | None = None,
     tty: str | None = None,
     wall_time_unix: int | None = None,
+    final_binding: FinalReviewBinding | None = None,
 ) -> OperationDraft:
     """Programmatic fixture-marked records for tests and the automated gate."""
 
@@ -156,6 +162,7 @@ def record_fixture_operation(  # noqa: PLR0913 (fixture seam mirrors the ingress
         wall_time_unix=wall_time_unix,
         fixture_only=True,
         runner_class=runner_class,
+        final_binding=final_binding,
     )
 
 

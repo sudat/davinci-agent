@@ -10,7 +10,7 @@ from services.approvals.ingress import (
     record_fixture_operation,
     record_operation,
 )
-from tests.approvals.support import ACTOR, TARGET_A
+from tests.approvals.support import ACTOR, FINAL_BINDING, TARGET_A
 
 
 def ingress_over_pty(
@@ -31,6 +31,7 @@ def ingress_over_pty(
             tty_fd=slave,
             runner_class=runner_class,  # type: ignore[arg-type]
             fixture=fixture,
+            final_binding=FINAL_BINDING if purpose == "final" else None,
         )
     finally:
         os.close(master)
@@ -139,6 +140,7 @@ def test_fixture_seam_never_produces_operator_records() -> None:
             target_bundle_hash=TARGET_A,
             decision="approve",
             actor_id=ACTOR,
+            final_binding=FINAL_BINDING if purpose == "final" else None,
         )
         for purpose in (
             "editorial",
