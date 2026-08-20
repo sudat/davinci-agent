@@ -1,0 +1,8 @@
+{
+  "schema_version": "retention-policy-v1",
+  "rebuildable_retention_days": 30,
+  "authoritative_names": ["artifacts", "renders", "sources"],
+  "manual_finalization_names": ["manual-finalization"],
+  "rebuildable_names": ["analysis", "contacts", "previews", "proxies"],
+  "runtime_cache_names": ["cache"]
+}
