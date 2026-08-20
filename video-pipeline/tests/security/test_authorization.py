@@ -10,15 +10,20 @@ target area and proves zero records were written.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import pty
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+from services.approvals.chain_key import CHAIN_KEY_ENV, ChainKeyError, load_chain_key
 from services.approvals.ingress import IngressRefusalError, record_operation
+from services.approvals.models import ChainedOperationRecord
+from services.approvals.store import OperationRecordError, OperationRecordStore
 from services.approvals.verify import (
     REFUSAL_FIXTURE,
     evaluate_authorization,
@@ -26,7 +31,8 @@ from services.approvals.verify import (
 )
 from services.cli import operator
 from services.cli.operator import OperatorRefusalError, dispatch, refuse
-from tests.approvals.support import TARGET_A, hand_chained
+from services.contracts.serialization import canonical_json_bytes
+from tests.approvals.support import TARGET_A, TEST_CHAIN_KEY, fixture_draft, hand_chained
 from tests.security.support import assert_zero_side_effects, snapshot_tree
 
 REFUSAL_NAMES = (
@@ -122,22 +128,32 @@ def test_21_non_tty_descriptors_refused(tmp_path: Path) -> None:
     assert_zero_side_effects(store_dir, before)
 
 
-def test_22_wrong_confirmation_writes_nothing(tmp_path: Path) -> None:
+def test_22_self_owned_pty_yes_saying_is_denied_not_aborted(tmp_path: Path) -> None:
+    """The verifier exploit: a master the same process writes 'confirm' to.
+
+    The refusal fires at the controlling-terminal gate BEFORE the
+    confirmation is ever read, and the store area is untouched.
+    """
+
     store_dir = tmp_path / "records"
     store_dir.mkdir()
     before = snapshot_tree(store_dir)
     master, slave = pty.openpty()
     try:
-        os.write(master, b"yes-please-approve-everything\n")
-        with pytest.raises(IngressRefusalError) as error:
-            record_operation(
-                purpose="editorial",
-                target_bundle_hash=TARGET_A,
-                decision="approve",
-                actor_id="attacker-typos",
-                tty_fd=slave,
+        for _answer in (b"confirm\n", b"yes-please-approve-everything\n"):
+            with pytest.raises(IngressRefusalError) as error:
+                record_operation(
+                    purpose="editorial",
+                    target_bundle_hash=TARGET_A,
+                    decision="approve",
+                    actor_id="attacker-self-owned-pty",
+                    tty_fd=slave,
+                )
+            assert error.value.code in (
+                "no-controlling-terminal",
+                "controlling-terminal-mismatch",
+                "not-a-tty",
             )
-        assert error.value.code == "operator-aborted"
     finally:
         os.close(master)
         os.close(slave)
@@ -176,7 +192,7 @@ def test_30_fixture_marked_record_never_authorizes_operator_gate() -> None:
 def test_31_tampered_record_chain_never_authorizes() -> None:
     forged = hand_chained(seq=1, tamper=True)
     with pytest.raises(Exception):  # noqa: B017, PT011 (typed VerificationError)
-        validate_supersession_chain((forged,))
+        validate_supersession_chain((forged,), chain_key=TEST_CHAIN_KEY)
     verdict = evaluate_authorization(
         (forged,),
         purpose="editorial",
@@ -185,3 +201,87 @@ def test_31_tampered_record_chain_never_authorizes() -> None:
         operator_gate=True,
     )
     assert verdict.authorized is False
+
+
+def _records_file(tmp_path: Path) -> Path:
+    """A store whose honest chain was minted under its own local key."""
+
+    store = OperationRecordStore(tmp_path / "operation-records.jsonl")
+    store.append(fixture_draft())
+    return store.records_path
+
+
+def test_40_offline_forged_unkeyed_chain_fails_verification(tmp_path: Path) -> None:
+    """The verifier's reforge exploit: rewrite lines with fresh sha256 seals."""
+
+    records_path = _records_file(tmp_path)
+    store = OperationRecordStore(records_path)
+    assert len(store.verify_chain()) == 1
+
+    forged_lines: list[bytes] = []
+    previous = "0" * 64
+    for seq, line in enumerate(records_path.read_bytes().splitlines(), start=1):
+        record = ChainedOperationRecord.model_validate_json(line)
+        mutated = record.model_copy(
+            update={
+                "actor_id": "attacker",
+                "timestamp_seq": seq,
+                "superseded_record_id": None,
+                "previous_record_hash": previous,
+                "record_hash": "0" * 64,
+            }
+        )
+        unkeyed = hashlib.sha256(
+            canonical_json_bytes(mutated.model_copy(update={"record_hash": "0" * 64}))
+        ).hexdigest()
+        sealed = mutated.model_copy(update={"record_hash": unkeyed})
+        forged_lines.append(sealed.model_dump_json().encode())
+        previous = unkeyed
+    records_path.write_bytes(b"\n".join(forged_lines) + b"\n")
+
+    with pytest.raises(OperationRecordError, match="chain-invalid"):
+        OperationRecordStore(records_path).verify_chain()
+
+
+def test_41_forged_chain_under_a_foreign_key_fails(tmp_path: Path) -> None:
+    records_path = _records_file(tmp_path)
+    foreign_key = b"attacker-knows-a-different-key-00000000000"
+    forged = hand_chained(seq=1, chain_key=foreign_key, tamper=False)
+    records_path.write_bytes(forged.model_dump_json().encode() + b"\n")
+    with pytest.raises(OperationRecordError, match="chain-invalid"):
+        OperationRecordStore(records_path).verify_chain()
+
+
+def test_42_deleted_key_file_fails_closed(tmp_path: Path) -> None:
+    records_path = _records_file(tmp_path)
+    key_file = records_path.with_name(records_path.name + ".hmac-key")
+    assert key_file.is_file()
+    key_file.unlink()
+    with pytest.raises(OperationRecordError, match="chain-key-missing"):
+        OperationRecordStore(records_path).verify_chain()
+    with pytest.raises(ChainKeyError, match="chain-key-missing"):
+        load_chain_key(records_path, create=False)
+
+
+def test_43_env_key_override_is_a_test_seam_not_a_backdoor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Records sealed under env key A fail verification under key B."""
+
+    records_path = tmp_path / "operation-records.jsonl"
+    monkeypatch.setenv(CHAIN_KEY_ENV, "ab" * 32)
+    store = OperationRecordStore(records_path)
+    store.append(fixture_draft())
+    assert len(store.verify_chain()) == 1
+    monkeypatch.setenv(CHAIN_KEY_ENV, "cd" * 32)
+    with pytest.raises(OperationRecordError, match="chain-invalid"):
+        store.verify_chain()
+
+
+def test_44_key_file_is_created_private_and_hex(tmp_path: Path) -> None:
+    records_path = _records_file(tmp_path)
+    key_file = records_path.with_name(records_path.name + ".hmac-key")
+    mode = stat.S_IMODE(key_file.stat().st_mode)
+    assert mode == 0o600
+    key = load_chain_key(records_path, create=False)
+    assert len(key) == 32

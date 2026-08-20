@@ -3,7 +3,9 @@
   "case_id": "happy-authorized-bounded-operations-pass",
   "kind": "happy",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_rights_expiry.py::test_20_valid_window_passes_and_registry_stays_sealed",
    "tests/security/test_probe_listeners.py::test_41_loopback_pipeline_listener_passes",
    "tests/security/test_probe_listeners.py::test_43_empty_state_passes_with_no_listeners",
@@ -26,7 +28,9 @@
   "case_id": "failure-prompt-injection-through-real-ingestion",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_prompt_injection.py::test_10_raw_injection_instruction_is_a_typed_refusal",
    "tests/security/test_prompt_injection.py::test_11_ja_injection_instruction_is_a_typed_refusal",
    "tests/security/test_prompt_injection.py::test_12_ocr_injection_is_data_never_an_instruction",
@@ -47,7 +51,9 @@
   "case_id": "failure-untrusted-facts-never-authoritative",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_untrusted_facts.py::test_10_proposal_claimed_ambiguity_is_recomputed_not_trusted",
    "tests/security/test_untrusted_facts.py::test_11_lying_ambiguity_fields_never_authoritize_apply",
    "tests/security/test_untrusted_facts.py::test_20_swapped_bytes_claiming_a_registered_identity_are_denied",
@@ -66,7 +72,9 @@
   "case_id": "failure-path-symlink-traversal-denied",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_traversal.py::test_10_dotdot_traversal_denied_with_victim_untouched",
    "tests/security/test_traversal.py::test_11_absolute_escape_denied",
    "tests/security/test_traversal.py::test_12_symlink_escape_denied",
@@ -86,7 +94,9 @@
   "case_id": "failure-network-exposure-probe-honest",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_probe_listeners.py::test_40_exposed_pipeline_listener_fails_the_verdict",
    "tests/security/test_probe_listeners.py::test_42_unrelated_non_loopback_listener_never_judged",
    "tests/security/test_probe_listeners.py::test_50_main_writes_honest_report_and_exits_by_verdict",
@@ -105,11 +115,13 @@
   "case_id": "failure-unauthorized-command-approval-denied",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_authorization.py::test_10_every_refusal_class_is_typed",
    "tests/security/test_authorization.py::test_20_automation_class_refused_even_on_a_real_tty",
    "tests/security/test_authorization.py::test_21_non_tty_descriptors_refused",
-   "tests/security/test_authorization.py::test_22_wrong_confirmation_writes_nothing",
+   "tests/security/test_authorization.py::test_22_self_owned_pty_yes_saying_is_denied_not_aborted",
    "tests/security/test_authorization.py::test_30_fixture_marked_record_never_authorizes_operator_gate",
    "tests/security/test_authorization.py::test_31_tampered_record_chain_never_authorizes",
    "-q"
@@ -125,7 +137,9 @@
   "case_id": "failure-cloud-data-violation-local-only",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_cloud_boundary.py::test_10_local_only_episode_cloud_stage_denied_zero_cloud_records",
    "tests/security/test_cloud_boundary.py::test_11_denied_transport_writes_no_audit_file",
    "tests/security/test_cloud_boundary.py::test_30_stage_not_declared_in_episode_config_denied",
@@ -143,7 +157,9 @@
   "case_id": "failure-secret-pii-logging-blocked",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_prompt_injection.py::test_50_marker_secret_never_reaches_machine_outputs",
    "tests/security/test_policy.py::test_audit_never_records_secrets",
    "tests/security/test_policy.py::test_secret_keys_are_redacted_with_the_key_name",
@@ -161,7 +177,9 @@
   "case_id": "failure-stale-tampered-evidence-detected",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_tamper.py::test_11_rewritten_ledger_row_detected",
    "tests/security/test_tamper.py::test_12_forged_head_detected",
    "tests/security/test_tamper.py::test_13_truncated_ledger_detected",
@@ -180,7 +198,9 @@
   "case_id": "failure-phase4-imports-denied",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_scope_phase4.py::test_10_attacker_imports_really_exist_then_denied",
    "tests/security/test_scope_phase4.py::test_11_phase_four_feature_request_is_out_of_scope",
    "-q"
@@ -196,7 +216,9 @@
   "case_id": "failure-license-expiry-blocks",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_rights_expiry.py::test_10_expired_license_blocks",
    "tests/security/test_rights_expiry.py::test_11_before_effective_window_blocks",
    "tests/security/test_rights_expiry.py::test_12_wrong_territory_blocks",
@@ -217,7 +239,9 @@
   "case_id": "failure-multiple-writers-single-writer-enforced",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_single_writer.py::test_10_second_writer_acquires_nothing",
    "tests/security/test_single_writer.py::test_11_renew_by_non_holder_leaves_row_untouched",
    "tests/security/test_single_writer.py::test_13_nonpositive_ttl_is_typed",
@@ -234,7 +258,9 @@
   "case_id": "failure-every-todo65-cli-surface-attempted",
   "kind": "failure",
   "argv": [
-   "uv", "run", "pytest",
+   "uv",
+   "run",
+   "pytest",
    "tests/security/test_cli_surface.py::test_10_exactly_27_unique_registered_operations",
    "tests/security/test_cli_surface.py::test_11_every_registered_module_is_importable",
    "tests/security/test_cli_surface.py::test_12_help_lists_every_operation_and_the_refusal_contract",
@@ -249,5 +275,66 @@
   "expected_exit": 0,
   "expected_artifacts": [],
   "expected_observation": "34 passed"
+ },
+ {
+  "case_id": "failure-self-owned-pty-operator-record-mint-denied",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/approvals/test_ingress.py::test_10_self_owned_pty_cannot_mint_an_operator_record",
+   "tests/approvals/test_ingress.py::test_11_self_owned_pty_denial_ignores_a_yes_saying_master",
+   "tests/approvals/test_ingress.py::test_12_self_owned_pty_fixture_mode_is_denied_too",
+   "tests/approvals/test_ingress.py::test_13_runner_class_validated_at_the_boundary",
+   "tests/security/test_authorization.py::test_22_self_owned_pty_yes_saying_is_denied_not_aborted",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "5 passed"
+ },
+ {
+  "case_id": "failure-offline-forged-record-chain-denied",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/security/test_authorization.py::test_40_offline_forged_unkeyed_chain_fails_verification",
+   "tests/security/test_authorization.py::test_41_forged_chain_under_a_foreign_key_fails",
+   "tests/security/test_authorization.py::test_42_deleted_key_file_fails_closed",
+   "tests/security/test_authorization.py::test_43_env_key_override_is_a_test_seam_not_a_backdoor",
+   "tests/security/test_authorization.py::test_44_key_file_is_created_private_and_hex",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "5 passed"
+ },
+ {
+  "case_id": "failure-job-state-content-redaction",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/security/test_log_redaction.py::test_10_poisoned_job_state_error_detail_carries_no_file_content",
+   "tests/security/test_log_redaction.py::test_11_poisoned_registry_error_detail_carries_no_file_content",
+   "tests/security/test_log_redaction.py::test_20_gc_cli_never_echoes_poisoned_job_state",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "3 passed"
  }
 ]

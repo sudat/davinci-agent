@@ -27,6 +27,20 @@ from services.retention.models import (
 WalkKind = Literal["file", "symlink", "dir"]
 
 
+def _validation_summary(error: ValidationError, *, limit: int = 5) -> str:
+    """Field-level failure summary WITHOUT input values (PRD 27 redaction)."""
+
+    parts: list[str] = []
+    for item in error.errors()[:limit]:
+        location = ".".join(str(part) for part in item.get("loc", ())) or "root"
+        parts.append(f"{location}: {item.get('type', 'invalid')}")
+    if not parts:
+        return "schema validation failed"
+    omitted = max(len(error.errors()) - limit, 0)
+    suffix = f" (+{omitted} more)" if omitted else ""
+    return f"{'; '.join(parts)}{suffix}"
+
+
 @dataclass(frozen=True, slots=True)
 class WalkEntry:
     kind: WalkKind
@@ -49,7 +63,8 @@ def load_job_state(job_dir: Path) -> JobRetentionState | None:
         state = JobRetentionState.model_validate_json(raw)
     except ValidationError as error:
         raise RetentionError(
-            "job-state-invalid", f"job state rejected (schema/tamper): {error}"
+            "job-state-invalid",
+            f"job state rejected (schema/tamper): {_validation_summary(error)}",
         ) from error
     if state.job_id != job_dir.name:
         raise RetentionError(
@@ -74,7 +89,8 @@ def load_registry(job_dir: Path) -> RetentionRegistry | None:
         return RetentionRegistry.model_validate_json(raw)
     except ValidationError as error:
         raise RetentionError(
-            "registry-invalid", f"retention registry rejected (seal/schema): {error}"
+            "registry-invalid",
+            f"retention registry rejected (seal/schema): {_validation_summary(error)}",
         ) from error
 
 

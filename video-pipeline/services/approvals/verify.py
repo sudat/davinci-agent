@@ -69,6 +69,8 @@ def _check_chain_links(
     expected_seq: int,
     previous_hash: str,
     by_id: dict[str, ChainedOperationRecord],
+    *,
+    chain_key: bytes,
 ) -> None:
     if record.timestamp_seq != expected_seq:
         raise VerificationError(
@@ -88,10 +90,11 @@ def _check_chain_links(
             "chain-broken",
             f"record {record.record_id} does not link to the previous hash",
         )
-    if record.recomputed_record_hash() != record.record_hash:
+    if record.recomputed_record_hash(chain_key=chain_key) != record.record_hash:
         raise VerificationError(
             "record-hash-tampered",
-            f"record {record.record_id} content does not hash to its seal",
+            f"record {record.record_id} content does not hash to its seal "
+            "(keyed HMAC; offline-forged chains fail here)",
         )
 
 
@@ -123,15 +126,24 @@ def _check_supersession_link(
 
 def validate_supersession_chain(
     records: tuple[ChainedOperationRecord, ...],
+    *,
+    chain_key: bytes,
 ) -> None:
-    """Fail closed on hash-chain breaks or supersession inconsistencies."""
+    """Fail closed on keyed hash-chain breaks or supersession inconsistencies.
+
+    ``chain_key`` is REQUIRED: every seal is an HMAC under the store-local
+    key (see ``services.approvals.chain_key``), so a chain forged offline
+    without the key fails ``record-hash-tampered``.
+    """
 
     superseding: dict[str, str] = {}
     by_id: dict[str, ChainedOperationRecord] = {}
     previous_hash = GENESIS_RECORD_HASH
     expected_seq = 1
     for record in records:
-        _check_chain_links(record, expected_seq, previous_hash, by_id)
+        _check_chain_links(
+            record, expected_seq, previous_hash, by_id, chain_key=chain_key
+        )
         _check_supersession_link(record, by_id, superseding)
         validate_operation_record(record)
         by_id[record.record_id] = record

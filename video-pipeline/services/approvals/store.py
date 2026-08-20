@@ -1,13 +1,14 @@
-"""Append-only hash-chained operation-record store with supersession.
+"""Append-only keyed hash-chained operation-record store with supersession.
 
 Layout: one JSONL file, one canonical ``ChainedOperationRecord`` per
-line. ``record_hash`` covers the record content (with the hash field
-zeroed) plus ``previous_record_hash``, so mutation, reordering, and
-interior deletion are all detected by ``verify_chain``. Supersession:
-appending a record with the same (purpose, target_hash) as the current
-latest marks that record superseded via the new record's
-``superseded_record_id``; superseded records are retained for audit and
-never returned by ``latest_records``.
+line, sealed under the store-local HMAC key (``chain_key.py``):
+``record_hash`` is HMAC-SHA256(chain_key, record bytes with the hash
+zeroed) plus ``previous_record_hash``, so mutation, reordering, interior
+deletion, AND offline-forged self-consistent chains are all detected by
+``verify_chain``. Supersession: appending a record with the same
+(purpose, target_hash) as the current latest marks that record superseded
+via the new record's ``superseded_record_id``; superseded records are
+retained for audit and never returned by ``latest_records``.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from services.approvals.chain_key import ChainKeyError, load_chain_key
 from services.approvals.models import (
     GENESIS_RECORD_HASH,
     ChainedOperationRecord,
@@ -57,8 +59,9 @@ class OperationRecordStore:
 
     def append(self, draft: OperationDraft) -> ChainedOperationRecord:
         records = self.all_records()
+        chain_key = self._chain_key(create=True)
         try:
-            validate_supersession_chain(records)
+            validate_supersession_chain(records, chain_key=chain_key)
         except ValueError as error:
             raise OperationRecordError("chain-invalid", str(error)) from error
         seq = 1 if not records else records[-1].timestamp_seq + 1
@@ -78,7 +81,7 @@ class OperationRecordStore:
             record_hash=GENESIS_RECORD_HASH,
         )
         record = unsealed.model_copy(
-            update={"record_hash": unsealed.recomputed_record_hash()}
+            update={"record_hash": unsealed.recomputed_record_hash(chain_key=chain_key)}
         )
         descriptor = os.open(
             self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600
@@ -92,11 +95,20 @@ class OperationRecordStore:
 
     def verify_chain(self) -> tuple[ChainedOperationRecord, ...]:
         records = _read_records(self._path)
+        if not records:
+            return records
+        chain_key = self._chain_key(create=False)
         try:
-            validate_supersession_chain(records)
+            validate_supersession_chain(records, chain_key=chain_key)
         except ValueError as error:
             raise OperationRecordError("chain-invalid", str(error)) from error
         return records
+
+    def _chain_key(self, *, create: bool) -> bytes:
+        try:
+            return load_chain_key(self._path, create=create)
+        except ChainKeyError as error:
+            raise OperationRecordError(error.code, error.detail) from error
 
 
 def _read_records(path: Path) -> tuple[ChainedOperationRecord, ...]:

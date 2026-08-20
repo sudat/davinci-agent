@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from services.approvals.chain_key import load_chain_key
 from services.final_review.bundle import FinalReviewBundle, assemble_final_review_bundle
 from services.final_review.ledger import FinalReviewLedger
 from services.final_review.routes import RouteRefusal, route_approve
@@ -66,6 +67,7 @@ def approve(ledger, store, record, bundle, *, fixture_mode: bool):
         record=record,
         active_bundle=bundle,
         fixture_mode=fixture_mode,
+        chain_key=load_chain_key(store.records_path, create=False),
     )
 
 

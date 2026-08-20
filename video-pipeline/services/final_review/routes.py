@@ -171,18 +171,19 @@ def _gate_record_binding(
             )
 
 
-def route_approve(
+def route_approve(  # noqa: PLR0913 (route contract fixed by the Todo-45 dispatch surface)
     ledger: FinalReviewLedger,
     *,
     records: tuple[ChainedOperationRecord, ...],
     record: ChainedOperationRecord,
     active_bundle: FinalReviewBundle,
     fixture_mode: bool,
+    chain_key: bytes,
 ) -> FinalApprovalResult:
     _gate_bundle_state(ledger, active_bundle)
     _gate_record_binding(record, active_bundle, fixture_mode=fixture_mode)
     try:
-        validate_supersession_chain(records)
+        validate_supersession_chain(records, chain_key=chain_key)
     except ValueError as error:
         raise RouteRefusal("records-chain-invalid", str(error)) from error
     verdict = evaluate_authorization(

@@ -11,7 +11,14 @@ from services.approvals.verify import (
     validate_operation_record,
     validate_supersession_chain,
 )
-from tests.approvals.support import TARGET_A, TARGET_B, fixture_draft, hand_chained, make_store
+from tests.approvals.support import (
+    TARGET_A,
+    TARGET_B,
+    TEST_CHAIN_KEY,
+    fixture_draft,
+    hand_chained,
+    make_store,
+)
 
 
 def test_fixture_record_authorizes_automated_gate(tmp_path: Path) -> None:
@@ -113,20 +120,20 @@ def test_chain_broken_detected_on_hand_built_records() -> None:
     first = hand_chained(seq=1)
     second = hand_chained(seq=2, previous_hash="e" * 64, superseded=first.record_id)
     with pytest.raises(VerificationError) as error:
-        validate_supersession_chain((first, second))
+        validate_supersession_chain((first, second), chain_key=TEST_CHAIN_KEY)
     assert error.value.code == "chain-broken"
 
 
 def test_record_hash_tamper_detected() -> None:
     with pytest.raises(VerificationError) as error:
-        validate_supersession_chain((hand_chained(seq=1, tamper=True),))
+        validate_supersession_chain((hand_chained(seq=1, tamper=True),), chain_key=TEST_CHAIN_KEY)
     assert error.value.code == "record-hash-tampered"
 
 
 def test_dangling_supersession_detected() -> None:
     with pytest.raises(VerificationError) as error:
         validate_supersession_chain(
-            (hand_chained(seq=1, superseded="opr-00000009"),)
+            (hand_chained(seq=1, superseded="opr-00000009"),), chain_key=TEST_CHAIN_KEY
         )
     assert error.value.code == "supersession-dangling"
 
@@ -138,7 +145,7 @@ def test_conflicting_supersession_detected() -> None:
         seq=3, previous_hash=second.record_hash, superseded=first.record_id
     )
     with pytest.raises(VerificationError) as error:
-        validate_supersession_chain((first, second, third))
+        validate_supersession_chain((first, second, third), chain_key=TEST_CHAIN_KEY)
     assert error.value.code == "supersession-conflict"
 
 
@@ -151,15 +158,17 @@ def test_cross_target_supersession_detected() -> None:
         superseded=first.record_id,
     )
     with pytest.raises(VerificationError) as error:
-        validate_supersession_chain((first, second))
+        validate_supersession_chain((first, second), chain_key=TEST_CHAIN_KEY)
     assert error.value.code == "supersession-key-mismatch"
 
 
 def test_genesis_previous_hash_required_for_first_record() -> None:
     with pytest.raises(VerificationError):
-        validate_supersession_chain((hand_chained(seq=1, previous_hash="a" * 64),))
+        validate_supersession_chain(
+            (hand_chained(seq=1, previous_hash="a" * 64),), chain_key=TEST_CHAIN_KEY
+        )
 
 
 def test_empty_chain_valid() -> None:
-    validate_supersession_chain(())
+    validate_supersession_chain((), chain_key=TEST_CHAIN_KEY)
     assert GENESIS_RECORD_HASH == "0" * 64

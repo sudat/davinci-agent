@@ -14,11 +14,11 @@ import os
 import pty
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from services.cli.bundle import load_bundle
+from tests.approvals.support import wait_with_master_drain
 
 if TYPE_CHECKING:
     from tests.cli.conftest import CliRig
@@ -159,17 +159,27 @@ def test_60_cli_package_has_no_ui_dependency() -> None:
 
 
 def test_70_real_tty_record_and_fixture_lineage_checkpoint_refusal(cli_rig: CliRig) -> None:
-    """A REAL TTY record on a FIXTURE lineage still cannot produce a checkpoint."""
+    """A REAL TTY record on a FIXTURE lineage still cannot produce a checkpoint.
+
+    The record child acquires the pty as its controlling terminal (a real
+    terminal login in miniature — the hardened ingress refuses anything
+    less), yet the fixture lineage still blocks the checkpoint export.
+    """
 
     receipt = cli_rig.root / "display.json"
     assert show(cli_rig, receipt).returncode == 0
     op_record = cli_rig.root / "op-tty.jsonl"
     master, slave = pty.openpty()
+    tty_path = os.ttyname(slave)
     try:
         process = subprocess.Popen(
             [
                 sys.executable,
                 "-m",
+                "tests.approvals.ctty_child",
+                tty_path,
+                "--stdin-runpy",
+                str(cli_rig.root / "ctty-result.json"),
                 "services.cli.checkpoint",
                 "record",
                 "--bundle",
@@ -183,21 +193,18 @@ def test_70_real_tty_record_and_fixture_lineage_checkpoint_refusal(cli_rig: CliR
                 "--out",
                 str(op_record),
             ],
-            stdin=slave,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            close_fds=True,
+            start_new_session=True,
+            cwd=Path.cwd(),
         )
-        os.close(slave)
-        slave = -1
-        time.sleep(1.0)
         os.write(master, b"confirm\n")
+        wait_with_master_drain(master, process, 60)
         stdout, stderr = process.communicate(timeout=60)
     finally:
         os.close(master)
-        if slave != -1:
-            os.close(slave)
+        os.close(slave)
     assert process.returncode == 0, stderr
     assert "real operator" in stdout
     line = json.loads(op_record.read_bytes().splitlines()[0])

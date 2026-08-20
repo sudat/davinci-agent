@@ -14,6 +14,7 @@ from typing import Final
 
 from pydantic import BaseModel, ValidationError
 
+from services.approvals.chain_key import CHAIN_KEY_FILE_SUFFIX, ChainKeyError, load_chain_key
 from services.approvals.models import ChainedOperationRecord
 from services.approvals.verify import VerificationError, validate_supersession_chain
 from services.foundation_io import sha256_file
@@ -170,9 +171,12 @@ def _load_operations(path: Path) -> tuple[ChainedOperationRecord, ...]:
             records.append(ChainedOperationRecord.model_validate(row))
         except ValidationError as error:
             raise _fail("operations-invalid", f"{path.name}: line {index}: {error}") from error
+    if not records:
+        return ()
     try:
-        validate_supersession_chain(tuple(records))
-    except VerificationError as error:
+        chain_key = load_chain_key(path, create=False)
+        validate_supersession_chain(tuple(records), chain_key=chain_key)
+    except (ChainKeyError, VerificationError) as error:
         raise _fail("operations-chain", f"{path.name}: {error}") from error
     return tuple(records)
 
@@ -180,8 +184,9 @@ def _load_operations(path: Path) -> tuple[ChainedOperationRecord, ...]:
 def load_bundle(root: Path) -> EventBundle:
     if not root.is_dir():
         raise _fail("bundle-missing", f"event bundle directory not found: {root}")
+    allowed = (*BUNDLE_FILES, OPERATIONS_FILE + CHAIN_KEY_FILE_SUFFIX)
     unexpected = sorted(
-        entry.name for entry in root.iterdir() if entry.name not in BUNDLE_FILES
+        entry.name for entry in root.iterdir() if entry.name not in allowed
     )
     if unexpected:
         raise _fail("unexpected-file", f"unknown bundle entries: {unexpected}")

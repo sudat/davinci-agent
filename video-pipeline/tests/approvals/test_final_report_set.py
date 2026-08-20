@@ -16,7 +16,6 @@ import os
 import pty
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -26,6 +25,7 @@ from services.approvals.global_review_models import (
     REPORT_FILE_NAMES,
     GlobalReviewReport,
 )
+from tests.approvals.support import wait_with_master_drain
 
 FULL_SHA = "1f" * 20
 CANDIDATE = "cand-fixture-01"
@@ -114,13 +114,26 @@ def test_12_happy_fixture_record_seam_records_final_approval(tmp_path: Path) -> 
 
 
 def test_14_final_approved_records_with_a_real_local_tty(tmp_path: Path) -> None:
+    """A child whose controlling terminal IS the pty mints a real record.
+
+    The child is a session leader that acquires the pty as its controlling
+    terminal before running the checkpoint CLI — a real terminal login in
+    miniature. A self-owned pty without that acquisition is refused by the
+    ingress (see tests/approvals/test_ingress.py).
+    """
+
     directory = write_set(tmp_path)
     out = tmp_path / "op-final-tty.jsonl"
+    result_file = tmp_path / "ctty-result.json"
     master, slave = pty.openpty()
+    tty_path = os.ttyname(slave)
     try:
         process = subprocess.Popen(
             [
-                sys.executable, "-m", "services.cli.checkpoint", "record",
+                sys.executable, "-m", "tests.approvals.ctty_child",
+                tty_path, "--stdin-runpy", str(result_file),
+                "services.cli.checkpoint",
+                "record",
                 "--purpose", "FINAL_APPROVED",
                 "--work-id", "work-fixture-01",
                 "--git-sha", FULL_SHA,
@@ -129,21 +142,18 @@ def test_14_final_approved_records_with_a_real_local_tty(tmp_path: Path) -> None
                 "--decision", "approve",
                 "--out", str(out),
             ],
-            stdin=slave,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            close_fds=True,
+            start_new_session=True,
+            cwd=Path.cwd(),
         )
-        os.close(slave)
-        slave = -1
-        time.sleep(1.0)
         os.write(master, b"confirm\n")
+        wait_with_master_drain(master, process, 60)
         stdout, stderr = process.communicate(timeout=60)
     finally:
         os.close(master)
-        if slave != -1:
-            os.close(slave)
+        os.close(slave)
     assert process.returncode == 0, stderr
     assert "real operator" in stdout
     line = json.loads(out.read_bytes().splitlines()[0])

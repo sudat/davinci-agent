@@ -18,6 +18,7 @@ from typing import Final
 
 from pydantic import TypeAdapter, ValidationError
 
+from services.approvals.chain_key import ChainKeyError, load_chain_key
 from services.approvals.global_review import (
     DEFAULT_REVOCATIONS_PATH,
     GlobalReviewError,
@@ -269,7 +270,14 @@ def _load_record_chain(path: Path) -> tuple[ChainedOperationRecord, ...]:
     records = tuple(
         ChainedOperationRecord.model_validate_json(line) for line in lines
     )
-    validate_supersession_chain(records)
+    try:
+        chain_key = load_chain_key(path, create=False)
+    except ChainKeyError as error:
+        raise CheckpointError(error.code, error.detail) from error
+    try:
+        validate_supersession_chain(records, chain_key=chain_key)
+    except ValueError as error:
+        raise CheckpointError("chain-invalid", str(error)) from error
     return records
 
 

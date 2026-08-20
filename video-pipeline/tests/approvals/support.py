@@ -1,11 +1,44 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import os
+import subprocess
+import time
 from pathlib import Path
 
 from services.approvals.global_review_models import FinalReviewBinding
 from services.approvals.models import ChainedOperationRecord, OperationDraft
 from services.approvals.store import GENESIS_RECORD_HASH, OperationRecordStore
+
+TEST_CHAIN_KEY = b"todo-66-fix-test-chain-key-0000000000000"
+
+
+def wait_with_master_drain(
+    master: int,
+    process: subprocess.Popen[str] | subprocess.Popen[bytes],
+    timeout: float,
+) -> None:
+    """Wait for a ctty-child while draining the pty master.
+
+    A macOS session leader whose controlling terminal still has unread
+    output blocks in exit until the master reader drains it, so poll and
+    drain non-blocking until the child is gone (bounded by ``timeout``).
+    """
+
+    os.set_blocking(master, False)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            with contextlib.suppress(BlockingIOError):
+                os.read(master, 65536)
+            if process.poll() is not None:
+                return
+            if time.monotonic() > deadline:
+                raise subprocess.TimeoutExpired(process.args, timeout)
+            time.sleep(0.05)
+    finally:
+        os.set_blocking(master, True)
 
 TARGET_A = hashlib.sha256(b"approvals-test-target-a").hexdigest()
 TARGET_B = hashlib.sha256(b"approvals-test-target-b").hexdigest()
@@ -65,6 +98,7 @@ def hand_chained(  # noqa: PLR0913 (explicit record-shape builder for chain test
     decision: str = "approve",
     superseded: str | None = None,
     tamper: bool = False,
+    chain_key: bytes = TEST_CHAIN_KEY,
 ) -> ChainedOperationRecord:
     draft = fixture_draft(purpose=purpose, target=target, decision=decision)
     unsealed = ChainedOperationRecord.model_validate(
@@ -77,5 +111,5 @@ def hand_chained(  # noqa: PLR0913 (explicit record-shape builder for chain test
             "record_hash": GENESIS_RECORD_HASH,
         }
     )
-    sealed_hash = "f" * 64 if tamper else unsealed.recomputed_record_hash()
+    sealed_hash = "f" * 64 if tamper else unsealed.recomputed_record_hash(chain_key=chain_key)
     return unsealed.model_copy(update={"record_hash": sealed_hash})

@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from services.approvals.chain_key import load_chain_key
 from services.approvals.ingress import record_fixture_operation
 from services.approvals.store import OperationRecordStore
 from services.final_review.bundle import assemble_final_review_bundle
@@ -148,6 +149,7 @@ def finalize_clean(  # noqa: PLR0913 (one slot per sealed bundle input)
         records=store.all_records(),
         record=record,
         active_bundle=bundle,
+        chain_key=load_chain_key(store.records_path, create=False),
         fixture_mode=True,
     )
     bundle_path = out_dir / "final-review-bundle.json"
@@ -206,6 +208,7 @@ def finalize_privacy_block(  # noqa: PLR0913 (one slot per sealed bundle input)
             record=record,
             active_bundle=bundle,
             fixture_mode=True,
+            chain_key=load_chain_key(store.records_path, create=False),
         )
     except RouteRefusal as error:
         refusal = {"code": error.code, "detail": error.detail}

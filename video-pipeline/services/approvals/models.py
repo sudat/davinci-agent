@@ -10,6 +10,7 @@ validity, or authorization decisions. Floats are rejected everywhere
 from __future__ import annotations
 
 import hashlib
+import hmac
 from typing import Final, Literal
 
 from pydantic import Field, model_validator
@@ -130,11 +131,19 @@ def record_id_for_seq(timestamp_seq: int) -> Identifier:
 
 
 class ChainedOperationRecord(OperationRecord):
-    """One append-only log line: record plus hash-chain fields."""
+    """One append-only log line: record plus keyed-hash-chain fields.
+
+    ``record_hash`` is HMAC-SHA256(chain_key, canonical bytes with the
+    hash field zeroed) — the key is the store-local secret from
+    ``services.approvals.chain_key``; an offline unkeyed recompute can
+    never produce a valid seal.
+    """
 
     previous_record_hash: Sha256
     record_hash: Sha256
 
-    def recomputed_record_hash(self) -> str:
+    def recomputed_record_hash(self, *, chain_key: bytes) -> str:
         payload = self.model_copy(update={"record_hash": GENESIS_RECORD_HASH})
-        return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+        return hmac.new(
+            chain_key, canonical_json_bytes(payload), hashlib.sha256
+        ).hexdigest()
