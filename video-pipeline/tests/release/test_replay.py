@@ -11,8 +11,14 @@ from pathlib import Path
 import pytest
 
 from services.release.network_guard import NETWORK_MARKER, child_environment, write_network_guard
-from services.release.replay import main as replay_main
-from services.release.replay import run_replay
+from services.release.replay import (
+    DEFAULT_PYTEST_ARGS,
+    WORKSPACE_ANCHORED_IGNORES,
+    run_replay,
+)
+from services.release.replay import (
+    main as replay_main,
+)
 from tests.release.support import build_test_candidate, expect_gate_error
 
 STUB_UV = (
@@ -178,6 +184,14 @@ def test_41_offline_environment_is_enforced(tmp_path: Path) -> None:
     assert environment["UV_OFFLINE"] == "1"
     assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
     assert environment["PYTHONPATH"].endswith("network-guard")
+
+
+def test_42_default_selection_excludes_only_workspace_anchored_modules() -> None:
+    ignores = [item for item in DEFAULT_PYTEST_ARGS if item.startswith("--ignore=")]
+    assert ignores == [f"--ignore={name}" for name in WORKSPACE_ANCHORED_IGNORES]
+    assert "not resolve_live and not cloud_fixture" in DEFAULT_PYTEST_ARGS
+    assert "no:cacheprovider" in DEFAULT_PYTEST_ARGS
+    assert len(WORKSPACE_ANCHORED_IGNORES) == 7
 
 
 @pytest.mark.parametrize("kind", ["staging", "extract"])

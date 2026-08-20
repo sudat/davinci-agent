@@ -34,12 +34,30 @@ CLEAN_ROOM_NAME = "clean-room"
 SEED_MARKER = ".release-cache-seeded"
 STATE_NAME = "replay-state.json"
 REPORT_NAME = "replay-report.json"
+# The acceptance-representative offline selection. Workspace-anchored modules
+# are excluded because they bind evidence to the live attempt layout by
+# design and cannot pass from any snapshot extract: runbook execution and
+# ledger self-restore resolve ``.omo/start-work`` from ``cwd.parent`` (Todo 65
+# runbooks, Todo 1 self-restore), and freeze-receipt policy verification
+# compares absolute paths recorded at freeze time (Todos 6/24/32/47/56).
+# Those evidence bindings are verified against the real attempt directory by
+# F1, not by clean-room replay of the source snapshot.
+WORKSPACE_ANCHORED_IGNORES: tuple[str, ...] = (
+    "tests/docs/test_runbooks.py",
+    "tests/gates/test_control_plane_inputs.py",
+    "tests/gates/test_phase0c_policy.py",
+    "tests/gates/test_phase1_inputs.py",
+    "tests/gates/test_phase2_inputs.py",
+    "tests/gates/test_phase3_inputs.py",
+    "tests/phase0a/test_fixture_contract.py",
+)
 DEFAULT_PYTEST_ARGS: tuple[str, ...] = (
     "-q",
     "-p",
     "no:cacheprovider",
     "-m",
     "not resolve_live and not cloud_fixture",
+    *(f"--ignore={name}" for name in WORKSPACE_ANCHORED_IGNORES),
 )
 
 
