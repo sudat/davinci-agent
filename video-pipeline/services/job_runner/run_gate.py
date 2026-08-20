@@ -40,7 +40,13 @@ DEFAULT_TOOLCHAIN_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="run_gate")
     parser.add_argument(
-        "gate", choices=("control-plane-baseline", "phase-1-technical", "phase-2")
+        "gate",
+        choices=(
+            "control-plane-baseline",
+            "phase-1-technical",
+            "phase-2",
+            "phase-3",
+        ),
     )
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
@@ -142,53 +148,46 @@ def run_gate(arguments: argparse.Namespace) -> int:
     return EXIT_PASS
 
 
+def _dispatch_gate(
+    faults_name: str,
+    run_name: str,
+    entry_name: str,
+    arguments: argparse.Namespace,
+    extra: list[str],
+) -> int:
+    """Route to a phase gate module with its own parser (phase-1/2/3)."""
+
+    import importlib  # noqa: PLC0415
+    import os  # noqa: PLC0415
+
+    fault_fixture = os.environ.get("QA_FAULT_FIXTURE")
+    if fault_fixture is not None:
+        faults = importlib.import_module(f"services.job_runner.{faults_name}")
+        return faults.run_fault_cli(Path(fault_fixture), arguments.policy)
+    module = importlib.import_module(f"services.job_runner.{run_name}")
+    gate_arguments = module.parser().parse_args(
+        ["--policy", str(arguments.policy), "--evidence", str(arguments.evidence), *extra]
+    )
+    entry = getattr(module, entry_name)
+    return entry(gate_arguments)
+
+
 def main() -> int:
     arguments = _parser().parse_args()
     if arguments.gate == "phase-1-technical":
-        import os  # noqa: PLC0415
-
-        fault_fixture = os.environ.get("QA_FAULT_FIXTURE")
-        if fault_fixture is not None:
-            from services.job_runner import gate_p1_faults  # noqa: PLC0415
-
-            return gate_p1_faults.run_fault_cli(Path(fault_fixture), arguments.policy)
-        from services.job_runner import gate_phase1  # noqa: PLC0415
-
-        gate_arguments = gate_phase1.parser().parse_args(
-            [
-                "--policy",
-                str(arguments.policy),
-                "--evidence",
-                str(arguments.evidence),
-                *(["--work-id", arguments.work_id] if arguments.work_id else []),
-            ]
-        )
-        return gate_phase1.run_phase1_gate(gate_arguments)
+        extra = ["--work-id", arguments.work_id] if arguments.work_id else []
+        return _dispatch_gate("gate_p1_faults", "gate_phase1", "run_phase1_gate", arguments, extra)
+    receipt_extra = (
+        ["--freeze-receipt", str(arguments.freeze_receipt)]
+        if arguments.freeze_receipt
+        else []
+    )
     if arguments.gate == "phase-2":
-        import os  # noqa: PLC0415
-
-        fault_fixture = os.environ.get("QA_FAULT_FIXTURE")
-        if fault_fixture is not None:
-            from services.job_runner import gate_p2_faults  # noqa: PLC0415
-
-            return gate_p2_faults.run_fault_cli(Path(fault_fixture), arguments.policy)
-        from services.job_runner import gate_phase2  # noqa: PLC0415
-
-        gate_arguments = gate_phase2.parser().parse_args(
-            [
-                "--policy",
-                str(arguments.policy),
-                "--evidence",
-                str(arguments.evidence),
-                *(
-                    ["--freeze-receipt", str(arguments.freeze_receipt)]
-                    if arguments.freeze_receipt
-                    else []
-                ),
-                *(["--offline"] if arguments.offline else []),
-            ]
-        )
-        return gate_phase2.run_phase2_gate(gate_arguments)
+        extra = [*receipt_extra, *(["--offline"] if arguments.offline else [])]
+        return _dispatch_gate("gate_p2_faults", "gate_phase2", "run_phase2_gate", arguments, extra)
+    if arguments.gate == "phase-3":
+        extra = [*receipt_extra, *(["--offline"] if arguments.offline else [])]
+        return _dispatch_gate("gate_p3_faults", "gate_phase3", "run_phase3_gate", arguments, extra)
     return run_gate(arguments)
 
 
