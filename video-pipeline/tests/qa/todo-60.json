@@ -1,0 +1,106 @@
+[
+ {
+  "case_id": "happy-known-camera-metadata-preset",
+  "kind": "happy",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_color_profile.py::test_compile_selects_preset_from_declared_camera_metadata",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-missing-hdr-color-metadata",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_color_profile.py::test_missing_color_metadata_is_typed",
+   "tests/presentation/test_color_profile.py::test_mismatched_hdr_metadata_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "2 passed"
+ },
+ {
+  "case_id": "failure-absent-changed-lut",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_color_profile.py::test_absent_or_changed_lut_is_typed",
+   "tests/presentation/test_color_profile.py::test_verify_color_section_detects_drift",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "2 passed"
+ },
+ {
+  "case_id": "failure-unknown-camera-blocking-human",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_color_profile.py::test_unknown_camera_is_blocking_human",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-per-shot-request-refused",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_color_profile.py::test_per_shot_grade_request_is_refused",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-unsupported-hdr-conversion",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_color_profile.py::test_unsupported_hdr_conversion_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ }
+]

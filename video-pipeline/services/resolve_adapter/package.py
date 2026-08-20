@@ -56,6 +56,7 @@ from services.resolve_adapter.validate import verify_compile_inputs
 
 if TYPE_CHECKING:
     from services.presentation.audio_models import AudioSection
+    from services.presentation.color_models import ColorSection
     from services.presentation.overlay_models import OverlaySection
     from services.presentation.styling_models import StyledPresentation
     from services.resolve_adapter.presentation_models import PresentationSection
@@ -81,6 +82,7 @@ class PackageCompileRequest:
     styled_presentation: StyledPresentation | None = None
     overlay_paths: OverlaySection | None = None
     audio_section: AudioSection | None = None
+    color_section: ColorSection | None = None
 
     def resolved_presented_media(self) -> tuple[MediaBinding, ...]:
         return self.declared_media if self.presented_media is None else self.presented_media
@@ -310,6 +312,7 @@ def compile_resolve_package(request: PackageCompileRequest) -> ResolvePackage:
         ),
         overlay_paths=request.overlay_paths,
         audio=request.audio_section,
+        color=request.color_section,
     )
     digest = hashlib.sha256(canonical_model_bytes(package)).hexdigest()
     return package.model_copy(update={"content_hash": digest})

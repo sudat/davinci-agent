@@ -33,12 +33,14 @@ AUDIO_ROLE_CONFLATION = "audio-role-conflation"
 SUBTITLE_UNSAFE_AREA = "subtitle-unsafe-area"
 RENDER_PRESET_MISMATCH = "render-preset-mismatch"
 STYLED_PRESENTATION_DRIFT = "styled-presentation-drift"
+COLOR_SECTION_DRIFT = "color-section-drift"
 
 
 __all__ = [
     "AUDIO_ROLE_CONFLATION",
     "AUDIO_ROLE_MISSING",
     "CAPABILITY_MATRIX_STALE",
+    "COLOR_SECTION_DRIFT",
     "CUE_TIMING_INEXACT",
     "MATRIX_EVIDENCE_MISSING",
     "MEDIA_BINDING_MISSING",

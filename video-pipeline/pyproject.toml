@@ -91,6 +91,17 @@ ignore = [
   "PLR0913",
 ]
 "services/presentation/audio_live_flow.py" = ["PLR0913", "PLR0917"]
+"services/presentation/color_live_media.py" = [
+  "N802",
+  "FBT001",
+  "FBT002",
+  "FBT003",
+  "PLR0913",
+]
+"services/presentation/color_live_flow.py" = ["N802", "PLR0913", "PLR0917"]
+"services/presentation/color_render.py" = ["PLR0913"]
+"services/resolve_bridge/color_setting_probe.py" = ["N802", "PLR0913"]
+"services/resolve_bridge/color_setting_probe_models.py" = ["N802", "PLR0913"]
 "services/presentation/overlay_render.py" = ["PLR0913"]
 "services/presentation/overlay_live_media.py" = [
   "N802",

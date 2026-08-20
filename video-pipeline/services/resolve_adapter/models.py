@@ -25,6 +25,7 @@ from services.contracts.primitives import (
 from services.presentation.audio_models import (
     AudioSection,
 )
+from services.presentation.color_models import ColorSection
 from services.presentation.overlay_models import (
     OverlaySection,
 )
@@ -201,6 +202,7 @@ class ResolvePackage(ArtifactEnvelope[Literal["resolve_package_v1"]]):
     styled_presentation: StyledPresentation | None = None
     overlay_paths: OverlaySection | None = None
     audio: AudioSection | None = None
+    color: ColorSection | None = None
 
 
 __all__ = [
@@ -209,6 +211,7 @@ __all__ = [
     "AppendTrackMapEntry",
     "AudioSection",
     "ClipInfo",
+    "ColorSection",
     "ExternalTrackMapEntry",
     "InputsView",
     "LinkGroup",
