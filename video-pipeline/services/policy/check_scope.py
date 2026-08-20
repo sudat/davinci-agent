@@ -1,13 +1,16 @@
-"""Minimal phase scope checker (Todo 35; Todo 66 hardens this).
+"""Phase scope checker (Todo 35; hardened for phase 3 by Todo 66).
 
-``check_scope --phase 1`` scans ``services/analyze`` module names, their
+``check_scope --phase N`` scans ``services/analyze`` module names, their
 import statements (AST), and ``config`` JSON keys for FORBIDDEN phase-4+
 analyzer markers — motion analysis, visual similarity, shot clustering,
 face/plate tracking, Privacy candidate ranking, Travel/POV logic, and visual
 auto-selection. Matching is exact-token (splitting names/keys on ``_``,
 ``-``, ``.``), so words like ``interface`` can never trip the ``face``
-token. The phase-1 allowlist is simply today's tree: exit 0 when clean,
-exit 1 listing every violation, exit 2 on usage errors.
+token. The allowed phases are 1-3 (everything through Phase 3); any phase-4+
+feature is out of scope and flagged. ``--ast``/``--imports``/``--config``
+select scan surfaces and may be combined; with none given, imports and config
+are both scanned (the historical default). Exit 0 when clean, exit 1 listing
+every violation, exit 2 on usage errors or unsupported phases.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ import sys
 from pathlib import Path
 from typing import Final
 
-SUPPORTED_PHASES: Final = (1,)
+SUPPORTED_PHASES: Final = (1, 2, 3)
 
 FORBIDDEN_IMPORT_ROOTS: Final = (
     "cv2",
@@ -133,10 +136,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="check_scope")
     parser.add_argument("--phase", type=int, required=True)
     parser.add_argument("--root", type=Path, default=None)
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--ast", dest="mode", action="store_const", const="ast")
-    mode.add_argument("--imports", dest="mode", action="store_const", const="imports")
-    mode.add_argument("--config", dest="mode", action="store_const", const="config")
+    parser.add_argument("--ast", dest="scan_imports", action="store_true", default=False)
+    parser.add_argument("--imports", dest="scan_imports", action="store_true", default=False)
+    parser.add_argument("--config", dest="scan_config", action="store_true", default=False)
     arguments = parser.parse_args(argv)
 
     if arguments.phase not in SUPPORTED_PHASES:
@@ -144,8 +146,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     root = arguments.root if arguments.root is not None else Path.cwd()
-    scan_imports = arguments.mode in (None, "ast", "imports")
-    scan_config = arguments.mode in (None, "config")
+    any_surface = arguments.scan_imports or arguments.scan_config
+    scan_imports = arguments.scan_imports or not any_surface
+    scan_config = arguments.scan_config or not any_surface
     violations = check_scope(root, scan_imports=scan_imports, scan_config=scan_config)
     if violations:
         for violation in violations:

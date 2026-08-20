@@ -1,0 +1,253 @@
+[
+ {
+  "case_id": "happy-authorized-bounded-operations-pass",
+  "kind": "happy",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_rights_expiry.py::test_20_valid_window_passes_and_registry_stays_sealed",
+   "tests/security/test_probe_listeners.py::test_41_loopback_pipeline_listener_passes",
+   "tests/security/test_probe_listeners.py::test_43_empty_state_passes_with_no_listeners",
+   "tests/security/test_authorization.py::test_11_registered_operation_dispatches_explicit_argv_only",
+   "tests/security/test_cli_surface.py::test_30_dispatch_passes_explicit_argv_never_a_shell",
+   "tests/security/test_prompt_injection.py::test_30_injection_as_new_subtitle_text_stays_data",
+   "tests/security/test_tamper.py::test_10_honest_bundle_verifies",
+   "tests/security/test_single_writer.py::test_12_expired_lease_is_the_only_lawful_handover",
+   "tests/security/test_untrusted_facts.py::test_21_honest_bytes_pass_and_registry_is_immutable",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "9 passed"
+ },
+ {
+  "case_id": "failure-prompt-injection-through-real-ingestion",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_prompt_injection.py::test_10_raw_injection_instruction_is_a_typed_refusal",
+   "tests/security/test_prompt_injection.py::test_11_ja_injection_instruction_is_a_typed_refusal",
+   "tests/security/test_prompt_injection.py::test_12_ocr_injection_is_data_never_an_instruction",
+   "tests/security/test_prompt_injection.py::test_20_injection_prefix_cannot_smuggle_a_real_command",
+   "tests/security/test_prompt_injection.py::test_21_injection_suffix_cannot_smuggle_a_real_command",
+   "tests/security/test_prompt_injection.py::test_40_forged_proposal_cannot_inject_decision_fields",
+   "tests/security/test_prompt_injection.py::test_41_forged_approval_from_model_actor_is_rejected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "7 passed"
+ },
+ {
+  "case_id": "failure-untrusted-facts-never-authoritative",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_untrusted_facts.py::test_10_proposal_claimed_ambiguity_is_recomputed_not_trusted",
+   "tests/security/test_untrusted_facts.py::test_11_lying_ambiguity_fields_never_authoritize_apply",
+   "tests/security/test_untrusted_facts.py::test_20_swapped_bytes_claiming_a_registered_identity_are_denied",
+   "tests/security/test_untrusted_facts.py::test_30_bundle_seal_detects_tampered_plan_bytes",
+   "tests/security/test_untrusted_facts.py::test_40_injection_payload_metadata_is_never_authoritative",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "5 passed"
+ },
+ {
+  "case_id": "failure-path-symlink-traversal-denied",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_traversal.py::test_10_dotdot_traversal_denied_with_victim_untouched",
+   "tests/security/test_traversal.py::test_11_absolute_escape_denied",
+   "tests/security/test_traversal.py::test_12_symlink_escape_denied",
+   "tests/security/test_traversal.py::test_20_symlinked_job_state_refused",
+   "tests/security/test_traversal.py::test_21_walk_reports_symlinks_without_following",
+   "tests/security/test_traversal.py::test_22_gc_never_deletes_through_a_symlink_escape",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "6 passed"
+ },
+ {
+  "case_id": "failure-network-exposure-probe-honest",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_probe_listeners.py::test_40_exposed_pipeline_listener_fails_the_verdict",
+   "tests/security/test_probe_listeners.py::test_42_unrelated_non_loopback_listener_never_judged",
+   "tests/security/test_probe_listeners.py::test_50_main_writes_honest_report_and_exits_by_verdict",
+   "tests/security/test_probe_listeners.py::test_51_broken_scanner_is_an_error_never_a_pass",
+   "tests/security/test_probe_listeners.py::test_60_live_scan_runs_bounded_against_real_state",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "5 passed"
+ },
+ {
+  "case_id": "failure-unauthorized-command-approval-denied",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_authorization.py::test_10_every_refusal_class_is_typed",
+   "tests/security/test_authorization.py::test_20_automation_class_refused_even_on_a_real_tty",
+   "tests/security/test_authorization.py::test_21_non_tty_descriptors_refused",
+   "tests/security/test_authorization.py::test_22_wrong_confirmation_writes_nothing",
+   "tests/security/test_authorization.py::test_30_fixture_marked_record_never_authorizes_operator_gate",
+   "tests/security/test_authorization.py::test_31_tampered_record_chain_never_authorizes",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "6 passed"
+ },
+ {
+  "case_id": "failure-cloud-data-violation-local-only",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_cloud_boundary.py::test_10_local_only_episode_cloud_stage_denied_zero_cloud_records",
+   "tests/security/test_cloud_boundary.py::test_11_denied_transport_writes_no_audit_file",
+   "tests/security/test_cloud_boundary.py::test_30_stage_not_declared_in_episode_config_denied",
+   "tests/security/test_cloud_boundary.py::test_31_sensitive_classes_never_allowlisted_for_production",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "7 passed"
+ },
+ {
+  "case_id": "failure-secret-pii-logging-blocked",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_prompt_injection.py::test_50_marker_secret_never_reaches_machine_outputs",
+   "tests/security/test_policy.py::test_audit_never_records_secrets",
+   "tests/security/test_policy.py::test_secret_keys_are_redacted_with_the_key_name",
+   "tests/security/test_policy.py::test_pii_values_are_masked",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "4 passed"
+ },
+ {
+  "case_id": "failure-stale-tampered-evidence-detected",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_tamper.py::test_11_rewritten_ledger_row_detected",
+   "tests/security/test_tamper.py::test_12_forged_head_detected",
+   "tests/security/test_tamper.py::test_13_truncated_ledger_detected",
+   "tests/security/test_tamper.py::test_20_registry_entry_swap_breaks_the_seal",
+   "tests/security/test_tamper.py::test_30_outbound_audit_rewrite_detected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "5 passed"
+ },
+ {
+  "case_id": "failure-phase4-imports-denied",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_scope_phase4.py::test_10_attacker_imports_really_exist_then_denied",
+   "tests/security/test_scope_phase4.py::test_11_phase_four_feature_request_is_out_of_scope",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "2 passed"
+ },
+ {
+  "case_id": "failure-license-expiry-blocks",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_rights_expiry.py::test_10_expired_license_blocks",
+   "tests/security/test_rights_expiry.py::test_11_before_effective_window_blocks",
+   "tests/security/test_rights_expiry.py::test_12_wrong_territory_blocks",
+   "tests/security/test_rights_expiry.py::test_13_wrong_usage_blocks",
+   "tests/security/test_rights_expiry.py::test_14_unapproved_asset_blocks",
+   "tests/security/test_rights_expiry.py::test_15_unregistered_asset_blocks",
+   "tests/security/test_rights_expiry.py::test_21_denials_never_mutate_the_sealed_snapshot",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "7 passed"
+ },
+ {
+  "case_id": "failure-multiple-writers-single-writer-enforced",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_single_writer.py::test_10_second_writer_acquires_nothing",
+   "tests/security/test_single_writer.py::test_11_renew_by_non_holder_leaves_row_untouched",
+   "tests/security/test_single_writer.py::test_13_nonpositive_ttl_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "3 passed"
+ },
+ {
+  "case_id": "failure-every-todo65-cli-surface-attempted",
+  "kind": "failure",
+  "argv": [
+   "uv", "run", "pytest",
+   "tests/security/test_cli_surface.py::test_10_exactly_27_unique_registered_operations",
+   "tests/security/test_cli_surface.py::test_11_every_registered_module_is_importable",
+   "tests/security/test_cli_surface.py::test_12_help_lists_every_operation_and_the_refusal_contract",
+   "tests/security/test_cli_surface.py::test_20_every_refusal_attempt_spawns_nothing",
+   "tests/security/test_cli_surface.py::test_21_empty_argv_is_help_with_exit_2",
+   "tests/security/test_cli_surface.py::test_40_operator_surface_has_no_ui_or_network_dependency",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "34 passed"
+ }
+]
