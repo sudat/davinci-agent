@@ -15,6 +15,7 @@ from services.release.replay import (
     DEFAULT_PYTEST_ARGS,
     WORKSPACE_ANCHORED_IGNORES,
     run_replay,
+    snapshot_tree_hash,
 )
 from services.release.replay import (
     main as replay_main,
@@ -192,6 +193,21 @@ def test_42_default_selection_excludes_only_workspace_anchored_modules() -> None
     assert "not resolve_live and not cloud_fixture" in DEFAULT_PYTEST_ARGS
     assert "no:cacheprovider" in DEFAULT_PYTEST_ARGS
     assert len(WORKSPACE_ANCHORED_IGNORES) == 7
+
+
+def test_43_snapshot_hash_ignores_transient_artifacts_only(tmp_path: Path) -> None:
+    source = tmp_path / "src"
+    (source / "pkg").mkdir(parents=True)
+    (source / "pkg" / "mod.py").write_text("VALUE = 1\n")
+    baseline = snapshot_tree_hash(source)
+    (source / ".hypothesis").mkdir()
+    (source / ".hypothesis" / "constants").write_text("{}")
+    pycache = source / "pkg" / "__pycache__"
+    pycache.mkdir()
+    (pycache / "mod.cpython-312.pyc").write_bytes(b"\x00")
+    assert snapshot_tree_hash(source) == baseline
+    (source / "pkg" / "mod.py").write_text("VALUE = 2\n")
+    assert snapshot_tree_hash(source) != baseline
 
 
 @pytest.mark.parametrize("kind", ["staging", "extract"])

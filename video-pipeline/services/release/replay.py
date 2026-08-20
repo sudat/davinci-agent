@@ -9,6 +9,7 @@ an interrupted replay restarts safely and completed steps are reused.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import subprocess
@@ -17,10 +18,9 @@ from pathlib import Path
 from typing import Literal
 
 from services.contracts.primitives import Sha256, StrictModel
-from services.foundation_io import atomic_write, canonical_model_bytes
+from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 from services.release.errors import ReleaseGateError
 from services.release.extract_candidate import copy_tree
-from services.release.manifest import tree_hash
 from services.release.network_guard import (
     CACHE_DIR_NAME,
     NETWORK_MARKER,
@@ -34,6 +34,12 @@ CLEAN_ROOM_NAME = "clean-room"
 SEED_MARKER = ".release-cache-seeded"
 STATE_NAME = "replay-state.json"
 REPORT_NAME = "replay-report.json"
+# Transient interpreter/test-runner artifacts (gitignored by the repository):
+# replaying the suite legitimately materializes them inside the clean room, so
+# source integrity is compared over tracked-source content only.
+TRANSIENT_NAMES = frozenset(
+    {".DS_Store", ".hypothesis", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__"}
+)
 # The acceptance-representative offline selection. Workspace-anchored modules
 # are excluded because they bind evidence to the live attempt layout by
 # design and cannot pass from any snapshot extract: runbook execution and
@@ -142,6 +148,31 @@ def _run_step(
     )
 
 
+def snapshot_tree_hash(root: Path) -> str:
+    """Tree hash over tracked-source content (transient artifacts skipped)."""
+
+    digest = hashlib.sha256()
+    stack = [root]
+    files: list[str] = []
+    while stack:
+        current = stack.pop()
+        with os.scandir(current) as iterator:
+            for entry in sorted(iterator, key=lambda item: item.name):
+                if entry.name in TRANSIENT_NAMES:
+                    continue
+                if entry.is_symlink():
+                    raise ReleaseGateError("stale_hash", f"symlink in clean room: {entry.path}")
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(Path(entry.path))
+                    continue
+                relative = Path(entry.path).relative_to(root).as_posix()
+                digest_line = f"{relative}\x00{sha256_file(Path(entry.path))}\n"
+                files.append(digest_line)
+    for line in sorted(files):
+        digest.update(line.encode())
+    return digest.hexdigest()
+
+
 def _prepare_step(
     source_root: Path,
     clean_source: Path,
@@ -157,7 +188,7 @@ def _prepare_step(
         and previous.completed
         and previous.input_sha256 == expected
         and clean_source.is_dir()
-        and tree_hash(clean_source) == source_tree
+        and snapshot_tree_hash(clean_source) == source_tree
     ):
         return previous.model_copy(update={"reused": True})
     if clean_source.exists():
@@ -198,7 +229,7 @@ def run_replay(
     out.mkdir(parents=True, exist_ok=True)
     write_network_guard(out)
     source_root = source_input / "source"
-    source_tree = tree_hash(source_root)
+    source_tree = snapshot_tree_hash(source_root)
     state_path = out / STATE_NAME
     state = (
         ReplayState.model_validate_json(state_path.read_bytes())
@@ -235,7 +266,7 @@ def run_replay(
         source_tree,
         done.get("acceptance-offline"),
     )
-    source_unmodified = tree_hash(clean_source) == source_tree
+    source_unmodified = snapshot_tree_hash(clean_source) == source_tree
     steps = (prepare, sync, acceptance)
     state = ReplayState(source_tree_sha256=source_tree, steps=steps)
     atomic_write(state_path, canonical_model_bytes(state))
