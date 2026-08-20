@@ -1,0 +1,109 @@
+[
+ {
+  "case_id": "happy-ab-parity-and-fixture-presentation-record",
+  "kind": "happy",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_preview_final_parity.py::test_same_manifest_sides_pass",
+   "tests/presentation/test_preview_final_parity.py::test_parity_is_manifest_anchored",
+   "tests/approvals/test_presentation.py::test_marked_fixture_presentation_record_authorizes",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "3 passed"
+ },
+ {
+  "case_id": "failure-editorial-final-purpose-reuse",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/approvals/test_presentation.py::test_editorial_or_final_purpose_reuse_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-changed-asset-manifest-after-approval",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/approvals/test_presentation.py::test_changed_asset_or_manifest_after_approval_supersedes",
+   "tests/approvals/test_presentation.py::test_editorial_change_also_supersedes_editorial",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "2 passed"
+ },
+ {
+  "case_id": "failure-unexplained-difference",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_preview_final_parity.py::test_unexplained_difference_is_typed",
+   "tests/presentation/test_preview_final_parity.py::test_audio_dims_are_toleranced",
+   "tests/presentation/test_preview_final_parity.py::test_color_dims_are_toleranced",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "3 passed"
+ },
+ {
+  "case_id": "failure-missing-shared-derivative",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_preview_final_parity.py::test_missing_shared_derivative_is_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ },
+ {
+  "case_id": "failure-byte-equality-only-assertion",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/presentation/test_preview_final_parity.py::test_byte_equality_only_basis_is_rejected_typed",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ }
+]
