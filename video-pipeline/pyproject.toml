@@ -139,6 +139,9 @@ ignore = [
 "services/spike/gate_phase0b_verify.py" = ["PLR0912", "PLR0913", "PLR0917", "C901"]
 "services/spike/gate_phase0c_cli.py" = ["PLR0911", "PLR0912", "PLR0915", "C901"]
 "services/spike/gate_phase0c_driver.py" = ["PLR0913", "PLR0917"]
+"services/release/staging.py" = ["PLR0913", "PLR0917"]
+"services/release/replay.py" = ["PLR0913", "PLR0917"]
+"services/release/finalize_candidate.py" = ["PLR0913", "PLR0917"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

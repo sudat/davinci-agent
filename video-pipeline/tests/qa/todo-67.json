@@ -1,0 +1,159 @@
+[
+ {
+  "case_id": "happy-clean-room-full-replay-restart",
+  "kind": "happy",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_build.py::test_10_full_build_layout_publishes_readonly",
+   "tests/release/test_build.py::test_40_stage_then_replay_restarts_safely_then_seal",
+   "tests/release/test_build.py::test_60_post_chmod_manifest_recompute_is_byte_identical",
+   "tests/release/test_replay.py::test_10_happy_replay_fresh_env_no_network",
+   "tests/release/test_replay.py::test_11_restart_second_run_reuses_completed_steps",
+   "tests/release/test_replay.py::test_12_crash_recovery_reruns_incomplete_step",
+   "tests/release/test_replay.py::test_30_guard_blocks_external_and_allows_loopback",
+   "tests/release/test_extract.py::test_10_full_extract_contains_inputs_and_source",
+   "tests/release/test_finalize.py::test_10_happy_record_embeds_evidence_and_hashes",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "9 passed"
+ },
+ {
+  "case_id": "failure-missing-chat-open-timeline-dependency-prevents-release",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_verify.py::test_40_chat_ledger_dependency_detected",
+   "tests/release/test_verify.py::test_41_open_timeline_dependency_detected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "2 passed"
+ },
+ {
+  "case_id": "failure-stale-hash-prevents-release",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_verify.py::test_20_tampered_byte_is_stale_hash",
+   "tests/release/test_verify.py::test_21_wrong_expected_sha_is_stale_hash",
+   "tests/release/test_verify.py::test_33_missing_gate_detected",
+   "tests/release/test_extract.py::test_21_tampered_candidate_refused",
+   "tests/release/test_finalize.py::test_30_ledger_drift_refused",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "5 passed"
+ },
+ {
+  "case_id": "failure-forged-report-prevents-release",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_verify.py::test_30_forged_gate_report_detected",
+   "tests/release/test_verify.py::test_31_forged_gate_id_swap_detected",
+   "tests/release/test_finalize.py::test_20_wrong_todo_evidence_refused",
+   "tests/release/test_finalize.py::test_21_unobserved_evidence_refused",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "4 passed"
+ },
+ {
+  "case_id": "failure-failed-gate-prevents-release",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_build.py::test_24_missing_gate_evidence_refused",
+   "tests/release/test_verify.py::test_32_failed_gate_detected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "2 passed"
+ },
+ {
+  "case_id": "failure-hidden-network-prevents-release",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_replay.py::test_20_hidden_network_prevents_release",
+   "tests/release/test_replay.py::test_21_failed_acceptance_is_failed_verdict",
+   "tests/release/test_replay.py::test_41_offline_environment_is_enforced",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "3 passed"
+ },
+ {
+  "case_id": "failure-duplicate-writer-prevents-release",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_build.py::test_30_duplicate_writer_on_existing_candidate",
+   "tests/release/test_build.py::test_31_duplicate_writer_on_held_lock",
+   "tests/release/test_revocation.py::test_40_rebuild_same_path_refused_new_sha_path_succeeds",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "3 passed"
+ },
+ {
+  "case_id": "failure-misleading-kpi-claim-prevents-release",
+  "kind": "failure",
+  "argv": [
+   "uv",
+   "run",
+   "pytest",
+   "tests/release/test_verify.py::test_50_misleading_kpi_claim_detected",
+   "-q"
+  ],
+  "stdin_fixture": null,
+  "environment": {},
+  "fault_fixture": null,
+  "expected_exit": 0,
+  "expected_artifacts": [],
+  "expected_observation": "1 passed"
+ }
+]
