@@ -51,13 +51,38 @@ class ResolveBridge(StrictModel):
     module: FileEvidence
 
 
+class ScriptingScopeLiveProbe(StrictModel):
+    """Positive live evidence for the host's scripting scope.
+
+    ``transport_observed`` records how the probe itself talked to the
+    scripting server (loopback TCP / in-process); the listener's bound
+    address class and the non-loopback connect-probe result are recorded
+    exactly as observed — never summarized into a safer-sounding claim.
+    """
+
+    schema_version: Literal["resolve-scripting-scope-probe-v1"] = (
+        "resolve-scripting-scope-probe-v1"
+    )
+    scripting_enabled: bool
+    transport_observed: str
+    scripting_server_port: int | None
+    listener_bound_addresses: tuple[str, ...]
+    non_loopback_probe: Literal[
+        "accepted", "refused", "not-attempted-no-non-loopback-interface"
+    ]
+    evidence_note: str
+
+
 class ScriptingPosture(StrictModel):
     preference_paths: tuple[FileEvidence, ...]
-    remote_access: Literal["disabled", "loopback", "network", "unknown"]
+    remote_access: Literal[
+        "disabled", "loopback", "network", "unknown", "local-network"
+    ]
     runtime_policy: Literal["loopback-only", "network"]
     network_access_performed: bool
     needs_live_verification: bool
     reason: str
+    live_probe: ScriptingScopeLiveProbe | None = None
 
 
 class GpuInventory(StrictModel):

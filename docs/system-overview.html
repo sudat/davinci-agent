@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="davinci-agent: DaVinci Resolve Studio 21 を使ったYouTube動画自動制作パイプラインの概要（正本 docs/prd/PRD_v4.2.md）">
+<title>davinci-agent — AI動画編集パイプライン 概要</title>
+<style>
+/* ============================================================
+   Design tokens — Premium Utilitarian Minimalism
+   暖色モノクロ＋意味固定的パステルアクセント
+   green = 検証通過 / amber = 人間・承認・未完了 / blue = AI・機械
+   ============================================================ */
+:root {
+  --canvas: #FBFBFA;
+  --surface: #FFFFFF;
+  --surface-2: #F7F6F3;
+  --ink: #111111;
+  --ink-2: #55524C;
+  --ink-3: #787774;
+  --line: #EAEAEA;
+  --line-2: #DDDCD8;
+  --green-bg: #EDF3EC;  --green-ink: #346538;  --green-line: #C9DAC8;
+  --amber-bg: #FBF3DB;  --amber-ink: #956400;  --amber-line: #E8D9AE;
+  --blue-bg: #E1F3FE;   --blue-ink: #1F6C9F;   --blue-line: #BFDFF2;
+  --red-bg: #FDEBEC;    --red-ink: #9F2F2D;
+  --serif: "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", "MS PMincho", "Noto Serif JP", "Source Han Serif JP", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  --mono: "SF Mono", "Geist Mono", "JetBrains Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --content-w: 1120px;
+  --arrow-down: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A6A39B' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v15m0 0l-6-6m6 6l6-6'/%3E%3C/svg%3E");
+  --arrow-right: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23B4B1A9' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 12h15m0 0l-6-6m6 6l-6 6'/%3E%3C/svg%3E");
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15.5px;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: #EFE7D2; }
+
+h1, h2, h3 { font-weight: 600; letter-spacing: 0.02em; }
+a { color: inherit; text-decoration: none; }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere; }
+.en-sub { font-family: var(--mono); font-size: 0.68em; color: var(--ink-3); letter-spacing: 0.06em; margin-left: 7px; font-weight: 400; white-space: nowrap; }
+
+/* ---------- scroll reveal ---------- */
+.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); transition-delay: calc(var(--d, 0) * 70ms); }
+.js .reveal.is-visible { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* ============================================================
+   Nav
+   ============================================================ */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(251, 251, 250, 0.86);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.nav-inner {
+  max-width: var(--content-w); margin: 0 auto; padding: 0 32px;
+  height: 56px; display: flex; align-items: center; gap: 28px;
+}
+.nav-brand { display: flex; align-items: baseline; gap: 10px; flex-shrink: 0; }
+.nav-brand .mark { width: 9px; height: 9px; background: var(--ink); border-radius: 2px; align-self: center; }
+.nav-brand .name { font-family: var(--mono); font-size: 13.5px; font-weight: 600; letter-spacing: 0.02em; }
+.nav-brand .ver { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.nav-links { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+.nav-links::-webkit-scrollbar { display: none; }
+.nav-links a {
+  font-size: 12px; color: var(--ink-2); padding: 5px 8px; border-radius: 6px;
+  white-space: nowrap; transition: color 0.15s, background 0.15s;
+}
+.nav-links a:hover { color: var(--ink); background: var(--surface-2); }
+.manual-cta {
+  flex-shrink: 0; margin-left: 10px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--green-ink); background: var(--green-bg);
+  border: 1px solid var(--green-line); border-radius: 999px;
+  padding: 6px 14px; white-space: nowrap;
+  transition: background 0.15s;
+}
+.manual-cta:hover { background: #E2EDE1; }
+
+/* ============================================================
+   Hero
+   ============================================================ */
+.hero {
+  position: relative; overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(1100px 460px at 78% -12%, rgba(217, 203, 166, 0.10), transparent 62%),
+    radial-gradient(900px 420px at 8% 4%, rgba(197, 216, 229, 0.10), transparent 58%);
+}
+.hero-inner { max-width: var(--content-w); margin: 0 auto; padding: 96px 32px 84px; }
+.hero-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 30px; }
+.hero-eyebrow .tagline { font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; color: var(--ink-2); text-transform: uppercase; }
+.hero-eyebrow .doc { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; background: var(--surface); }
+.hero h1 {
+  font-family: var(--serif);
+  font-size: clamp(34px, 4.6vw, 56px);
+  line-height: 1.28; letter-spacing: 0.015em; font-weight: 600;
+  max-width: 17em;
+}
+.hero h1 .em { box-shadow: inset 0 -0.32em 0 rgba(233, 219, 184, 0.55); }
+.hero-sub { margin-top: 30px; max-width: 54em; font-size: 15.5px; color: var(--ink-2); }
+.hero-sub b { color: var(--ink); font-weight: 600; }
+
+.status-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 34px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
+  border-radius: 999px; padding: 7px 15px 7px 11px; border: 1px solid;
+}
+.chip svg { flex-shrink: 0; }
+.chip-green { background: var(--green-bg); color: var(--green-ink); border-color: var(--green-line); }
+.chip-amber { background: var(--amber-bg); color: var(--amber-ink); border-color: var(--amber-line); }
+.chip-neutral { background: var(--surface); color: var(--ink-2); border-color: var(--line); }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-top: 58px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.kpi { padding: 26px 28px 24px; border-left: 1px solid var(--line); }
+.kpi:first-child { border-left: none; }
+.kpi .k-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.kpi .k-value { font-family: var(--serif); font-size: 44px; line-height: 1.15; margin-top: 10px; font-weight: 600; }
+.kpi .k-value small { font-family: var(--sans); font-size: 15px; color: var(--ink-2); font-weight: 500; margin-left: 6px; letter-spacing: 0.02em; }
+.kpi .k-desc { font-size: 12.5px; color: var(--ink-3); margin-top: 8px; line-height: 1.65; }
+.kpi-note {
+  grid-column: 1 / -1; border-top: 1px solid var(--line); background: var(--surface-2);
+  padding: 13px 28px; font-size: 12.5px; color: var(--ink-2); display: flex; gap: 10px; align-items: baseline;
+}
+.kpi-note .mono { font-family: var(--mono); font-size: 11px; color: var(--amber-ink); background: var(--amber-bg); border-radius: 4px; padding: 1px 7px; white-space: nowrap; align-self: center; }
+
+/* ============================================================
+   Section frame
+   ============================================================ */
+.section { border-bottom: 1px solid var(--line); }
+.section-inner { max-width: var(--content-w); margin: 0 auto; padding: 104px 32px 108px; }
+.section-head { margin-bottom: 52px; }
+.section-eyebrow { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.section-eyebrow .num { font-family: var(--mono); font-size: 12px; color: var(--ink); letter-spacing: 0.08em; }
+.section-eyebrow .rule { height: 1px; width: 44px; background: var(--line-2); }
+.section-eyebrow .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-3); }
+.section h2 { font-family: var(--serif); font-size: clamp(26px, 3vw, 34px); line-height: 1.4; font-weight: 600; max-width: 28em; text-wrap: balance; }
+.section-lead { margin-top: 16px; max-width: 46em; color: var(--ink-2); font-size: 15px; }
+
+/* ============================================================
+   01 Roles — 人間とAIの役割分担
+   ============================================================ */
+.roles-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.role-card, .role-list li > span:last-child, .role-foot { min-width: 0; }
+.role-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.role-head { padding: 20px 26px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+.role-head .icon-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.role-card.human .icon-dot { background: #C79A2E; }
+.role-card.ai .icon-dot { background: #4E88AC; }
+.role-head h3 { font-size: 16.5px; letter-spacing: 0.03em; }
+.role-head .sub { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin-left: auto; }
+.role-card.human .role-head { background: linear-gradient(180deg, rgba(251, 243, 219, 0.55), transparent); }
+.role-card.ai .role-head { background: linear-gradient(180deg, rgba(225, 243, 254, 0.55), transparent); }
+.role-list { list-style: none; padding: 10px 0 14px; }
+.role-list li { display: flex; gap: 14px; padding: 12px 26px; font-size: 14.5px; line-height: 1.7; }
+.role-list li + li { border-top: 1px solid var(--surface-2); }
+.role-list .bullet { flex-shrink: 0; margin-top: 9px; width: 6px; height: 6px; border-radius: 2px; }
+.role-card.human .bullet { background: #C79A2E; }
+.role-card.ai .bullet { background: #4E88AC; }
+.role-list b { font-weight: 600; }
+.role-foot { padding: 14px 26px 18px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; color: var(--ink-2); }
+.role-foot .mini-tag { font-family: var(--mono); font-size: 10.5px; border-radius: 4px; padding: 1px 7px; margin-right: 6px; }
+.role-card.human .mini-tag { color: var(--amber-ink); background: var(--amber-bg); }
+.role-card.ai .mini-tag { color: var(--blue-ink); background: var(--blue-bg); }
+
+/* ============================================================
+   02 Architecture — Data Plane / Control Plane
+   ============================================================ */
+.plane-wrap { display: flex; flex-direction: column; gap: 20px; }
+.plane {
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden;
+}
+.plane-head { display: flex; align-items: baseline; gap: 16px; padding: 22px 30px 18px; border-bottom: 1px solid var(--line); }
+.plane-head h3 { font-size: 17px; }
+.plane-head .sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); }
+.plane-head .desc { margin-left: auto; font-size: 12.5px; color: var(--ink-3); max-width: 30em; text-align: right; }
+.plane-body { padding: 30px 30px 34px; }
+
+.flow { display: flex; flex-direction: column; align-items: stretch; }
+.plane-body > .flow { max-width: 640px; margin: 0 auto; }
+.plane-body > .flow .flow-node, .plane-body > .flow .flow-gate { width: 100%; }
+.flow-stage { display: flex; align-items: center; justify-content: center; }
+.flow-node {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 11px 22px; font-size: 13.5px; font-weight: 500; text-align: center; line-height: 1.5;
+  box-shadow: 0 1px 2px rgba(17, 17, 17, 0.03);
+}
+.flow-node .en { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.06em; margin-top: 2px; font-weight: 400; }
+.flow-node.proposal { border-style: dashed; background: transparent; box-shadow: none; color: var(--ink-2); }
+.flow-node.proposal .en { color: #A09D94; }
+.flow-node.committed { border-color: var(--green-line); background: #FCFDFC; }
+.flow-node.human-touch { border-color: var(--amber-line); background: #FEFBF3; }
+.flow-node.wide { padding: 13px 30px; }
+.flow-gate {
+  border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2);
+  padding: 10px 22px; text-align: center;
+}
+.flow-gate .gt { font-size: 13px; font-weight: 600; }
+.flow-gate .gc { font-family: var(--mono); font-size: 10px; color: var(--ink-3); letter-spacing: 0.08em; margin-top: 3px; }
+.flow-arrow {
+  width: 100%; height: 26px; margin: 2px 0;
+  background: var(--arrow-down) center / 14px 14px no-repeat;
+}
+.flow-caption { text-align: center; font-size: 11.5px; color: var(--ink-3); margin: -2px 0 6px; }
+
+.branch { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 26px; }
+.lane { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 22px 24px 24px; min-width: 0; }
+.lane-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.lane-head .lane-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 4px; padding: 2px 8px; }
+.lane.preview .lane-tag { color: var(--blue-ink); background: var(--blue-bg); }
+.lane.final .lane-tag { color: var(--amber-ink); background: var(--amber-bg); }
+.lane-head h4 { font-size: 14.5px; font-weight: 600; min-width: 0; }
+.lane-head .cond { margin-left: auto; font-size: 11px; color: var(--ink-3); text-align: right; max-width: 14em; line-height: 1.5; }
+.lane-steps { display: flex; flex-direction: column; }
+.lane-step { display: flex; align-items: center; gap: 12px; }
+.lane-step .flow-node { flex: 1; min-width: 0; text-align: center; padding: 9px 12px; font-size: 12.5px; }
+.lane .flow-arrow { height: 20px; }
+.loopback {
+  margin-top: 16px; border: 1px dashed var(--blue-line); border-radius: 8px; background: rgba(225, 243, 254, 0.35);
+  padding: 10px 16px; font-size: 12px; color: var(--ink-2); display: flex; align-items: center; gap: 10px;
+}
+.loopback svg { flex-shrink: 0; }
+
+.cp-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+.cp-cell { background: var(--surface); padding: 20px 22px 18px; }
+.cp-cell h4 { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.cp-cell h4 .sq { width: 7px; height: 7px; border-radius: 2px; background: var(--ink-2); opacity: 0.55; flex-shrink: 0; }
+.cp-cell p { font-size: 12px; color: var(--ink-3); line-height: 1.7; margin-top: 7px; }
+.cp-cell.tty h4 .sq { background: #C79A2E; opacity: 1; }
+
+/* ============================================================
+   03 Job State Machine
+   ============================================================ */
+.sm-strip { display: flex; flex-direction: column; }
+.sm-row { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 0; }
+.sm-continue { height: 30px; margin: 6px 0 2px; background: var(--arrow-down) 86% center / 14px 14px no-repeat; }
+.sm-state {
+  display: flex; align-items: center;
+}
+.sm-chip {
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 6px;
+  padding: 9px 13px; white-space: nowrap; box-shadow: 0 1px 2px rgba(17,17,17,0.03);
+}
+.sm-chip .idx { color: var(--ink-3); font-weight: 400; margin-right: 7px; font-size: 10px; }
+.sm-arrow { width: 26px; height: 14px; background: var(--arrow-right) center / 13px 13px no-repeat; flex-shrink: 0; }
+.sm-state.gate .sm-chip {
+  border-color: var(--amber-line); background: var(--amber-bg); color: var(--amber-ink);
+  position: relative; padding: 9px 13px 9px 13px;
+}
+.sm-state.gate .sm-chip::after {
+  content: "人間Gate"; position: absolute; top: -9px; right: 8px;
+  font-family: var(--sans); font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em;
+  background: #C79A2E; color: #FFF; border-radius: 3px; padding: 1px 6px;
+}
+.sm-note {
+  margin-top: 30px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px;
+}
+.sm-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px 24px; min-width: 0; }
+.sm-card h4 { font-size: 13px; display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.sm-card h4 .k { font-family: var(--mono); font-size: 10px; color: var(--ink-3); letter-spacing: 0.1em; font-weight: 500; }
+.sm-card p, .sm-card li { font-size: 13px; color: var(--ink-2); line-height: 1.8; }
+.sm-card .key-formula {
+  font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 10px 14px; margin-top: 10px; color: var(--ink); overflow-wrap: anywhere;
+}
+.sm-substates { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
+.sm-substates span {
+  font-family: var(--mono); font-size: 10.5px; color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; background: var(--surface);
+}
+.sm-substates span.attention { color: var(--amber-ink); border-color: var(--amber-line); background: var(--amber-bg); }
+.sm-forbidden {
+  margin-top: 14px; font-size: 12px; color: var(--red-ink); background: var(--red-bg);
+  border: 1px solid #F2D4D5; border-radius: 8px; padding: 10px 14px; display: flex; gap: 9px; align-items: baseline;
+}
+.sm-forbidden .mono { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+
+/* ============================================================
+   04 Time coordinates
+   ============================================================ */
+.coord-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.coord-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px 20px 18px; position: relative; }
+.coord-card .cc-badge { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--ink-3); text-transform: uppercase; }
+.coord-card h4 { font-size: 14.5px; margin-top: 8px; font-weight: 600; }
+.coord-card .unit { font-family: var(--mono); font-size: 12px; color: var(--blue-ink); background: var(--blue-bg); border-radius: 4px; display: inline-block; padding: 2px 8px; margin-top: 10px; }
+.coord-card p { font-size: 12px; color: var(--ink-3); line-height: 1.7; margin-top: 10px; }
+.coord-card .axis { margin-top: 14px; height: 4px; border-radius: 2px; background: var(--surface-2); position: relative; overflow: visible; }
+.coord-card .axis::before { content: ""; position: absolute; inset: 0; border-radius: 2px; background: repeating-linear-gradient(90deg, #CFCEC9 0 2px, transparent 2px 7px); }
+.coord-card .axis::after { content: ""; position: absolute; left: 22%; right: 58%; top: -3px; bottom: -3px; border-radius: 2px; background: var(--ink); }
+.coord-rules { margin-top: 26px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.coord-rule { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; }
+.coord-rule h5 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+.coord-rule h5 svg { flex-shrink: 0; }
+.coord-rule p { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; line-height: 1.75; }
+.coord-rule .hl { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
+
+/* ============================================================
+   05 Edit loop
+   ============================================================ */
+.loop-wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.chat-panel, .loop-step, .loop-step .ls-body { min-width: 0; }
+.chat-panel { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.chat-panel-head {
+  padding: 15px 24px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+  display: flex; align-items: center; gap: 10px;
+}
+.chat-panel-head .win { display: flex; gap: 6px; }
+.chat-panel-head .win i { width: 9px; height: 9px; border-radius: 50%; background: #D8D7D3; display: block; }
+.chat-panel-head .title { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); letter-spacing: 0.04em; }
+.chat-body { padding: 26px 26px 20px; display: flex; flex-direction: column; gap: 18px; }
+.msg { display: flex; gap: 12px; }
+.msg .avatar {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+}
+.msg.human .avatar { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-line); }
+.msg.system .avatar { background: var(--blue-bg); color: var(--blue-ink); border: 1px solid var(--blue-line); }
+.msg .bubble { max-width: 78%; }
+.msg .who { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px; }
+.msg .say {
+  border: 1px solid var(--line); border-radius: 10px; padding: 11px 15px;
+  font-size: 14px; line-height: 1.7; background: var(--surface);
+}
+.msg.human .say { border-color: var(--amber-line); background: #FEFCF6; }
+.msg .cmd {
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 11px; color: var(--blue-ink);
+  background: var(--blue-bg); border: 1px solid var(--blue-line); border-radius: 5px; padding: 3px 10px;
+}
+.msg .cmd::before { content: "→"; color: var(--blue-ink); opacity: 0.6; }
+.chat-foot { padding: 13px 26px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 11.5px; color: var(--ink-3); line-height: 1.7; }
+.loop-steps { display: flex; flex-direction: column; gap: 0; }
+.loop-step { display: flex; gap: 16px; }
+.loop-step .no-col { display: flex; flex-direction: column; align-items: center; }
+.loop-step .no {
+  width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.loop-step.human .no { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber-ink); }
+.loop-step.ai .no { background: var(--blue-bg); border-color: var(--blue-line); color: var(--blue-ink); }
+.loop-step .no-line { width: 1px; flex: 1; background: var(--line); margin: 4px 0; min-height: 14px; }
+.loop-step:last-child .no-line { display: none; }
+.loop-step .ls-body { padding-bottom: 22px; }
+.loop-step h4 { font-size: 14px; font-weight: 600; padding-top: 3px; }
+.loop-step h4 .side { font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: 0.1em; border-radius: 3px; padding: 1px 6px; margin-left: 8px; vertical-align: 1px; }
+.loop-step.human h4 .side { color: var(--amber-ink); background: var(--amber-bg); }
+.loop-step.ai h4 .side { color: var(--blue-ink); background: var(--blue-bg); }
+.loop-step p { font-size: 12.5px; color: var(--ink-2); line-height: 1.75; margin-top: 5px; max-width: 34em; }
+
+/* ============================================================
+   06 Approval model
+   ============================================================ */
+.approval-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 20px; }
+.ap-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px 24px; }
+.ap-card h4 { font-size: 13.5px; display: flex; gap: 9px; align-items: center; margin-bottom: 8px; }
+.ap-card p { font-size: 12.5px; color: var(--ink-2); line-height: 1.75; }
+.ap-card .k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; }
+.purpose-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
+.purpose {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  padding: 16px 14px 14px; text-align: center;
+}
+.purpose .p-name { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--amber-ink); }
+.purpose .p-ja { font-size: 12px; font-weight: 600; margin-top: 5px; }
+.purpose p { font-size: 11px; color: var(--ink-2); line-height: 1.65; margin-top: 6px; text-align: left; }
+.ap-limit {
+  margin-top: 20px; border: 1px solid var(--line); border-left: 3px solid #D9B96A;
+  border-radius: 8px; background: var(--surface-2); padding: 16px 22px;
+  font-size: 12px; color: var(--ink-2); line-height: 1.8;
+}
+.ap-limit .ap-limit-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber-ink); font-weight: 700; margin-right: 10px; }
+
+/* ============================================================
+   07 Phase / Gate timeline
+   ============================================================ */
+.tl-summary { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 40px; align-items: center; }
+.tl-count { font-family: var(--serif); font-size: 30px; font-weight: 600; line-height: 1; }
+.tl-count small { font-family: var(--sans); font-size: 13px; color: var(--ink-3); font-weight: 500; }
+.tl-summary .sep { width: 1px; height: 26px; background: var(--line-2); }
+.tl-summary .note { font-size: 12.5px; color: var(--ink-3); }
+.timeline { position: relative; }
+.tl-row { display: grid; grid-template-columns: 52px 1fr; gap: 0; position: relative; }
+.tl-row::before { content: ""; position: absolute; left: 25px; top: 44px; bottom: -8px; width: 1px; background: var(--line); }
+.tl-row:last-child::before { display: none; }
+.tl-badge-col { display: flex; justify-content: center; padding-top: 12px; }
+.tl-badge {
+  width: 30px; height: 30px; border-radius: 50%; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-2); background: var(--surface);
+}
+.tl-badge.pass { border-color: var(--green-line); background: var(--green-bg); }
+.tl-badge.open { border-color: var(--amber-line); background: var(--amber-bg); }
+.tl-badge.human-gate { border-color: var(--amber-line); background: var(--amber-bg); }
+.tl-card { margin: 6px 0 8px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 16px 22px 15px; }
+.tl-card.pending { border-style: dashed; border-color: var(--amber-line); background: #FFFCF4; }
+.tl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.tl-gate-id { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 0.01em; }
+.tl-wave { font-family: var(--mono); font-size: 10px; color: var(--ink-3); letter-spacing: 0.08em; }
+.tl-title { font-size: 14px; font-weight: 600; }
+.tl-head .st { margin-left: auto; }
+.tl-threshold { margin-top: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.75; display: flex; gap: 9px; align-items: baseline; }
+.tl-threshold .th-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; color: var(--ink-3); text-transform: uppercase; white-space: nowrap; align-self: center; background: var(--surface-2); border-radius: 3px; padding: 1px 6px; border: 1px solid var(--line); flex-shrink: 0; }
+.tl-threshold b { font-weight: 600; color: var(--ink); }
+.tl-detail { margin-top: 9px; font-size: 12px; color: var(--ink-3); line-height: 1.7; }
+.f-lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.f-lane { border: 1px dashed var(--amber-line); border-radius: 7px; background: var(--surface); padding: 9px 12px; }
+.f-lane .fl-id { font-family: var(--mono); font-size: 10.5px; font-weight: 700; color: var(--amber-ink); }
+.f-lane p { font-size: 10.5px; color: var(--ink-2); line-height: 1.55; margin-top: 3px; }
+
+/* ============================================================
+   08 Stack
+   ============================================================ */
+.stack-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.stack-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px 22px 18px; min-width: 0; }
+.stack-card .sc-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+.stack-card h4 { font-size: 15px; font-weight: 600; margin-top: 8px; }
+.stack-card p { font-size: 12.5px; color: var(--ink-2); line-height: 1.75; margin-top: 8px; }
+.stack-card p code { font-size: 11px; }
+.stack-card .pins { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.stack-card .pins span { font-family: var(--mono); font-size: 10.5px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
+.stack-card .pins span.lock { color: var(--green-ink); background: var(--green-bg); border-color: var(--green-line); }
+.cmd-block { display: flex; flex-direction: column; gap: 3px; margin-top: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 9px 13px; }
+.cmd-block span { font-family: var(--mono); font-size: 10.5px; color: var(--ink); white-space: nowrap; }
+.cmd-block span::before { content: "$ "; color: var(--ink-3); }
+
+/* ============================================================
+   09 Not building yet
+   ============================================================ */
+.notyet { background: #FCFBF7; }
+.notyet-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ny-card { border: 1px solid var(--amber-line); border-radius: 10px; background: var(--surface); padding: 20px 22px 18px; }
+.ny-card h4 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 9px; text-wrap: balance; }
+.ny-card h4 .nowrap { white-space: nowrap; }
+.ny-card h4 .ph { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--amber-ink); background: var(--amber-bg); border-radius: 3px; padding: 1px 7px; letter-spacing: 0.06em; flex-shrink: 0; }
+.ny-card p { font-size: 12.5px; color: var(--ink-2); line-height: 1.75; margin-top: 9px; }
+.ny-note {
+  margin-top: 22px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  padding: 20px 26px; display: flex; gap: 18px; align-items: baseline;
+}
+.ny-note .nn-tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700; color: var(--red-ink); background: var(--red-bg); border-radius: 4px; padding: 2px 9px; white-space: nowrap; align-self: center; letter-spacing: 0.06em; }
+.ny-note p { font-size: 13px; color: var(--ink-2); line-height: 1.8; }
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.footer { background: #141414; color: #D7D5D0; }
+.footer-inner { max-width: var(--content-w); margin: 0 auto; padding: 64px 32px 56px; }
+.footer-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
+.footer .f-brand { font-family: var(--mono); font-size: 14px; font-weight: 600; color: #F2F1EE; }
+.footer .f-desc { font-size: 12.5px; color: #9B9994; line-height: 1.8; margin-top: 12px; max-width: 30em; }
+.footer h5 { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #9B9994; margin-bottom: 14px; font-weight: 500; }
+.footer .f-links { display: flex; flex-direction: column; gap: 9px; }
+.footer .f-links code { background: #1E1E1E; border-color: #2C2C2C; color: #C9E4D6; font-size: 11px; }
+.footer .f-meta { font-size: 12px; color: #9B9994; line-height: 2.0; }
+.footer .f-meta b { color: #C9C7C2; font-weight: 600; }
+.footer-bottom {
+  max-width: var(--content-w); margin: 0 auto; padding: 0 32px 40px;
+  font-size: 11.5px; color: #96948F; border-top: 1px solid #262626; padding-top: 22px;
+  display: flex; flex-wrap: wrap; gap: 8px 24px;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 1080px) {
+  .cp-grid { grid-template-columns: repeat(2, 1fr); }
+  .coord-grid, .stack-grid { grid-template-columns: repeat(2, 1fr); }
+  .purpose-grid { grid-template-columns: repeat(4, 1fr); }
+  .plane-head .desc { display: none; }
+}
+@media (max-width: 900px) {
+  .nav-links { display: none; }
+  .roles-grid, .loop-wrap, .approval-top, .coord-rules, .sm-note, .branch { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .kpi { border-left: none; border-top: 1px solid var(--line); }
+  .kpi:first-child { border-top: none; }
+  .section-inner { padding: 72px 22px 76px; }
+  .hero-inner { padding: 64px 22px 60px; }
+  .nav-inner { padding: 0 22px; }
+  .footer-inner, .footer-bottom { padding-left: 22px; padding-right: 22px; }
+  .footer-grid { grid-template-columns: 1fr; gap: 30px; }
+  .notyet-grid { grid-template-columns: 1fr 1fr; }
+  .f-lanes { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .coord-grid, .stack-grid, .purpose-grid, .notyet-grid { grid-template-columns: 1fr; }
+  .sm-row { flex-direction: column; align-items: stretch; }
+  .sm-state { justify-content: space-between; }
+  .sm-arrow { width: 100%; height: 20px; background: var(--arrow-down) center / 14px 14px no-repeat; }
+  .sm-continue { display: none; }
+  .msg .bubble { max-width: 90%; }
+  .tl-row { grid-template-columns: 40px 1fr; }
+  .tl-row::before { left: 19px; }
+  .tl-card { margin-left: 10px; }
+}
+</style>
+<script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+
+<!-- ================= NAV ================= -->
+<nav class="nav" aria-label="セクションナビゲーション">
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <span class="mark"></span>
+      <span class="name">davinci-agent</span>
+      <span class="ver">PRD v4.2</span>
+    </div>
+    <div class="nav-links">
+      <a href="#roles">役割分担</a>
+      <a href="#architecture">アーキテクチャ</a>
+      <a href="#state-machine">Job状態機械</a>
+      <a href="#time">時間座標</a>
+      <a href="#loop">編集ループ</a>
+      <a href="#approval">承認モデル</a>
+      <a href="#progress">Phase進捗</a>
+      <a href="#stack">スタック</a>
+      <a href="#not-yet">非目標</a>
+    </div>
+    <a class="manual-cta" href="operator-manual.html">操作マニュアル →</a>
+  </div>
+</nav>
+
+<!-- ================= HERO / Section 1 ================= -->
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow reveal">
+      <span class="tagline">AI動画編集パイプライン 概要</span>
+      <span class="doc">docs/prd/PRD_v4.2.md / 基準日 2026-08-21</span>
+    </div>
+    <h1 class="reveal" style="--d:1">AIが提案し、コードが確定し、<br><span class="em">人間だけが承認する。</span></h1>
+    <p class="hero-sub reveal" style="--d:2">
+      カメラ素材を入力すると、<b>素材の取り込み（Ingest）、解析、AI編集提案、低解像度プレビューMP4、人間による自然言語での修正指示、編集プランの確定（Edit Plan）、DaVinci Resolveでの自動組み立て（Build）、レンダー、品質検査（QC）、最終承認</b>までを、版管理された成果物（Versioned Artifact）の連鎖として再構築可能に実行する制作パイプライン。対象はDaVinci Resolve Studio 21を使ったYouTube動画制作。
+    </p>
+    <div class="status-row reveal" style="--d:3">
+      <span class="chip chip-green">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+        Phase 0A〜3 実装完了・各Gate通過済み
+      </span>
+      <span class="chip chip-amber">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></svg>
+        リリース検証中（release + F1〜F4）
+      </span>
+      <span class="chip chip-neutral">判定: GO</span>
+    </div>
+    <div class="kpi-grid reveal" style="--d:4">
+      <div class="kpi">
+        <div class="k-label">実作業時間（Active Human Time）＝最上位KPI</div>
+        <div class="k-value">30<small>分以内を目指す中央値</small></div>
+        <div class="k-desc">対応対象契約（Supported Episode Contract）を満たす動画について、候補確認・修正指示・最終確認を含む撮影後の人間作業時間の中央値。</div>
+      </div>
+      <div class="kpi">
+        <div class="k-label">P90（裾の値）</div>
+        <div class="k-value">P90<small>同時に計測</small></div>
+        <div class="k-desc">平均値だけでは一部の失敗を隠せるため、分布の裾も同時に見る。</div>
+      </div>
+      <div class="kpi">
+        <div class="k-label">対応可能率（Coverage Ratio）</div>
+        <div class="k-value">併記<small>契約適格Episodeの割合</small></div>
+        <div class="k-desc">30分という単一値だけでは、難しいEpisodeを契約外へ追い出して達成できて見える。対応可能率とP90を同時に見る。</div>
+      </div>
+      <div class="kpi-note">
+        <span class="mono">未評価</span>
+        <span>現時点で達成済みなのは技術的成功条件（Phase 0A〜3・各Gate）。30分KPIは実素材Episodeを実運用して初めて評価可能であり、技術フィクスチャ（検証用素材）がKPI達成を証明することはない。</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= Section 2: Roles ================= -->
+<section class="section" id="roles">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">01</span><span class="rule"></span><span class="label">人間とAI</span></div>
+      <h2>人間の作業は判断に、AIの作業は提案に限定する</h2>
+      <p class="section-lead">評価指標は自動化率ではなく実作業時間（Active Human Time）。人間は創作の方向性と承認を持ち、AIと決定論的コードの分担を厳密に分ける。</p>
+    </div>
+    <div class="roles-grid">
+      <div class="role-card human reveal">
+        <div class="role-head">
+          <span class="icon-dot"></span>
+          <h3>人間が担当すること</h3>
+          <span class="sub">判断の主体</span>
+        </div>
+        <ul class="role-list">
+          <li><span class="bullet"></span><span><b>撮影する</b>。素材の入口は常に人間。</span></li>
+          <li><span class="bullet"></span><span><b>チャンネルと動画の方向性を決める</b>。</span></li>
+          <li><span class="bullet"></span><span>AIの確度が低い（confidenceが低い）候補だけを、必要に応じて選ぶ。</span></li>
+          <li><span class="bullet"></span><span>低解像度の<b>編集プレビューMP4（Editorial Preview）で構成を確認</b>し、AIとの自然言語対話で修正要求を入力する。</span></li>
+          <li><span class="bullet"></span><span>品質検査エンジン（QC）が抽出した<b>要確認箇所を確認</b>する。</span></li>
+          <li><span class="bullet"></span><span><b>最終的な公開可否を判断</b>する。</span></li>
+        </ul>
+        <div class="role-foot"><span class="mini-tag">原則</span>公開判断・権利判断・プライバシー判断をAIへ移さない。</div>
+      </div>
+      <div class="role-card ai reveal" style="--d:1">
+        <div class="role-head">
+          <span class="icon-dot"></span>
+          <h3>AIが担当すること</h3>
+          <span class="sub">提案のみ</span>
+        </div>
+        <ul class="role-list">
+          <li><span class="bullet"></span><span>素材検索方針、候補評価、構成の<b>意味判断</b>。選定プラン（Selection Plan）・編集プラン（Edit Plan）・修正案の提案（Proposal）生成。</span></li>
+          <li><span class="bullet"></span><span>自然言語の修正指示を<b>構造化された修正指示（Review Command）へ変換</b>する（Review Translator）。</span></li>
+          <li><span class="bullet"></span><span>例外原因の仮説生成（組み立て報告（Build Report）の確認、再試行（Retry）可否の判定案）。</span></li>
+          <li><span class="bullet"></span><span>テロップ・BGMの意味選択。ただし根拠（Evidence）のない映像内容はプランへ書かない。</span></li>
+        </ul>
+        <div class="role-foot"><span class="mini-tag">境界</span>モデル出力は常に提案（Proposal）。<b>形式（Schema）・意味（Semantic）・ロック（Lock）・機能対応（Capability）の各検証を通過したものだけ</b>が新しい版として確定（Commit）される。AIにはシェル実行・ファイル書き込み・ネットワークアクセスの権限を渡さない。</div>
+      </div>
+    </div>
+    <div class="sm-note reveal" style="--d:2">
+      <div class="sm-card">
+        <h4><span class="k">AIが所有しない決定</span></h4>
+        <p>座標・尺計算、制約解決、最終字幕分割、トラック割り当て、組み立て成功判定、再試行実行、品質検査合格、プライバシー/権利の却下、最終/公開承認は、すべて決定論的コードまたは人間が所有する。LLMは意味判断・候補評価・構成・例外原因の仮説生成に限定される。</p>
+      </div>
+      <div class="sm-card">
+        <h4><span class="k">AIロールとモデル</span></h4>
+        <p>役割（Role）が契約で、モデル（Model）は交換可能な実装。編集ディレクターAI（Editorial Director、GPT-5.6 Sol）と修正指示変換（Review Translator）は実装済み。視覚評価（Visual Judge）はPhase 4で導入、診断アシスタント（Diagnostic Assistant、GLM-5.2）はロール定義のみ。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 3: Architecture ================= -->
+<section class="section" id="architecture">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">02</span><span class="rule"></span><span class="label">アーキテクチャ</span></div>
+      <h2>制作データの流れと、それを支える制御基盤</h2>
+      <p class="section-lead">制作データを流れるデータ面（Data Plane）と、ジョブの状態を管理する制御面（Control Plane）を分ける。破線は提案（Proposal＝未確定）、実線は確定済み成果物（Committed Artifact）。英字はシステム内の正式名称。</p>
+    </div>
+    <div class="plane-wrap">
+
+      <div class="plane reveal">
+        <div class="plane-head">
+          <h3>Data Plane</h3>
+          <span class="sub">制作パイプライン</span>
+          <span class="desc">Camera OriginalsからFinal Reviewまで。各工程の出力はすべてVersioned Artifactとして連鎖する。</span>
+        </div>
+        <div class="plane-body">
+          <div class="flow">            <div class="flow-stage"><div class="flow-node wide">撮影素材<span class="en">Camera Originals・一切変更しない</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node wide">取り込み・正規化<span class="en">Ingest / Normalize・機械可読化・CFR化・適格性判定</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node wide">素材台帳と座標対応表<span class="en">Source Manifest + Conform Map</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node wide">解析<span class="en">Analyzers・音声認識（ASR）・発話・無音・画質</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node wide">検索可能な素材ストア<span class="en">Queryable Media Store・ファイル正本＋DuckDB索引</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node wide">編集ディレクターAI<span class="en">Editorial Director（LLM）</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node proposal">選定プラン案<span class="en">Selection Plan Proposal</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-gate"><div class="gt">検証と確定（Validator / Committer）</div><div class="gc">形式・意味・ロック・機能対応の4段階検証</div></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node committed">選定プラン（確定）<span class="en">Selection Plan（Committed）</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node wide">尺と制約のプランナー<span class="en">Duration / Constraint Planner・決定論的コード</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node proposal">編集プラン案<span class="en">Edit Plan Proposal</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-gate"><div class="gt">検証と確定（Validator / Committer）</div><div class="gc">形式・意味・ロック・機能対応の4段階検証</div></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node committed">編集プラン（確定）<span class="en">Edit Plan（Committed）</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node wide">タイムラインコンパイラ<span class="en">Timeline Compiler・NLE非依存の中間表現へ</span></div></div>
+            <div class="flow-arrow"></div>
+            <div class="flow-stage"><div class="flow-node committed wide">タイムライン中間表現<span class="en">Timeline IR・Resolve固有の命令を含まない</span></div></div>
+          </div>
+          <div class="branch">
+            <div class="lane preview">
+              <div class="lane-head">
+                <span class="lane-tag">編集レーン</span>
+                <h4>プレビューと対話による編集確定</h4>
+                <span class="cond">Resolve不要・低解像度</span>
+              </div>
+              <div class="lane-steps">
+                <div class="lane-step"><div class="flow-node">プレビュー生成<span class="en">Preview Renderer・FFmpeg</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node">編集プレビュー<span class="en">Editorial Preview・低解像度MP4</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node human-touch">確認インターフェース<span class="en">Review Interface・通常プレイヤー＋AI対話</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node">構造化修正指示<span class="en">Review Commands</span></div></div>
+              </div>
+              <div class="loopback">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1F6C9F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+                構造化修正指示は決定論的な適用器（Reducer）で編集プランへ反映され、中間表現とプレビューが再生成される（対話ループ）。
+              </div>
+            </div>
+            <div class="lane final">
+              <div class="lane-head">
+                <span class="lane-tag">仕上げレーン</span>
+                <h4>Resolveでの自動組み立てと検証</h4>
+                <span class="cond">編集承認（EDITORIAL_APPROVED）後にのみ実行</span>
+              </div>
+              <div class="lane-steps">
+                <div class="lane-step"><div class="flow-node">Resolveアダプタ<span class="en">Resolve Adapter・公開Scripting API</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node">ステージングタイムライン<span class="en">Staging Timeline・クリーンビルド（完全再構築）</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node">組み立て検証<span class="en">Build Conformance・アイテム単位の一致確認</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node">最終レンダー<span class="en">Final Render</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node">決定論的品質検査<span class="en">Deterministic QC</span></div></div>
+                <div class="flow-arrow"></div>
+                <div class="lane-step"><div class="flow-node human-touch">最終確認<span class="en">Final Review・人間が確認</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="plane reveal" style="--d:1">
+        <div class="plane-head">
+          <h3>Control Plane</h3>
+          <span class="sub">Job制御基盤</span>
+          <span class="desc">どのArtifactを入力にどのStageを実行したか、Retryしてよいか、人間確認が必要か、どのVersionが承認済みかを管理する。</span>
+        </div>
+        <div class="cp-grid">
+          <div class="cp-cell">
+            <h4><span class="sq"></span>ジョブ状態機械<span class="en-sub">Job State Machine</span></h4>
+            <p>工程の遷移・冪等性（同じ入力なら同じ結果）をCAS（比較して設定）と期限付きリース（Lease＝排他権）で単一書き込み元に保証。</p>
+          </div>
+          <div class="cp-cell">
+            <h4><span class="sq"></span>成果物登録簿<span class="en-sub">Artifact Registry</span></h4>
+            <p>不変のファイル成果物ストアと系譜（lineage）管理。原子的な公開（atomic publish）・クラッシュ復帰・迷子成果物の整合（orphan reconciliation）。</p>
+          </div>
+          <div class="cp-cell">
+            <h4><span class="sq"></span>機能対応表<span class="en-sub">Capability Matrix</span></h4>
+            <p>Resolve機能の実測表。「APIが存在する」と「安全に自動化できる」を区別し、実機検証済み（live_verified）でのみ採用。</p>
+          </div>
+          <div class="cp-cell">
+            <h4><span class="sq"></span>確定済み設定<span class="en-sub">Resolved Configuration</span></h4>
+            <p>システム既定→ジャンル→チャンネル→Episode単位の優先度で解決。ジョブ開始時にスナップショットして固定。</p>
+          </div>
+          <div class="cp-cell">
+            <h4><span class="sq"></span>証跡台帳<span class="en-sub">Evidence Ledger</span></h4>
+            <p>実行前の事前記録（fsync）と前要素ハッシュ連鎖を持つ試行台帳。Gate合否は報告値でなく生バイトから再計算。</p>
+          </div>
+          <div class="cp-cell">
+            <h4><span class="sq"></span>ポリシー防護<span class="en-sub">Policy Guard</span></h4>
+            <p>予算・データポリシー・権限の強制。クラウド送信可否、ローカル限定モード、実装範囲チェック。</p>
+          </div>
+          <div class="cp-cell tty">
+            <h4><span class="sq"></span>承認入口（TTY専用）<span class="en-sub">Approval Ingress</span></h4>
+            <p>人間承認の唯一の入口。端末（TTY）専用のコマンドライン操作で、製品AI・自動実行プログラムは呼び出せない。</p>
+          </div>
+          <div class="cp-cell">
+            <h4><span class="sq"></span>ツールチェーン固定<span class="en-sub">Toolchain Lock</span></h4>
+            <p>uv、CPython、FFmpeg、whisper.cpp、CMake、Semgrepをバイナリ・モデルハッシュ単位でPhase別に固定。</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 4: Job State Machine ================= -->
+<section class="section" id="state-machine">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">03</span><span class="rule"></span><span class="label">ジョブ状態機械</span></div>
+      <h2>長いAI対話をジョブ指揮者（Orchestrator）にしない、12状態の明示的な状態機械</h2>
+      <p class="section-lead">各工程は明示的な入力・出力・成功条件を持ち、冪等（同じ入力なら同じ結果）に実行される。AIの長い連続操作（tool-call chain）へパイプラインを依存させない。状態名はシステム内の識別子のため英語表記。</p>
+    </div>
+    <div class="sm-strip reveal">
+      <div class="sm-row">
+        <div class="sm-state"><span class="sm-chip"><span class="idx">1</span>CREATED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">2</span>INGESTED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">3</span>NORMALIZED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">4</span>ANALYZED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">5</span>PLAN_PROPOSED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">6</span>PLAN_COMMITTED</span></div>
+      </div>
+      <div class="sm-continue" aria-hidden="true"></div>
+      <div class="sm-row">
+        <div class="sm-state"><span class="sm-chip"><span class="idx">7</span>PREVIEW_READY</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state gate"><span class="sm-chip"><span class="idx">8</span>EDITORIAL_APPROVED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">9</span>RESOLVE_BUILT</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">10</span>QC_PASSED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">11</span>FINAL_APPROVED</span></div>
+        <div class="sm-arrow"></div>
+        <div class="sm-state"><span class="sm-chip"><span class="idx">12</span>FROZEN</span></div>
+      </div>
+    </div>
+    <div class="sm-forbidden reveal" style="--d:1">
+      <span class="mono">GATE</span>
+      <span>編集承認（EDITORIAL_APPROVED）は最終組み立ての必須ゲート。<b>承認なしの PREVIEW_READY から RESOLVE_BUILT への遷移は禁止され、テストで保証されている</b>。プレビューを通さずResolveでの組み立てへ進むと、編集判断の問題とResolve自動化の問題が混ざる。</span>
+    </div>
+    <div class="sm-note reveal" style="--d:2">
+      <div class="sm-card">
+        <h4><span class="k">冪等性キー（Idempotency Key）</span></h4>
+        <p>同じキーの成功成果物がある場合は再利用する。コード変更後も古いキーで成功を誤再利用しないよう、V4.2で <code>code_snapshot_id</code> を追加。</p>
+        <div class="key-formula">stage_name + sorted(input_artifact_hashes) + runner_version + code_snapshot_id</div>
+        <p style="margin-top:10px">状態遷移はCAS（期待状態と親ハッシュの一致確認）で行い、競合した側は <code>SUPERSEDED</code>（無効化）になる。クラッシュ後の復旧は最後に確定された成果物から再開する。</p>
+      </div>
+      <div class="sm-card">
+        <h4><span class="k">補助状態と再試行の分類</span></h4>
+        <div class="sm-substates">
+          <span>RUNNING＝実行中</span><span>FAILED_RETRYABLE＝再試行可</span><span class="attention">FAILED_BLOCKING＝要対処</span><span class="attention">NEEDS_HUMAN＝人間確認待ち</span><span>CANCELLED＝中止</span><span>SUPERSEDED＝無効化</span>
+        </div>
+        <p style="margin-top:12px">タイムアウト・一時的なResolve接続断は回数制限付きで自動再試行。形式違反・機能未対応・元素材欠落は自動再試行せず、入力修正または人間確認へ送る。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 5: Time coordinates ================= -->
+<section class="section" id="time">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">04</span><span class="rule"></span><span class="label">正準時間座標</span></div>
+      <h2>四つの正準時間座標。混ぜない、丸めない、仮定しない</h2>
+      <p class="section-lead">時刻は「Original Timestamp」「Edit Video Position」「Edit Audio Position」「Record Position」の座標で厳密に扱う。変換はConform Layerに集約し、有理数・整数演算のみで行う。</p>
+    </div>
+    <div class="coord-grid">
+      <div class="coord-card reveal">
+        <div class="cc-badge">原本</div>
+        <h4>原本時刻<span class="en-sub">Original Timestamp</span></h4>
+        <span class="unit">PTS + time_base</span>
+        <p>カメラが記録した原本の時間。撮影素材は一切変更せず、この座標のまま保存する。</p>
+        <div class="axis"></div>
+      </div>
+      <div class="coord-card reveal" style="--d:1">
+        <div class="cc-badge">編集・映像</div>
+        <h4>編集映像位置<span class="en-sub">Edit Video Position</span></h4>
+        <span class="unit">整数フレーム + フレームレート</span>
+        <p>編集用素材上の映像位置。可変フレームレート（VFR）素材は直接編集せず、固定フレームレート（CFR）の中間素材を生成してから扱う。</p>
+        <div class="axis"></div>
+      </div>
+      <div class="coord-card reveal" style="--d:2">
+        <div class="cc-badge">編集・音声</div>
+        <h4>編集音声位置<span class="en-sub">Edit Audio Position</span></h4>
+        <span class="unit">整数サンプル + サンプルレート</span>
+        <p>編集用素材上の音声位置。字幕と文字起こしトークンは原則このサンプル座標に結び付ける。</p>
+        <div class="axis"></div>
+      </div>
+      <div class="coord-card reveal" style="--d:3">
+        <div class="cc-badge">タイムライン</div>
+        <h4>配置位置<span class="en-sub">Record Position</span></h4>
+        <span class="unit">整数フレーム（タイムライン上）</span>
+        <p>完成タイムライン上の配置位置。サンプルからタイムラインフレームへの変換はコンパイラが行う。</p>
+        <div class="axis"></div>
+      </div>
+    </div>
+    <div class="coord-rules">
+      <div class="coord-rule reveal">
+        <h5>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          すべての区間は半開区間
+        </h5>
+        <p><span class="hl">[start, end)</span> で表現し、<b>小数秒（float）を正準保存に使わない</b>。丸め規則を明示し、hypothesis（プロパティテストライブラリ）で単調性・境界保持・決定的丸めを検証済み。</p>
+      </div>
+      <div class="coord-rule reveal" style="--d:1">
+        <h5>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9F2F2D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.5 5.5l13 13"/></svg>
+          一致を仮定しない
+        </h5>
+        <p>Analyzerの秒・ffprobeのPTS・ResolveのSource Frameが一致すると<b>仮定しない</b>。OriginalとEdit Sourceの対応はConform Map（PTSからframeへのテーブル・sample mapping）としてVersioned Artifactで保存する。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 6: Edit loop ================= -->
+<section class="section" id="loop">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">05</span><span class="rule"></span><span class="label">編集ループ</span></div>
+      <h2>プレビューMP4を見て、自然言語で直す。それだけの対話ループ</h2>
+      <p class="section-lead">Resolveでの組み立て前に低解像度プレビューで編集判断を確定させる（不確実性を早く見せる）。専用UIは作らない。通常の動画プレイヤーと、AIとの対話で完結する。</p>
+    </div>
+    <div class="loop-wrap">
+      <div class="chat-panel reveal">
+        <div class="chat-panel-head">
+          <span class="win"><i></i><i></i><i></i></span>
+          <span class="title">editorial-preview.mp4 を再生しながら対話（例）</span>
+        </div>
+        <div class="chat-body">
+          <div class="msg human">
+            <div class="avatar">人</div>
+            <div class="bubble">
+              <div class="who">操作者</div>
+              <div class="say">3:12〜3:35は削除。</div>
+              <span class="cmd">remove_segment</span>
+            </div>
+          </div>
+          <div class="msg human">
+            <div class="avatar">人</div>
+            <div class="bubble">
+              <div class="who">操作者</div>
+              <div class="say">5:40は切るのが早いので、一文前から残す。</div>
+              <span class="cmd">adjust_source_span</span>
+            </div>
+          </div>
+          <div class="msg human">
+            <div class="avatar">人</div>
+            <div class="bubble">
+              <div class="who">操作者</div>
+              <div class="say">7:20の字幕を「OpenClaw」に修正。</div>
+              <span class="cmd">correct_subtitle</span>
+            </div>
+          </div>
+          <div class="msg human">
+            <div class="avatar">人</div>
+            <div class="bubble">
+              <div class="who">操作者</div>
+              <div class="say">それ以外はOK。</div>
+              <span class="cmd">approve_remaining</span>
+            </div>
+          </div>
+          <div class="msg system">
+            <div class="avatar">AI</div>
+            <div class="bubble">
+              <div class="who">修正指示変換AI（Review Translator）</div>
+              <div class="say">各指示を構造化された修正指示（Review Command）へ変換。検証済みの提案のみ確定し、解釈結果は修正履歴（Review Event）として保存します。曖昧な指示（対象が一意に定まらないもの）だけは状態を変えずに確認へ戻します。</div>
+            </div>
+          </div>
+        </div>
+        <div class="chat-foot">操作表面は <code>services.cli.phase1 run</code>（フロー実行）と <code>services.cli.review propose|apply</code>（指示から提案変換、確定、中間表現/プレビュー再生成）。曖昧・未対応の形式（schema gap）・サポート外（unsupported）な結果は状態を変えない。</div>
+      </div>
+      <div class="loop-steps reveal" style="--d:1">
+        <div class="loop-step human">
+          <div class="no-col"><div class="no">1</div><div class="no-line"></div></div>
+          <div class="ls-body">
+            <h4>プレビューを通常プレイヤーで再生<span class="side">人間</span></h4>
+            <p>低解像度の編集プレビューMP4で、ショットの採否・発話の削除・構成順序・尺とペース（Pacing）・必須収録（Must Include）の充足・字幕内容の大きな誤り・BGMの方向性を確認する。</p>
+          </div>
+        </div>
+        <div class="loop-step human">
+          <div class="no-col"><div class="no">2</div><div class="no-line"></div></div>
+          <div class="ls-body">
+            <h4>自然言語で修正指示<span class="side">人間</span></h4>
+            <p>「3:12〜3:35は削除」「7:20の字幕を修正」のように、タイムスタンプ付きの自然な日本語で伝える。</p>
+          </div>
+        </div>
+        <div class="loop-step ai">
+          <div class="no-col"><div class="no">3</div><div class="no-line"></div></div>
+          <div class="ls-body">
+            <h4>構造化された修正指示へ変換<span class="side">AI</span></h4>
+            <p>修正指示変換AI（Review Translator）が厳密なJSONスキーマ出力の指示案（Command Proposal）へ変換。要求/モデルハッシュを記録し、同じ入力からの再生（replay）が可能。修正履歴（Review Event）には変更前後・理由・冪等性キーが残る。</p>
+          </div>
+        </div>
+        <div class="loop-step human">
+          <div class="no-col"><div class="no">4</div><div class="no-line"></div></div>
+          <div class="ls-body">
+            <h4>曖昧な指示だけ確認<span class="side">人間</span></h4>
+            <p>対象が一意に定まらない指示だけ人間へ確認する。曖昧な命令の自動適用は0件（phase-0cゲートで実証済み）。基準プランの版（Base Plan Version）が不一致なら競合（Conflict）として止める。</p>
+          </div>
+        </div>
+        <div class="loop-step ai">
+          <div class="no-col"><div class="no">5</div><div class="no-line"></div></div>
+          <div class="ls-body">
+            <h4>新しい編集プラン / 中間表現 / プレビューを再生成<span class="side">コード</span></h4>
+            <p>決定論的な適用器（Reducer）が履歴を順に適用し、新しい編集プラン・タイムライン中間表現・プレビューを再生成。冪等性・イベント順序の非可換性・無関係な判断への不影響をテスト済み。この段階でResolveはまだ動かない。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 7: Approval model ================= -->
+<section class="section" id="approval">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">06</span><span class="rule"></span><span class="label">承認モデル</span></div>
+      <h2>承認は目的束縛の操作レコード。AIは承認できない</h2>
+      <p class="section-lead">人間の承認は、端末（TTY）専用コマンドが表示した対象ハッシュを操作者が確認した上で記録される、目的ごとに束縛された操作レコード（Operation Record）として保存される。</p>
+    </div>
+    <div class="approval-top">
+      <div class="ap-card reveal">
+        <h4><span class="k">入口</span>ローカルTTY専用CLI</h4>
+        <p><code>checkpoint show / record / export</code>。目的と対象ハッシュの組み合わせごとに独立したレコードになり、<b>他目的のレコード流用、対象ハッシュ不一致、AI・自動実行からの発行はすべて拒否</b>される。レコードには目的（purpose）、対象ハッシュ、判断内容、操作者ID、ローカルuid、時刻、失効させた旧レコードを含む。</p>
+      </div>
+      <div class="ap-card reveal" style="--d:1">
+        <h4><span class="k">分離</span>製品AIは呼び出せない</h4>
+        <p>編集ディレクターAIなどの製品AIと自動実行プログラムはこの経路を呼び出せない。承認の主体は常にローカルホストの操作者のみ。確認のゲートは編集・見た目・最終の独立した記録として運用される。</p>
+      </div>
+    </div>
+    <div class="purpose-grid">
+      <div class="purpose reveal"><div class="p-name">Editorial</div><div class="p-ja">編集承認</div><p>EDITORIAL_APPROVED。プレビューでの構成確定。最終組み立ての必須ゲート。</p></div>
+      <div class="purpose reveal" style="--d:1"><div class="p-name">Presentation</div><div class="p-ja">見た目一致承認</div><p>PRESENTATION_APPROVED。プレビューと最終出力の見た目の一致（parity）。目次・素材（Manifest/Asset）の変更で自動失効。</p></div>
+      <div class="purpose reveal" style="--d:2"><div class="p-name">Privacy</div><div class="p-ja">プライバシー確認</div><p>重大なプライバシー問題の解消または人間の明示承認。通常の確認予算（Review Budget）外。</p></div>
+      <div class="purpose reveal" style="--d:3"><div class="p-name">Rights</div><div class="p-ja">権利確認</div><p>BGM・効果音・イントロ等の権利期限・用途外使用・ファイル改変のゲート。</p></div>
+      <div class="purpose reveal" style="--d:4"><div class="p-name">Final</div><div class="p-ja">最終承認</div><p>最終レンダー・組み立て報告・品質検査結果の不変セット（Bundle）に対する承認。</p></div>
+      <div class="purpose reveal" style="--d:5"><div class="p-name">Publication</div><div class="p-ja">公開判断</div><p>公開可否の最終判断。AIへ移譲しない人間の専権。</p></div>
+      <div class="purpose reveal" style="--d:6"><div class="p-name">Manual Freeze</div><div class="p-ja">手作業凍結</div><p>スキーマで表現できない手作業の後、タイムラインを例外的に正本化して自動化を凍結。</p></div>
+    </div>
+    <div class="ap-limit reveal" style="--d:7">
+      <span class="ap-limit-label">限界の明記</span>
+      本機構は単一利用者ホスト向けの監査チェックポイントであり、<b>暗号学的な本人認証・否認防止（non-repudiation）ではない</b>。未記録の実行、台帳全体の差し替え、ワークスペース所有者/root権限による改ざんは検出できない。この限界を仕様として明記する。
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 8: Phase / Gate progress ================= -->
+<section class="section" id="progress">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">07</span><span class="rule"></span><span class="label">フェーズとゲート</span></div>
+      <h2>Phaseは機能数ではなく、不確実性を一つずつ潰す順に並んでいる</h2>
+      <p class="section-lead">各ゲートの判定基準は正準JSON（キーソート・小数禁止・SHA-256）として実装から独立に凍結され、観測結果に合わせた期待値の書き換えと同一バージョンの再凍結は禁止される。Gate合否は報告値でなく生バイトからの再計算で判定する。Gate ID（phase-0a等）と状態名はシステム内の識別子のため英語表記。</p>
+    </div>
+    <div class="tl-summary reveal">
+      <span class="tl-count">10<small> Gate 通過済み</small></span>
+      <span class="sep"></span>
+      <span class="tl-count">1<small> 未完了（release）</small></span>
+      <span class="sep"></span>
+      <span class="note">残作業はリリース候補生成と最終独立検証（F1〜F4）のみ。</span>
+    </div>
+    <div class="timeline">
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">準備</span>
+            <span class="tl-gate-id">スパイク・ハーネス</span>
+            <span class="tl-title">実行基盤の足場</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>初期環境構築（bootstrap）、Resolve実機の事前調査（readiness probe）、ゲート判定の枠組み、証跡台帳、最初の検証素材と判定基準の凍結。<b>uv/CPythonハッシュ一致、事前契約確認</b>。</span></div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート1</span>
+            <span class="tl-gate-id">phase-0a</span>
+            <span class="tl-title">Resolve実力確認スパイク（Capability Spike）</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>素材の取り込み、基本カットの配置と読み戻し（readback）、固定字幕、イントロ/アウトロ、音声プリセット、レンダー、アイテム単位の組み立て報告。<b>アイテム一致率100%・全フレームずれ0</b>、6回のクリーンビルド（Resolve再起動含む）＋部分失敗からの回復。</span></div>
+          <div class="tl-detail">フィクスチャ: p0a-cfr30-fixed</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート2</span>
+            <span class="tl-gate-id">phase-0b</span>
+            <span class="tl-title">座標・整合（Conform）スパイク</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>CFR24 / 29.97 / 59.94 / 可変フレームレート（2-3パルス）/ 90度回転 / 音声オフセット1024サンプル。<b>基準値（Golden）との座標100%一致</b>、フレームの落ちられ/重複を全件報告、<b>字幕と音声のずれはタイムライン1フレーム以下</b>。</span></div>
+          <div class="tl-detail">フィクスチャ: p0b-cfr24 / p0b-ntsc2997 / p0b-ntsc5994 / p0b-vfr-2-3-cadence / p0b-rotate90 / p0b-audio-offset1024</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート3</span>
+            <span class="tl-gate-id">phase-0c</span>
+            <span class="tl-title">プレビュー / 自然言語確認スパイク</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>区間削除・範囲調整・字幕修正の明確な指示、曖昧な指示（候補2つ）、ロック競合。<b>明確な命令は100%変換して適用・曖昧な命令の自動適用0件</b>、Resolveなしで編集プラン/中間表現/プレビューを再生成。</span></div>
+          <div class="tl-detail">フィクスチャ: p0c-remove-clear / p0c-span-clear / p0c-subtitle-clear / p0c-ambiguous-two-targets / p0c-locked-conflict</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート4</span>
+            <span class="tl-gate-id">control-plane-baseline</span>
+            <span class="tl-title">制御面（Control Plane）基盤</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>不変の成果物ストア、系譜登録簿、SQLite状態とマイグレーション、CAS/リース/直列化、設定/ポリシー/監査、TTY承認入口。<b>原子的な公開、クラッシュ復帰、迷子成果物の整合、古いCASの拒否、リース排他、パス/シンボリックリンク拒否</b>。</span></div>
+          <div class="tl-detail">このゲートを通過するまでPhase 1以降の実装へ進めない。検証素材: cp-atomic-publish / cp-crash-before-rename / cp-orphan-reconcile / cp-stale-cas / cp-lease-expiry / cp-path-symlink-denial</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート5–6</span>
+            <span class="tl-gate-id">phase-1-technical</span>
+            <span class="tl-title">トーキングヘッド編集の縦貫</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過（技術）</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>5本の参照用検証素材で素材取り込み、音声認識、解析、検索、選定、制約プランニング、編集プラン、中間表現、プレビュー、確認ループを縦貫。<b>必須収録（Must Include）の欠落0・重大な欠陥0・構造化指示の網羅率80%以上・E2E（端から端まで）完走</b>。</span></div>
+          <div class="tl-detail">フィクスチャ: p1-ref-01-clean-ja / p1-ref-02-pauses-fillers / p1-ref-03-multi-take-must-include / p1-ref-04-linked-av-offset / p1-ref-05-review-mix</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge human-gate"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#956400" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.2L20 9l-4 3.9.9 5.6-4.9-2.7-4.9 2.7.9-5.6L4 9l5.6-.8z"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">人間</span>
+            <span class="tl-gate-id">H1</span>
+            <span class="tl-title">実素材による人間承認チェックポイント</span>
+            <span class="st chip chip-amber"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></svg>完了</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>自動試験では満たせない人間だけのゲート。操作者が<b>実素材</b>のトーキングヘッドEpisodeを用意し、プレビュー確認、自然言語での修正、端末（TTY）での <b>EDITORIAL_APPROVED</b> 操作レコード記録までを行う。<b>表示ハッシュ一致、TTY実行、実Episode使用（検証素材での代替禁止）</b>。</span></div>
+          <div class="tl-detail">未完了ならPhase 2開始とリリース候補生成をブロックする。このチェックポイントは完了済み。</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート7</span>
+            <span class="tl-gate-id">phase-2</span>
+            <span class="tl-title">Resolve仕上げの縦貫</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>パッケージ生成、クリーンビルド実行、固定の見た目、アイテム単位の一致/ドリフト検出、レンダー、品質検査、最終確認/凍結の経路。5種の障害注入を含む。<b>アイテム一致率100%・重大/未分類の失敗0・通常経路で手動Resolve操作不要・回数制限付き復旧</b>。</span></div>
+          <div class="tl-detail">障害注入フィクスチャ: p2-stale-capability / p2-partial-build-restart / p2-same-duration-wrong-media / p2-false-render-complete / p2-blocking-qc-privacy</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート8</span>
+            <span class="tl-gate-id">phase-3</span>
+            <span class="tl-title">見た目レイヤー（Presentation Layer）</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>A/Bブランド設定の差し替え、字幕/オーバーレイ/音声/カラープロファイル、プレビューと最終出力の見た目一致。<b>同一の編集内容で構造のずれ0</b>、見た目ハッシュの差分は宣言通り、<b>権利違反0</b>、ゲート7の回帰試験100%合格、組み立て側にチャンネル固有分岐なし。</span></div>
+          <div class="tl-detail">フィクスチャ: p3-brand-a / p3-brand-b（自己生成・権利metadata付き・編集hash同一。実チャンネル資産の登録は範囲外）</div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge pass"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#346538" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></div></div>
+        <div class="tl-card">
+          <div class="tl-head">
+            <span class="tl-wave">運用</span>
+            <span class="tl-gate-id">運用強化</span>
+            <span class="tl-title">保存・計測・セキュリティ・範囲チェック</span>
+            <span class="st chip chip-green"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>通過</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>保存期間管理と不要データ回収（GC）、KPI計測、操作者向けCLIと手順書、攻撃を想定したセキュリティ試験、実装範囲チェック。<b>セキュリティ試験全合格、自マシン内通信（loopback）限定の強制</b>。</span></div>
+        </div>
+      </div>
+
+      <div class="tl-row reveal">
+        <div class="tl-badge-col"><div class="tl-badge open"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#956400" stroke-width="2.4"><rect x="4.5" y="4.5" width="15" height="15" rx="3"/></svg></div></div>
+        <div class="tl-card pending">
+          <div class="tl-head">
+            <span class="tl-wave">ゲート10</span>
+            <span class="tl-gate-id">release</span>
+            <span class="tl-title">リリース候補の生成 + F1〜F4 独立検証</span>
+            <span class="st chip chip-amber"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="4.5" y="4.5" width="15" height="15" rx="3"/></svg>未完了</span>
+          </div>
+          <div class="tl-threshold"><span class="th-label">合格基準</span><span>クリーンルーム再生（会話履歴や開いたままのタイムラインへの依存があれば失敗）＋不変のリリース候補生成＋独立検証。<b>全レーンが承認（APPROVE）、候補のバイト列一致</b>。候補IDは目録（manifest）バイト列のSHA-256。</span></div>
+          <div class="f-lanes">
+            <div class="f-lane"><div class="fl-id">F1</div><p>計画遵守監査。候補の目録/証跡照合、実行記録の検証、識別情報の再計算。</p></div>
+            <div class="f-lane"><div class="fl-id">F2</div><p>コード品質レビュー。候補抽出物への固定環境での静的解析・型検査・オフライン試験。</p></div>
+            <div class="f-lane"><div class="fl-id">F4</div><p>実装範囲の忠実性。Phase 4以降の機能・分散基盤・AI承認権限をSemgrep（静的検査）で拒否。</p></div>
+            <div class="f-lane"><div class="fl-id">F3</div><p>実手動QA。F1/F2/F4承認後に実機Resolveでの障害注入再生と検証。</p></div>
+          </div>
+          <div class="tl-detail">すべてのレーンが同一コミット（full SHA）・同一候補IDで承認（APPROVE）を出すまで完成とみなさない。レビュー後のソース変更は当該コミットのレビューを無効化する。</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 9: Stack ================= -->
+<section class="section" id="stack">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">08</span><span class="rule"></span><span class="label">実装スタック</span></div>
+      <h2>再現性のために、ツールチェーンごと固定する</h2>
+      <p class="section-lead">「同じツール環境」を検証可能な定義にするため、バイナリ・モデルハッシュまでPhase別に固定（Toolchain Lock）して継承管理する。正本は常にファイル成果物。SQLiteとDuckDBは再生成可能な補助構造に限る。</p>
+    </div>
+    <div class="stack-grid">
+      <div class="stack-card reveal">
+        <div class="sc-label">実行基盤</div>
+        <h4>Python 3.12 モジュラーモノリス</h4>
+        <p><code>video-pipeline/services/</code> 配下に約40モジュール。単一リポジトリ・単一実行基盤で、分散キュー・ワーカープールは持たない。</p>
+        <div class="pins"><span class="lock">uv 0.8.11</span><span class="lock">CPython 3.12.10</span></div>
+      </div>
+      <div class="stack-card reveal" style="--d:1">
+        <div class="sc-label">契約</div>
+        <h4>Pydantic v2 strict</h4>
+        <p>契約を <code>extra='forbid'</code> の厳格型で定義し、JSONスキーマを生成してずれ（drift）を検査する。LLM出力は形式検証を通って初めて成果物になる。</p>
+        <div class="pins"><span>生成JSON Schema</span><span>schema_version管理</span></div>
+      </div>
+      <div class="stack-card reveal" style="--d:2">
+        <div class="sc-label">状態と索引</div>
+        <h4>SQLite + DuckDB</h4>
+        <p>SQLiteは実行状態（番号付きマイグレーション）、DuckDBは検索索引（再生成可能）。<b>編集判断の正本をデータベース行として保存しない</b>。正本は常にファイル成果物。</p>
+        <div class="pins"><span>SQLite＝実行状態</span><span>DuckDB＝検索索引</span></div>
+      </div>
+      <div class="stack-card reveal" style="--d:3">
+        <div class="sc-label">品質</div>
+        <h4>pytest / hypothesis / 静的解析</h4>
+        <p>品質ゲートは固定済みロックファイルの上で Ruff・basedpyright・pytest を実行する。hypothesis（プロパティテスト）で座標変換・制約解決を検証。</p>
+        <div class="cmd-block"><span>uv sync --frozen</span><span>uv run ruff check .</span><span>uv run basedpyright</span><span>uv run pytest -q</span></div>
+        <div class="pins"><span>Ruff</span><span>basedpyright</span><span class="lock">Semgrep 1.120.0</span></div>
+      </div>
+      <div class="stack-card reveal" style="--d:4">
+        <div class="sc-label">音声認識（ASR）</div>
+        <h4>whisper.cpp ローカル日本語ASR</h4>
+        <p><code>ggml-org/whisper.cpp</code>をコミット固定（pin）でソースビルド。モデルは <code>ggml-large-v3-turbo.bin</code>（改訂版・SHA-256固定）。入力は凍結したFFmpeg引数でのみ変換。<b>クラウド送信なし</b>。</p>
+        <div class="pins"><span class="lock">commit 1fe009ca…</span><span class="lock">モデルSHA-256固定</span></div>
+      </div>
+      <div class="stack-card reveal" style="--d:5">
+        <div class="sc-label">メディア処理</div>
+        <h4>FFmpeg 7.1.1</h4>
+        <p>ハッシュ固定ビルド。configure引数まで凍結し、プレビュー生成・音声前処理・解析入力のすべてを同一バイナリで実行する。</p>
+        <div class="pins"><span class="lock">FFmpeg 7.1.1</span><span class="lock">configure凍結</span><span class="lock">CMake 3.31.8</span></div>
+      </div>
+      <div class="stack-card reveal" style="--d:6">
+        <div class="sc-label">編集ソフト（NLE）</div>
+        <h4>DaVinci Resolve Studio 21</h4>
+        <p>自マシン内通信（loopback）限定のブリッジ経由で、実機調査済みの公式スクリプティングAPIのみをロード。内部データベースの直接編集は正式経路にしない。</p>
+        <div class="pins"><span>公開Scripting API</span><span>loopback限定</span></div>
+      </div>
+      <div class="stack-card reveal" style="--d:7">
+        <div class="sc-label">試験マーカー</div>
+        <h4>実機と合成の分離</h4>
+        <p><code>resolve_live</code>（実機Resolve必須）と <code>cloud_fixture</code>（合成データのクラウド呼び出し）をマーカー分離。実機検証とオフライン試験を混ぜない。</p>
+        <div class="pins"><span>resolve_live</span><span>cloud_fixture</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Section 10: Not building yet ================= -->
+<section class="section notyet" id="not-yet">
+  <div class="section-inner">
+    <div class="section-head reveal">
+      <div class="section-eyebrow"><span class="num">09</span><span class="rule"></span><span class="label">意図的に作らないもの</span></div>
+      <h2>今は作らないもの</h2>
+      <p class="section-lead">先回り実装をしない。Phase 4以降の機能は未実装であることをテストで保証し、必要になったとき（実素材の失敗から）初めて追加する。</p>
+    </div>
+    <div class="notyet-grid">
+      <div class="ny-card reveal">
+        <h4><span class="ph">PHASE 4</span>旅行・POV支援モード（Travel/POV）</h4>
+        <p>シーン検出、動き解析、視覚類似、視覚評価AI（Visual Judge）、J/Lカット、Bロール。視覚候補ベースの編集も完全自動選択ではなく候補提示型（Candidate-assisted）から始める。</p>
+      </div>
+      <div class="ny-card reveal" style="--d:1">
+        <h4><span class="ph">PHASE 5</span>レビュー学習（Review Learning）</h4>
+        <p>過去の編集プラン取得、プロフィール変更提案、効果確認用の保留評価（Holdout）。<code>get_review_examples</code> 等の取得APIは<b>存在しないことをテストで保証</b>している。プロフィール自動更新は常に禁止。</p>
+      </div>
+      <div class="ny-card reveal" style="--d:2">
+        <h4><span class="ph">PHASE 5</span>専用レビューUI</h4>
+        <p>「残す/削除/トリム」ボタンやシークUIは作らない。自然言語での確認が複数本運用され、人間時間のボトルネックが実測された場合にだけ追加する。</p>
+      </div>
+      <div class="ny-card reveal" style="--d:3">
+        <h4><span class="ph">PHASE 6</span>Shorts等の派生動画</h4>
+        <p>本編パイプラインの安定が先。素材ストアと候補は再利用するが、編集プランは本編と別に作る。</p>
+      </div>
+      <div class="ny-card reveal" style="--d:4">
+        <h4><span class="ph">PHASE 4</span>自動プライバシー検出</h4>
+        <p>現状は人間が申告したプライバシー/権利の問題を受け付け、人間のゲートを強制するのみ。自動検出器の読み込み自体が範囲チェックで拒否されることをテストで保証。</p>
+      </div>
+      <div class="ny-card reveal" style="--d:5">
+        <h4><span class="ph">非目標</span><span><span class="nowrap">トランジション /</span> <span class="nowrap">可変速度 /</span> <span class="nowrap">マルチカム自動化</span></span></h4>
+        <p>トランジション自動追加、可変速度再生（Retime）、ネイティブマルチカム、ショットごとのAIカラーグレード、複雑なFusion合成は対象外。ハードカット・一定速再生に限定する。</p>
+      </div>
+    </div>
+    <div class="ny-note reveal" style="--d:6">
+      <span class="nn-tag">未評価</span>
+      <p>技術フィクスチャ（検証用素材）だけで30分KPIや実編集品質の達成を主張しない。実作業時間（Active Human Time）は実素材Episodeを実運用して初めて評価できる指標であり、合成データの指標を実人間時間と混同しない。あらゆるジャンルへの同時対応、Resolve全機能自動化、分散キュー・第二Resolveホスト等も非目標として明示的に排除済み。</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ================= Footer / Section 11 ================= -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div>
+        <div class="f-brand">davinci-agent</div>
+        <p class="f-desc">カメラ素材からYouTube動画まで、Versioned Artifactの連鎖として再構築可能に実行する制作パイプライン。このページは正本仕様の要約であり、内容の正本はPRDにある。</p>
+      </div>
+      <div>
+        <h5>文書</h5>
+        <div class="f-links">
+          <code>docs/prd/PRD_v4.2.md</code>
+          <span style="font-size:11.5px;color:#8F8D88;">正本仕様（本ページの情報源）</span>
+          <code>.omo/plans/foundation-video-pipeline.md</code>
+          <span style="font-size:11.5px;color:#8F8D88;">実行計画（OMO監査済み実行仕様・証跡契約）</span>
+        </div>
+      </div>
+      <div>
+        <h5>参照</h5>
+        <div class="f-meta">
+          <div><b>文書バージョン</b>　4.2</div>
+          <div><b>基準日</b>　2026-08-21</div>
+          <div><b>対象</b>　DaVinci Resolve Studio 21</div>
+          <div><b>状態</b>　Phase 0A〜3実装完了・リリース検証中</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>AI動画編集パイプライン 概要</span>
+    <span>報告値を信頼しない。証拠は再計算可能でなければならない。</span>
+    <a href="operator-manual.html" style="color:#C9E4D6;text-decoration:underline;">操作マニュアル（何をどんな順番で行うか）→</a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var targets = document.querySelectorAll(".reveal");
+  if (reduce || !("IntersectionObserver" in window)) {
+    targets.forEach(function (el) { el.classList.add("is-visible"); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        io.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+  targets.forEach(function (el) { io.observe(el); });
+  // 印刷・フルページキャプチャ時は全要素を即時表示する
+  window.addEventListener("beforeprint", function () {
+    targets.forEach(function (el) { el.classList.add("is-visible"); });
+  });
+})();
+</script>
+
+</body>
+</html>

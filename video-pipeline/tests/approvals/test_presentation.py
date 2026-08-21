@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 import pytest
 from pydantic import ValidationError
 
+from services.approvals.chain_key import load_chain_key
 from services.approvals.models import OperationDraft
 from services.approvals.presentation import (
     REFUSAL_PURPOSE_REUSE,
@@ -56,6 +57,11 @@ if TYPE_CHECKING:
     from services.presentation.models import ResolvedPresentationProfile
 
 PREVIEW_SHA = "d" * 64
+
+
+
+def chain_key_for(store: OperationRecordStore) -> bytes:
+    return load_chain_key(store.records_path, create=False)
 
 
 def _load_brand(fixture_id: str) -> Phase3FixtureManifest:
@@ -166,10 +172,14 @@ def test_marked_fixture_presentation_record_authorizes(
     assert record.fixture_only is True
     store.verify_chain()
 
-    verdict = authorize_presentation(store.all_records(), binding)
+    verdict = authorize_presentation(
+        store.all_records(), binding, chain_key=chain_key_for(store)
+    )
     assert verdict.authorized is True
     assert verdict.record_id == record.record_id
-    operator = authorize_presentation(store.all_records(), binding, operator_gate=True)
+    operator = authorize_presentation(
+        store.all_records(), binding, chain_key=chain_key_for(store), operator_gate=True
+    )
     assert operator.authorized is False
     assert operator.refusal_code == "fixture-record"
 
@@ -187,7 +197,9 @@ def test_editorial_or_final_purpose_reuse_is_typed(
     for purpose in ("editorial", "final"):
         reused_store: OperationRecordStore = make_store(tmp_path / f"reuse-{purpose}")
         reused_store.append(fixture_draft(purpose=purpose, target=target))
-        verdict = authorize_presentation(reused_store.all_records(), binding)
+        verdict = authorize_presentation(
+            reused_store.all_records(), binding, chain_key=chain_key_for(reused_store)
+        )
         assert verdict.authorized is False
         assert verdict.refusal_code == REFUSAL_PURPOSE_REUSE
         assert verdict.purpose == purpose
@@ -224,7 +236,9 @@ def test_changed_asset_or_manifest_after_approval_supersedes(
     fresh_binding = bind_presentation_approval(
         manifest_b, preview_artifact_sha256=PREVIEW_SHA
     )
-    assert authorize_presentation((), fresh_binding).refusal_code == "no-record"
+    assert authorize_presentation(
+        (), fresh_binding, chain_key=b"empty-chain-key"
+    ).refusal_code == "no-record"
 
 
 def test_editorial_change_also_supersedes_editorial(
@@ -265,7 +279,9 @@ def test_no_drift_keeps_authorization(
     assert verdict.presentation_superseded is False
     assert verdict.editorial_superseded is False
     enforce_supersession(verdict)
-    assert authorize_presentation(store.all_records(), binding).authorized is True
+    assert authorize_presentation(
+        store.all_records(), binding, chain_key=chain_key_for(store)
+    ).authorized is True
 
 
 # ---------------------------------------------------------------- malformed --

@@ -170,12 +170,17 @@ def route_to_freeze(tmp_path, *, with_record: bool):
     if with_record:
         fixture_record(store, purpose="manual_freeze", target_hash=bundle.target_set_hash)
     freeze_store = FreezeStore(tmp_path / "manual-finalization")
+    from services.approvals.chain_key import load_chain_key  # noqa: PLC0415
+
+    chain_key = load_chain_key(store.records_path, create=True)
+
     result = route_unsupported(
         ledger,
         records=store.all_records(),
         inputs=FreezeInputs.model_validate(freeze_inputs(bundle.target_set_hash)),
         freeze_store=freeze_store,
         reason_detail="Fairlight fine-grained automation is not exposed",
+        chain_key=chain_key,
         fixture_mode=True,
     )
     return result, freeze_store, ledger

@@ -18,6 +18,7 @@ import os
 import urllib.error
 import urllib.request
 from typing import TYPE_CHECKING, Final
+from urllib.parse import urlparse
 
 from services.contracts.editorial_model import EditorialSelectionProposal
 from services.editorial.prompt import SYSTEM_PROMPT, UNTRUSTED_DATA_NOTICE, build_prompt
@@ -37,6 +38,8 @@ if TYPE_CHECKING:
 NETWORK_ENV: Final = "EDITORIAL_DIRECTOR_NETWORK_ENABLED"
 DEFAULT_ENDPOINT: Final = "https://api.openai.com/v1/responses"
 ENDPOINT_ENV: Final = "EDITORIAL_DIRECTOR_BASE_URL"
+ALLOWED_ENDPOINT_HOSTS: Final = frozenset({"api.openai.com"})
+ALLOWED_ENDPOINT_SCHEMES: Final = frozenset({"https"})
 REQUEST_TIMEOUT_SECONDS: Final = 120
 _ERROR_BODY_LIMIT: Final = 300
 
@@ -65,6 +68,56 @@ def _gate(env: dict[str, str]) -> EditorialTransportFailure | None:
             ),
         )
     return None
+
+
+def pinned_endpoint(endpoint: str | None, env: dict[str, str]) -> str:
+    """Resolve the endpoint to an EXACT allowlisted HTTPS origin.
+
+    The override env var may only name an already-pinned host over HTTPS;
+    anything else (plain HTTP, another host, a subdomain look-alike, a
+    non-http scheme) is refused before any socket opens.
+    """
+    resolved = endpoint or env.get(ENDPOINT_ENV, DEFAULT_ENDPOINT)
+    parsed = urlparse(resolved)
+    if (
+        parsed.scheme not in ALLOWED_ENDPOINT_SCHEMES
+        or parsed.hostname not in ALLOWED_ENDPOINT_HOSTS
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        allowlist = ", ".join(sorted(ALLOWED_ENDPOINT_HOSTS))
+        raise ValueError(
+            "endpoint-not-pinned: "
+            f"live editorial endpoint {resolved!r} is not pinned: the exact "
+            f"HTTPS origin must be one of [{allowlist}] "
+            f"(scheme https, exact host, no credentials in URL)"
+        )
+    return resolved
+
+
+class _PinnedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Redirects are refused outright: the bearer must never ride one."""
+
+    def redirect_request(  # type: ignore[override] (refusal contract)  # noqa: PLR0913, PLR0917
+        self,
+        req: urllib.request.Request,
+        fp: object,
+        redirect_to: str,
+        code: int,
+        message: str,
+        data: object,
+        headers: object = None,
+    ) -> urllib.request.Request | None:
+        del req, fp, code, message, data, headers
+        raise ValueError(
+            "redirect-refused: the pinned editorial endpoint answered a "
+            f"redirect to {redirect_to!r}; redirects are refused so the "
+            "bearer credential can never be replayed to another origin"
+        )
+
+
+def _no_redirect_opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(_PinnedRedirectHandler())
 
 
 def _request_body(pin: EditorialDirectorPin, request: DirectorRequest) -> bytes:
@@ -135,12 +188,16 @@ class LiveHttpTransport(EditorialTransport):
         self._env = env if env is not None else dict(os.environ)
         self._endpoint = endpoint
 
-    def send(self, request_hash: str) -> EditorialOutcome:
+    def send(self, request_hash: str) -> EditorialOutcome:  # noqa: PLR0911 (typed outcome per failure)
         del request_hash
         refused = _gate(self._env)
         if refused is not None:
             return refused
-        endpoint = self._endpoint or self._env.get(ENDPOINT_ENV, DEFAULT_ENDPOINT)
+        try:
+            endpoint = pinned_endpoint(self._endpoint, self._env)
+        except ValueError as error:
+            code, _, detail = str(error).partition(": ")
+            return EditorialTransportFailure(code=code, detail=detail)
         body = _request_body(self._pin, self._request)
         http_request = urllib.request.Request(  # noqa: S310 (https endpoint, pinned surface)
             endpoint,
@@ -152,10 +209,13 @@ class LiveHttpTransport(EditorialTransport):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(  # noqa: S310 (pinned https endpoint)
+            with _no_redirect_opener().open(
                 http_request, timeout=REQUEST_TIMEOUT_SECONDS
             ) as response:
                 raw = response.read()
+        except ValueError as error:
+            code, _, detail = str(error).partition(": ")
+            return EditorialTransportFailure(code=code, detail=detail)
         except urllib.error.HTTPError as error:
             detail = error.read()[:_ERROR_BODY_LIMIT].decode("utf-8", "replace")
             return EditorialTransportFailure(
@@ -186,8 +246,10 @@ class LiveHttpTransport(EditorialTransport):
 
 
 __all__ = [
+    "ALLOWED_ENDPOINT_HOSTS",
     "DEFAULT_ENDPOINT",
     "ENDPOINT_ENV",
     "NETWORK_ENV",
     "LiveHttpTransport",
+    "pinned_endpoint",
 ]

@@ -12,6 +12,7 @@ from services.fixtures.golden import GoldenAuditError, audit_derivation_source
 from services.fixtures.manifest_phase0c import Phase0CFixtureManifest
 from services.fixtures.models import (
     FreezeIntent,
+    GateVersion,
     GoldenHashes,
     ManifestBinding,
     Phase0CFreezeReceipt,
@@ -39,6 +40,7 @@ class Phase0CPrepareRequest:
     freeze_receipt: Path
     staging: Path
     intent: Path
+    gate_version: GateVersion = "v1"
 
 
 def _load_manifest(root: Path, fixture_id: str) -> tuple[Phase0CFixtureManifest, bytes]:
@@ -118,10 +120,12 @@ def _verify_parent_gate_result(path: Path, root: Path) -> tuple[str, str]:
     raw = path.read_bytes()
     result = GateResult.model_validate_json(raw)
     result_sha256 = hashlib.sha256(raw).hexdigest()
-    frozen_0b_policy = root / "config/gates/phase-0b-v1.json"
+    from services.fixtures.prepare import parent_policy_path  # noqa: PLC0415
+
+    frozen_0b_policy = parent_policy_path(root, "phase-0b", result.gate_version)
     policy_sha256 = sha256_file(frozen_0b_policy)
-    if result.gate_id != "phase-0b" or result.gate_version != "v1":
-        raise PrepareError("parent gate result must be the frozen phase-0b v1 result")
+    if result.gate_id != "phase-0b":
+        raise PrepareError("parent gate result must be a frozen phase-0b result")
     if not result.passed:
         raise PrepareError("parent phase-0b gate result did not pass")
     if result.policy_sha256 != policy_sha256:
@@ -184,7 +188,7 @@ def prepare_phase0c(request: Phase0CPrepareRequest) -> FreezeIntent:
     policy = GatePolicy(
         schema_version="gate-policy-v1",
         gate_id="phase-0c",
-        gate_version="v1",
+        gate_version=request.gate_version,
         parent_gate_result_hashes=(parent_sha256,),
         criteria=PHASE_0C_CRITERIA,
         toolchain_lock_sha256=toolchain_hash,
@@ -196,6 +200,7 @@ def prepare_phase0c(request: Phase0CPrepareRequest) -> FreezeIntent:
     policy_bytes = canonical_gate_bytes(policy)
     policy_hash = hashlib.sha256(policy_bytes).hexdigest()
     receipt = Phase0CFreezeReceipt(
+        gate_version=request.gate_version,
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,
         toolchain_lock_path=str(request.toolchain_lock.resolve(strict=True)),
@@ -228,6 +233,7 @@ def prepare_phase0c(request: Phase0CPrepareRequest) -> FreezeIntent:
     intent = FreezeIntent(
         todo=26,
         gate_id="phase-0c",
+        gate_version=request.gate_version,
         staged_policy_path=str(staged_policy.resolve(strict=True)),
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,

@@ -25,6 +25,7 @@ from services.fixtures.manifest_phase3 import (
 )
 from services.fixtures.models import (
     FreezeIntent,
+    GateVersion,
     ManifestBinding,
     ParentResultLink,
     Phase3FreezeReceipt,
@@ -58,6 +59,7 @@ class Phase3PrepareRequest:
     freeze_receipt: Path
     staging: Path
     intent: Path
+    gate_version: GateVersion = "v1"
 
 
 def _load_manifest(root: Path, fixture_id: str) -> tuple[Phase3FixtureManifest, bytes]:
@@ -99,11 +101,13 @@ def verify_phase3_toolchain(lock_path: Path) -> Phase3ToolchainLock:
 def _verify_parent_gate_result(path: Path, root: Path) -> ParentResultLink:
     raw = path.read_bytes()
     result = GateResult.model_validate_json(raw)
-    if result.gate_id != PHASE_3_PARENT_GATE or result.gate_version != "v1":
-        raise PrepareError("parent gate result must be the frozen phase-2 v1 result")
+    if result.gate_id != PHASE_3_PARENT_GATE:
+        raise PrepareError("parent gate result must be a frozen phase-2 result")
     if not result.passed:
         raise PrepareError("parent phase-2 gate result did not pass")
-    policy_hash = sha256_file(root / PHASE_3_PARENT_POLICY)
+    from services.fixtures.prepare import parent_policy_path  # noqa: PLC0415
+
+    policy_hash = sha256_file(parent_policy_path(root, "phase-2", result.gate_version))
     if result.policy_sha256 != policy_hash:
         raise PrepareError("parent gate result is bound to a different phase-2 policy")
     return ParentResultLink(
@@ -134,14 +138,24 @@ def _verify_pair(manifests: dict[str, Phase3FixtureManifest]) -> None:
                 raise PrepareError(f"stored asset bytes drift: {fixture_id}/{asset.kind}")
 
 
+def _guard_product_module(root: Path, gate_version: GateVersion) -> None:
+    """v1 input-freeze precedes implementation; a re-freeze re-binds the code."""
+    if gate_version == "v1":
+        if (root / PHASE_3_PRODUCT_MODULE).exists():
+            raise PrepareError(
+                "phase-3 product code already exists; the input freeze must precede implementation"
+            )
+    elif not (root / PHASE_3_PRODUCT_MODULE).exists():
+        raise PrepareError(
+            "a same-gate re-freeze requires the implemented product module to re-bind"
+        )
+
+
 def prepare_phase3(request: Phase3PrepareRequest) -> FreezeIntent:
     if request.fixture_ids != PHASE_3_FIXTURES or request.fixture_ids != PHASE_3_FIXTURE_IDS:
         raise PrepareError("phase-3 accepts exactly the two canonical brand fixture ids")
     root = Path.cwd().resolve()
-    if (root / PHASE_3_PRODUCT_MODULE).exists():
-        raise PrepareError(
-            "phase-3 product code already exists; the input freeze must precede implementation"
-        )
+    _guard_product_module(root, request.gate_version)
     if request.policy_out.exists() or request.freeze_receipt.exists():
         raise PrepareError("same-version re-freeze is forbidden")
     parsed: dict[str, Phase3FixtureManifest] = {}
@@ -173,7 +187,7 @@ def prepare_phase3(request: Phase3PrepareRequest) -> FreezeIntent:
     policy = GatePolicy(
         schema_version="gate-policy-v1",
         gate_id="phase-3",
-        gate_version="v1",
+        gate_version=request.gate_version,
         parent_gate_result_hashes=(parent.sha256,),
         criteria=PHASE_3_CRITERIA,
         toolchain_lock_sha256=toolchain_hash,
@@ -185,6 +199,7 @@ def prepare_phase3(request: Phase3PrepareRequest) -> FreezeIntent:
     policy_bytes = canonical_gate_bytes(policy)
     policy_hash = hashlib.sha256(policy_bytes).hexdigest()
     receipt = Phase3FreezeReceipt(
+        gate_version=request.gate_version,
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,
         toolchain_lock_path=str(request.toolchain_lock.resolve(strict=True)),
@@ -214,6 +229,7 @@ def prepare_phase3(request: Phase3PrepareRequest) -> FreezeIntent:
     intent = FreezeIntent(
         todo=56,
         gate_id="phase-3",
+        gate_version=request.gate_version,
         staged_policy_path=str(staged_policy.resolve(strict=True)),
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,

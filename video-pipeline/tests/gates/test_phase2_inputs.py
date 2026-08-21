@@ -34,8 +34,8 @@ ATTEMPT = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
-POLICY = Path("config/gates/phase-2-v1.json")
-RECEIPT = ATTEMPT / "task-47-freeze-receipt.json"
+POLICY = Path("config/gates/phase-2-v4.json")
+RECEIPT = ATTEMPT / "gate-cascade/receipts/phase-2-v4.json"
 LOCK = Path("config/toolchains/phase-2-v1.json")
 
 
@@ -45,7 +45,7 @@ def test_frozen_policy_is_canonical_with_three_parents_and_h1_prerequisite() -> 
 
     assert raw == canonical_gate_bytes(policy)
     assert policy.gate_id == "phase-2"
-    assert policy.gate_version == "v1"
+    assert policy.gate_version == "v4"
     assert policy.criteria == PHASE_2_CRITERIA
     assert policy.capability_allowlist == PHASE_2_CAPABILITIES
     assert policy.parent_gate_result_hashes == (
@@ -82,7 +82,7 @@ def test_freeze_receipt_binds_five_fixtures_three_parents_lock_and_checkpoint() 
     )
     assert receipt.toolchain_lock_sha256 == hashlib.sha256(LOCK.read_bytes()).hexdigest()
     assert receipt.execution_contract_sha256 == hashlib.sha256(
-        (ATTEMPT / "execution-contract.json").read_bytes()
+        (ATTEMPT / "gate-cascade/execution-contract.canonical.json").read_bytes()
     ).hexdigest()
     assert receipt.prerequisite_checkpoint.episode_id == "real-01"
     assert receipt.golden_hashes.index_sha256 == hashlib.sha256(
@@ -91,7 +91,9 @@ def test_freeze_receipt_binds_five_fixtures_three_parents_lock_and_checkpoint() 
 
 
 def test_policy_verification_passes_with_frozen_artifacts() -> None:
-    policy = verify_policy(POLICY, RECEIPT, None, ATTEMPT / "execution-contract.json")
+    policy = verify_policy(
+        POLICY, RECEIPT, None, ATTEMPT / "gate-cascade/execution-contract.canonical.json"
+    )
 
     assert policy.gate_id == "phase-2"
 
@@ -146,7 +148,7 @@ def test_two_parents_are_rejected() -> None:
 def test_edited_policy_is_rejected_by_receipt_binding(tmp_path: Path) -> None:
     edited = tmp_path / "policy.json"
     payload = _policy_payload()
-    payload["gate_version"] = "v2"
+    payload["gate_version"] = "v9"
     edited.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
     with pytest.raises(PolicyVerificationError, match="policy hash"):

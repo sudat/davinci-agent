@@ -122,6 +122,30 @@ class RestartObservation(StrictModel):
     binding_same: bool
 
 
+class LiveInvocation(StrictModel):
+    """The canonical invocation identity a summary is bound to.
+
+    Revalidation of an idempotent re-run requires EXACT equality of this
+    record (and its digest) with the current invocation — a passing
+    summary from any other extract/binding/routes/profiles/tools can
+    never be replayed as the current success.
+    """
+
+    schema_version: Literal["live-invocation-v1"] = "live-invocation-v1"
+    candidate_id: Sha256
+    extract_git_sha: str
+    h1_binding_sha256: Sha256
+    injections: tuple[InjectionRoute, ...]
+    profiles: tuple[ProfileId, ...]
+    tool_sha256: tuple[Sha256, ...] = ()
+    invocation_digest: Sha256
+
+
+class EvidenceFileRef(StrictModel):
+    path: str
+    sha256: Sha256
+
+
 @dataclass(frozen=True)
 class ProfileBuildResult:
     """Runtime carrier from the profile-build seam (not serialized)."""
@@ -141,7 +165,11 @@ class LiveReplaySummary(StrictModel):
     injections: tuple[InjectionOutcome, ...]
     profile_swap: ProfileSwapEvidence
     final_render: FinalRenderObservation
-    verdict: Literal["passed", "failed"]
+    verdict: Literal["passed", "failed", "diagnostic-passed"]
+    verdict_scope: Literal["acceptance", "diagnostic"] = "diagnostic"
+    invocation: LiveInvocation | None = None
+    evidence_files: tuple[EvidenceFileRef, ...] = ()
+    evidence_files_complete: bool = False
     failure_codes: tuple[str, ...]
 
 
@@ -150,11 +178,13 @@ __all__ = [
     "PROFILE_SNAPSHOT_IDS",
     "AnchorFrame",
     "AnchorPosition",
+    "EvidenceFileRef",
     "FinalRenderObservation",
     "H1Evidence",
     "InjectionOutcome",
     "InjectionRoute",
     "LeaseEvidence",
+    "LiveInvocation",
     "LiveReplaySummary",
     "ProfileBuildEvidence",
     "ProfileBuildResult",

@@ -18,7 +18,7 @@ from services.fixtures.materialize_validation import (
 from services.foundation_io import sha256_file
 
 MANIFEST = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixed.json")
-POLICY = Path("config/gates/phase-0a-v1.json")
+POLICY = Path("config/gates/phase-0a-v2.json")
 STATIC_OUTPUTS = (
     "audio-preset.json",
     "expected-readback.json",

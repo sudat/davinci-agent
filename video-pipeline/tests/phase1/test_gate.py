@@ -29,7 +29,7 @@ ATTEMPT = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
-POLICY = Path("config/gates/phase-1-technical-v1.json")
+POLICY = Path("config/gates/phase-1-technical-v2.json")
 WORK_ID = "pytest-phase1-gate-work-id"
 
 
@@ -56,7 +56,7 @@ def test_00_all_five_criteria_pass(gate: tuple[Path, Path]) -> None:
     )
     assert all(row.passed for row in result.criteria_results)
     assert result.gate_id == "phase-1-technical"
-    assert result.gate_version == "v1"
+    assert result.gate_version == "v2"
 
 
 def test_10_every_criterion_is_bound_to_real_evidence(gate: tuple[Path, Path]) -> None:

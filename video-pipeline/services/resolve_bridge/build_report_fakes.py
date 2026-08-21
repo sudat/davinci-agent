@@ -38,6 +38,7 @@ from services.resolve_bridge.models import (
     ResolveDocs,
     ResolveHostReport,
     ScriptingPosture,
+    ScriptingScopeLiveProbe,
 )
 from services.resolve_bridge.readiness import APP, SCRIPTING
 
@@ -97,11 +98,19 @@ def synthetic_host_report() -> ResolveHostReport:
         ),
         scripting=ScriptingPosture(
             preference_paths=(),
-            remote_access="unknown",
+            remote_access="loopback",
             runtime_policy="loopback-only",
             network_access_performed=False,
-            needs_live_verification=True,
-            reason="synthetic build-report fault scenario",
+            needs_live_verification=False,
+            reason="synthetic live-verified scripting scope",
+            live_probe=ScriptingScopeLiveProbe(
+                scripting_enabled=True,
+                transport_observed="synthetic tcp 127.0.0.1 -> 127.0.0.1:49152",
+                scripting_server_port=49152,
+                listener_bound_addresses=("*:49152",),
+                non_loopback_probe="refused",
+                evidence_note="synthetic live-verified loopback scope",
+            ),
         ),
         gpu=GpuInventory(backend="metal", inventory="synthetic"),
         assets=AssetInventory(

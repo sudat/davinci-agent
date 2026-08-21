@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from services.approvals.chain_key import load_chain_key
 from services.final_review.bundle import (
     PrivacyAlignmentError,
     assemble_final_review_bundle,
@@ -69,6 +70,7 @@ def assemble(tmp_path, payload: dict[str, object], *, fixture_mode: bool = True)
         records=store.all_records(),
         inputs=payload,
         reason_detail="unsupported",
+        chain_key=load_chain_key(store.records_path, create=True),
         fixture_mode=fixture_mode,
     )
 
@@ -82,6 +84,7 @@ def test_complete_package_assembles_with_fixture_freeze_record(tmp_path) -> None
         records=store.all_records(),
         inputs=FreezeInputs.model_validate(inputs()),
         reason_detail="Resolve cannot automate this transition",
+        chain_key=load_chain_key(store.records_path, create=True),
         fixture_mode=True,
     )
     assert package.automation_frozen is True
@@ -96,6 +99,7 @@ def test_missing_manual_freeze_record_refused(tmp_path) -> None:
             records=store.all_records(),
             inputs=FreezeInputs.model_validate(inputs()),
             reason_detail="unsupported",
+            chain_key=load_chain_key(store.records_path, create=True),
             fixture_mode=True,
         )
 
@@ -108,6 +112,7 @@ def test_wrong_purpose_record_cannot_authorize_freeze(tmp_path) -> None:
             records=store.all_records(),
             inputs=FreezeInputs.model_validate(inputs()),
             reason_detail="unsupported",
+            chain_key=load_chain_key(store.records_path, create=True),
             fixture_mode=True,
         )
 
@@ -120,6 +125,7 @@ def test_fixture_freeze_record_presented_as_real_refused(tmp_path) -> None:
             records=store.all_records(),
             inputs=FreezeInputs.model_validate(inputs()),
             reason_detail="unsupported",
+            chain_key=load_chain_key(store.records_path, create=True),
             fixture_mode=False,
         )
 
@@ -131,6 +137,7 @@ def test_real_operator_freeze_record_authorizes_production_freeze(tmp_path) -> N
         records=store.all_records(),
         inputs=FreezeInputs.model_validate(inputs(fixture_only=False)),
         reason_detail="manual finish",
+        chain_key=load_chain_key(store.records_path, create=True),
         fixture_mode=False,
     )
     assert package.fixture_only is False

@@ -3,14 +3,20 @@
 These rows complement the flock lease authority with durable,
 expiry-enforced bookkeeping. Expiry is evaluated ONLY against
 caller-supplied ``now`` values (logical test clock or epoch reading);
-no method reads the wall clock. Acquire after expiry steals the row,
-renew/release by a non-holder or past expiry fail closed.
+no method reads the wall clock. Every mutation is ONE atomic
+conditional statement under ``BEGIN IMMEDIATE`` (acquire = conditional
+upsert that only overwrites the same holder or an expired row; renew
+and release re-check holder and expiry in the statement's WHERE
+clause), and refusal is decided by the affected-row count — so two
+connections can never both observe success, and a reader that raced
+with a fresh committer is refused instead of blindly overwriting.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from typing import TYPE_CHECKING
+import types
+from typing import TYPE_CHECKING, Final
 
 from services.job_runner.state_context import StateContext
 from services.job_runner.state_errors import StateStoreError
@@ -19,6 +25,18 @@ from services.job_runner.state_models import LeaseRow
 if TYPE_CHECKING:
     from services.contracts.primitives import Identifier
 
+_ACQUIRE_SQL: Final = (
+    "INSERT INTO leases (resource, holder, expires_at) VALUES (?, ?, ?)"
+    " ON CONFLICT(resource) DO UPDATE SET holder = excluded.holder,"
+    " expires_at = excluded.expires_at"
+    " WHERE leases.holder = excluded.holder OR leases.expires_at <= ?"
+)
+_RENEW_SQL: Final = (
+    "UPDATE leases SET expires_at = ? WHERE resource = ? AND holder = ?"
+    " AND expires_at > ?"
+)
+_RELEASE_SQL: Final = "DELETE FROM leases WHERE resource = ? AND holder = ? AND expires_at > ?"
+
 
 class LeaseOps(StateContext):
 
@@ -26,50 +44,72 @@ class LeaseOps(StateContext):
         self, *, resource: Identifier, holder: Identifier, now: int, ttl_seconds: int
     ) -> LeaseRow:
         _require_positive_ttl(ttl_seconds)
-        row = self._connection.execute(
-            "SELECT holder, expires_at FROM leases WHERE resource = ?", (resource,)
-        ).fetchone()
-        if row is not None and str(row[0]) != holder and now < int(row[1]):
-            raise StateStoreError(
-                "lease-held",
-                f"lease {resource} is held by {row[0]} until {row[1]} (now {now})",
-            )
         lease = LeaseRow(resource=resource, holder=holder, expires_at=now + ttl_seconds)
-        self._connection.execute(
-            "INSERT INTO leases (resource, holder, expires_at) VALUES (?, ?, ?)"
-            " ON CONFLICT(resource) DO UPDATE SET holder = excluded.holder,"
-            " expires_at = excluded.expires_at",
-            (lease.resource, lease.holder, lease.expires_at),
-        )
+        with _immediate(self._connection):
+            cursor = self._connection.execute(
+                _ACQUIRE_SQL, (resource, holder, lease.expires_at, now)
+            )
+            if cursor.rowcount != 1:
+                raise StateStoreError(
+                    "lease-held",
+                    f"lease {resource} is held by another fresh holder (now {now})",
+                )
         return lease
 
     def renew_lease(
         self, *, resource: Identifier, holder: Identifier, now: int, ttl_seconds: int
     ) -> LeaseRow:
         _require_positive_ttl(ttl_seconds)
-        _require_fresh_lease(self._connection, resource, holder, now)
         renewed = LeaseRow(
             resource=resource, holder=holder, expires_at=now + ttl_seconds
         )
-        self._connection.execute(
-            "UPDATE leases SET expires_at = ? WHERE resource = ?",
-            (renewed.expires_at, resource),
-        )
+        with _immediate(self._connection):
+            cursor = self._connection.execute(
+                _RENEW_SQL, (renewed.expires_at, resource, holder, now)
+            )
+            if cursor.rowcount != 1:
+                _raise_stale_lease(self._connection, resource, holder, now)
         return renewed
 
-    def release_lease(self, *, resource: Identifier, holder: Identifier, now: int) -> None:
-        _require_fresh_lease(self._connection, resource, holder, now)
-        self._connection.execute("DELETE FROM leases WHERE resource = ?", (resource,))
+    def release_lease(
+        self, *, resource: Identifier, holder: Identifier, now: int
+    ) -> None:
+        with _immediate(self._connection):
+            cursor = self._connection.execute(
+                _RELEASE_SQL, (resource, holder, now)
+            )
+            if cursor.rowcount != 1:
+                _raise_stale_lease(self._connection, resource, holder, now)
 
 
-def _require_positive_ttl(ttl_seconds: int) -> None:
-    if ttl_seconds <= 0:
-        raise StateStoreError("lease-ttl", f"ttl must be positive, got {ttl_seconds}")
+class _Immediate:
+    """``BEGIN IMMEDIATE`` … ``COMMIT`` context (rollback on error)."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def __enter__(self) -> None:
+        self._connection.execute("BEGIN IMMEDIATE")
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: types.TracebackType | None,
+    ) -> None:
+        if exc_type is None:
+            self._connection.execute("COMMIT")
+        else:
+            self._connection.execute("ROLLBACK")
 
 
-def _require_fresh_lease(
+def _immediate(connection: sqlite3.Connection) -> _Immediate:
+    return _Immediate(connection)
+
+
+def _raise_stale_lease(
     connection: sqlite3.Connection, resource: str, holder: str, now: int
-) -> int:
+) -> None:
     row = connection.execute(
         "SELECT holder, expires_at FROM leases WHERE resource = ?", (resource,)
     ).fetchone()
@@ -80,11 +120,14 @@ def _require_fresh_lease(
         raise StateStoreError(
             "not-holder", f"lease {resource} is held by {current_holder}"
         )
-    if now >= expires_at:
-        raise StateStoreError(
-            "lease-expired", f"lease {resource} expired at {expires_at} (now {now})"
-        )
-    return expires_at
+    raise StateStoreError(
+        "lease-expired", f"lease {resource} expired at {expires_at} (now {now})"
+    )
+
+
+def _require_positive_ttl(ttl_seconds: int) -> None:
+    if ttl_seconds <= 0:
+        raise StateStoreError("lease-ttl", f"ttl must be positive, got {ttl_seconds}")
 
 
 __all__ = ["LeaseOps"]

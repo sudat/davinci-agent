@@ -4,18 +4,24 @@ A fresh uv environment/cache is created under ``--out``; the only network
 exit is a loopback-only guard that aborts any external egress attempt with a
 typed marker (hidden network prevents release). Steps are checkpointed, so
 an interrupted replay restarts safely and completed steps are reused.
+The ``--uv-bin`` executable is hash-verified against the pinned toolchain
+lock (or an explicit ``--uv-sha256``) BEFORE any use, ``--pytest-arg`` is
+restricted to explicitly-marked diagnostic runs, and the acceptance step
+must report an executed pytest count at or above the floor.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from services.contracts.primitives import Sha256, StrictModel
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
@@ -23,6 +29,7 @@ from services.release.errors import ReleaseGateError
 from services.release.extract_candidate import copy_tree
 from services.release.network_guard import (
     CACHE_DIR_NAME,
+    GUARD_LIMITATIONS,
     NETWORK_MARKER,
     child_environment,
     write_network_guard,
@@ -65,6 +72,15 @@ DEFAULT_PYTEST_ARGS: tuple[str, ...] = (
     "not resolve_live and not cloud_fixture",
     *(f"--ignore={name}" for name in WORKSPACE_ANCHORED_IGNORES),
 )
+PASSED_COUNT_RE: Final = re.compile(r"\b(\d+) passed\b")
+TOOLCHAIN_LOCK_CANDIDATES: Final = (
+    "phase-0a-v1.json",
+    "phase-0b-v1.json",
+    "phase-0c-v1.json",
+    "phase-1-technical-v1.json",
+    "phase-2-v1.json",
+    "phase-3-v1.json",
+)
 
 
 class ReplayStep(StrictModel):
@@ -76,6 +92,7 @@ class ReplayStep(StrictModel):
     reused: bool
     stdout_sha256: Sha256
     stderr_sha256: Sha256
+    tests_passed: int | None = None
 
 
 class ReplayReport(StrictModel):
@@ -87,6 +104,7 @@ class ReplayReport(StrictModel):
     source_unmodified: bool
     steps: tuple[ReplayStep, ...]
     reused_steps: tuple[str, ...]
+    guard_limitations: str = GUARD_LIMITATIONS
 
 
 class ReplayState(StrictModel):
@@ -136,6 +154,7 @@ def _run_step(
     combined = result.stdout + result.stderr
     if NETWORK_MARKER in combined:
         raise ReleaseGateError("hidden_network", f"step {name} attempted network egress")
+    passed_match = PASSED_COUNT_RE.search(result.stdout)
     return ReplayStep(
         name=name,
         argv=argv,
@@ -145,7 +164,47 @@ def _run_step(
         reused=False,
         stdout_sha256=sha256_bytes(result.stdout.encode()),
         stderr_sha256=sha256_bytes(result.stderr.encode()),
+        tests_passed=(
+            int(passed_match.group(1)) if name == "acceptance-offline" and passed_match else None
+        ),
     )
+
+
+def _pinned_uv_sha256(source_root: Path) -> str | None:
+    """The pinned uv hash from the frozen toolchain lock beside the source."""
+    for name in TOOLCHAIN_LOCK_CANDIDATES:
+        lock_path = source_root / "config" / "toolchains" / name
+        if not lock_path.is_file():
+            continue
+        try:
+            lock = json.loads(lock_path.read_text())
+        except ValueError:
+            continue
+        record = lock.get("python", {}).get("uv", {})
+        sha256 = record.get("sha256") if isinstance(record, dict) else None
+        if isinstance(sha256, str):
+            return sha256
+    return None
+
+
+def _verify_uv_bin(uv_bin: Path, uv_sha256: str | None, source_root: Path) -> str:
+    if uv_sha256 is None:
+        uv_sha256 = _pinned_uv_sha256(source_root)
+    if uv_sha256 is None:
+        raise ReleaseGateError(
+            "uv-sha-required",
+            "replay requires the pinned uv hash (explicit --uv-sha256 or the "
+            "frozen toolchain lock beside the source)",
+        )
+    if not uv_bin.is_file():
+        raise ReleaseGateError("missing_release_input", f"uv binary not found: {uv_bin}")
+    actual = sha256_file(uv_bin)
+    if actual != uv_sha256:
+        raise ReleaseGateError(
+            "uv-hash-mismatch",
+            f"uv binary {uv_bin} hashes {actual} != pinned {uv_sha256}",
+        )
+    return actual
 
 
 def snapshot_tree_hash(root: Path) -> str:
@@ -215,6 +274,9 @@ def run_replay(
     uv_bin: Path,
     seed: Path | None,
     pytest_args: tuple[str, ...],
+    *,
+    uv_sha256: str | None = None,
+    min_passed: int = 1,
 ) -> ReplayReport:
     """Replay the offline acceptance pipeline in a clean room."""
 
@@ -226,6 +288,7 @@ def run_replay(
             recompute=True,
             require_readonly=True,
         )
+    _verify_uv_bin(uv_bin, uv_sha256, source_input / "source")
     out.mkdir(parents=True, exist_ok=True)
     write_network_guard(out)
     source_root = source_input / "source"
@@ -270,9 +333,15 @@ def run_replay(
     steps = (prepare, sync, acceptance)
     state = ReplayState(source_tree_sha256=source_tree, steps=steps)
     atomic_write(state_path, canonical_model_bytes(state))
+    acceptance_proven = acceptance.completed and acceptance.tests_passed is not None
+    if acceptance.completed and not acceptance_proven:
+        acceptance_proven = False
     verdict: Literal["passed", "failed"] = (
         "passed"
-        if all(step.completed for step in steps) and source_unmodified
+        if acceptance_proven
+        and (acceptance.tests_passed or 0) >= min_passed
+        and source_unmodified
+        and all(step.completed for step in steps if step.name != "acceptance-offline")
         else "failed"
     )
     report = ReplayReport(
@@ -296,8 +365,11 @@ def _parser() -> argparse.ArgumentParser:
     source.add_argument("--candidate-extract", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--uv-bin", type=Path, required=True)
+    parser.add_argument("--uv-sha256")
     parser.add_argument("--seed-cache", type=Path)
     parser.add_argument("--pytest-arg", action="append")
+    parser.add_argument("--diagnostic", action="store_true")
+    parser.add_argument("--min-passed", type=int, default=1)
     parser.add_argument("--h1-binding", type=Path)
     parser.add_argument("--inject")
     parser.add_argument("--profile-swap")
@@ -307,17 +379,22 @@ def _parser() -> argparse.ArgumentParser:
 def _run_live(arguments: argparse.Namespace) -> int:
     """Live fault-injecting replay (Todo 67 / F3 contract)."""
 
+    from services.foundation_io import sha256_file as hash_file  # noqa: PLC0415
     from services.release.live_flow import (  # noqa: PLC0415
+        complete_invocation,
         parse_injections,
         parse_profiles,
         revalidate_live_replay,
         run_live_replay,
     )
+    from services.release.live_guard import verify_h1_binding  # noqa: PLC0415
     from services.release.live_wiring import (  # noqa: PLC0415
         pinned_media_bins,
         production_seams,
         resolve_host_report,
     )
+    from services.release.manifest import candidate_id  # noqa: PLC0415
+    from services.release.verify import read_manifest  # noqa: PLC0415
 
     try:
         injections = parse_injections(arguments.inject)
@@ -330,10 +407,20 @@ def _run_live(arguments: argparse.Namespace) -> int:
             ffprobe=ffprobe,
             out_root=arguments.out,
         )
+        h1 = verify_h1_binding(arguments.candidate_extract, arguments.h1_binding)
+        manifest, _payload = read_manifest(arguments.candidate_extract)
+        invocation = complete_invocation(
+            candidate_id=candidate_id(manifest),
+            git_sha=h1.git_sha,
+            h1_binding_sha256=h1.binding_sha256,
+            injections=injections,
+            profiles=profiles,
+            tool_sha256=(hash_file(ffmpeg), hash_file(ffprobe)),
+        )
     except Exception as error:  # noqa: BLE001 (typed usage failure, never a silent pass)
         print(f"live replay inputs invalid: {error}", file=sys.stderr)
         return 2
-    revalidated = revalidate_live_replay(arguments.out, seams=seams)
+    revalidated = revalidate_live_replay(arguments.out, seams=seams, invocation=invocation)
     if revalidated is not None:
         print(canonical_model_bytes(revalidated).decode())
         print("live-replay: revalidated (idempotent re-run)")
@@ -345,9 +432,10 @@ def _run_live(arguments: argparse.Namespace) -> int:
         profiles=profiles,
         out=arguments.out,
         seams=seams,
+        tool_sha256=invocation.tool_sha256,
     )
     print(canonical_model_bytes(summary).decode())
-    return 0 if summary.verdict == "passed" else 1
+    return 0 if summary.verdict in ("passed", "diagnostic-passed") else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -362,6 +450,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
         return _run_live(arguments)
+    if arguments.pytest_arg and not arguments.diagnostic:
+        print(
+            "--pytest-arg is restricted to explicitly-marked diagnostic runs; "
+            "release acceptance uses the fixed default selection",
+            file=sys.stderr,
+        )
+        return 2
     pytest_args = tuple(arguments.pytest_arg) if arguments.pytest_arg else DEFAULT_PYTEST_ARGS
     source_input, source_kind = (
         (arguments.candidate, "candidate")
@@ -378,6 +473,8 @@ def main(argv: list[str] | None = None) -> int:
             arguments.uv_bin,
             arguments.seed_cache,
             pytest_args,
+            uv_sha256=arguments.uv_sha256,
+            min_passed=arguments.min_passed,
         )
     except (ReleaseGateError, OSError) as error:
         print(error, file=sys.stderr)

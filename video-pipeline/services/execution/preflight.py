@@ -21,6 +21,15 @@ class PreflightError(Exception):
         return self.detail
 
 
+class F4RuleAmendment(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    amendment: int
+    approved_by: str
+    old_sha256: str
+    record: str
+
+
 class ExecutionContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -38,6 +47,7 @@ class ExecutionContract(BaseModel):
     python_sha256: str
     python_version: str
     f4_rule_sha256: str
+    f4_rule_amendment: F4RuleAmendment | None = None
     baseline_git_sha: str
     cwd: str
 

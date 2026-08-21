@@ -36,8 +36,8 @@ ATTEMPT = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
-POLICY = Path("config/gates/phase-2-v1.json")
-FREEZE_RECEIPT = ATTEMPT / "task-47-freeze-receipt.json"
+POLICY = Path("config/gates/phase-2-v4.json")
+FREEZE_RECEIPT = ATTEMPT / "gate-cascade/receipts/phase-2-v4.json"
 PARENTS = ("phase-0a", "phase-0b", "phase-1-technical")
 
 
@@ -84,7 +84,7 @@ def test_00_all_five_criteria_pass(gate: Path) -> None:
     assert tuple(row.criterion_id for row in result.criteria_results) == PHASE_2_CRITERIA
     assert all(row.passed for row in result.criteria_results)
     assert result.gate_id == "phase-2"
-    assert result.gate_version == "v1"
+    assert result.gate_version == "v4"
 
 
 def test_10_every_criterion_is_bound_to_real_evidence(gate: Path) -> None:

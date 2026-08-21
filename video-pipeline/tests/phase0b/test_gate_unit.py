@@ -58,7 +58,7 @@ from services.spike.gate_phase0b_sync import source_span
 from services.spike.stop_rules import record_stop, stop_marker_path, stop_recorded
 from services.toolchain.models import Phase0BToolchainLock, load_lock
 
-POLICY = Path("config/gates/phase-0b-v1.json")
+POLICY = Path("config/gates/phase-0b-v2.json")
 LOCK = Path("config/toolchains/phase-0b-v1.json")
 GOLDEN_EXPECTED = Path("tests/goldens/reference/phase-0b/expected.json")
 

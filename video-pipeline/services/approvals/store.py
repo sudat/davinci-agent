@@ -13,7 +13,10 @@ retained for audit and never returned by ``latest_records``.
 
 from __future__ import annotations
 
+import fcntl
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -34,6 +37,32 @@ class OperationRecordError(Exception):
         super().__init__(f"{code}: {detail}")
         self.code = code
         self.detail = detail
+
+
+@contextmanager
+def _exclusive(records_path: Path) -> Iterator[None]:
+    """Exclusive flock on the records file itself across read-modify-append.
+
+    The records file is append-only (never replaced), so flocking its own
+    descriptor gives cross-process mutual exclusion without a sidecar
+    file that could pollute bundle scans.
+    """
+    records_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(records_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def _write_all(descriptor: int, payload: bytes) -> None:
+    """Robust single-line write: keep writing until every byte is durable."""
+    view = memoryview(payload)
+    while view:
+        written = os.write(descriptor, view)
+        view = view[written:]
+    os.fsync(descriptor)
 
 
 class OperationRecordStore:
@@ -58,40 +87,40 @@ class OperationRecordStore:
         return latest
 
     def append(self, draft: OperationDraft) -> ChainedOperationRecord:
-        records = self.all_records()
-        chain_key = self._chain_key(create=True)
-        try:
-            validate_supersession_chain(records, chain_key=chain_key)
-        except ValueError as error:
-            raise OperationRecordError("chain-invalid", str(error)) from error
-        seq = 1 if not records else records[-1].timestamp_seq + 1
-        previous = (
-            GENESIS_RECORD_HASH if not records else records[-1].record_hash
-        )
-        superseded_id: str | None = None
-        current = self.latest_records().get(draft.supersession_key)
-        if current is not None:
-            superseded_id = current.record_id
-        unsealed = ChainedOperationRecord(
-            **draft.model_dump(),
-            record_id=record_id_for_seq(seq),
-            timestamp_seq=seq,
-            superseded_record_id=superseded_id,
-            previous_record_hash=previous,
-            record_hash=GENESIS_RECORD_HASH,
-        )
-        record = unsealed.model_copy(
-            update={"record_hash": unsealed.recomputed_record_hash(chain_key=chain_key)}
-        )
-        descriptor = os.open(
-            self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600
-        )
-        try:
-            os.write(descriptor, canonical_json_bytes(record) + b"\n")
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        return record
+        with _exclusive(self._path):
+            records = self.all_records()
+            chain_key = self._chain_key(create=True)
+            try:
+                validate_supersession_chain(records, chain_key=chain_key)
+            except ValueError as error:
+                raise OperationRecordError("chain-invalid", str(error)) from error
+            seq = 1 if not records else records[-1].timestamp_seq + 1
+            previous = (
+                GENESIS_RECORD_HASH if not records else records[-1].record_hash
+            )
+            superseded_id: str | None = None
+            current = self.latest_records().get(draft.supersession_key)
+            if current is not None:
+                superseded_id = current.record_id
+            unsealed = ChainedOperationRecord(
+                **draft.model_dump(),
+                record_id=record_id_for_seq(seq),
+                timestamp_seq=seq,
+                superseded_record_id=superseded_id,
+                previous_record_hash=previous,
+                record_hash=GENESIS_RECORD_HASH,
+            )
+            record = unsealed.model_copy(
+                update={"record_hash": unsealed.recomputed_record_hash(chain_key=chain_key)}
+            )
+            descriptor = os.open(
+                self._path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600
+            )
+            try:
+                _write_all(descriptor, canonical_json_bytes(record) + b"\n")
+            finally:
+                os.close(descriptor)
+            return record
 
     def verify_chain(self) -> tuple[ChainedOperationRecord, ...]:
         records = _read_records(self._path)

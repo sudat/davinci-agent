@@ -37,10 +37,12 @@ from services.release.live_models import (
     PROFILE_SNAPSHOT_IDS,
     AnchorFrame,
     AnchorPosition,
+    EvidenceFileRef,
     FinalRenderObservation,
     InjectionOutcome,
     InjectionRoute,
     LeaseEvidence,
+    LiveInvocation,
     LiveReplaySummary,
     ProfileBuildResult,
     ProfileId,
@@ -57,12 +59,47 @@ from services.release.verify import read_manifest
 
 SUMMARY_NAME = "run-summary.json"
 FINAL_RENDER_NAME = "final.mp4"
+MAX_EVIDENCE_FILES = 512
+ACCEPTANCE_PROFILES: tuple[ProfileId, ...] = ("a", "b")
 PRE_RENDER_ROUTES: tuple[InjectionRoute, ...] = (
     "partial-build",
     "resolve-restart",
     "repeated-interruption",
     "stale-state",
 )
+
+
+def invocation_digest(invocation: LiveInvocation) -> str:
+    """sha256 over the canonical invocation identity (digest zeroed)."""
+    payload = invocation.model_copy(update={"invocation_digest": "0" * 64})
+    return sha256_bytes(canonical_model_bytes(payload))
+
+
+def complete_invocation(
+    *,
+    candidate_id: str,
+    git_sha: str,
+    h1_binding_sha256: str,
+    injections: tuple[InjectionRoute, ...],
+    profiles: tuple[ProfileId, ...],
+    tool_sha256: tuple[str, ...] = (),
+) -> LiveInvocation:
+    unsealed = LiveInvocation(
+        candidate_id=candidate_id,
+        extract_git_sha=git_sha,
+        h1_binding_sha256=h1_binding_sha256,
+        injections=injections,
+        profiles=profiles,
+        tool_sha256=tool_sha256,
+        invocation_digest="0" * 64,
+    )
+    return unsealed.model_copy(update={"invocation_digest": invocation_digest(unsealed)})
+
+
+def _acceptance_coverage(
+    injections: tuple[InjectionRoute, ...], profiles: tuple[ProfileId, ...]
+) -> bool:
+    return tuple(injections) == INJECTION_ROUTES and tuple(profiles) == ACCEPTANCE_PROFILES
 
 
 def parse_injections(raw: str) -> tuple[InjectionRoute, ...]:
@@ -105,7 +142,7 @@ class LiveSeams:
     cleanup: Callable[[ConnectionLike], tuple[str, ...]]
 
 
-def run_live_replay(
+def run_live_replay(  # noqa: PLR0912 (the flow enumerates every honest failure path)
     *,
     extract: Path,
     h1_binding: Path,
@@ -113,6 +150,7 @@ def run_live_replay(
     profiles: tuple[ProfileId, ...],
     out: Path,
     seams: LiveSeams,
+    tool_sha256: tuple[str, ...] = (),
 ) -> LiveReplaySummary:
     """Drive the live replay end to end; the summary is always honest."""
 
@@ -120,6 +158,14 @@ def run_live_replay(
     manifest, _ = read_manifest(extract)
     candidate = candidate_id(manifest)
     git_sha = h1.git_sha
+    invocation = complete_invocation(
+        candidate_id=candidate,
+        git_sha=git_sha,
+        h1_binding_sha256=h1.binding_sha256,
+        injections=injections,
+        profiles=profiles,
+        tool_sha256=tool_sha256,
+    )
     out.mkdir(parents=True, exist_ok=True)
     for name in ("evidence", "render"):
         shutil.rmtree(out / name, ignore_errors=True)
@@ -195,7 +241,16 @@ def run_live_replay(
     failures.extend(row.outcome for row in outcomes if not row.passed)
     if not swap.passed and "profile_swap_failed" not in failures:
         failures.append("profile_swap_failed")
-    verdict: Literal["passed", "failed"] = "passed" if not failures else "failed"
+    scope: Literal["acceptance", "diagnostic"] = (
+        "acceptance" if _acceptance_coverage(injections, profiles) else "diagnostic"
+    )
+    if not failures and scope == "acceptance":
+        verdict: Literal["passed", "failed", "diagnostic-passed"] = "passed"
+    elif not failures:
+        verdict = "diagnostic-passed"
+    else:
+        verdict = "failed"
+    evidence_files, evidence_complete = _hash_evidence_files(out)
     summary = LiveReplaySummary(
         extract_path=str(extract),
         extract_git_sha=git_sha,
@@ -208,10 +263,40 @@ def run_live_replay(
         if final_observation is not None
         else _missing_final_observation(),
         verdict=verdict,
+        verdict_scope=scope,
+        invocation=invocation,
+        evidence_files=evidence_files,
+        evidence_files_complete=evidence_complete,
         failure_codes=tuple(dict.fromkeys(failures)),
     )
     atomic_write(out / SUMMARY_NAME, canonical_model_bytes(summary))
     return summary
+
+
+def _hash_evidence_files(out: Path) -> tuple[tuple[EvidenceFileRef, ...], bool]:
+    """Hash-bind the bounded evidence tree for revalidation."""
+    evidence_root = out / "evidence"
+    if not evidence_root.is_dir():
+        return (), True
+    files: list[EvidenceFileRef] = []
+    complete = True
+    stack = [evidence_root]
+    while stack:
+        current = stack.pop()
+        for entry in sorted(current.iterdir(), key=lambda item: item.name):
+            if entry.is_dir():
+                stack.append(entry)
+                continue
+            if len(files) >= MAX_EVIDENCE_FILES:
+                complete = False
+                continue
+            files.append(
+                EvidenceFileRef(
+                    path=entry.relative_to(out).as_posix(),
+                    sha256=sha256_file(entry),
+                )
+            )
+    return tuple(files), complete
 
 
 def _plan_sha() -> str:
@@ -257,15 +342,35 @@ def _missing_final_observation() -> FinalRenderObservation:
     )
 
 
-def revalidate_live_replay(out: Path, *, seams: LiveSeams) -> LiveReplaySummary | None:
-    """Idempotent re-run: a prior passing summary must fully re-verify."""
+def revalidate_live_replay(
+    out: Path,
+    *,
+    seams: LiveSeams,
+    invocation: LiveInvocation,
+) -> LiveReplaySummary | None:
+    """Idempotent re-run: the prior summary must match THIS invocation.
+
+    The persisted summary is only accepted when its invocation record
+    equals the current one EXACTLY (candidate, git sha, H1 binding hash,
+    routes, profiles, tool hashes, digest), every hash-bound evidence
+    file still re-hashes to its recorded value, and the render still
+    re-verifies. Anything else forces a fresh run.
+    """
 
     path = out / SUMMARY_NAME
     if not path.is_file():
         return None
     summary = LiveReplaySummary.model_validate_json(path.read_bytes())
-    if summary.verdict != "passed":
+    if summary.verdict not in ("passed", "diagnostic-passed"):
         return None
+    if summary.invocation is None or summary.invocation != invocation:
+        return None
+    if summary.invocation.invocation_digest != invocation_digest(summary.invocation):
+        return None
+    for row in summary.evidence_files:
+        evidence_file = out / row.path
+        if not evidence_file.is_file() or sha256_file(evidence_file) != row.sha256:
+            return None
     if not _final_render_reverifies(out, summary, seams):
         return None
     for row in summary.injections:
@@ -292,6 +397,8 @@ __all__ = [
     "FINAL_RENDER_NAME",
     "SUMMARY_NAME",
     "LiveSeams",
+    "complete_invocation",
+    "invocation_digest",
     "parse_injections",
     "parse_profiles",
     "revalidate_live_replay",

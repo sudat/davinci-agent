@@ -17,6 +17,7 @@ from services.fixtures.manifest_phase1 import (
 )
 from services.fixtures.models import (
     FreezeIntent,
+    GateVersion,
     ManifestBinding,
     ParentResultLink,
     Phase1TechnicalFreezeReceipt,
@@ -35,10 +36,6 @@ from services.toolchain.models import LockError, Phase1TechnicalToolchainLock, l
 
 PHASE_1_MANIFEST_DIR = Path("tests/fixtures/manifests/phase-1-technical")
 PHASE_1_PARENT_GATES = ("phase-0c", "control-plane-baseline")
-PHASE_1_PARENT_POLICIES = (
-    "config/gates/phase-0c-v1.json",
-    "config/gates/phase-1-control-plane-v1.json",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +49,7 @@ class Phase1PrepareRequest:
     freeze_receipt: Path
     staging: Path
     intent: Path
+    gate_version: GateVersion = "v1"
 
 
 def _load_manifest(root: Path, fixture_id: str) -> tuple[Phase1TechnicalFixtureManifest, bytes]:
@@ -95,17 +93,17 @@ def _verify_parent_gate_results(
     paths: tuple[Path, Path],
     root: Path,
 ) -> tuple[ParentResultLink, ...]:
+    from services.fixtures.prepare import parent_policy_path  # noqa: PLC0415
+
     links: list[ParentResultLink] = []
-    for path, gate_id, policy_relative in zip(
-        paths, PHASE_1_PARENT_GATES, PHASE_1_PARENT_POLICIES, strict=True
-    ):
+    for path, gate_id in zip(paths, PHASE_1_PARENT_GATES, strict=True):
         raw = path.read_bytes()
         result = GateResult.model_validate_json(raw)
-        if result.gate_id != gate_id or result.gate_version != "v1":
-            raise PrepareError(f"parent gate result must be the frozen {gate_id} v1 result")
+        if result.gate_id != gate_id:
+            raise PrepareError(f"parent gate result must be a frozen {gate_id} result")
         if not result.passed:
             raise PrepareError(f"parent {gate_id} gate result did not pass")
-        policy_hash = sha256_file(root / policy_relative)
+        policy_hash = sha256_file(parent_policy_path(root, gate_id, result.gate_version))
         if result.policy_sha256 != policy_hash:
             raise PrepareError(f"parent gate result is bound to a different {gate_id} policy")
         links.append(
@@ -152,7 +150,7 @@ def prepare_phase1_technical(request: Phase1PrepareRequest) -> FreezeIntent:
     policy = GatePolicy(
         schema_version="gate-policy-v1",
         gate_id="phase-1-technical",
-        gate_version="v1",
+        gate_version=request.gate_version,
         parent_gate_result_hashes=tuple(link.sha256 for link in parents),
         criteria=PHASE_1_TECHNICAL_CRITERIA,
         toolchain_lock_sha256=toolchain_hash,
@@ -164,6 +162,7 @@ def prepare_phase1_technical(request: Phase1PrepareRequest) -> FreezeIntent:
     policy_bytes = canonical_gate_bytes(policy)
     policy_hash = hashlib.sha256(policy_bytes).hexdigest()
     receipt = Phase1TechnicalFreezeReceipt(
+        gate_version=request.gate_version,
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,
         toolchain_lock_path=str(request.toolchain_lock.resolve(strict=True)),
@@ -195,6 +194,7 @@ def prepare_phase1_technical(request: Phase1PrepareRequest) -> FreezeIntent:
     intent = FreezeIntent(
         todo=32,
         gate_id="phase-1-technical",
+        gate_version=request.gate_version,
         staged_policy_path=str(staged_policy.resolve(strict=True)),
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,

@@ -26,9 +26,10 @@ from services.foundation_io import canonical_model_bytes
 GENESIS_HASH = "0" * 64
 
 FailureClass = Literal["transient", "permanent", "blocking_human"]
-StageRunOutcome = Literal["succeeded", "reused", "recovered", "failed_blocked"]
+StageRunOutcome = Literal["succeeded", "reused", "recovered", "failed_blocked", "superseded"]
 JournalEventKind = Literal[
     "attempt-failed", "attempt-succeeded", "run-reused", "run-recovered", "run-blocked",
+    "run-superseded",
 ]
 
 

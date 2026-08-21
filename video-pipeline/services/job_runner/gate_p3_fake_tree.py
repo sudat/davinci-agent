@@ -194,8 +194,10 @@ def _drift_manifest_b(ab_dir: Path) -> None:
 
 
 def _synth_regression(evidence: Path) -> P3RegressionObservation:
+    from services.job_runner.gate_p3_regression import phase2_policy  # noqa: PLC0415
+
     policy_sha = hashlib.sha256(
-        (Path(__file__).resolve().parents[2] / PHASE_2_POLICY).read_bytes()
+        (Path(__file__).resolve().parents[2] / phase2_policy()).read_bytes()
     ).hexdigest()
     bundle = hashlib.sha256(b"synthetic-phase2").hexdigest()
     result = GateResult.model_validate(
@@ -203,7 +205,9 @@ def _synth_regression(evidence: Path) -> P3RegressionObservation:
             "schema_version": "gate-result-v1",
             "record_type": "gate_result",
             "gate_id": "phase-2",
-            "gate_version": "v1",
+            "gate_version": json.loads(
+                (ATTEMPT / "phase-2" / "gate-result.json").read_bytes()
+            )["gate_version"],
             "policy_sha256": policy_sha,
             "passed": True,
             "evidence_bundles": [

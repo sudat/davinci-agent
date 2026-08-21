@@ -45,12 +45,15 @@ def freeze_payload(target: str, render_seed: str = "final-render") -> dict[str, 
 
 
 def make_package(tmp_path, target: str, render_seed: str = "final-render"):
+    from services.approvals.chain_key import load_chain_key  # noqa: PLC0415
+
     store = make_records_store(tmp_path)
     fixture_record(store, purpose="manual_freeze", target_hash=target)
     return assemble_freeze_package(
         records=store.all_records(),
         inputs=FreezeInputs.model_validate(freeze_payload(target, render_seed)),
         reason_detail="manual finish",
+        chain_key=load_chain_key(store.records_path, create=False),
         fixture_mode=True,
     )
 

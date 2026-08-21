@@ -14,6 +14,7 @@ from services.fixtures.manifest_control_plane import (
 from services.fixtures.models import (
     ControlPlaneFreezeReceipt,
     FreezeIntent,
+    GateVersion,
     ManifestBinding,
     SourceSnapshot,
 )
@@ -43,6 +44,7 @@ class ControlPlanePrepareRequest:
     freeze_receipt: Path
     staging: Path
     intent: Path
+    gate_version: GateVersion = "v1"
 
 
 def _load_manifest(root: Path, fixture_id: str) -> tuple[ControlPlaneFixtureManifest, bytes]:
@@ -57,11 +59,13 @@ def _load_manifest(root: Path, fixture_id: str) -> tuple[ControlPlaneFixtureMani
 def _verify_parent_gate_result(path: Path, root: Path) -> str:
     raw = path.read_bytes()
     result = GateResult.model_validate_json(raw)
-    if result.gate_id != "phase-0c" or result.gate_version != "v1":
+    if result.gate_id != "phase-0c":
         raise PrepareError("parent gate result must be the frozen phase-0c v1 result")
     if not result.passed:
         raise PrepareError("parent phase-0c gate result did not pass")
-    frozen_0c_policy = root / "config/gates/phase-0c-v1.json"
+    from services.fixtures.prepare import parent_policy_path  # noqa: PLC0415
+
+    frozen_0c_policy = parent_policy_path(root, "phase-0c", result.gate_version)
     if result.policy_sha256 != sha256_file(frozen_0c_policy):
         raise PrepareError("parent gate result is bound to a different phase-0c policy")
     return hashlib.sha256(raw).hexdigest()
@@ -100,7 +104,7 @@ def prepare_control_plane(request: ControlPlanePrepareRequest) -> FreezeIntent:
     policy = GatePolicy(
         schema_version="gate-policy-v1",
         gate_id="control-plane-baseline",
-        gate_version="v1",
+        gate_version=request.gate_version,
         parent_gate_result_hashes=(parent_sha256,),
         criteria=PHASE_1_CONTROL_PLANE_CRITERIA,
         toolchain_lock_sha256=toolchain_hash,
@@ -112,6 +116,7 @@ def prepare_control_plane(request: ControlPlanePrepareRequest) -> FreezeIntent:
     policy_bytes = canonical_gate_bytes(policy)
     policy_hash = hashlib.sha256(policy_bytes).hexdigest()
     receipt = ControlPlaneFreezeReceipt(
+        gate_version=request.gate_version,
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,
         toolchain_lock_path=str(request.toolchain_lock.resolve(strict=True)),
@@ -143,6 +148,7 @@ def prepare_control_plane(request: ControlPlanePrepareRequest) -> FreezeIntent:
     intent = FreezeIntent(
         todo=7,
         gate_id="control-plane-baseline",
+        gate_version=request.gate_version,
         staged_policy_path=str(staged_policy.resolve(strict=True)),
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,

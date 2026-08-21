@@ -83,7 +83,23 @@ def load_receipt(path: Path, policy_sha256: str) -> Phase2FreezeReceipt:
     return receipt
 
 
+ATTEMPT_ROOT: Final = Path(
+    "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
+    "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
+)
+
+
 def default_receipt(evidence: Path) -> Path:
+    """The cascade receipt matching the frozen phase-2 gate version, if any."""
+    import json  # noqa: PLC0415
+
+    result_path = ATTEMPT_ROOT / "phase-2" / "gate-result.json"
+    if result_path.is_file():
+        version = json.loads(result_path.read_bytes()).get("gate_version")
+        if isinstance(version, str) and version != "v1":
+            cascaded = ATTEMPT_ROOT / "gate-cascade" / "receipts" / f"phase-2-{version}.json"
+            if cascaded.is_file():
+                return cascaded
     return evidence.parent / DEFAULT_RECEIPT
 
 

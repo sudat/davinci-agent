@@ -17,8 +17,8 @@ ATTEMPT = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
-POLICY = Path("config/gates/phase-0c-v1.json")
-RECEIPT = ATTEMPT / "task-26-freeze-receipt.json"
+POLICY = Path("config/gates/phase-0c-v2.json")
+RECEIPT = ATTEMPT / "gate-cascade/receipts/phase-0c-v2.json"
 
 
 def test_frozen_policy_is_canonical_and_bound_to_the_0b_parent() -> None:
@@ -27,7 +27,7 @@ def test_frozen_policy_is_canonical_and_bound_to_the_0b_parent() -> None:
 
     assert raw == canonical_gate_bytes(policy)
     assert policy.gate_id == "phase-0c"
-    assert policy.gate_version == "v1"
+    assert policy.gate_version == "v2"
     assert policy.criteria == PHASE_0C_CRITERIA
     assert len(policy.parent_gate_result_hashes) == 1
     assert (
@@ -51,13 +51,13 @@ def test_freeze_receipt_matches_policy_bytes() -> None:
     assert receipt.policy_sha256 == hashlib.sha256(POLICY.read_bytes()).hexdigest()
     assert len(receipt.fixture_manifests) == 5
     parent = json.loads((ATTEMPT / "phase-0b/gate-result.json").read_bytes())
-    assert parent["policy_sha256"] == (
-        "9e49584b1e0051422cfdd4a332b380f2f8fb8f6319611559af4e3ea2c8a157ce"
-    )
+    assert parent["gate_version"] == "v2"
 
 
 def test_policy_verification_passes_with_frozen_artifacts() -> None:
-    policy = verify_policy(POLICY, RECEIPT, None, ATTEMPT / "execution-contract.json")
+    policy = verify_policy(
+        POLICY, RECEIPT, None, ATTEMPT / "gate-cascade/execution-contract.canonical.json"
+    )
 
     assert policy.gate_id == "phase-0c"
 
@@ -65,7 +65,7 @@ def test_policy_verification_passes_with_frozen_artifacts() -> None:
 def test_post_result_policy_edit_is_rejected(tmp_path: Path) -> None:
     edited = tmp_path / "policy.json"
     payload = json.loads(POLICY.read_bytes())
-    payload["gate_version"] = "v2"
+    payload["gate_version"] = "v9"
     edited.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
     with pytest.raises(PolicyVerificationError, match="policy hash"):

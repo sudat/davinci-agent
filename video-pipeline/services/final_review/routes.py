@@ -213,6 +213,7 @@ def route_unsupported(  # noqa: PLR0913 (route contract mirrors the Todo-45 disp
     inputs: FreezeInputs,
     freeze_store: FreezeStore,
     reason_detail: str,
+    chain_key: bytes,
     fixture_mode: bool,
 ) -> UnsupportedRouteResult:
     active = ledger.active_bundle_hash()
@@ -226,6 +227,7 @@ def route_unsupported(  # noqa: PLR0913 (route contract mirrors the Todo-45 disp
             records=records,
             inputs=inputs,
             reason_detail=reason_detail,
+            chain_key=chain_key,
             fixture_mode=fixture_mode,
             reason_code="unsupported_capability",
         )

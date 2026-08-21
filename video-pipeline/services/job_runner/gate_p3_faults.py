@@ -31,7 +31,26 @@ if TYPE_CHECKING:
 MARKER: Final = "phase3-gate"
 EXIT_DETECTED: Final = 0
 EXIT_FAULT: Final = 2
-POLICY: Final = Path("config/gates/phase-3-v1.json")
+ATTEMPT: Final = Path(
+    "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
+    "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
+)
+
+
+def _current_policy() -> Path:
+    """The newest frozen phase-3 policy (cascade re-freezes append versions)."""
+    import json  # noqa: PLC0415
+
+    result = json.loads(
+        (ATTEMPT / "phase-3" / "gate-result.json").read_bytes()
+    )
+    version = result.get("gate_version")
+    if isinstance(version, str) and version != "v1":
+        return Path(f"config/gates/phase-3-{version}.json")
+    return Path("config/gates/phase-3-v1.json")
+
+
+POLICY: Final = _current_policy()
 
 
 @dataclass(frozen=True, slots=True)

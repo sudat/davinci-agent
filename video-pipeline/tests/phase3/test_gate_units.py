@@ -38,7 +38,7 @@ from services.job_runner.gate_p3_scan import (
 )
 from services.job_runner.gate_phase3 import evaluate, load_policy, parser, run_phase3_gate
 
-POLICY = Path("config/gates/phase-3-v1.json")
+POLICY = Path("config/gates/phase-3-v3.json")
 FAULT_DIR = Path("tests/fixtures/phase3-gate-faults")
 
 

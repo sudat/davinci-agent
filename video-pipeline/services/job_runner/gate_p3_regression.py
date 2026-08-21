@@ -25,7 +25,6 @@ from services.job_runner.gate_p3_models import (
 )
 
 MARKER: Final = "phase3-gate"
-PHASE2_POLICY: Final = Path("config/gates/phase-2-v1.json")
 PHASE2_RECEIPT_NAME: Final = "task-47-freeze-receipt.json"
 ATTEMPT: Final = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
@@ -34,9 +33,26 @@ ATTEMPT: Final = Path(
 DEFAULT_TIMEOUT_SECONDS: Final = 5400.0
 
 
-def default_receipt(evidence: Path) -> Path:
-    """The frozen phase-2 freeze receipt beside the attempt root."""
+def _phase2_version() -> str:
+    """The gate_version of the frozen phase-2 result this regression re-runs."""
+    import json  # noqa: PLC0415
 
+    result = json.loads((ATTEMPT / "phase-2" / "gate-result.json").read_text())
+    version = result.get("gate_version")
+    return version if isinstance(version, str) else "v1"
+
+
+def phase2_policy() -> Path:
+    return Path("config") / "gates" / f"phase-2-{_phase2_version()}.json"
+
+
+def default_receipt(evidence: Path) -> Path:
+    """The frozen phase-2 freeze receipt matching the frozen phase-2 version."""
+
+    version = _phase2_version()
+    cascaded = ATTEMPT / "gate-cascade" / "receipts" / f"phase-2-{version}.json"
+    if cascaded.is_file():
+        return cascaded
     for base in (evidence.parent, ATTEMPT):
         candidate = base / PHASE2_RECEIPT_NAME
         if candidate.is_file():
@@ -75,7 +91,7 @@ def run_regression(
     regression_dir = evidence / REGRESSION_DIR_NAME
     _link_phase2_parents(evidence)
     repo = repo_root()
-    policy_path = repo / PHASE2_POLICY
+    policy_path = repo / phase2_policy()
     argv = (
         sys.executable,
         "-m",
@@ -158,7 +174,7 @@ def host_report_path(evidence: Path) -> Path | None:
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
     "MARKER",
-    "PHASE2_POLICY",
     "host_report_path",
+    "phase2_policy",
     "run_regression",
 ]

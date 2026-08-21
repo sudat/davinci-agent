@@ -11,6 +11,20 @@ from services.toolchain.smoke import run_ffmpeg_probe
 type SmokeName = str
 
 
+def _scope_observation(report_scope: str, reason: str) -> str:
+    match report_scope:
+        case "disabled":
+            return "scripting scope verified live: disabled (scriptapp unavailable)"
+        case "loopback":
+            return "scripting scope verified live: loopback (non-loopback probe refused)"
+        case "local-network":
+            return (
+                "scripting scope verified live: local-network under an explicit "
+                "operator permit (non-loopback probe accepted)"
+            )
+    return f"scripting scope unresolved ({report_scope}): {reason}"
+
+
 def verify_phase0a_smoke(
     lock: ToolchainLock, smoke_names: tuple[SmokeName, ...]
 ) -> ToolchainLock:
@@ -25,9 +39,13 @@ def verify_phase0a_smoke(
                             status="passed",
                             evidence_paths=(lock.resolve.report_path,),
                             observation=(
-                                "loopback-only policy confirmed; probe performed no network "
-                                f"access; live preference check required="
-                                f"{report.scripting.needs_live_verification}"
+                                f"{_scope_observation(
+                                    report.scripting.remote_access,
+                                    report.scripting.reason,
+                                )}; "
+                                "probe performed no external network access; "
+                                f"live verification complete="
+                                f"{not report.scripting.needs_live_verification}"
                             ),
                         )
                     }

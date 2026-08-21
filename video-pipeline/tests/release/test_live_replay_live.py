@@ -64,7 +64,8 @@ def test_live_replay_partial_stale_false_success(tmp_path: Path, request: pytest
         out=out,
         seams=seams,
     )
-    assert summary.verdict == "passed", summary.failure_codes
+    assert summary.verdict == "diagnostic-passed", summary.failure_codes
+    assert summary.verdict_scope == "diagnostic"
     assert summary.lease.acquired
     assert summary.lease.released
     outcomes = {row.route: row.outcome for row in summary.injections}

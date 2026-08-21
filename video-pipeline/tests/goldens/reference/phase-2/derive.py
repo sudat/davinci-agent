@@ -24,7 +24,7 @@ PHASE_1_MANIFEST_DIR = Path("tests/fixtures/manifests/phase-1-technical")
 
 # Frozen pinned Resolve facts (capability matrix + findings, Todo 19).
 PINNED_MATRIX_PATH = "capabilities/resolve-21.0.4/capability-matrix.json"
-PINNED_MATRIX_SHA256 = "f8f47e001ac4f87f3dbad2b0e194b1e5464fa7be1f42b0d81e1942fe84f87df8"
+PINNED_MATRIX_SHA256 = "0dee1905b9475fcf7655e6907bfc71db3e4b37ad620e40222010a49f25822599"
 FRAME_ORIGIN = 108000
 START_TIMECODE = "01:00:00:00"
 SUBTITLE_MUX_ARGV = (

@@ -149,14 +149,21 @@ def test_30_duplicate_writer_on_existing_candidate(
 def test_31_duplicate_writer_on_held_lock(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    import fcntl  # noqa: PLC0415
+    import os  # noqa: PLC0415
+
     repo, sha = make_git_repo(tmp_path)
     candidate = tmp_path / "cand"
     lock_path(candidate).parent.mkdir(parents=True, exist_ok=True)
-    lock_path(candidate).write_text("other")
-    args = [*build_args(tmp_path, repo, sha, candidate), "--phase", "stage"]
-    code, err = stage_rc(args, capsys)
-    assert code == 2
-    assert "another writer" in err
+    descriptor = os.open(lock_path(candidate), os.O_CREAT | os.O_RDWR, 0o644)
+    fcntl.flock(descriptor, fcntl.LOCK_EX)
+    try:
+        args = [*build_args(tmp_path, repo, sha, candidate), "--phase", "stage"]
+        code, err = stage_rc(args, capsys)
+        assert code == 2
+        assert "another writer" in err
+    finally:
+        os.close(descriptor)
 
 
 def test_40_stage_then_replay_restarts_safely_then_seal(tmp_path: Path) -> None:

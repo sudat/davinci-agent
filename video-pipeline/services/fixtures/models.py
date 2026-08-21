@@ -18,6 +18,7 @@ GateId = Literal[
     "phase-3",
 ]
 FreezeTodo = Literal[6, 7, 24, 26, 32, 47, 56]
+GateVersion = Literal["v1", "v2", "v3", "v4"]
 
 
 class GoldenHashes(StrictModel):
@@ -38,7 +39,7 @@ class FreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[6] = 6
     gate_id: Literal["phase-0a"] = "phase-0a"
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     policy_path: str
     policy_sha256: Sha256
     toolchain_lock_path: str
@@ -57,7 +58,7 @@ class Phase0BFreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[24] = 24
     gate_id: Literal["phase-0b"] = "phase-0b"
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     policy_path: str
     policy_sha256: Sha256
     toolchain_lock_path: str
@@ -78,7 +79,7 @@ class Phase0CFreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[26] = 26
     gate_id: Literal["phase-0c"] = "phase-0c"
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     policy_path: str
     policy_sha256: Sha256
     toolchain_lock_path: str
@@ -99,7 +100,7 @@ class ControlPlaneFreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[7] = 7
     gate_id: Literal["control-plane-baseline"] = "control-plane-baseline"
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     policy_path: str
     policy_sha256: Sha256
     toolchain_lock_path: str
@@ -125,7 +126,7 @@ class Phase1TechnicalFreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[32] = 32
     gate_id: Literal["phase-1-technical"] = "phase-1-technical"
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     policy_path: str
     policy_sha256: Sha256
     toolchain_lock_path: str
@@ -145,7 +146,7 @@ class Phase2FreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[47] = 47
     gate_id: Literal["phase-2"] = "phase-2"
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     policy_path: str
     policy_sha256: Sha256
     toolchain_lock_path: str
@@ -167,7 +168,7 @@ class Phase3FreezeReceipt(StrictModel):
     record_type: Literal["freeze_receipt"] = "freeze_receipt"
     todo: Literal[56] = 56
     gate_id: Literal["phase-3"] = "phase-3"
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     policy_path: str
     policy_sha256: Sha256
     toolchain_lock_path: str
@@ -187,7 +188,7 @@ class FreezeIntent(StrictModel):
     event_type: Literal["freeze-intent"] = "freeze-intent"
     todo: FreezeTodo
     gate_id: GateId
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     staged_policy_path: str
     policy_path: str
     policy_sha256: Sha256
@@ -204,7 +205,7 @@ class FreezeEventRow(StrictModel):
     event_type: Literal["freeze-intent", "freeze-completed"]
     todo: FreezeTodo
     gate_id: GateId
-    gate_version: Literal["v1"] = "v1"
+    gate_version: GateVersion = "v1"
     intent_sha256: Sha256
     policy_sha256: Sha256
     receipt_sha256: Sha256

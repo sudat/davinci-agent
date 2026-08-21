@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import socket
 import subprocess
@@ -50,6 +51,10 @@ def make_stub_uv(tmp: Path) -> Path:
     return stub
 
 
+def uv_sha_of(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def make_failing_uv(tmp: Path) -> Path:
     stub = tmp / "bin-fail" / "uv"
     stub.parent.mkdir(parents=True, exist_ok=True)
@@ -62,7 +67,7 @@ def test_10_happy_replay_fresh_env_no_network(tmp_path: Path) -> None:
     _repo, candidate, _sha = build_test_candidate(tmp_path)
     out = tmp_path / "replay"
     stub = make_stub_uv(tmp_path)
-    report = run_replay(candidate, "candidate", out, stub, None, ("-q",))
+    report = run_replay(candidate, "candidate", out, stub, None, ("-q",), uv_sha256=uv_sha_of(stub))
     assert report.verdict == "passed"
     assert report.source_unmodified is True
     assert report.network_blocked is False
@@ -82,8 +87,8 @@ def test_11_restart_second_run_reuses_completed_steps(tmp_path: Path) -> None:
     _repo, candidate, _sha = build_test_candidate(tmp_path)
     out = tmp_path / "replay"
     stub = make_stub_uv(tmp_path)
-    first = run_replay(candidate, "candidate", out, stub, None, ("-q",))
-    second = run_replay(candidate, "candidate", out, stub, None, ("-q",))
+    first = run_replay(candidate, "candidate", out, stub, None, ("-q",), uv_sha256=uv_sha_of(stub))
+    second = run_replay(candidate, "candidate", out, stub, None, ("-q",), uv_sha256=uv_sha_of(stub))
     assert first.verdict == second.verdict == "passed"
     assert second.reused_steps == tuple(step.name for step in second.steps)
 
@@ -92,12 +97,12 @@ def test_12_crash_recovery_reruns_incomplete_step(tmp_path: Path) -> None:
     _repo, candidate, _sha = build_test_candidate(tmp_path)
     out = tmp_path / "replay"
     stub = make_stub_uv(tmp_path)
-    run_replay(candidate, "candidate", out, stub, None, ("-q",))
+    run_replay(candidate, "candidate", out, stub, None, ("-q",), uv_sha256=uv_sha_of(stub))
     state_path = out / "replay-state.json"
     state_path.write_bytes(
         state_path.read_bytes().replace(b'"completed":true', b'"completed":false', 1)
     )
-    report = run_replay(candidate, "candidate", out, stub, None, ("-q",))
+    report = run_replay(candidate, "candidate", out, stub, None, ("-q",), uv_sha256=uv_sha_of(stub))
     assert report.verdict == "passed"
     assert "prepare-clean-room" not in report.reused_steps
     assert "acceptance-offline" in report.reused_steps
@@ -109,7 +114,8 @@ def test_20_hidden_network_prevents_release(tmp_path: Path) -> None:
     expect_gate_error(
         "hidden_network",
         lambda: run_replay(
-            candidate, "candidate", tmp_path / "replay", stub, None, ("--network",)
+            candidate, "candidate", tmp_path / "replay", stub, None, ("--network",),
+            uv_sha256=uv_sha_of(stub),
         ),
     )
 
@@ -117,7 +123,10 @@ def test_20_hidden_network_prevents_release(tmp_path: Path) -> None:
 def test_21_failed_acceptance_is_failed_verdict(tmp_path: Path) -> None:
     _repo, candidate, _sha = build_test_candidate(tmp_path)
     failing = make_failing_uv(tmp_path)
-    report = run_replay(candidate, "candidate", tmp_path / "replay", failing, None, ("-q",))
+    report = run_replay(
+        candidate, "candidate", tmp_path / "replay", failing, None, ("-q",),
+        uv_sha256=uv_sha_of(failing),
+    )
     assert report.verdict == "failed"
 
 
@@ -170,14 +179,27 @@ def test_40_cli_exit_codes(tmp_path: Path) -> None:
     stub = make_stub_uv(tmp_path)
     out = tmp_path / "replay"
     rc = replay_main(
-        ["--candidate", str(candidate), "--out", str(out), "--uv-bin", str(stub), "--pytest-arg=-q"]
+        [
+            "--candidate", str(candidate), "--out", str(out), "--uv-bin", str(stub),
+            "--uv-sha256", uv_sha_of(stub), "--pytest-arg=-q", "--diagnostic",
+        ]
     )
     assert rc == 0
     failing = make_failing_uv(tmp_path)
     rc = replay_main(
-        ["--candidate", str(candidate), "--out", str(out / "f"), "--uv-bin", str(failing)]
+        [
+            "--candidate", str(candidate), "--out", str(out / "f"),
+            "--uv-bin", str(failing), "--uv-sha256", uv_sha_of(failing),
+        ]
     )
     assert rc == 1
+    rc = replay_main(
+        [
+            "--candidate", str(candidate), "--out", str(out / "g"),
+            "--uv-bin", str(stub), "--uv-sha256", uv_sha_of(stub), "--pytest-arg=-q",
+        ]
+    )
+    assert rc == 2
 
 
 def test_41_offline_environment_is_enforced(tmp_path: Path) -> None:
@@ -224,5 +246,6 @@ def test_50_staging_and_extract_kinds_accepted(tmp_path: Path, kind: str) -> Non
         stub,
         None,
         ("-q",),
+        uv_sha256=uv_sha_of(stub),
     )
     assert report.verdict == "passed"

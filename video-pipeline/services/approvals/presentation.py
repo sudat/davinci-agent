@@ -18,7 +18,11 @@ import hashlib
 from typing import TYPE_CHECKING, Literal
 
 from services.approvals.ingress import record_fixture_operation
-from services.approvals.verify import AuthorizationVerdict, evaluate_authorization
+from services.approvals.verify import (
+    AuthorizationVerdict,
+    evaluate_authorization,
+    validate_supersession_chain,
+)
 from services.contracts.primitives import Identifier, Sha256, StrictModel
 from services.contracts.serialization import canonical_json_bytes
 
@@ -183,10 +187,23 @@ def authorize_presentation(
     records: tuple[ChainedOperationRecord, ...],
     binding: PresentationApprovalBinding,
     *,
+    chain_key: bytes,
     operator_gate: bool = False,
 ) -> AuthorizationVerdict:
-    """Authorize with typed purpose isolation (``purpose_reuse`` refusal)."""
+    """Authorize with typed purpose isolation (``purpose_reuse`` refusal).
 
+    The boundary is chain-verified first: a record set whose keyed hash
+    chain does not verify under ``chain_key`` can never authorize a
+    presentation build, regardless of its semantics.
+    """
+
+    try:
+        validate_supersession_chain(records, chain_key=chain_key)
+    except ValueError as error:
+        raise PresentationApprovalError(
+            "records-chain-invalid",
+            f"the operation-record chain does not verify under the store key: {error}",
+        ) from error
     target_hash = binding.bundle_hash()
     reused = [
         record

@@ -26,8 +26,8 @@ ATTEMPT = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
-POLICY = Path("config/gates/phase-1-control-plane-v1.json")
-RECEIPT = ATTEMPT / "task-7-freeze-receipt.json"
+POLICY = Path("config/gates/phase-1-control-plane-v2.json")
+RECEIPT = ATTEMPT / "gate-cascade/receipts/control-plane-v2.json"
 PARENT_RESULT = ATTEMPT / "phase-0c/gate-result.json"
 
 
@@ -37,7 +37,7 @@ def test_frozen_policy_is_canonical_and_bound_to_the_0c_parent() -> None:
 
     assert raw == canonical_gate_bytes(policy)
     assert policy.gate_id == "control-plane-baseline"
-    assert policy.gate_version == "v1"
+    assert policy.gate_version == "v2"
     assert policy.criteria == PHASE_1_CONTROL_PLANE_CRITERIA
     assert len(policy.parent_gate_result_hashes) == 1
     assert policy.parent_gate_result_hashes[0] == hashlib.sha256(
@@ -76,7 +76,9 @@ def test_freeze_receipt_binds_the_six_control_plane_fixtures() -> None:
 
 
 def test_policy_verification_passes_with_frozen_artifacts() -> None:
-    policy = verify_policy(POLICY, RECEIPT, None, ATTEMPT / "execution-contract.json")
+    policy = verify_policy(
+        POLICY, RECEIPT, None, ATTEMPT / "gate-cascade/execution-contract.canonical.json"
+    )
 
     assert policy.gate_id == "control-plane-baseline"
 
@@ -84,7 +86,7 @@ def test_policy_verification_passes_with_frozen_artifacts() -> None:
 def test_post_result_policy_edit_is_rejected(tmp_path: Path) -> None:
     edited = tmp_path / "policy.json"
     payload = json.loads(POLICY.read_bytes())
-    payload["gate_version"] = "v2"
+    payload["gate_version"] = "v9"
     edited.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
     with pytest.raises(PolicyVerificationError, match="policy hash"):

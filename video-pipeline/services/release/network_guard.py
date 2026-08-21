@@ -5,17 +5,38 @@ replay child process: any external egress attempt (connect, DNS, non-loopback
 create_connection) aborts the process with a typed marker so replay can
 classify it as a hidden network release prevention. Loopback IPC stays
 allowed (PRD 27: local-only bridge surfaces).
+
+LIMITATIONS (honest): the isolation is Python-socket-level only — it
+monkeypatches ``socket`` inside CPython, so native extensions, subprocesses
+spawning their own interpreters (e.g. a bundled curl or a non-Python tool)
+can still egress unmarked. The marker therefore proves only that MARKED
+Python paths stayed offline; release-grade isolation should additionally
+run the replay under an OS-level sandbox (sandbox-exec/seatbelt,
+containers, or a dedicated VM with an egress-denying firewall).
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Final
 
 NETWORK_MARKER = "RELEASE_REPLAY_NETWORK_BLOCKED"
 GUARD_DIR_NAME = "network-guard"
 CACHE_DIR_NAME = "uv-cache"
 VENV_NAME = "venv"
+
+GUARD_LIMITATIONS: Final = (
+    "isolation is Python-socket-level only (socket monkeypatch inside CPython); "
+    "native extensions and non-Python subprocesses can egress unmarked; the "
+    "network marker proves only marked Python paths stayed offline (marked "
+    "paths only); an OS-level sandbox (seatbelt/container/VM with egress "
+    "denial) is recommended for release-grade isolation"
+)
+
+CHILD_ENV_ALLOWLIST: Final = frozenset(
+    {"PATH", "HOME", "TMPDIR", "TZ", "LANG", "LC_CTYPE"}
+)
 
 GUARD_SOURCE = """\
 import socket as _socket
@@ -94,21 +115,30 @@ def write_network_guard(out: Path) -> None:
 
 
 def child_environment(out: Path) -> dict[str, str]:
-    """Fresh, offline, no-bytecode child environment for every replay step."""
+    """Minimal allowlisted child environment for every replay step.
 
-    environment = dict(os.environ)
+    Only the allowlisted locale/path variables are inherited — every other
+    parent variable (credentials, API keys, endpoint overrides) is STRIPPED
+    so it can never leak into replay children or their logs.
+    """
+
+    environment = {
+        name: os.environ[name]
+        for name in sorted(CHILD_ENV_ALLOWLIST)
+        if name in os.environ
+    }
     environment["UV_PROJECT_ENVIRONMENT"] = str(out / VENV_NAME)
     environment["UV_CACHE_DIR"] = str(out / CACHE_DIR_NAME)
     environment["UV_OFFLINE"] = "1"
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPATH"] = str(out / GUARD_DIR_NAME)
-    environment.pop("PYTHONHOME", None)
     return environment
 
 
 __all__ = [
     "CACHE_DIR_NAME",
     "GUARD_DIR_NAME",
+    "GUARD_LIMITATIONS",
     "GUARD_SOURCE",
     "NETWORK_MARKER",
     "VENV_NAME",

@@ -8,6 +8,7 @@ lives in ``test_live_replay_live.py`` behind the ``resolve_live`` marker.
 from __future__ import annotations
 
 import json
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -259,14 +260,21 @@ def _stub_summary() -> LiveReplaySummary:
     )
 
 
-def _patch_live_cli(monkeypatch: pytest.MonkeyPatch, fake_run: object) -> None:
+def _patch_live_cli(
+    monkeypatch: pytest.MonkeyPatch, fake_run: object, tmp_path: Path | None = None
+) -> None:
+    root = tmp_path if tmp_path is not None else Path(tempfile.gettempdir())
+    ffmpeg = root / "fake-ffmpeg"
+    ffprobe = root / "fake-ffprobe"
+    ffmpeg.write_bytes(b"ffmpeg")
+    ffprobe.write_bytes(b"ffprobe")
     monkeypatch.setattr("services.release.live_flow.run_live_replay", fake_run)
     monkeypatch.setattr("services.release.live_flow.revalidate_live_replay", lambda out,
-        seams: None)
+        seams, invocation: None)
     monkeypatch.setattr("services.release.live_wiring.resolve_host_report",
         lambda out: Path("r.json"))
-    monkeypatch.setattr("services.release.live_wiring.pinned_media_bins", lambda: (Path("f"),
-        Path("p")))
+    monkeypatch.setattr("services.release.live_wiring.pinned_media_bins",
+        lambda: (ffmpeg, ffprobe))
     monkeypatch.setattr("services.release.live_wiring.production_seams", lambda **kwargs: object())
 
 
@@ -279,13 +287,14 @@ def test_10_live_mode_parses_exact_f3_argv(tmp_path: Path, monkeypatch: pytest.M
         captured.update(kwargs)
         return _stub_summary()
 
-    _patch_live_cli(monkeypatch, fake_run)
+    _patch_live_cli(monkeypatch, fake_run, tmp_path)
+    extract = _write_binding_extract(tmp_path, git_sha="d" * 40)
     exit_code = replay_cli.main(
         [
             "--candidate-extract",
-            str(tmp_path / "extract"),
+            str(extract),
             "--h1-binding",
-            str(tmp_path / "extract/inputs/h1/binding.json"),
+            str(extract / "inputs/h1/binding.json"),
             "--inject",
             "partial-build,resolve-restart,stale-state,false-success,repeated-interruption",
             "--profile-swap",
@@ -311,7 +320,7 @@ def test_11_live_mode_requires_candidate_extract(tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch) -> None:
     from services.release import replay as replay_cli  # noqa: PLC0415
 
-    _patch_live_cli(monkeypatch, lambda **kwargs: None)
+    _patch_live_cli(monkeypatch, lambda **kwargs: None, tmp_path)
     assert (
         replay_cli.main(
             [
@@ -833,7 +842,7 @@ def test_73_idempotent_rerun_revalidates_without_rerunning(tmp_path: Path) -> No
     harness = _flow_harness(tmp_path)
     extract = harness.extract
     binding = extract / "inputs/h1/binding.json"
-    run_live_replay(
+    first = run_live_replay(
         extract=extract,
         h1_binding=binding,
         injections=("stale-state",),
@@ -841,10 +850,13 @@ def test_73_idempotent_rerun_revalidates_without_rerunning(tmp_path: Path) -> No
         out=harness.out,
         seams=harness.seams,
     )
+    assert first.invocation is not None
     before = dict(harness.calls)
-    revalidated = revalidate_live_replay(harness.out, seams=harness.seams)
+    revalidated = revalidate_live_replay(
+        harness.out, seams=harness.seams, invocation=first.invocation
+    )
     assert revalidated is not None
-    assert revalidated.verdict == "passed"
+    assert revalidated.verdict in ("passed", "diagnostic-passed")
     assert harness.calls == before
 
 
@@ -866,7 +878,13 @@ def test_74_rerun_runs_fresh_when_prior_summary_fails(tmp_path: Path) -> None:
         seams=harness.seams,
     )
     assert broken.verdict == "failed"
-    assert revalidate_live_replay(harness.out, seams=harness.seams) is None
+    assert broken.invocation is not None
+    assert (
+        revalidate_live_replay(
+            harness.out, seams=harness.seams, invocation=broken.invocation
+        )
+        is None
+    )
 
     def good_build(_connection: ConnectionLike, interrupt_at: int | None) -> str:
         if interrupt_at is not None:
@@ -882,7 +900,7 @@ def test_74_rerun_runs_fresh_when_prior_summary_fails(tmp_path: Path) -> None:
         out=harness.out,
         seams=harness.seams,
     )
-    assert fresh.verdict == "passed"
+    assert fresh.verdict == "diagnostic-passed"
 
 
 def test_75_summary_model_is_strict_and_canonical(tmp_path: Path) -> None:

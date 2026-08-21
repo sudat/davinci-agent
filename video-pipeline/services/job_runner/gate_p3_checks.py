@@ -35,6 +35,7 @@ from services.job_runner.gate_p3_models import (
     P3GateObservation,
     P3StructRow,
 )
+from services.job_runner.gate_p3_regression import phase2_policy
 from services.job_runner.gate_p3_scan import (
     default_channel_roots,
     resolve_repo_path,
@@ -140,7 +141,9 @@ def check_regression(observation: P3GateObservation, state: CheckState) -> None:
             "phase2-regression-failed",
             f"passed={parsed.passed} failed={failed}",
         )
-    if parsed.policy_sha256 != sha256_file(resolve_repo_path(PARENT_POLICY)):
+    if parsed.policy_sha256 != sha256_file(
+        resolve_repo_path(phase2_policy())
+    ):
         state.fail(
             C_REGRESSION,
             "phase2-regression-policy-drift",

@@ -64,6 +64,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--freeze-receipt", type=Path, required=True)
     prepare.add_argument("--staging", type=Path, required=True)
     prepare.add_argument("--intent", type=Path, required=True)
+    prepare.add_argument("--gate-version", choices=("v1", "v2", "v3", "v4"), default="v1")
     publish = commands.add_parser("publish")
     publish.add_argument("--intent", type=Path, required=True)
     publish.add_argument("--ledger", type=Path, required=True)
@@ -93,6 +94,7 @@ def _prepare_phase1(arguments: argparse.Namespace) -> int:
         freeze_receipt=arguments.freeze_receipt,
         staging=arguments.staging,
         intent=arguments.intent,
+        gate_version=arguments.gate_version,
     )
     prepare_phase1_technical(request)
     print("freeze prepared: phase-1-technical v1")
@@ -111,6 +113,7 @@ def _prepare_phase0a(arguments: argparse.Namespace) -> int:
         freeze_receipt=arguments.freeze_receipt,
         staging=arguments.staging,
         intent=arguments.intent,
+        gate_version=arguments.gate_version,
     )
     prepare_freeze(request)
     print("freeze prepared: phase-0a v1")
@@ -130,6 +133,7 @@ def _prepare_phase0b(arguments: argparse.Namespace) -> int:
         freeze_receipt=arguments.freeze_receipt,
         staging=arguments.staging,
         intent=arguments.intent,
+        gate_version=arguments.gate_version,
     )
     prepare_phase0b(request)
     print("freeze prepared: phase-0b v1")
@@ -157,6 +161,7 @@ def _prepare_phase2(arguments: argparse.Namespace) -> int:
         freeze_receipt=arguments.freeze_receipt,
         staging=arguments.staging,
         intent=arguments.intent,
+        gate_version=arguments.gate_version,
     )
     prepare_phase2(request)
     print("freeze prepared: phase-2 v1")
@@ -176,6 +181,7 @@ def _prepare_control_plane(arguments: argparse.Namespace) -> int:
         freeze_receipt=arguments.freeze_receipt,
         staging=arguments.staging,
         intent=arguments.intent,
+        gate_version=arguments.gate_version,
     )
     prepare_control_plane(request)
     print("freeze prepared: control-plane-baseline v1")
@@ -195,6 +201,7 @@ def _prepare_phase3(arguments: argparse.Namespace) -> int:
         freeze_receipt=arguments.freeze_receipt,
         staging=arguments.staging,
         intent=arguments.intent,
+        gate_version=arguments.gate_version,
     )
     prepare_phase3(request)
     print("freeze prepared: phase-3 v1")
@@ -231,6 +238,7 @@ def _prepare(arguments: argparse.Namespace) -> int:
         freeze_receipt=arguments.freeze_receipt,
         staging=arguments.staging,
         intent=arguments.intent,
+        gate_version=arguments.gate_version,
     )
     prepare_phase0c(request)
     print("freeze prepared: phase-0c v1")

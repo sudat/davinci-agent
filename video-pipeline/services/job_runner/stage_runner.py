@@ -50,6 +50,7 @@ if TYPE_CHECKING:
 
     from services.artifact_registry.registry import ArtifactRegistry
     from services.contracts.primitives import Producer
+    from services.job_runner.state_models import JobStatus
     from services.job_runner.state_store import StateStore
 
     RunnerFn = Callable[[int], bytes]
@@ -78,6 +79,8 @@ class _RunContext:
     journal: StageRunJournal
     clock: LogicalClock
     started_seq: int
+    started_status: JobStatus
+    started_adopted_hash: str | None
 
 
 class StageRunner:
@@ -114,10 +117,13 @@ class StageRunner:
             runner_version=self._identity.runner_version,
             code_snapshot_id=self._identity.code_snapshot_id,
         )
+        starting = current_job_state(store, job_id)
         context = _RunContext(
             store=store, registry=registry, job_id=job_id, key=key,
             journal=StageRunJournal(self._journal_root, job_id), clock=clock,
-            started_seq=current_job_state(store, job_id).updated_at_seq,
+            started_seq=starting.updated_at_seq,
+            started_status=starting.status,
+            started_adopted_hash=starting.adopted_artifact_hash,
         )
         resource = stage_resource(job_id, stage_name)
         store.acquire_lease(
@@ -195,6 +201,12 @@ class StageRunner:
         lane.acquire(now=clock.now, ttl_seconds=self._lease_ttl)
         try:
             current = current_job_state(store, context.job_id)
+            drifted = (
+                current.status != context.started_status
+                or current.adopted_artifact_hash != context.started_adopted_hash
+            )
+            if drifted:
+                return self._superseded(context, payload_hash=content_hash, attempt=attempt)
             if current.adopted_artifact_hash != content_hash:
                 lane.apply(
                     expected_status=current.status,
@@ -216,6 +228,25 @@ class StageRunner:
         outcome = "succeeded" if kind == "attempt-succeeded" else "recovered"
         return StageRunResult(
             outcome=outcome, output_artifact_hash=content_hash, attempts=attempt, record=record
+        )
+
+    def _superseded(
+        self, context: _RunContext, *, payload_hash: str, attempt: int
+    ) -> StageRunResult:
+        """Stale output: the parent moved on mid-run; adopt NOTHING."""
+        context.journal.append(context.journal.mint(
+            job_id=context.job_id, key=context.key, identity=self._identity,
+            kind="run-superseded", attempt=attempt, output_artifact_hash=payload_hash,
+        ))
+        record = StageRunRecord(
+            key=context.key, attempt=attempt, output_artifact_hash=payload_hash,
+            started_seq=context.started_seq,
+            ended_seq=current_job_state(context.store, context.job_id).updated_at_seq,
+            identity=self._identity,
+        )
+        return StageRunResult(
+            outcome="superseded", output_artifact_hash=payload_hash,
+            attempts=attempt, record=record,
         )
 
     def _block(

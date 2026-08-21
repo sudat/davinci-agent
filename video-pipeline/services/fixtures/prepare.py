@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 from pydantic import BaseModel, ValidationError
 
@@ -12,6 +13,7 @@ from services.fixtures.golden import GoldenAuditError, audit_derivation_source
 from services.fixtures.models import (
     FreezeIntent,
     FreezeReceipt,
+    GateVersion,
     GoldenHashes,
     Phase0AFixtureManifest,
     SourceSnapshot,
@@ -40,6 +42,26 @@ class PrepareRequest:
     freeze_receipt: Path
     staging: Path
     intent: Path
+    gate_version: GateVersion = "v1"
+
+
+POLICY_FILE_STEM: Final[dict[str, str]] = {
+    "phase-0a": "phase-0a",
+    "phase-0b": "phase-0b",
+    "phase-0c": "phase-0c",
+    "control-plane-baseline": "phase-1-control-plane",
+    "phase-1-technical": "phase-1-technical",
+    "phase-2": "phase-2",
+    "phase-3": "phase-3",
+}
+
+
+def parent_policy_path(root: Path, gate_id: str, gate_version: str) -> Path:
+    """The frozen policy file for a parent gate result of the given version."""
+    stem = POLICY_FILE_STEM.get(gate_id)
+    if stem is None:
+        raise PrepareError(f"unknown gate id for policy lookup: {gate_id}")
+    return root / "config" / "gates" / f"{stem}-{gate_version}.json"
 
 
 def _load_canonical[Model: BaseModel](path: Path, model: type[Model]) -> tuple[bytes, Model]:
@@ -123,7 +145,7 @@ def prepare_freeze(request: PrepareRequest) -> FreezeIntent:
     policy = GatePolicy(
         schema_version="gate-policy-v1",
         gate_id="phase-0a",
-        gate_version="v1",
+        gate_version=request.gate_version,
         parent_gate_result_hashes=(),
         criteria=PHASE_0A_CRITERIA,
         toolchain_lock_sha256=toolchain_hash,
@@ -135,6 +157,7 @@ def prepare_freeze(request: PrepareRequest) -> FreezeIntent:
     policy_bytes = canonical_gate_bytes(policy)
     policy_hash = hashlib.sha256(policy_bytes).hexdigest()
     receipt = FreezeReceipt(
+        gate_version=request.gate_version,
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,
         toolchain_lock_path=str(request.toolchain_lock.resolve(strict=True)),
@@ -155,6 +178,7 @@ def prepare_freeze(request: PrepareRequest) -> FreezeIntent:
     intent = FreezeIntent(
         todo=6,
         gate_id="phase-0a",
+        gate_version=request.gate_version,
         staged_policy_path=str(staged_policy.resolve(strict=True)),
         policy_path=str(request.policy_out.resolve()),
         policy_sha256=policy_hash,

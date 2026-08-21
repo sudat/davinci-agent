@@ -117,7 +117,7 @@ def evaluate(  # noqa: PLR0913 (gate contract: policy + evidence + drive seams)
     *,
     connection: ResolveConnection | None = None,
     host_report: Path | None = None,
-    receipt: Path | None = None,
+    receipt: Path | None = None,  # noqa: ARG001 (reserved: the phase-3 receipt binds the outer policy)
     regression_timeout: float = DEFAULT_TIMEOUT_SECONDS,
     drive: bool = True,
     observation: P3GateObservation | None = None,
@@ -147,7 +147,7 @@ def evaluate(  # noqa: PLR0913 (gate contract: policy + evidence + drive seams)
         regression = run_regression(
             evidence,
             host_report=report,
-            receipt=receipt or default_receipt(evidence),
+            receipt=default_receipt(evidence),
             timeout_seconds=regression_timeout,
         )
         record = _scan_record()

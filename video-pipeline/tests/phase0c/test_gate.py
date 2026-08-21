@@ -47,7 +47,7 @@ from services.spike.gate_phase0c_models import (
 )
 from services.spike.stop_rules import record_stop, stop_marker_path, stop_recorded
 
-POLICY = Path("config/gates/phase-0c-v1.json")
+POLICY = Path("config/gates/phase-0c-v2.json")
 LOCK = Path("config/toolchains/phase-0c-v1.json")
 
 

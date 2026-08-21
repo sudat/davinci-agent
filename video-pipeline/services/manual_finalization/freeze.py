@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from services.approvals.verify import evaluate_authorization
+from services.approvals.verify import evaluate_authorization, validate_supersession_chain
 from services.contracts.serialization import GENESIS_SHA256
 from services.manual_finalization.freeze_models import (
     DrtDrp,
@@ -50,11 +50,12 @@ def _authorizing_record(
     return next((record for record in records if record.record_id == record_id), None)
 
 
-def assemble_freeze_package(
+def assemble_freeze_package(  # noqa: PLR0913 (authorization boundary: records + inputs + chain key)
     *,
     records: tuple[ChainedOperationRecord, ...],
     inputs: FreezeInputs | Mapping[str, object],
     reason_detail: str,
+    chain_key: bytes,
     fixture_mode: bool = False,
     reason_code: FreezeReasonCode = "unsupported_capability",
 ) -> FreezePackage:
@@ -63,6 +64,13 @@ def assemble_freeze_package(
         if isinstance(inputs, FreezeInputs)
         else _validated_inputs(inputs)
     )
+    try:
+        validate_supersession_chain(records, chain_key=chain_key)
+    except ValueError as error:
+        raise FreezeRefusal(
+            "records-chain-invalid",
+            f"the operation-record chain does not verify under the store key: {error}",
+        ) from error
     verdict = evaluate_authorization(
         records,
         purpose="manual_freeze",

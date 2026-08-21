@@ -49,6 +49,19 @@ class StageBindings:
     golden_expected_sha256: str
 
 
+def _receipt_for_policy(attempt_dir: Path, policy: Path) -> Path:
+    """The freeze receipt matching the policy's gate version (cascade-aware)."""
+    import json  # noqa: PLC0415
+
+    payload = json.loads(policy.read_bytes())
+    version = payload.get("gate_version")
+    if isinstance(version, str) and version != "v1":
+        cascaded = attempt_dir / "gate-cascade" / "receipts" / f"phase-0a-{version}.json"
+        if cascaded.is_file():
+            return cascaded
+    return attempt_dir / "task-6-freeze-receipt.json"
+
+
 def _load_receipt(path: Path) -> FreezeReceipt:
     raw = path.read_bytes()
     receipt = FreezeReceipt.model_validate_json(raw)
@@ -162,7 +175,7 @@ def materialize(fixture_id: str, policy: Path, output_dir: Path | None) -> Path:
         workspace_root / ".omo/plans/foundation-video-pipeline.md",
         "",
     )
-    receipt_path = record.attempt_dir / "task-6-freeze-receipt.json"
+    receipt_path = _receipt_for_policy(record.attempt_dir, policy)
     receipt = _load_receipt(receipt_path)
     verify_policy(policy, receipt_path, None, Path(receipt.execution_contract_path))
     lock_path = Path(receipt.toolchain_lock_path)

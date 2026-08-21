@@ -14,9 +14,10 @@ failure — the chain NEVER silently falls back.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from services.cli.live_editorial import LiveHttpTransport
 from services.cli.real_policy import load_policy, write_policy_snapshot
@@ -40,6 +41,7 @@ from services.editorial.reconcile import reconcile
 from services.editorial.transport import CREDENTIALS_ENV
 from services.fixtures.manifest_phase1 import EditorialRules, EditSourceSpec
 from services.media_query.api import MediaQueryApi
+from services.policy.redaction import redact_text
 
 if TYPE_CHECKING:
     from services.cli.real_analyze import RealAnalysis
@@ -65,7 +67,33 @@ class RealDirectorError(Exception):
         self.detail = detail
 
 
+RESIDUAL_SECRET_RE: Final = re.compile(
+    r"\bsk-[A-Za-z0-9_-]{16,}\b"
+    r"|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
+    r"|\d{7,}"
+)
+
 type DirectorMode = Literal["deterministic-baseline", "live"]
+
+
+def redacted_speech_text(speech_text: dict[str, str]) -> dict[str, str]:
+    """Redact every transcript string BEFORE any prompt construction.
+
+    A live cloud grant may only ever see the redacted text; when sensitive
+    content SURVIVES redaction (a bare credential shape the deterministic
+    redactor cannot safely rewrite), the live transport is denied outright.
+    """
+
+    cleaned = {segment_id: redact_text(text) for segment_id, text in speech_text.items()}
+    for segment_id, text in cleaned.items():
+        if RESIDUAL_SECRET_RE.search(text):
+            raise RealDirectorError(
+                "transcript-redaction-ineffective",
+                f"segment {segment_id} still carries sensitive content after "
+                "redaction; the live editorial transport is denied rather "
+                "than shipping it to the cloud prompt",
+            )
+    return cleaned
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,7 +216,7 @@ def select(  # noqa: PLR0913 (director wiring: pool + rules + policy + env + evi
         )
     request = director_request(
         episode_id=episode_id, source_id=source_id, total_frames=total_frames,
-        rules=rules, pool=pool, speech_text=speech_text,
+        rules=rules, pool=pool, speech_text=redacted_speech_text(speech_text),
     )
     return _live(request, index_path, policy, env)
 

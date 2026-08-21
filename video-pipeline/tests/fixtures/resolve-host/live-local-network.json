@@ -1,0 +1,84 @@
+{
+  "application": {
+    "app_path": "/Applications/DaVinci Resolve/DaVinci Resolve.app",
+    "build": "21.0.40005",
+    "bundle_id": "com.blackmagic-design.DaVinciResolve",
+    "edition": {
+      "evidence": [
+        "bundle identifier does not distinguish editions"
+      ],
+      "needs_live_verification": true,
+      "value": "unverified"
+    },
+    "info_plist": {
+      "path": "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Info.plist",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "present": true,
+    "version": "21.0.4"
+  },
+  "assets": {
+    "fairlight_paths": [],
+    "font_paths": [],
+    "lut_paths": [],
+    "plugin_paths": [],
+    "preset_paths": []
+  },
+  "bridge": {
+    "library": {
+      "path": "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "module": {
+      "path": "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/Modules/DaVinciResolveScript.py",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  "docs": {
+    "app_bundle_paths": [],
+    "installed_paths": [
+      {
+        "path": "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/README.txt",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      {
+        "path": "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/Examples/python_get_resolve.py",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    ],
+    "location_note": "installed support package; no Developer/Scripting docs found inside the app bundle"
+  },
+  "gpu": {
+    "backend": "metal",
+    "inventory": "Apple M5"
+  },
+  "host": {
+    "architecture": "arm64",
+    "macos_build": "25F84",
+    "macos_version": "26.5.2"
+  },
+  "output": {
+    "cwd": "/tmp",
+    "writable": true
+  },
+  "schema_version": "resolve-host-report-v1",
+  "scripting": {
+    "live_probe": {
+      "evidence_note": "scripting_enabled=True transport=tcp server_port=49152 listener_bound=('*:49152',) non_loopback_probe=accepted via 192.168.1.4:49152; probed addresses target this host only",
+      "listener_bound_addresses": [
+        "*:49152"
+      ],
+      "non_loopback_probe": "accepted",
+      "schema_version": "resolve-scripting-scope-probe-v1",
+      "scripting_enabled": true,
+      "scripting_server_port": 49152,
+      "transport_observed": "tcp 127.0.0.1 -> 127.0.0.1:49152"
+    },
+    "needs_live_verification": false,
+    "network_access_performed": false,
+    "preference_paths": [],
+    "reason": "live scripting-scope probe: non-loopback connect to scripting port accepted",
+    "remote_access": "local-network",
+    "runtime_policy": "loopback-only"
+  }
+}

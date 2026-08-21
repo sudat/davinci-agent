@@ -6,10 +6,11 @@ import platform
 import plistlib
 import subprocess
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 from pydantic import ValidationError
 
+from services.contracts.primitives import StrictModel
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 from services.resolve_bridge.models import (
     AssetInventory,
@@ -30,6 +31,36 @@ APP: Final = Path("/Applications/DaVinci Resolve/DaVinci Resolve.app")
 SUPPORT: Final = Path("/Library/Application Support/Blackmagic Design/DaVinci Resolve")
 SCRIPTING: Final = SUPPORT / "Developer/Scripting"
 PREFERENCES: Final = Path.home() / "Library/Preferences/Blackmagic Design/DaVinci Resolve"
+REPO_ROOT: Final = Path(__file__).resolve().parents[2]
+DEFAULT_PERMIT_PATH: Final = REPO_ROOT / "config" / "security" / "scripting-scope-permit.json"
+
+
+class ScriptingPermit(StrictModel):
+    """An explicit operator decision permitting local-network scripting.
+
+    A live probe that observes the scripting port ACCEPTING connections
+    from a non-loopback local interface classifies the host as
+    ``local-network``; readiness passes ONLY when the operator has
+    recorded this explicit permit (fail-closed otherwise).
+    """
+
+    schema_version: Literal["resolve-scripting-scope-permit-v1"] = (
+        "resolve-scripting-scope-permit-v1"
+    )
+    permitted_scope: Literal["local-network"]
+    granted_by: str
+    host_note: str
+    granted_date: str
+
+
+def default_scripting_permit() -> ScriptingPermit | None:
+    """The repo-recorded operator permit, when the operator granted one."""
+    if not DEFAULT_PERMIT_PATH.is_file():
+        return None
+    try:
+        return ScriptingPermit.model_validate_json(DEFAULT_PERMIT_PATH.read_bytes())
+    except (OSError, ValidationError):
+        return None
 
 
 class HostReadinessError(Exception):
@@ -177,12 +208,35 @@ def probe_host() -> ResolveHostReport:
     )
 
 
-def validate_host_report(report: ResolveHostReport) -> None:
+def validate_host_report(
+    report: ResolveHostReport, *, permit: ScriptingPermit | None = None
+) -> None:
+    """Fail-closed: only a LIVE-VERIFIED safe scope passes readiness.
+
+    ``unknown`` scope and ``needs_live_verification`` are refusals, not
+    pass states; ``local-network`` additionally requires the explicit
+    operator permit (auto-loaded from the repo config when present).
+    """
     if (
         report.scripting.runtime_policy != "loopback-only"
         or report.scripting.remote_access == "network"
     ):
         raise HostReadinessError("unsafe Resolve scripting exposure")
+    if report.scripting.remote_access == "unknown":
+        raise HostReadinessError(
+            "scripting scope unverified (unknown): run the live scripting-scope "
+            "probe before readiness can pass"
+        )
+    if report.scripting.needs_live_verification:
+        raise HostReadinessError(
+            "scripting scope needs live verification: readiness fails closed "
+            "until the live probe positively confirms the scope"
+        )
+    if report.scripting.remote_access == "local-network" and permit is None:
+        raise HostReadinessError(
+            "local-network scripting scope requires an explicit operator permit "
+            f"({DEFAULT_PERMIT_PATH})"
+        )
     if report.scripting.network_access_performed:
         raise HostReadinessError("readiness probe performed network access")
     if not report.docs.installed_paths or not report.bridge.library.path:
@@ -191,12 +245,15 @@ def validate_host_report(report: ResolveHostReport) -> None:
         raise HostReadinessError("pipeline cwd is not writable")
 
 
-def load_host_report(path: Path) -> ResolveHostReport:
+def load_host_report(
+    path: Path, *, permit: ScriptingPermit | None = None
+) -> ResolveHostReport:
     try:
         report = ResolveHostReport.model_validate_json(path.read_bytes())
     except (OSError, ValidationError) as error:
         raise HostReadinessError(f"invalid Resolve host report: {error}") from error
-    validate_host_report(report)
+    effective_permit = permit if permit is not None else default_scripting_permit()
+    validate_host_report(report, permit=effective_permit)
     return report
 
 

@@ -210,7 +210,7 @@ def test_interrupt_after_partial_placements_raises_the_kill_seam() -> None:
 
 @pytest.mark.parametrize("fault", sorted(FAULTS))
 def test_fault_is_detected_from_recomputed_evidence(fault: str, tmp_path: Path) -> None:
-    policy, policy_sha256 = load_policy(Path("config/gates/phase-2-v1.json"))
+    policy, policy_sha256 = load_policy(Path("config/gates/phase-2-v4.json"))
     baseline = evaluate_fake(policy, policy_sha256, tmp_path / "baseline", FaultKnobs())
     probe = evaluate_fake(policy, policy_sha256, tmp_path / "fault", FaultKnobs(fault=fault))
     assert baseline.result.passed, (fault, baseline.mismatches)
@@ -222,7 +222,7 @@ def test_fault_is_detected_from_recomputed_evidence(fault: str, tmp_path: Path) 
 
 
 def test_fake_baseline_passes_every_criterion(tmp_path: Path) -> None:
-    policy, policy_sha256 = load_policy(Path("config/gates/phase-2-v1.json"))
+    policy, policy_sha256 = load_policy(Path("config/gates/phase-2-v4.json"))
     outcome = evaluate_fake(policy, policy_sha256, tmp_path, FaultKnobs())
     assert outcome.result.passed, list(outcome.mismatches)
     assert outcome.marker is not None

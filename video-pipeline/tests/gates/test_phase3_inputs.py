@@ -33,8 +33,8 @@ ATTEMPT = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
-POLICY = Path("config/gates/phase-3-v1.json")
-RECEIPT = ATTEMPT / "task-56-freeze-receipt.json"
+POLICY = Path("config/gates/phase-3-v3.json")
+RECEIPT = ATTEMPT / "gate-cascade/receipts/phase-3-v3.json"
 LOCK = Path("config/toolchains/phase-3-v1.json")
 PHASE2_RESULT = ATTEMPT / "phase-2/gate-result.json"
 
@@ -45,7 +45,7 @@ def test_frozen_policy_is_canonical_with_single_phase2_parent() -> None:
 
     assert raw == canonical_gate_bytes(policy)
     assert policy.gate_id == "phase-3"
-    assert policy.gate_version == "v1"
+    assert policy.gate_version == "v3"
     assert policy.criteria == PHASE_3_CRITERIA
     assert policy.capability_allowlist == ()
     assert policy.prerequisite_bindings == ()
@@ -69,7 +69,7 @@ def test_freeze_receipt_binds_two_brand_fixtures_parent_lock_and_contract() -> N
     assert tuple(link.gate_id for link in receipt.parent_gate_results) == ("phase-2",)
     assert receipt.toolchain_lock_sha256 == hashlib.sha256(LOCK.read_bytes()).hexdigest()
     assert receipt.execution_contract_sha256 == hashlib.sha256(
-        (ATTEMPT / "execution-contract.json").read_bytes()
+        (ATTEMPT / "gate-cascade/execution-contract.canonical.json").read_bytes()
     ).hexdigest()
     assert receipt.golden_hashes.index_sha256 == hashlib.sha256(
         Path("tests/goldens/reference/phase-3/index.json").read_bytes()
@@ -77,7 +77,9 @@ def test_freeze_receipt_binds_two_brand_fixtures_parent_lock_and_contract() -> N
 
 
 def test_policy_verification_passes_with_frozen_artifacts() -> None:
-    policy = verify_policy(POLICY, RECEIPT, None, ATTEMPT / "execution-contract.json")
+    policy = verify_policy(
+        POLICY, RECEIPT, None, ATTEMPT / "gate-cascade/execution-contract.canonical.json"
+    )
 
     assert policy.gate_id == "phase-3"
 
@@ -101,7 +103,7 @@ def _policy_payload() -> dict[str, object]:
 def test_edited_policy_is_rejected_by_receipt_binding(tmp_path: Path) -> None:
     edited = tmp_path / "policy.json"
     payload = _policy_payload()
-    payload["gate_version"] = "v2"
+    payload["gate_version"] = "v9"
     edited.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
     with pytest.raises(PolicyVerificationError, match="policy hash"):

@@ -7,6 +7,10 @@ artifact content: the store stays the sole truth."""
 
 from __future__ import annotations
 
+import fcntl
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -33,6 +37,18 @@ if TYPE_CHECKING:
     from services.artifact_store.store import ArtifactStore
 
 INDEX_FILE_NAME = "registry-index.json"
+LOCK_FILE_NAME = "registry.lock"
+
+
+@contextmanager
+def _exclusive(index_root: Path) -> Iterator[None]:
+    """Serialize the load-modify-replace cycle across processes."""
+    descriptor = os.open(index_root / LOCK_FILE_NAME, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
 
 
 class RegistryError(Exception):
@@ -141,27 +157,31 @@ class ArtifactRegistry:
         atomic_write(self.index_path, canonical_model_bytes(index))
 
     def register(self, store: ArtifactStore, receipt: PublicationReceipt) -> RegistryEntry:
-        index = self.load()
-        existing = index.entries.get(receipt.artifact_id)
-        if existing is not None:
-            if existing.content_sha256 != receipt.content_sha256:
-                raise RegistryError(
-                    "registry-conflict",
-                    f"artifact id {receipt.artifact_id} is already indexed "
-                    f"with content {existing.content_sha256}",
-                )
-            return existing
-        next_sequence = max(
-            (entry.sequence for entry in index.entries.values()), default=-1
-        ) + 1
-        entry = entry_from_store(
-            store,
-            artifact_id=receipt.artifact_id,
-            sequence=next_sequence,
-            expected_sha256=receipt.content_sha256,
-        )
-        self.save(mint_index(index.entries | {entry.artifact_id: entry}))
-        return entry
+        with _exclusive(self._root):
+            index = self.load()
+            existing = index.entries.get(receipt.artifact_id)
+            if existing is not None:
+                if existing.content_sha256 != receipt.content_sha256:
+                    raise RegistryError(
+                        "registry-conflict",
+                        f"artifact id {receipt.artifact_id} is already indexed "
+                        f"with content {existing.content_sha256}",
+                    )
+                return existing
+            next_sequence = max(
+                (entry.sequence for entry in index.entries.values()), default=-1
+            ) + 1
+            entry = entry_from_store(
+                store,
+                artifact_id=receipt.artifact_id,
+                sequence=next_sequence,
+                expected_sha256=receipt.content_sha256,
+            )
+            reloaded = self.load().entries
+            if receipt.artifact_id in reloaded:
+                return reloaded[receipt.artifact_id]
+            self.save(mint_index(index.entries | {entry.artifact_id: entry}))
+            return entry
 
     def walk(
         self,

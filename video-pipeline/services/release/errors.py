@@ -20,6 +20,8 @@ ReleaseGateCode = Literal[
     "missing_h1_binding",
     "writable_candidate",
     "revoked_candidate",
+    "uv-sha-required",
+    "uv-hash-mismatch",
 ]
 
 GATE_CODE_DETAIL: Final[dict[str, str]] = {
