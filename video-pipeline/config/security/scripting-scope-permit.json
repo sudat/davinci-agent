@@ -1,7 +1,16 @@
 {
   "granted_by": "owner",
   "granted_date": "2026-08-21",
-  "host_note": "macOS dev host running DaVinci Resolve Studio 21.0.4; Resolve binds its scripting listener on the wildcard address and the port accepts connections from the machine's own LAN interface (192.168.1.4). Permit recorded during the 2026-08-21 global-review blocker fix round; revisit if the host leaves the trusted LAN.",
+  "host_fingerprint": {
+    "architecture": "arm64",
+    "macos_build": "25F84",
+    "macos_version": "26.5.2"
+  },
+  "host_note": "macOS dev host running DaVinci Resolve Studio 21.0.4; Resolve binds its scripting listener on the wildcard address and the port accepts connections from the machine's own LAN interface (192.168.1.4). Owner grant recorded 2026-08-21 during the global-review fix round 2 and now bound to THIS host's fingerprint, Resolve version/build, and the observed local-network listener scope; valid until revalidate_by, then a fresh owner decision is required. Revisit immediately if the host leaves the trusted LAN.",
+  "observed_listener_scope": "local-network",
   "permitted_scope": "local-network",
-  "schema_version": "resolve-scripting-scope-permit-v1"
+  "resolve_build": "21.0.40005",
+  "resolve_version": "21.0.4",
+  "revalidate_by": "2026-11-21",
+  "schema_version": "resolve-scripting-scope-permit-v2"
 }

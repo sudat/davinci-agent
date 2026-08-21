@@ -8,12 +8,19 @@ listeners' bound address classes (lsof, no name resolution, no egress),
 and connect-probes the scripting port from a NON-LOOPBACK local interface
 of the same host — recording ACCEPTED vs REFUSED exactly as observed.
 
-Classification:
+Classification (fail-closed on unobserved evidence):
 - ``disabled``  — the official module exposes no scripting app.
-- ``loopback``  — non-loopback connect-probe REFUSED (or no non-loopback
-  interface exists on the host, recorded honestly as not-attempted).
-- ``local-network`` — the scripting port ACCEPTS non-loopback connections;
-  readiness then additionally requires the explicit operator permit.
+- ``local-network`` — the scripting port ACCEPTS non-loopback connections
+  (positive observation); readiness then additionally requires the
+  explicit operator permit.
+- ``loopback``  — POSITIVE evidence only: the non-loopback connect-probe
+  was attempted and REFUSED and the scripting port's listener inventory
+  shows loopback-only binding.
+- ``unknown``   — everything else (probe not attempted, port/interface
+  discovery failure, listener inventory unobserved, wildcard or
+  non-loopback bindings with a refused probe). ``unknown`` keeps
+  ``needs_live_verification=true``; wildcard listeners are NEVER
+  downgraded to verified loopback.
 
 Every socket this probe opens targets the LOCAL HOST only (loopback or
 this machine's own interface addresses); no external egress is attempted,
@@ -59,15 +66,53 @@ class OwnTargetsSeam(Protocol):
     def __call__(self) -> tuple[tuple[str, int], ...]: ...
 
 
-Scope = Literal["disabled", "loopback", "local-network", "network"]
+class ResolvePidSeam(Protocol):
+    def __call__(self) -> int | None: ...
 
 
-def classify_scope(*, enabled: bool, accepted: bool, attempted: bool) -> Scope:
+Scope = Literal["disabled", "loopback", "local-network", "network", "unknown"]
+
+NonLoopbackObservation = Literal[
+    "accepted", "refused", "not-attempted-no-non-loopback-interface"
+]
+
+_LOOPBACK_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "[::1]", "::1"})
+
+
+def _is_loopback_binding(address: str) -> bool:
+    host, _, _port = address.rpartition(":")
+    if not host:
+        return False
+    return host in _LOOPBACK_HOSTS or host.startswith("127.")
+
+
+def _loopback_only_binding(port_bindings: tuple[str, ...]) -> bool:
+    """True only when the scripting port is POSITIVELY bound loopback-only."""
+
+    return bool(port_bindings) and all(_is_loopback_binding(item) for item in port_bindings)
+
+
+def classify_scope(
+    *,
+    enabled: bool,
+    non_loopback: NonLoopbackObservation,
+    port_bindings: tuple[str, ...],
+) -> Scope:
+    """Fail-closed classification from the observed probe facts only.
+
+    ``port_bindings`` are the listener inventory rows whose port equals
+    the discovered scripting server port. ``loopback`` is only claimable
+    from positive evidence: a REFUSED non-loopback connect-probe plus a
+    loopback-only listener binding for that port.
+    """
+
     if not enabled:
         return "disabled"
-    if accepted and attempted:
+    if non_loopback == "accepted":
         return "local-network"
-    return "loopback"
+    if non_loopback == "refused" and _loopback_only_binding(port_bindings):
+        return "loopback"
+    return "unknown"
 
 
 def _own_tcp_targets(pid: int) -> tuple[tuple[str, int], ...]:
@@ -184,6 +229,7 @@ def probe_scripting_scope(  # noqa: PLR0913 (injectable seams are the probe cont
     interfaces_seam: InterfacesSeam | None = None,
     connect_probe_seam: ConnectProbeSeam | None = None,
     own_targets_seam: OwnTargetsSeam | None = None,
+    resolve_pid_seam: ResolvePidSeam | None = None,
 ) -> ResolveHostReport:
     """Probe the host live and persist the scope-verified report to ``out``."""
     module = module_seam if module_seam is not None else _default_module_seam(report)
@@ -194,8 +240,9 @@ def probe_scripting_scope(  # noqa: PLR0913 (injectable seams are the probe cont
         own_targets = own_targets_seam
     else:
         own_targets = lambda: _own_tcp_targets(_pid())  # noqa: E731
-
-    resolve_pid = _resolve_pid("Resolve")
+    resolve_pid = (
+        resolve_pid_seam() if resolve_pid_seam is not None else _live_resolve_pid()
+    )
     scripting_app = module.scriptapp("Resolve")
     enabled = scripting_app is not None
     transport = "official-bridge-module"
@@ -214,23 +261,29 @@ def probe_scripting_scope(  # noqa: PLR0913 (injectable seams are the probe cont
         )
 
     local_addresses = interfaces()
-    non_loopback: Literal[
-        "accepted", "refused", "not-attempted-no-non-loopback-interface"
-    ] = "not-attempted-no-non-loopback-interface"
-    attempted = False
+    non_loopback: NonLoopbackObservation = "not-attempted-no-non-loopback-interface"
     probed_via = ""
     if enabled and server_port is not None and local_addresses:
         address = local_addresses[0]
-        attempted = True
         probed_via = f"{address}:{server_port}"
         non_loopback = "accepted" if connect_probe(address, server_port) else "refused"
 
+    port_bindings: tuple[str, ...] = ()
+    if enabled and server_port is not None and resolve_pid is not None:
+        port_bindings = tuple(
+            address
+            for pid, address in listeners()
+            if pid == resolve_pid and address.rpartition(":")[2] == str(server_port)
+        )
+
     scope = classify_scope(
-        enabled=enabled, accepted=non_loopback == "accepted", attempted=attempted
+        enabled=enabled, non_loopback=non_loopback, port_bindings=port_bindings
     )
     note = (
         f"scripting_enabled={enabled} transport={transport} server_port={server_port} "
-        f"listener_bound={bound or 'unobserved'} non_loopback_probe={non_loopback}"
+        f"listener_bound={bound or 'unobserved'} "
+        f"scripting_port_bindings={port_bindings or 'unobserved'} "
+        f"non_loopback_probe={non_loopback}"
         f"{f' via {probed_via}' if probed_via else ''}; probed addresses target this "
         "host only (loopback / own interfaces), no external egress"
     )
@@ -245,8 +298,13 @@ def probe_scripting_scope(  # noqa: PLR0913 (injectable seams are the probe cont
     posture = report.scripting.model_copy(
         update={
             "remote_access": scope,
-            "needs_live_verification": False,
-            "reason": f"live scripting-scope probe: {note}",
+            "needs_live_verification": scope == "unknown",
+            "reason": (
+                f"live scripting-scope probe ({scope}): {note}"
+                if scope != "unknown"
+                else "live scripting-scope probe left the scope unresolved "
+                f"(unobserved evidence): {note}"
+            ),
             "live_probe": probe,
         }
     )
@@ -254,6 +312,10 @@ def probe_scripting_scope(  # noqa: PLR0913 (injectable seams are the probe cont
     out.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(out, canonical_model_bytes(updated))
     return updated
+
+
+def _live_resolve_pid() -> int | None:
+    return _resolve_pid("Resolve")
 
 
 def _pid() -> int:
@@ -280,7 +342,8 @@ def main(argv: list[str] | None = None) -> int:
     probe = updated.scripting.live_probe
     scope = updated.scripting.remote_access
     note = probe.evidence_note if probe else "n/a"
-    print(f"scripting-scope: {scope} probe={note}")
+    unresolved = " needs_live_verification=true" if scope == "unknown" else ""
+    print(f"scripting-scope: {scope} probe={note}{unresolved}")
     return 0
 
 

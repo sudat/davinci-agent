@@ -5,6 +5,7 @@ import os
 import platform
 import plistlib
 import subprocess
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final, Literal
 
@@ -35,22 +36,50 @@ REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 DEFAULT_PERMIT_PATH: Final = REPO_ROOT / "config" / "security" / "scripting-scope-permit.json"
 
 
+class HostReadinessError(Exception):
+    def __init__(self, detail: str, *, code: str = "host-not-ready") -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.code = code
+
+    def __str__(self) -> str:
+        return self.detail
+
+
+class PermitHostFingerprint(StrictModel):
+    """The host reality a permit is bound to (from the ResolveHostReport)."""
+
+    macos_version: str
+    macos_build: str
+    architecture: str
+
+
 class ScriptingPermit(StrictModel):
-    """An explicit operator decision permitting local-network scripting.
+    """An explicit, host-bound operator decision permitting local-network
+    scripting.
 
     A live probe that observes the scripting port ACCEPTING connections
     from a non-loopback local interface classifies the host as
     ``local-network``; readiness passes ONLY when the operator has
-    recorded this explicit permit (fail-closed otherwise).
+    recorded this explicit permit AND the permit still binds the observed
+    host reality (host fingerprint, Resolve version/build, observed
+    listener scope) within its revalidation window. Any drift is a typed
+    ``permit-host-mismatch`` refusal — a permit for one host never
+    blesses another.
     """
 
-    schema_version: Literal["resolve-scripting-scope-permit-v1"] = (
-        "resolve-scripting-scope-permit-v1"
+    schema_version: Literal["resolve-scripting-scope-permit-v2"] = (
+        "resolve-scripting-scope-permit-v2"
     )
     permitted_scope: Literal["local-network"]
     granted_by: str
     host_note: str
     granted_date: str
+    revalidate_by: str
+    host_fingerprint: PermitHostFingerprint
+    resolve_version: str
+    resolve_build: str
+    observed_listener_scope: Literal["local-network"]
 
 
 def default_scripting_permit() -> ScriptingPermit | None:
@@ -61,15 +90,6 @@ def default_scripting_permit() -> ScriptingPermit | None:
         return ScriptingPermit.model_validate_json(DEFAULT_PERMIT_PATH.read_bytes())
     except (OSError, ValidationError):
         return None
-
-
-class HostReadinessError(Exception):
-    def __init__(self, detail: str) -> None:
-        super().__init__(detail)
-        self.detail = detail
-
-    def __str__(self) -> str:
-        return self.detail
 
 
 def _evidence(path: Path) -> FileEvidence:
@@ -208,15 +228,91 @@ def probe_host() -> ResolveHostReport:
     )
 
 
+def _utc_today() -> date:
+    return datetime.now(tz=UTC).date()
+
+
+def _validate_permit_binding(report: ResolveHostReport, permit: ScriptingPermit) -> None:
+    """A permit must still bind the observed host reality (typed refusals)."""
+
+    fingerprint = PermitHostFingerprint(
+        macos_version=report.host.macos_version,
+        macos_build=report.host.macos_build,
+        architecture=report.host.architecture,
+    )
+    try:
+        granted = date.fromisoformat(permit.granted_date)
+        revalidate_by = date.fromisoformat(permit.revalidate_by)
+    except ValueError as error:
+        raise HostReadinessError(
+            f"permit dates are malformed: {error}", code="permit-invalid"
+        ) from error
+    if granted > revalidate_by:
+        raise HostReadinessError(
+            "permit granted_date is after revalidate_by", code="permit-invalid"
+        )
+    if (
+        fingerprint != permit.host_fingerprint
+        or report.application.version != permit.resolve_version
+        or report.application.build != permit.resolve_build
+        or report.scripting.remote_access != permit.observed_listener_scope
+    ):
+        raise HostReadinessError(
+            "permit-host-mismatch: the permit does not bind this host's "
+            f"observed reality (host={fingerprint.macos_version}/"
+            f"{fingerprint.macos_build}/{fingerprint.architecture}, "
+            f"resolve={report.application.version}/{report.application.build}, "
+            f"scope={report.scripting.remote_access})",
+            code="permit-host-mismatch",
+        )
+
+
+def _validate_local_network_permit(
+    report: ResolveHostReport, permit: ScriptingPermit, today: date | None
+) -> None:
+    probe = report.scripting.live_probe
+    if probe is None or probe.non_loopback_probe != "accepted":
+        raise HostReadinessError(
+            "scope-observation-missing: local-network scope without a "
+            "positively observed accepted non-loopback probe",
+            code="scope-observation-missing",
+        )
+    _validate_permit_binding(report, permit)
+    effective_today = today if today is not None else _utc_today()
+    try:
+        revalidate_by = date.fromisoformat(permit.revalidate_by)
+        granted = date.fromisoformat(permit.granted_date)
+    except ValueError as error:
+        raise HostReadinessError(
+            f"permit dates are malformed: {error}", code="permit-invalid"
+        ) from error
+    if effective_today > revalidate_by:
+        raise HostReadinessError(
+            f"permit-expired: revalidation was due by {permit.revalidate_by}",
+            code="permit-expired",
+        )
+    if granted > effective_today:
+        raise HostReadinessError(
+            f"permit-invalid: grant date {permit.granted_date} is in the future",
+            code="permit-invalid",
+        )
+
+
 def validate_host_report(
-    report: ResolveHostReport, *, permit: ScriptingPermit | None = None
+    report: ResolveHostReport,
+    *,
+    permit: ScriptingPermit | None = None,
+    today: date | None = None,
 ) -> None:
     """Fail-closed: only a LIVE-VERIFIED safe scope passes readiness.
 
     ``unknown`` scope and ``needs_live_verification`` are refusals, not
-    pass states; ``local-network`` additionally requires the explicit
-    operator permit (auto-loaded from the repo config when present).
+    pass states; ``local-network`` additionally requires the explicit,
+    host-bound operator permit (auto-loaded from the repo config when
+    present) whose binding fields match the report exactly and whose
+    revalidation window still covers ``today``.
     """
+
     if (
         report.scripting.runtime_policy != "loopback-only"
         or report.scripting.remote_access == "network"
@@ -232,11 +328,13 @@ def validate_host_report(
             "scripting scope needs live verification: readiness fails closed "
             "until the live probe positively confirms the scope"
         )
-    if report.scripting.remote_access == "local-network" and permit is None:
-        raise HostReadinessError(
-            "local-network scripting scope requires an explicit operator permit "
-            f"({DEFAULT_PERMIT_PATH})"
-        )
+    if report.scripting.remote_access == "local-network":
+        if permit is None:
+            raise HostReadinessError(
+                "local-network scripting scope requires an explicit operator permit "
+                f"({DEFAULT_PERMIT_PATH})"
+            )
+        _validate_local_network_permit(report, permit, today)
     if report.scripting.network_access_performed:
         raise HostReadinessError("readiness probe performed network access")
     if not report.docs.installed_paths or not report.bridge.library.path:
@@ -274,7 +372,7 @@ def main() -> int:
             else probe_host()
         )
         atomic_write(arguments.out, canonical_model_bytes(report))
-        validate_host_report(report)
+        validate_host_report(report, permit=default_scripting_permit())
         if arguments.update_lock is not None:
             update_host_binding(arguments.update_lock, arguments.out, report)
     except (HostReadinessError, OSError, subprocess.CalledProcessError, ValidationError) as error:
