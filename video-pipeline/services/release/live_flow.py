@@ -352,8 +352,10 @@ def revalidate_live_replay(
 
     The persisted summary is only accepted when its invocation record
     equals the current one EXACTLY (candidate, git sha, H1 binding hash,
-    routes, profiles, tool hashes, digest), every hash-bound evidence
-    file still re-hashes to its recorded value, and the render still
+    routes, profiles, tool hashes, digest), the summary's evidence
+    enumeration completed (``evidence_files_complete``), the CURRENT
+    evidence tree re-enumerates to EXACTLY the recorded files (extra
+    unbound files are a refusal, not an omission), and the render still
     re-verifies. Anything else forces a fresh run.
     """
 
@@ -367,10 +369,11 @@ def revalidate_live_replay(
         return None
     if summary.invocation.invocation_digest != invocation_digest(summary.invocation):
         return None
-    for row in summary.evidence_files:
-        evidence_file = out / row.path
-        if not evidence_file.is_file() or sha256_file(evidence_file) != row.sha256:
-            return None
+    if not summary.evidence_files_complete:
+        return None
+    current_files, enumeration_complete = _hash_evidence_files(out)
+    if not enumeration_complete or current_files != summary.evidence_files:
+        return None
     if not _final_render_reverifies(out, summary, seams):
         return None
     for row in summary.injections:

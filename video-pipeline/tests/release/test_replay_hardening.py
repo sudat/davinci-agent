@@ -9,6 +9,7 @@ credentials instead of inheriting the parent env.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from services.release.errors import ReleaseGateError
 from services.release.network_guard import GUARD_LIMITATIONS, child_environment
 from services.release.replay import run_replay
 from tests.release.support import build_test_candidate
-from tests.release.test_replay import make_stub_uv
+from tests.release.test_replay import make_failing_uv, make_stub_uv
 
 PASSED_ARG_SCRIPT = (
     "#!/usr/bin/env python3\n"
@@ -153,3 +154,91 @@ def test_guard_limitations_ride_with_the_report(tmp_path: Path) -> None:
     )
     assert report.guard_limitations == GUARD_LIMITATIONS
     assert (tmp_path / "replay-limitations" / "replay-report.json").is_file()
+
+
+def test_diagnostic_run_never_carries_bare_passed_verdict(tmp_path: Path) -> None:
+    _repo, candidate, _git_sha = build_test_candidate(tmp_path)
+    counting = _counting_uv(tmp_path)
+    report = run_replay(
+        candidate, "candidate", tmp_path / "replay-diagnostic", counting, None,
+        ("-q", "--ignore=tests/release"), uv_sha256=_sha(counting), diagnostic=True,
+    )
+    assert report.verdict == "diagnostic-passed"
+    assert report.verdict_scope == "diagnostic"
+    assert report.verdict != "passed"
+    persisted = json.loads(
+        (tmp_path / "replay-diagnostic" / "replay-report.json").read_text()
+    )
+    assert persisted["verdict"] == "diagnostic-passed"
+    assert persisted["verdict_scope"] == "diagnostic"
+
+
+def test_acceptance_run_carries_acceptance_scope(tmp_path: Path) -> None:
+    _repo, candidate, _git_sha = build_test_candidate(tmp_path)
+    counting = _counting_uv(tmp_path)
+    report = run_replay(
+        candidate, "candidate", tmp_path / "replay-acceptance", counting, None, ("-q",),
+        uv_sha256=_sha(counting),
+    )
+    assert report.verdict == "passed"
+    assert report.verdict_scope == "acceptance"
+
+
+def test_diagnostic_failure_is_failed_verdict(tmp_path: Path) -> None:
+    _repo, candidate, _git_sha = build_test_candidate(tmp_path)
+    failing = make_failing_uv(tmp_path)
+    report = run_replay(
+        candidate, "candidate", tmp_path / "replay-diag-fail", failing, None, ("-q",),
+        uv_sha256=_sha(failing), diagnostic=True,
+    )
+    assert report.verdict == "failed"
+    assert report.verdict_scope == "diagnostic"
+
+
+@pytest.mark.parametrize("min_passed", [0, -1, -100])
+def test_non_positive_min_passed_is_typed_refusal(
+    tmp_path: Path, min_passed: int
+) -> None:
+    _repo, candidate, _git_sha = build_test_candidate(tmp_path)
+    stub = make_stub_uv(tmp_path)
+    with pytest.raises(ReleaseGateError, match="min-passed-invalid"):
+        run_replay(
+            candidate, "candidate", tmp_path / "replay-minpassed", stub, None, ("-q",),
+            uv_sha256=_sha(stub), min_passed=min_passed,
+        )
+
+
+def test_min_passed_floor_is_non_overridable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Overrides may raise the floor; they can never lower it below the
+    non-overridable acceptance floor constant."""
+
+    import services.release.replay as replay_module  # noqa: PLC0415
+
+    _repo, candidate, _git_sha = build_test_candidate(tmp_path)
+    counting = _counting_uv(tmp_path)
+    monkeypatch.setattr(replay_module, "MIN_PASSED_FLOOR", 2000)
+    report = run_replay(
+        candidate, "candidate", tmp_path / "replay-floor-const", counting, None,
+        ("-q",), uv_sha256=_sha(counting), min_passed=1,
+    )
+    assert report.verdict == "failed"
+
+
+def test_cli_min_passed_zero_is_typed_refusal(tmp_path: Path, capsys) -> None:
+    from services.release.replay import main as replay_main  # noqa: PLC0415
+
+    _repo, candidate, _git_sha = build_test_candidate(tmp_path)
+    stub = make_stub_uv(tmp_path)
+    rc = replay_main(
+        [
+            "--candidate", str(candidate),
+            "--out", str(tmp_path / "replay-cli-zero"),
+            "--uv-bin", str(stub),
+            "--uv-sha256", _sha(stub),
+            "--min-passed", "0",
+        ]
+    )
+    assert rc == 2
+    assert "min-passed-invalid" in capsys.readouterr().err

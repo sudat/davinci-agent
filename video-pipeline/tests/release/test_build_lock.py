@@ -107,6 +107,11 @@ def test_stage_then_seal_holds_one_lock_lifecycle(tmp_path: Path) -> None:
     assert build_main([*args, "--phase", "stage"]) == 0
     assert staging_path(candidate).is_dir()
     assert lock_path(candidate).is_file()
-    assert build_main([*args, "--phase", "seal"]) == 0
+    token = (staging_path(candidate) / ".staging-ownership.json")
+    assert token.is_file()
+    import json  # noqa: PLC0415
+
+    build_token = json.loads(token.read_text())["build_token"]
+    assert build_main([*args, "--phase", "seal", "--build-token", build_token]) == 0
     assert candidate.is_dir()
     assert not lock_path(candidate).exists()

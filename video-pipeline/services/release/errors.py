@@ -22,6 +22,9 @@ ReleaseGateCode = Literal[
     "revoked_candidate",
     "uv-sha-required",
     "uv-hash-mismatch",
+    "staging-ownership-required",
+    "staging-ownership-mismatch",
+    "min-passed-invalid",
 ]
 
 GATE_CODE_DETAIL: Final[dict[str, str]] = {

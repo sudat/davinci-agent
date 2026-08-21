@@ -41,7 +41,7 @@ from services.release.models import (
     task_evidence_name,
 )
 
-DEFAULT_ALLOW_UNTRACKED: tuple[str, ...] = ("CLAUDE.md", "Makefile")
+DEFAULT_ALLOW_UNTRACKED: tuple[str, ...] = ("CLAUDE.md",)
 GATE_RESULT_NAME = "gate-result.json"
 
 

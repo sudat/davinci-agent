@@ -43,6 +43,7 @@ class CleanupReceipt(StrictModel):
     schema_version: Literal["release-cleanup-receipt-v1"] = "release-cleanup-receipt-v1"
     candidate_path: str
     candidate_id: Sha256
+    expected_candidate_id: Sha256
     manifest_sha256: Sha256
     candidate_readonly: bool
     identity_unchanged: bool
@@ -73,6 +74,7 @@ def audit_cleanup(
     candidate: Path,
     removed: tuple[Path, ...],
     retained_evidence: tuple[Path, ...],
+    expected_candidate_id: str,
 ) -> CleanupReceipt:
     try:
         verification = verify_candidate(
@@ -82,6 +84,12 @@ def audit_cleanup(
         raise CleanupAuditError(
             "candidate-drift", f"candidate verification failed: {error}"
         ) from error
+    if verification.candidate_id != expected_candidate_id:
+        raise CleanupAuditError(
+            "candidate-id-mismatch",
+            f"verified candidate {verification.candidate_id} != expected "
+            f"{expected_candidate_id}; identity is NOT unchanged",
+        )
     removed_records: list[RemovedPath] = []
     for path in removed:
         if path.exists():
@@ -90,21 +98,32 @@ def audit_cleanup(
                 f"cleanup path still exists: {path}",
             )
         removed_records.append(RemovedPath(path=str(path)))
-    retained_records = [
-        RetainedTree(
-            path=str(path),
-            file_count=sum(1 for item in path.rglob("*") if item.is_file()),
-            tree_sha256=tree_digest(path),
+    retained_records: list[RetainedTree] = []
+    for path in retained_evidence:
+        if not path.exists():
+            raise CleanupAuditError(
+                "retained-evidence-missing",
+                f"declared retained-evidence path does not exist: {path}",
+            )
+        if not path.is_dir():
+            raise CleanupAuditError(
+                "retained-evidence-not-dir",
+                f"declared retained-evidence path is not a directory: {path}",
+            )
+        retained_records.append(
+            RetainedTree(
+                path=str(path),
+                file_count=sum(1 for item in path.rglob("*") if item.is_file()),
+                tree_sha256=tree_digest(path),
+            )
         )
-        for path in retained_evidence
-        if path.is_dir()
-    ]
     return CleanupReceipt(
         candidate_path=str(candidate),
         candidate_id=verification.candidate_id,
+        expected_candidate_id=expected_candidate_id,
         manifest_sha256=verification.manifest_sha256,
         candidate_readonly=verification.modes.all_readonly,
-        identity_unchanged=True,
+        identity_unchanged=verification.candidate_id == expected_candidate_id,
         removed=tuple(removed_records),
         retained=tuple(retained_records),
     )
@@ -113,6 +132,7 @@ def audit_cleanup(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cleanup_audit")
     parser.add_argument("--candidate", type=Path, required=True)
+    parser.add_argument("--expected-candidate-id", required=True)
     parser.add_argument("--removed", type=Path, action="append", default=[])
     parser.add_argument("--retained-evidence", default="")
     parser.add_argument("--out", type=Path, required=True)
@@ -129,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
             candidate=arguments.candidate,
             removed=tuple(arguments.removed),
             retained_evidence=retained,
+            expected_candidate_id=arguments.expected_candidate_id,
         )
         atomic_write(arguments.out, canonical_model_bytes(receipt))
     except (CleanupAuditError, ReleaseGateError, OSError) as error:

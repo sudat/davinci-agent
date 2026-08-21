@@ -2,10 +2,16 @@
 
 ``--phase stage`` prepares ``<out>.staging`` under an exclusive OS flock
 (single writer; a crashed writer's leftover lock file is safely retaken
-because the kernel released its flock). ``--phase seal`` re-acquires the
-same flock, writes ``manifest-v1``, publishes with fsync + atomic rename,
-chmods the whole candidate read-only, and recomputes the manifest
-byte-identically before writing the build receipt.
+because the kernel released its flock) and persists an unpredictable
+build token plus the expected staging digest INSIDE the staging tree.
+``--phase seal`` re-acquires the same flock and refuses to publish any
+staging tree whose recorded token/digest does not match the presented
+``--build-token`` and the recomputed tree state (typed
+``staging-ownership-mismatch``: another invocation's — or a tampered —
+staging can never be sealed). On match it removes the ownership marker,
+writes ``manifest-v1``, publishes with fsync + atomic rename, chmods the
+whole candidate read-only, and recomputes the manifest byte-identically
+before writing the build receipt.
 """
 
 from __future__ import annotations
@@ -13,12 +19,14 @@ from __future__ import annotations
 import argparse
 import errno
 import fcntl
+import hashlib
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Literal
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import Sha256, StrictModel
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.release.errors import ReleaseGateError
 from services.release.manifest import MANIFEST_NAME, build_manifest, manifest_bytes
@@ -28,6 +36,72 @@ from services.release.verify import verify_candidate
 
 LOCK_SUFFIX = ".lock"
 STAGING_SUFFIX = ".staging"
+OWNERSHIP_NAME = ".staging-ownership.json"
+
+
+class StagingOwnership(StrictModel):
+    """Stage-time ownership binding persisted inside the staging tree."""
+
+    schema_version: Literal["release-staging-ownership-v1"] = (
+        "release-staging-ownership-v1"
+    )
+    build_token: str
+    staging_digest: Sha256
+
+
+def _staging_digest(staging: Path) -> str:
+    """sha256 over sorted ``relative\\0sha256`` lines, skipping the marker."""
+
+    lines: list[str] = []
+    for path in sorted(staging.rglob("*"), key=lambda item: item.as_posix()):
+        if path.is_dir() or path.name == OWNERSHIP_NAME:
+            continue
+        relative = path.relative_to(staging).as_posix()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        lines.append(f"{relative}\x00{digest}\n")
+    combined = hashlib.sha256()
+    for line in sorted(lines):
+        combined.update(line.encode())
+    return combined.hexdigest()
+
+
+def write_staging_ownership(staging: Path) -> str:
+    """Persist an unpredictable token + expected digest; returns the token."""
+
+    token = secrets.token_hex(32)
+    ownership = StagingOwnership(
+        build_token=token, staging_digest=_staging_digest(staging)
+    )
+    atomic_write(staging / OWNERSHIP_NAME, canonical_model_bytes(ownership))
+    return token
+
+
+def verify_staging_ownership(staging: Path, build_token: str) -> None:
+    path = staging / OWNERSHIP_NAME
+    if not path.is_file():
+        raise ReleaseGateError(
+            "staging-ownership-mismatch",
+            f"staging tree carries no ownership marker: {path}",
+        )
+    try:
+        ownership = StagingOwnership.model_validate_json(path.read_bytes())
+    except ValueError as error:
+        raise ReleaseGateError(
+            "staging-ownership-mismatch",
+            f"staging ownership marker is unreadable: {error}",
+        ) from error
+    if ownership.build_token != build_token:
+        raise ReleaseGateError(
+            "staging-ownership-mismatch",
+            "presented build token does not match the staging tree's "
+            "recorded token (foreign staging refused)",
+        )
+    current = _staging_digest(staging)
+    if current != ownership.staging_digest:
+        raise ReleaseGateError(
+            "staging-ownership-mismatch",
+            "staging tree drifted after stage (digest mismatch)",
+        )
 
 
 class BuildReceipt(StrictModel):
@@ -145,12 +219,20 @@ def chmod_readonly(root: Path) -> None:
         directory.chmod(0o555)
 
 
-def seal_candidate(out: Path, receipt_out: Path, expected_git_sha: str | None) -> BuildReceipt:
-    """Manifest, atomic publish, chmod read-only, recompute, verify."""
+def seal_candidate(
+    out: Path,
+    receipt_out: Path,
+    expected_git_sha: str | None,
+    *,
+    build_token: str,
+) -> BuildReceipt:
+    """Verify staging ownership, then manifest, publish, chmod, recompute."""
 
     staging = staging_path(out)
     if not staging.is_dir():
         raise ReleaseGateError("missing_release_input", f"missing staging tree: {staging}")
+    verify_staging_ownership(staging, build_token)
+    (staging / OWNERSHIP_NAME).unlink()
     manifest_payload = manifest_bytes(build_manifest(staging))
     atomic_write(staging / MANIFEST_NAME, manifest_payload)
     _fsync_tree(staging)
@@ -188,13 +270,24 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--phase", choices=("stage", "seal", "all"), default="all")
     parser.add_argument("--allow-untracked", action="append", default=list(DEFAULT_ALLOW_UNTRACKED))
+    parser.add_argument("--build-token")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
+    if arguments.phase == "seal" and not arguments.build_token:
+        print(
+            ReleaseGateError(
+                "staging-ownership-required",
+                "--phase seal requires the --build-token printed at stage time",
+            ),
+            file=sys.stderr,
+        )
+        return 2
     out = arguments.out
     lock: WriterLock | None = None
+    build_token: str | None = None
     try:
         if arguments.phase in ("stage", "all"):
             lock = WriterLock(out)
@@ -209,14 +302,23 @@ def main(argv: list[str] | None = None) -> int:
                 allow_untracked=tuple(arguments.allow_untracked),
             )
             stage_release(inputs, out)
+            build_token = write_staging_ownership(staging_path(out))
             if arguments.phase == "stage":
+                print(f"staging-token: {build_token}")
                 lock.abandon()
                 lock = None
         if arguments.phase in ("seal", "all"):
             if lock is None:
                 lock = WriterLock(out, create=False)
                 lock.acquire()
-            receipt = seal_candidate(out, arguments.receipt, arguments.git_sha)
+            if arguments.phase == "seal":
+                build_token = arguments.build_token
+            receipt = seal_candidate(
+                out,
+                arguments.receipt,
+                arguments.git_sha,
+                build_token=build_token if build_token is not None else "",
+            )
             print(receipt.verification.candidate_id)
             lock.release()
             lock = None

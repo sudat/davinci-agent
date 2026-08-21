@@ -60,6 +60,7 @@ WORKSPACE_ANCHORED_IGNORES: tuple[str, ...] = (
     "tests/gates/test_control_plane_inputs.py",
     "tests/gates/test_phase0c_policy.py",
     "tests/gates/test_phase1_inputs.py",
+    "tests/gates/test_phase2_fault_cli.py",
     "tests/gates/test_phase2_inputs.py",
     "tests/gates/test_phase3_inputs.py",
     "tests/phase0a/test_fixture_contract.py",
@@ -72,6 +73,7 @@ DEFAULT_PYTEST_ARGS: tuple[str, ...] = (
     "not resolve_live and not cloud_fixture",
     *(f"--ignore={name}" for name in WORKSPACE_ANCHORED_IGNORES),
 )
+MIN_PASSED_FLOOR: Final = 1
 PASSED_COUNT_RE: Final = re.compile(r"\b(\d+) passed\b")
 TOOLCHAIN_LOCK_CANDIDATES: Final = (
     "phase-0a-v1.json",
@@ -99,7 +101,8 @@ class ReplayReport(StrictModel):
     schema_version: Literal["release-replay-v1"] = "release-replay-v1"
     source_kind: Literal["candidate", "staging", "extract"]
     source_tree_sha256: Sha256
-    verdict: Literal["passed", "failed"]
+    verdict: Literal["passed", "failed", "diagnostic-passed"]
+    verdict_scope: Literal["acceptance", "diagnostic"]
     network_blocked: bool
     source_unmodified: bool
     steps: tuple[ReplayStep, ...]
@@ -277,9 +280,23 @@ def run_replay(
     *,
     uv_sha256: str | None = None,
     min_passed: int = 1,
+    diagnostic: bool = False,
 ) -> ReplayReport:
-    """Replay the offline acceptance pipeline in a clean room."""
+    """Replay the offline acceptance pipeline in a clean room.
 
+    ``diagnostic=True`` marks the run as a diagnostic: the report carries
+    ``verdict_scope="diagnostic"`` and a passing diagnostic NEVER uses the
+    acceptance verdict ``"passed"`` (it reports ``"diagnostic-passed"``).
+    ``min_passed`` must be a positive integer and can only RAISE the
+    non-overridable acceptance floor ``MIN_PASSED_FLOOR``.
+    """
+
+    if min_passed < 1:
+        raise ReleaseGateError(
+            "min-passed-invalid",
+            f"--min-passed must be a positive integer, got {min_passed}",
+        )
+    effective_min_passed = max(min_passed, MIN_PASSED_FLOOR)
     if source_kind == "candidate":
         verify_candidate(
             source_input,
@@ -336,18 +353,28 @@ def run_replay(
     acceptance_proven = acceptance.completed and acceptance.tests_passed is not None
     if acceptance.completed and not acceptance_proven:
         acceptance_proven = False
-    verdict: Literal["passed", "failed"] = (
-        "passed"
-        if acceptance_proven
-        and (acceptance.tests_passed or 0) >= min_passed
-        and source_unmodified
-        and all(step.completed for step in steps if step.name != "acceptance-offline")
-        else "failed"
+    scope: Literal["acceptance", "diagnostic"] = (
+        "diagnostic" if diagnostic else "acceptance"
     )
+    verdict: Literal["passed", "failed", "diagnostic-passed"]
+    gates_ok = source_unmodified and all(
+        step.completed for step in steps if step.name != "acceptance-offline"
+    )
+    if (
+        not acceptance_proven
+        or (acceptance.tests_passed or 0) < effective_min_passed
+        or not gates_ok
+    ):
+        verdict = "failed"
+    elif diagnostic:
+        verdict = "diagnostic-passed"
+    else:
+        verdict = "passed"
     report = ReplayReport(
         source_kind=source_kind,
         source_tree_sha256=source_tree,
         verdict=verdict,
+        verdict_scope=scope,
         network_blocked=False,
         source_unmodified=source_unmodified,
         steps=steps,
@@ -475,12 +502,13 @@ def main(argv: list[str] | None = None) -> int:
             pytest_args,
             uv_sha256=arguments.uv_sha256,
             min_passed=arguments.min_passed,
+            diagnostic=arguments.diagnostic,
         )
     except (ReleaseGateError, OSError) as error:
         print(error, file=sys.stderr)
         return 2
     print(canonical_model_bytes(report).decode())
-    return 0 if report.verdict == "passed" else 1
+    return 0 if report.verdict in ("passed", "diagnostic-passed") else 1
 
 
 if __name__ == "__main__":

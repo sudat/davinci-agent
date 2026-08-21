@@ -96,15 +96,22 @@ def test_20_untracked_smuggle_refused(tmp_path: Path, capsys: pytest.CaptureFixt
     assert not candidate.exists()
 
 
-def test_21_preexisting_root_claude_makefile_tolerated(tmp_path: Path) -> None:
+def test_21_preexisting_root_claude_tolerated_makefile_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     repo, sha = make_git_repo(tmp_path)
     (repo / "CLAUDE.md").write_text("notes\n")
     (repo / "Makefile").write_text("all:\n")
     candidate = tmp_path / "cand"
-    args = [*build_args(tmp_path, repo, sha, candidate), "--phase", "all"]
-    assert build_main(args) == 0
+    args = [*build_args(tmp_path, repo, sha, candidate), "--phase", "stage"]
+    code, err = stage_rc(args, capsys)
+    assert code == 2
+    assert "untracked smuggle" in err
+    assert "Makefile" in err
+
+    (repo / "Makefile").unlink()
+    assert build_main([*build_args(tmp_path, repo, sha, candidate), "--phase", "all"]) == 0
     assert not (candidate / "source" / "CLAUDE.md").exists()
-    assert not (candidate / "source" / "Makefile").exists()
 
 
 def test_22_dirty_worktree_refused(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -172,10 +179,70 @@ def test_40_stage_then_replay_restarts_safely_then_seal(tmp_path: Path) -> None:
     args = build_args(tmp_path, repo, sha, candidate)
     assert build_main([*args, "--phase", "stage"]) == 0
     assert staging_path(candidate).is_dir()
+    second = build_main([*args, "--phase", "stage"])
+    assert second == 0
+    assert staging_path(candidate).is_dir()
+    assert (staging_path(candidate) / ".staging-ownership.json").is_file()
+
+
+def test_41_seal_requires_build_token(tmp_path: Path, capsys) -> None:
+    repo, sha = make_git_repo(tmp_path)
+    candidate = tmp_path / "cand"
+    args = build_args(tmp_path, repo, sha, candidate)
     assert build_main([*args, "--phase", "stage"]) == 0
-    assert build_main([*args, "--phase", "seal"]) == 0
+    code = build_main([*args, "--phase", "seal"])
+    assert code == 2
+    assert "staging-ownership-required" in capsys.readouterr().err
+    assert not candidate.exists()
+
+
+def test_42_seal_with_foreign_staging_token_refused(tmp_path: Path, capsys) -> None:
+    repo, sha = make_git_repo(tmp_path)
+    candidate = tmp_path / "cand"
+    args = build_args(tmp_path, repo, sha, candidate)
+    assert build_main([*args, "--phase", "stage"]) == 0
+    code = build_main([*args, "--phase", "seal", "--build-token", "f" * 64])
+    assert code == 2
+    assert "staging-ownership-mismatch" in capsys.readouterr().err
+    assert not candidate.exists()
+    assert staging_path(candidate).is_dir()
+
+
+def test_43_seal_refuses_staging_drift_after_stage(tmp_path: Path, capsys) -> None:
+    repo, sha = make_git_repo(tmp_path)
+    candidate = tmp_path / "cand"
+    args = build_args(tmp_path, repo, sha, candidate)
+    assert build_main([*args, "--phase", "stage"]) == 0
+    (staging_path(candidate) / "rogue.txt").write_text("drift\n")
+    captured = capsys.readouterr()
+    del captured
+    from services.release.build_candidate import main as rebuild_main  # noqa: PLC0415
+
+    code = rebuild_main(
+        [*args, "--phase", "seal", "--build-token", "0" * 64]
+    )
+    assert code == 2
+    assert "staging-ownership-mismatch" in capsys.readouterr().err
+
+
+def test_44_stage_then_seal_with_printed_token_succeeds(
+    tmp_path: Path, capsys
+) -> None:
+    repo, sha = make_git_repo(tmp_path)
+    candidate = tmp_path / "cand"
+    args = build_args(tmp_path, repo, sha, candidate)
+    assert build_main([*args, "--phase", "stage"]) == 0
+    token_line = next(
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("staging-token:")
+    )
+    token = token_line.split("staging-token:", 1)[1].strip()
+    assert len(token) >= 32
+    assert build_main([*args, "--phase", "seal", "--build-token", token]) == 0
     assert candidate.is_dir()
     assert not lock_path(candidate).exists()
+    assert not (candidate / ".staging-ownership.json").exists()
 
 
 def test_50_chmod_readonly_is_bottom_up_and_idempotent(tmp_path: Path) -> None:

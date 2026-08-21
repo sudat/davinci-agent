@@ -214,7 +214,7 @@ def test_42_default_selection_excludes_only_workspace_anchored_modules() -> None
     assert ignores == [f"--ignore={name}" for name in WORKSPACE_ANCHORED_IGNORES]
     assert "not resolve_live and not cloud_fixture" in DEFAULT_PYTEST_ARGS
     assert "no:cacheprovider" in DEFAULT_PYTEST_ARGS
-    assert len(WORKSPACE_ANCHORED_IGNORES) == 7
+    assert len(WORKSPACE_ANCHORED_IGNORES) == 8
 
 
 def test_43_snapshot_hash_ignores_transient_artifacts_only(tmp_path: Path) -> None:

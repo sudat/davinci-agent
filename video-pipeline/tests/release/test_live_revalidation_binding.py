@@ -132,5 +132,56 @@ def test_revalidation_detects_tampered_evidence_file(tmp_path: Path) -> None:
     )
 
 
+def test_revalidation_refuses_extra_unbound_evidence_file(tmp_path: Path) -> None:
+    """The evidence tree must re-enumerate EXACTLY as recorded."""
+
+    harness = _flow_harness(tmp_path)
+    extract = harness.extract
+    binding = extract / "inputs/h1/binding.json"
+    summary = run_live_replay(
+        extract=extract, h1_binding=binding, injections=("stale-state",),
+        profiles=("a",), out=harness.out, seams=harness.seams,
+    )
+    assert summary.invocation is not None
+    rogue = harness.out / "evidence" / "rogue-injected.json"
+    rogue.parent.mkdir(parents=True, exist_ok=True)
+    rogue.write_text("{}")
+    assert (
+        revalidate_live_replay(
+            harness.out, seams=harness.seams, invocation=summary.invocation
+        )
+        is None
+    )
+
+
+def test_revalidation_refuses_incomplete_evidence_enumeration(
+    tmp_path: Path,
+) -> None:
+    """A summary whose evidence enumeration hit the bound is never accepted."""
+
+    harness = _flow_harness(tmp_path)
+    extract = harness.extract
+    binding = extract / "inputs/h1/binding.json"
+    summary = run_live_replay(
+        extract=extract, h1_binding=binding, injections=("stale-state",),
+        profiles=("a",), out=harness.out, seams=harness.seams,
+    )
+    assert summary.invocation is not None
+    assert summary.evidence_files_complete is True
+    from services.release import live_flow  # noqa: PLC0415
+
+    forced_incomplete = summary.model_copy(update={"evidence_files_complete": False})
+    summary_path = harness.out / live_flow.SUMMARY_NAME
+    from services.foundation_io import canonical_model_bytes  # noqa: PLC0415
+
+    summary_path.write_bytes(canonical_model_bytes(forced_incomplete))
+    assert (
+        revalidate_live_replay(
+            harness.out, seams=harness.seams, invocation=summary.invocation
+        )
+        is None
+    )
+
+
 def test_seams_type_still_constructible() -> None:
     assert LiveSeams.__dataclass_fields__ is not None
