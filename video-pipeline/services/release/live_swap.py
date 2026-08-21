@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 from services.foundation_io import sha256_file
 from services.job_runner.gate_p3_ab import structure_rows
-from services.release.live_builds import ConnectionLike
 from services.release.live_models import (
     PROFILE_SNAPSHOT_IDS,
     ProfileBuildEvidence,
@@ -26,6 +25,7 @@ from services.release.staging import sha256_bytes
 
 if TYPE_CHECKING:
     from services.job_runner.gate_p3_models import P3StructRow
+    from services.release.live_builds import ConnectionLike
     from services.release.live_flow import LiveSeams
 
 

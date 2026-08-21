@@ -13,10 +13,9 @@ import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
-from services.release.live_builds import ConnectionLike  # noqa: TC001 (runtime protocol)
 from services.release.live_guard import (
     LEASE_HOLDER,
     LEASE_RESOURCE,
@@ -29,6 +28,10 @@ from services.release.live_injections import (
     false_success_route,
 )
 from services.release.live_media import anchor_indices, declared_render_policy, policy_matches
+
+if TYPE_CHECKING:
+    from services.release.live_builds import ConnectionLike
+
 from services.release.live_models import (
     INJECTION_ROUTES,
     PROFILE_SNAPSHOT_IDS,

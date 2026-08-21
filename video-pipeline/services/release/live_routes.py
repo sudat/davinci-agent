@@ -12,13 +12,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from services.foundation_io import canonical_model_bytes
-from services.release.live_builds import ConnectionLike
-from services.release.live_guard import LiveStateGuard
 from services.release.live_plan import frozen_ab_plan
 from services.release.staging import sha256_bytes
 
 if TYPE_CHECKING:
+    from services.release.live_builds import ConnectionLike
     from services.release.live_flow import LiveSeams
+    from services.release.live_guard import LiveStateGuard
+
 from services.release.live_injections import (
     partial_build_route,
     repeated_interruption_route,
