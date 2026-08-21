@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import fcntl
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -153,12 +153,31 @@ class ArtifactRegistry:
                 f"registry index rejected (seal/schema): {error}",
             ) from error
 
-    def save(self, index: RegistryIndex) -> None:
+    def _save(self, index: RegistryIndex) -> None:
         atomic_write(self.index_path, canonical_model_bytes(index))
 
-    def register(self, store: ArtifactStore, receipt: PublicationReceipt) -> RegistryEntry:
+    def apply(
+        self, transform: Callable[[RegistryIndex], RegistryIndex]
+    ) -> RegistryIndex:
+        """The ONE lock-held reload-transform-save mutation primitive.
+
+        Every index mutation (register, reconcile, rebuild) routes through
+        this: the index is reloaded INSIDE the exclusive critical section,
+        transformed, and saved — so concurrent writers merge instead of
+        one saving a stale pre-transform index over the other.
+        """
+
         with _exclusive(self._root):
-            index = self.load()
+            current = self.load()
+            updated = transform(current)
+            if updated is not current:
+                self._save(updated)
+            return updated
+
+    def register(self, store: ArtifactStore, receipt: PublicationReceipt) -> RegistryEntry:
+        outcome: dict[str, RegistryEntry] = {}
+
+        def merge(index: RegistryIndex) -> RegistryIndex:
             existing = index.entries.get(receipt.artifact_id)
             if existing is not None:
                 if existing.content_sha256 != receipt.content_sha256:
@@ -167,7 +186,8 @@ class ArtifactRegistry:
                         f"artifact id {receipt.artifact_id} is already indexed "
                         f"with content {existing.content_sha256}",
                     )
-                return existing
+                outcome["entry"] = existing
+                return index
             next_sequence = max(
                 (entry.sequence for entry in index.entries.values()), default=-1
             ) + 1
@@ -177,11 +197,11 @@ class ArtifactRegistry:
                 sequence=next_sequence,
                 expected_sha256=receipt.content_sha256,
             )
-            reloaded = self.load().entries
-            if receipt.artifact_id in reloaded:
-                return reloaded[receipt.artifact_id]
-            self.save(mint_index(index.entries | {entry.artifact_id: entry}))
-            return entry
+            outcome["entry"] = entry
+            return mint_index(index.entries | {entry.artifact_id: entry})
+
+        self.apply(merge)
+        return outcome["entry"]
 
     def walk(
         self,

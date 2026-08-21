@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 
 import pytest
 
-from services.artifact_registry.models import mint_index
+from services.artifact_registry.models import RegistryIndex, mint_index
 from services.artifact_registry.reconcile import (
     RegistryDriftError,
     rebuild_index_from_store,
@@ -24,6 +26,91 @@ from tests.artifact_registry.support import (
 from tests.artifact_store.support import intent_for, load_manifest, payload_for
 
 WRONG_SHA256 = "f" * 64
+
+
+def test_registry_save_is_private_single_writer_primitive() -> None:
+    """The only mutation surface is the lock-held apply(); a public save
+    would let any caller bypass the critical section (round-2 blocker)."""
+
+    from services.artifact_registry.registry import ArtifactRegistry  # noqa: PLC0415
+
+    assert not hasattr(ArtifactRegistry, "save")
+    assert hasattr(ArtifactRegistry, "apply")
+
+
+def test_apply_transforms_never_interleave(tmp_path: Path) -> None:
+    registry = make_registry(tmp_path)
+    inside = 0
+    peak: dict[str, int] = {}
+    guard = threading.Lock()
+
+    def transform(index: RegistryIndex) -> RegistryIndex:
+        nonlocal inside
+        with guard:
+            inside += 1
+            peak["peak"] = max(peak.get("peak", 0), inside)
+        time.sleep(0.05)
+        with guard:
+            inside -= 1
+        return index
+
+    threads = [
+        threading.Thread(target=lambda: registry.apply(transform)) for _ in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=15)
+    assert peak["peak"] == 1
+
+
+def test_concurrent_reconcile_and_register_lose_nothing(tmp_path: Path) -> None:
+    """All index mutations serialize through one lock-held
+    reload-transform-save primitive: adoption (reconcile) and fresh
+    registrations interleaved from parallel threads must ALL survive."""
+
+    store = make_store(tmp_path)
+    registry = make_registry(tmp_path)
+    orphan_receipts = [
+        publish(store, f"orphan-{i}", f"orphan-payload-{i}".encode())
+        for i in range(6)
+    ]
+    fresh_receipts = [
+        publish(store, f"fresh-{i}", f"fresh-payload-{i}".encode()) for i in range(6)
+    ]
+
+    errors: list[Exception] = []
+
+    def reconciler() -> None:
+        try:
+            for _ in range(4):
+                reconcile(store, registry)
+        except Exception as error:  # noqa: BLE001 (test collects every failure)
+            errors.append(error)
+
+    def registrar(receipts: list[object]) -> None:
+        try:
+            for receipt in receipts:
+                registry.register(store, receipt)  # type: ignore[arg-type]
+        except Exception as error:  # noqa: BLE001 (test collects every failure)
+            errors.append(error)
+
+    threads = [
+        threading.Thread(target=reconciler),
+        threading.Thread(target=registrar, args=(orphan_receipts,)),
+        threading.Thread(target=registrar, args=(fresh_receipts,)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert errors == []
+    final = registry.load()
+    assert set(final.entries) == {
+        *(f"orphan-{i}" for i in range(6)),
+        *(f"fresh-{i}" for i in range(6)),
+    }
+    assert len(final.entries) == 12
 
 
 def test_reconcile_complete_and_orphaned_publish(tmp_path: Path) -> None:
@@ -76,7 +163,10 @@ def test_missing_file_detection_on_tmp_copy(tmp_path: Path) -> None:
 
     index = registry.load()
     tampered_size = index.entries["art-a"].model_copy(update={"size": 999})
-    registry.save(mint_index(index.entries | {"art-a": tampered_size}))
+    tampered_bytes = canonical_model_bytes(
+        mint_index(index.entries | {"art-a": tampered_size})
+    )
+    registry.index_path.write_bytes(tampered_bytes)
     assert registry.detect_missing(store) == (
         MissingFinding(
             artifact_id="art-a",

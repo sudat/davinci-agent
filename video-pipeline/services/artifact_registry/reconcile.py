@@ -163,28 +163,35 @@ def _unadopted_object_hashes(
 
 
 def reconcile(store: ArtifactStore, registry: ArtifactRegistry) -> ReconcileReport:
-    index = registry.load()
-    verify_against_store(store, index)
-    missing = registry.detect_missing(store)
-    adopted: list[RegistryEntry] = []
-    for meta_file in _sorted_meta_paths(store):
-        artifact_id = meta_file.stem
-        if artifact_id in index.entries:
-            continue
-        adopted.append(
-            entry_from_store(
-                store,
-                artifact_id=artifact_id,
-                sequence=len(index.entries) + len(adopted),
+    findings: dict[str, tuple[MissingFinding, ...]] = {}
+    adopted_out: dict[str, list[RegistryEntry]] = {}
+
+    def adopt(index: RegistryIndex) -> RegistryIndex:
+        verify_against_store(store, index)
+        findings["missing"] = registry.detect_missing(store)
+        adopted: list[RegistryEntry] = []
+        for meta_file in _sorted_meta_paths(store):
+            artifact_id = meta_file.stem
+            if artifact_id in index.entries:
+                continue
+            adopted.append(
+                entry_from_store(
+                    store,
+                    artifact_id=artifact_id,
+                    sequence=len(index.entries) + len(adopted),
+                )
             )
-        )
-    known_hashes = set(index.by_sha256) | {
+        adopted_out["adopted"] = adopted
+        if not adopted:
+            return index
+        return mint_index(index.entries | {entry.artifact_id: entry for entry in adopted})
+
+    updated = registry.apply(adopt)
+    adopted = adopted_out["adopted"]
+    known_hashes = set(updated.by_sha256) | {
         entry.content_sha256 for entry in adopted
     }
     unadopted = _unadopted_object_hashes(store, known_hashes)
-    if adopted:
-        entries = index.entries | {entry.artifact_id: entry for entry in adopted}
-        registry.save(mint_index(entries))
     if adopted or unadopted:
         _append_journal(
             registry,
@@ -195,7 +202,7 @@ def reconcile(store: ArtifactStore, registry: ArtifactRegistry) -> ReconcileRepo
         )
     return ReconcileReport(
         adopted=tuple(adopted),
-        missing=missing,
+        missing=findings["missing"],
         unadopted_object_sha256s=tuple(unadopted),
     )
 
@@ -203,13 +210,15 @@ def reconcile(store: ArtifactStore, registry: ArtifactRegistry) -> ReconcileRepo
 def rebuild_index_from_store(
     store: ArtifactStore, registry: ArtifactRegistry
 ) -> RegistryIndex:
-    entries: dict[str, RegistryEntry] = {}
-    for sequence, meta_file in enumerate(_sorted_meta_paths(store)):
-        entry = entry_from_store(store, artifact_id=meta_file.stem, sequence=sequence)
-        entries[entry.artifact_id] = entry
-    index = mint_index(entries)
-    registry.save(index)
-    _append_journal(registry, RebuildJournalEvent(entry_count=len(entries)))
+    def rebuild(_index: RegistryIndex) -> RegistryIndex:
+        entries: dict[str, RegistryEntry] = {}
+        for sequence, meta_file in enumerate(_sorted_meta_paths(store)):
+            entry = entry_from_store(store, artifact_id=meta_file.stem, sequence=sequence)
+            entries[entry.artifact_id] = entry
+        return mint_index(entries)
+
+    index = registry.apply(rebuild)
+    _append_journal(registry, RebuildJournalEvent(entry_count=len(index.entries)))
     return index
 
 
