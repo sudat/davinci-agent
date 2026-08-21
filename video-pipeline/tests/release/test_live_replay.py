@@ -910,6 +910,18 @@ def test_76_render_policy_declared_shape() -> None:
     assert policy.frame_rate == "30/1"
     assert policy.frame_count == 600
     assert policy.duration_ms == 20000
+    assert policy.duration_tolerance_ms == 250
     assert policy.audio_channels == 2
     assert policy.audio_sample_rate_hz == 48000
     assert policy.audio_layout == "stereo"
+
+
+def test_77_frozen_plan_resolves_from_foreign_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: the F3 lane runs the replay from an external cwd."""
+    from services.release.live_plan import frozen_ab_plan  # noqa: PLC0415
+
+    monkeypatch.chdir(tmp_path)
+    plan = frozen_ab_plan()
+    assert set(plan.manifests) == {"p3-brand-a", "p3-brand-b"}

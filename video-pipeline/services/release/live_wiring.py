@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, cast
 
 from services.contracts.primitives import RationalFrameRate
 from services.foundation_io import sha256_file
-from services.job_runner.gate_p3_ab import compile_ab
 from services.job_runner.gate_p3_scan import repo_root
 from services.presentation.audio_mix import render_mixed_derivative
 from services.presentation.audio_profile import compile_audio_profile
@@ -37,6 +36,7 @@ from services.release.live_models import (
     ProfileBuildResult,
     RestartObservation,
 )
+from services.release.live_plan import frozen_ab_plan
 from services.toolchain.models import load_lock
 
 if TYPE_CHECKING:
@@ -111,7 +111,7 @@ class _MediaKit:
         cached = self._cache.get(snapshot_id)
         if cached is not None:
             return cached
-        plan = compile_ab()
+        plan = frozen_ab_plan()
         work = self._media_root / snapshot_id
         work.mkdir(parents=True, exist_ok=True)
         profile = plan.profiles[snapshot_id]

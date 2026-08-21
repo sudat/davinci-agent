@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from services.foundation_io import canonical_model_bytes
-from services.job_runner.gate_p3_ab import compile_ab
 from services.release.live_builds import ConnectionLike
 from services.release.live_guard import LiveStateGuard
+from services.release.live_plan import frozen_ab_plan
 from services.release.staging import sha256_bytes
 
 if TYPE_CHECKING:
@@ -68,7 +68,7 @@ def run_injections(
                 )
             else:
                 snap_a = PROFILE_SNAPSHOT_IDS["a"]
-                manifest_a = compile_ab().manifests[snap_a]
+                manifest_a = frozen_ab_plan().manifests[snap_a]
                 outcome = stale_state_route(
                     guard=guard,
                     evidence_dir=directory,

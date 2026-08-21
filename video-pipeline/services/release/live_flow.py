@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Literal, cast
 
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
-from services.job_runner.gate_p3_ab import compile_ab
 from services.release.live_builds import ConnectionLike  # noqa: TC001 (runtime protocol)
 from services.release.live_guard import (
     LEASE_HOLDER,
@@ -46,6 +45,7 @@ from services.release.live_models import (
     RenderPolicy,
     RestartObservation,
 )
+from services.release.live_plan import frozen_ab_plan
 from services.release.live_routes import run_injections
 from services.release.live_swap import profile_swap
 from services.release.manifest import candidate_id
@@ -212,7 +212,7 @@ def run_live_replay(
 
 
 def _plan_sha() -> str:
-    return sha256_bytes(canonical_model_bytes(compile_ab().timeline_ir))
+    return sha256_bytes(canonical_model_bytes(frozen_ab_plan().timeline_ir))
 
 
 def _finalize_render(

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from services.foundation_io import sha256_file
-from services.job_runner.gate_p3_ab import compile_ab, structure_rows
+from services.job_runner.gate_p3_ab import structure_rows
 from services.release.live_builds import ConnectionLike
 from services.release.live_models import (
     PROFILE_SNAPSHOT_IDS,
@@ -21,6 +21,7 @@ from services.release.live_models import (
     ProfileId,
     ProfileSwapEvidence,
 )
+from services.release.live_plan import frozen_ab_plan
 from services.release.staging import sha256_bytes
 
 if TYPE_CHECKING:
@@ -64,7 +65,7 @@ def profile_swap(
     profiles: tuple[ProfileId, ...],
     evidence_root: Path,
 ) -> tuple[ProfileSwapEvidence, Path | None, list[str]]:
-    plan = compile_ab()
+    plan = frozen_ab_plan()
     rows = structure_rows(plan.timeline_ir)
     structure_sha = sha256_bytes(_structure_bytes(rows))
     failures: list[str] = []

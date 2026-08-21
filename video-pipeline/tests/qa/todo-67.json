@@ -171,7 +171,7 @@
    "fault_fixture": null,
    "expected_exit": 0,
    "expected_artifacts": [],
-   "expected_observation": "33 passed"
+   "expected_observation": "34 passed"
   },
   {
    "case_id": "live-replay-cli-rejects-live-flags-without-extract",
