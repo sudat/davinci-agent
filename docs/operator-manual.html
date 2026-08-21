@@ -255,13 +255,46 @@ details.deep .deep-body li { margin-top: 4px; }
         <h5>やること</h5>
         <ul style="padding-left:18px;font-size:13.5px;color:var(--ink-2);line-height:1.9;">
           <li>Episode用ディレクトリ（例: <code>jobs/my-episode/</code>）を作り、撮影素材を配置する</li>
-          <li>Episode設定（完成尺の目標・特記事項・クラウド送信可否など）を設定ファイルに記述する</li>
+          <li>Episode設定ファイル（<code>episode.json</code>）に、素材の場所・言語・申告事項（プライバシー/権利フラグ）を記述する（詳細は下の展開を参照）</li>
           <li>契約条件（話者1名・ハードカット中心・総素材90分以内 等）に合うEpisodeか確認する</li>
         </ul>
         <details class="deep">
-          <summary>Episodeディレクトリの中身と契約条件</summary>
+          <summary>Episode設定ファイル（episode.json）とは</summary>
           <div class="deep-body">
-            実行が進むとディレクトリ内に自動生成されるもの: 素材台帳・座標対応表・解析結果・編集プラン・プレビューMP4・修正履歴。<b>あなたが直接触るのは最初の素材配置と設定だけ</b>です。適格条件の既定値: 日本語・完成尺6〜15分・単一話者・Hard Cut中心・48kHz推奨。契約外のEpisodeは失敗ではなく「対象外」と判定され、KPI計測の分母から分離されます。
+            実行が進むとディレクトリ内に自動生成されるもの（素材台帳・座標対応表・解析結果・編集プラン・プレビューMP4・修正履歴）とは別に、<b>あなたが最初に置く設定ファイルは <code>episode.json</code> の1つだけ</b>です。Phase 1の取り込みはこのファイルを見つけるところから始まります。中身の例:
+            <pre>{
+  "schema_version": "real-episode-v1",
+  "episode_id": "my-episode-001",
+  "video_path": "sources/main.mp4",
+  "audio_path": null,
+  "language": "ja",
+  "declared_privacy_flags": [],
+  "declared_rights_flags": [],
+  "fixture_only": false
+}</pre>
+            <table>
+              <tr><th>フィールド</th><th>意味</th></tr>
+              <tr><td><code>schema_version</code></td><td>固定値 <code>real-episode-v1</code>。書式の版であり、書き換えません。</td></tr>
+              <tr><td><code>episode_id</code></td><td>このEpisodeの識別子。検証用フィクスチャと同名のIDは拒否されます。</td></tr>
+              <tr><td><code>video_path</code></td><td>メイン映像ファイル。Episodeディレクトリからの相対パス、または絶対パス。</td></tr>
+              <tr><td><code>audio_path</code></td><td>現在は必ず <code>null</code>。音声は映像ファイルに含まれている前提で、別ファイルの音声はこの契約では対象外です。</td></tr>
+              <tr><td><code>language</code></td><td>現在は <code>"ja"</code> のみ。</td></tr>
+              <tr><td><code>declared_privacy_flags</code></td><td>あなたが事前に申告するプライバシー問題（顔・ナンバープレート等）。申告すると対応する人間ゲートを通るまで先へ進めません。</td></tr>
+              <tr><td><code>declared_rights_flags</code></td><td>あなたが事前に申告する権利問題（BGM権利等）。同上。</td></tr>
+              <tr><td><code>fixture_only</code></td><td>常に <code>false</code>。検証用素材と実素材を混同させないための固定値です。</td></tr>
+            </table>
+          </div>
+        </details>
+        <details class="deep">
+          <summary>契約条件はどこで・どう判定されるか</summary>
+          <div class="deep-body">
+            契約条件は<b>Episodeごとに設定するものではなく、システム側に固定された「対応対象の定義」</b>です。あなたが設定で「契約を選ぶ」必要はありません。
+            <ul>
+              <li><b>判定タイミング</b>: STEP 1（取り込み）の実行時。ffprobeによる実測値（総尺・映像/音声ストリームの有無・可変フレームレートかどうか）と、<code>episode.json</code> への申告内容を組み合わせて機械判定します。</li>
+              <li><b>主な条件（実装値）</b>: 言語＝日本語／総素材尺＝90分以内（5,400秒）／話者数＝分離可能な少人数まで／単一の主映像＋音声あり。</li>
+              <li><b>対象外の扱い</b>: 失敗（エラー停止）ではなく「対象外」と判定され、理由コードが返ります。KPI計測の分母から分離されるだけで、素材自体は残ります。</li>
+              <li><b>申告フラグがある場合</b>: プライバシー・権利の申告があると「人間ゲート開放」として停止します。解消するか、人間の明示承認を通すまで先へ進めません。</li>
+            </ul>
           </div>
         </details>
       </div>
