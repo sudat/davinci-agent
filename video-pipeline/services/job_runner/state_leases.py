@@ -3,13 +3,17 @@
 These rows complement the flock lease authority with durable,
 expiry-enforced bookkeeping. Expiry is evaluated ONLY against
 caller-supplied ``now`` values (logical test clock or epoch reading);
-no method reads the wall clock. Every mutation is ONE atomic
-conditional statement under ``BEGIN IMMEDIATE`` (acquire = conditional
-upsert that only overwrites the same holder or an expired row; renew
-and release re-check holder and expiry in the statement's WHERE
-clause), and refusal is decided by the affected-row count — so two
-connections can never both observe success, and a reader that raced
-with a fresh committer is refused instead of blindly overwriting.
+no method reads the wall clock. Holders are INVOCATION-UNIQUE tokens
+(e.g. ``f"{role}:{uuid4}"``): acquisition may only take an EXPIRED row —
+a second process claiming the same role with a fresh token is refused
+while the lease lives, and the owner refreshes exclusively through
+``renew_lease``. Every mutation is ONE atomic conditional statement under
+``BEGIN IMMEDIATE`` (acquire = conditional upsert that only overwrites
+an expired row; renew and release re-check holder and expiry in the
+statement's WHERE clause), and refusal is decided by the affected-row
+count — so two connections can never both observe success, and a reader
+that raced with a fresh committer is refused instead of blindly
+overwriting.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ _ACQUIRE_SQL: Final = (
     "INSERT INTO leases (resource, holder, expires_at) VALUES (?, ?, ?)"
     " ON CONFLICT(resource) DO UPDATE SET holder = excluded.holder,"
     " expires_at = excluded.expires_at"
-    " WHERE leases.holder = excluded.holder OR leases.expires_at <= ?"
+    " WHERE leases.expires_at <= ?"
 )
 _RENEW_SQL: Final = (
     "UPDATE leases SET expires_at = ? WHERE resource = ? AND holder = ?"
@@ -43,6 +47,7 @@ class LeaseOps(StateContext):
     def acquire_lease(
         self, *, resource: Identifier, holder: Identifier, now: int, ttl_seconds: int
     ) -> LeaseRow:
+        """Take the lease ONLY if free or expired (never from a fresh holder)."""
         _require_positive_ttl(ttl_seconds)
         lease = LeaseRow(resource=resource, holder=holder, expires_at=now + ttl_seconds)
         with _immediate(self._connection):
@@ -52,7 +57,8 @@ class LeaseOps(StateContext):
             if cursor.rowcount != 1:
                 raise StateStoreError(
                     "lease-held",
-                    f"lease {resource} is held by another fresh holder (now {now})",
+                    f"lease {resource} is held by a fresh holder (now {now}); "
+                    "the owner renews via renew_lease, others wait for expiry",
                 )
         return lease
 

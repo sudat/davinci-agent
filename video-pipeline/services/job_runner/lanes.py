@@ -49,19 +49,33 @@ def resolve_build_resource(job_id: str) -> Identifier:
 
 
 class _LaneLease:
-    """One named exclusive lease; expiry is judged by the logical clock."""
+    """One named exclusive lease; expiry is judged by the logical clock.
+
+    Holders are invocation-unique tokens. A lane that re-enters
+    ``acquire`` while it already holds a FRESH lease refreshes through
+    ``renew_lease`` (the owner's only refresh path); acquisition itself
+    never steals a fresh lease, not even from the same token.
+    """
 
     def __init__(self, store: StateStore, holder: Identifier, resource: Identifier) -> None:
         self._store = store
         self._holder = holder
         self._resource = resource
         self._ttl = 0
+        self._held = False
 
     def acquire(self, *, now: int, ttl_seconds: int) -> None:
         self._ttl = ttl_seconds
+        if self._held:
+            self._store.renew_lease(
+                resource=self._resource, holder=self._holder, now=now,
+                ttl_seconds=ttl_seconds,
+            )
+            return
         self._store.acquire_lease(
             resource=self._resource, holder=self._holder, now=now, ttl_seconds=ttl_seconds
         )
+        self._held = True
 
     def renew(self, *, now: int) -> None:
         self._store.renew_lease(
@@ -70,6 +84,7 @@ class _LaneLease:
 
     def release(self, *, now: int) -> None:
         self._store.release_lease(resource=self._resource, holder=self._holder, now=now)
+        self._held = False
 
 
 class StateLane:

@@ -13,6 +13,8 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from services.job_runner.state_errors import StateStoreError
 from services.job_runner.state_store import StateStore
 
@@ -136,26 +138,83 @@ def test_release_cannot_delete_a_stolen_lease(tmp_path: Path) -> None:
             assert str(row[0]) == "writer-b"
 
 
-def test_parallel_same_holder_acquire_is_serialized(tmp_path: Path) -> None:
-    """The allowed same-holder reacquire path stays correct under contention."""
+def test_second_process_same_role_refused_while_lease_fresh(tmp_path: Path) -> None:
+    """Holder tokens are invocation-unique: only expiry (or the owner's
+    renew_lease) can extend a fresh lease — a second process claiming the
+    same ROLE with its own token is refused."""
 
+    with _open_store(tmp_path) as store:
+        owner_holder = "stage-runner:11111111-1111-4111-8111-111111111111"
+        rival_holder = "stage-runner:22222222-2222-4222-8222-222222222222"
+        store.acquire_lease(
+            resource=RESOURCE, holder=owner_holder, now=1_000, ttl_seconds=60
+        )
+        with pytest.raises(StateStoreError, match="lease-held"):
+            store.acquire_lease(
+                resource=RESOURCE, holder=rival_holder, now=1_010, ttl_seconds=60
+            )
+        renewed = store.renew_lease(
+            resource=RESOURCE, holder=owner_holder, now=1_020, ttl_seconds=60
+        )
+        assert renewed.holder == owner_holder
+        with pytest.raises(StateStoreError) as rival_renew:
+            store.renew_lease(
+                resource=RESOURCE, holder=rival_holder, now=1_030, ttl_seconds=60
+            )
+        assert rival_renew.value.code == "not-holder"
+        expired_takeover = store.acquire_lease(
+            resource=RESOURCE, holder=rival_holder, now=1_100, ttl_seconds=60
+        )
+        assert expired_takeover.holder == rival_holder
+
+
+def test_same_token_reacquire_while_fresh_is_refused(tmp_path: Path) -> None:
+    """Even the SAME token cannot re-acquire a fresh lease; renewal is the
+    owner's only refresh path (renew_lease), keeping acquisition honest."""
+
+    with _open_store(tmp_path) as store:
+        holder = "resolve-builder:33333333-3333-4333-8333-333333333333"
+        store.acquire_lease(resource=RESOURCE, holder=holder, now=1_000, ttl_seconds=60)
+        with pytest.raises(StateStoreError, match="lease-held"):
+            store.acquire_lease(
+                resource=RESOURCE, holder=holder, now=1_005, ttl_seconds=60
+            )
+        store.renew_lease(resource=RESOURCE, holder=holder, now=1_010, ttl_seconds=60)
+
+
+def test_parallel_distinct_token_acquires_never_share_a_timestamp(
+    tmp_path: Path,
+) -> None:
     with _open_store(tmp_path):
-        results: list[str] = []
+        winners: dict[int, str] = {}
+        errors: list[StateStoreError] = []
         lock = threading.Lock()
 
-        def acquire() -> None:
+        def acquire(worker: str) -> None:
             with _open_store(tmp_path) as racer_store:
                 for now in range(0, 200, 2):
-                    lease = racer_store.acquire_lease(
-                        resource=RESOURCE, holder="writer-a", now=now, ttl_seconds=50
-                    )
+                    try:
+                        lease = racer_store.acquire_lease(
+                            resource=RESOURCE,
+                            holder=f"stage-runner:{worker}",
+                            now=now,
+                            ttl_seconds=1,
+                        )
+                    except StateStoreError as error:
+                        if error.code != "lease-held":
+                            errors.append(error)
+                        continue
                     with lock:
-                        results.append(lease.holder)
+                        previous = winners.setdefault(now, lease.holder)
+                        assert previous == lease.holder
 
-        threads = [threading.Thread(target=acquire) for _ in range(4)]
+        threads = [
+            threading.Thread(target=acquire, args=(f"worker-{index}",))
+            for index in range(4)
+        ]
         for thread in threads:
             thread.start()
         for thread in threads:
             thread.join(timeout=30)
-        assert results
-        assert set(results) == {"writer-a"}
+        assert errors == []
+        assert winners

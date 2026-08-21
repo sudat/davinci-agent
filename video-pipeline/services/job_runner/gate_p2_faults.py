@@ -23,7 +23,7 @@ from services.job_runner.gate_p2_fake_tree import (
     FaultKnobs,
     synthesize_evidence,
 )
-from services.job_runner.gate_phase2 import evaluate, load_policy
+from services.job_runner.gate_phase2 import GateP2Error, evaluate, load_policy
 
 if TYPE_CHECKING:
     from services.gates import GatePolicy, GateResult
@@ -32,12 +32,13 @@ if TYPE_CHECKING:
 MARKER: Final = "phase2-gate"
 EXIT_DETECTED: Final = 0
 EXIT_FAULT: Final = 2
-POLICY: Final = Path("config/gates/phase-2-v1.json")
 ATTEMPT: Final = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
 PARENTS: Final = ("phase-0a", "phase-0b", "phase-1-technical")
+
+
 def _cascade_receipt() -> Path:
     """The receipt matching the current frozen phase-2 gate version."""
     import json  # noqa: PLC0415
@@ -52,6 +53,20 @@ def _cascade_receipt() -> Path:
 
 
 RECEIPT: Final = _cascade_receipt()
+
+
+def _current_policy() -> Path:
+    """The cascade-tracked current phase-2 policy (mirror of RECEIPT)."""
+    import json  # noqa: PLC0415
+
+    result = json.loads((ATTEMPT / "phase-2" / "gate-result.json").read_text())
+    version = result.get("gate_version")
+    if isinstance(version, str) and version != "v1":
+        return Path(f"config/gates/phase-2-{version}.json")
+    return Path("config/gates/phase-2-v1.json")
+
+
+POLICY: Final = _current_policy()
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +116,14 @@ def run_fault_cli(fault_fixture: Path, policy_path: Path) -> int:
     del policy_path  # the frozen in-repo policy is the only fault target
     import json  # noqa: PLC0415
 
-    spec = json.loads(fault_fixture.read_bytes())
+    try:
+        spec = json.loads(fault_fixture.read_bytes())
+    except (OSError, ValueError) as error:
+        print(f"{MARKER} fault-unreadable {error}", file=sys.stderr)
+        return EXIT_FAULT
+    if not isinstance(spec, dict):
+        print(f"{MARKER} fault-unreadable spec is not an object", file=sys.stderr)
+        return EXIT_FAULT
     fault = str(spec.get("fault", ""))
     if fault not in FAULTS:
         print(f"{MARKER} fault-unknown fault={fault}", file=sys.stderr)
@@ -112,6 +134,9 @@ def run_fault_cli(fault_fixture: Path, policy_path: Path) -> int:
             baseline = evaluate_fake(policy, policy_sha256, Path(tmp), FaultKnobs())
         with tempfile.TemporaryDirectory(prefix="p2-fault-probe-") as tmp:
             probe = evaluate_fake(policy, policy_sha256, Path(tmp), FaultKnobs(fault=fault))
+    except GateP2Error as error:
+        print(f"{MARKER} fault-error {error}", file=sys.stderr)
+        return EXIT_FAULT
     except (OSError, ValueError) as error:
         print(f"{MARKER} fault-error {error}", file=sys.stderr)
         return EXIT_FAULT

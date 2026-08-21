@@ -14,6 +14,7 @@ retries (PRD Appendix C 9).
 from __future__ import annotations
 
 import hashlib
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
@@ -81,6 +82,7 @@ class _RunContext:
     started_seq: int
     started_status: JobStatus
     started_adopted_hash: str | None
+    holder_token: Identifier
 
 
 class StageRunner:
@@ -117,6 +119,7 @@ class StageRunner:
             runner_version=self._identity.runner_version,
             code_snapshot_id=self._identity.code_snapshot_id,
         )
+        holder_token = f"{self._holder}:{uuid.uuid4()}"
         starting = current_job_state(store, job_id)
         context = _RunContext(
             store=store, registry=registry, job_id=job_id, key=key,
@@ -124,10 +127,11 @@ class StageRunner:
             started_seq=starting.updated_at_seq,
             started_status=starting.status,
             started_adopted_hash=starting.adopted_artifact_hash,
+            holder_token=holder_token,
         )
         resource = stage_resource(job_id, stage_name)
         store.acquire_lease(
-            resource=resource, holder=self._holder, now=clock.now, ttl_seconds=self._lease_ttl
+            resource=resource, holder=holder_token, now=clock.now, ttl_seconds=self._lease_ttl
         )
         try:
             succeeded = self._matching_row(context, require_succeeded=True)
@@ -141,7 +145,9 @@ class StageRunner:
                 return self._commit(context, payload, attempt=0, kind="run-recovered")
             return self._attempts(context, runner_fn, policy)
         finally:
-            store.release_lease(resource=resource, holder=self._holder, now=clock.now)
+            store.release_lease(
+                resource=resource, holder=holder_token, now=clock.now
+            )
 
     def _attempts(
         self, context: _RunContext, runner_fn: RunnerFn, policy: RetryPolicy
@@ -197,7 +203,7 @@ class StageRunner:
             status="succeeded", idempotency_key=key.idempotency_key,
             retry_count=0 if existing is None else existing.retry_count,
         ))
-        lane = StateLane(store, context.job_id, holder=self._holder)
+        lane = StateLane(store, context.job_id, holder=context.holder_token)
         lane.acquire(now=clock.now, ttl_seconds=self._lease_ttl)
         try:
             current = current_job_state(store, context.job_id)
