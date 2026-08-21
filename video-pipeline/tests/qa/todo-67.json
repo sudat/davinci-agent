@@ -139,21 +139,67 @@
   "expected_artifacts": [],
   "expected_observation": "3 passed"
  },
- {
-  "case_id": "failure-misleading-kpi-claim-prevents-release",
-  "kind": "failure",
-  "argv": [
-   "uv",
-   "run",
-   "pytest",
-   "tests/release/test_verify.py::test_50_misleading_kpi_claim_detected",
-   "-q"
-  ],
-  "stdin_fixture": null,
-  "environment": {},
-  "fault_fixture": null,
-  "expected_exit": 0,
-  "expected_artifacts": [],
-  "expected_observation": "1 passed"
- }
+  {
+   "case_id": "failure-misleading-kpi-claim-prevents-release",
+   "kind": "failure",
+   "argv": [
+    "uv",
+    "run",
+    "pytest",
+    "tests/release/test_verify.py::test_50_misleading_kpi_claim_detected",
+    "-q"
+   ],
+   "stdin_fixture": null,
+   "environment": {},
+   "fault_fixture": null,
+   "expected_exit": 0,
+   "expected_artifacts": [],
+   "expected_observation": "1 passed"
+  },
+  {
+   "case_id": "live-replay-fault-shape-offline",
+   "kind": "happy",
+   "argv": [
+    "uv",
+    "run",
+    "pytest",
+    "tests/release/test_live_replay.py",
+    "-q"
+   ],
+   "stdin_fixture": null,
+   "environment": {},
+   "fault_fixture": null,
+   "expected_exit": 0,
+   "expected_artifacts": [],
+   "expected_observation": "33 passed"
+  },
+  {
+   "case_id": "live-replay-cli-rejects-live-flags-without-extract",
+   "kind": "failure",
+   "argv": [
+    "uv",
+    "run",
+    "python",
+    "-m",
+    "services.release.replay",
+    "--staging",
+    "staging-x",
+    "--h1-binding",
+    "b.json",
+    "--inject",
+    "stale-state",
+    "--profile-swap",
+    "a",
+    "--out",
+    "out-y",
+    "--uv-bin",
+    "uv"
+   ],
+   "stdin_fixture": null,
+   "environment": {},
+   "fault_fixture": null,
+   "expected_exit": 2,
+   "expected_artifacts": [],
+   "expected_observation": "--candidate-extract"
+  }
 ]

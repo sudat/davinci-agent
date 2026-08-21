@@ -42,6 +42,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ANN", "ARG", "D", "PLR2004", "S101", "S603", "S607", "SLF001"]
+"tests/release/test_live_replay.py" = ["ANN", "ARG", "D", "PLR2004", "S101", "S603", "S607", "SLF001", "N802"]
 # Golden derive.py files are frozen gate-bound evidence; see the basedpyright exclusion below.
 "tests/goldens/reference/**/derive.py" = ["C901", "E501", "F401", "F841", "PLC0415", "PLR0912", "PLR0913", "PLR0917"]
 "services/resolve_bridge/connection.py" = ["N802", "N818"]
@@ -142,6 +143,12 @@ ignore = [
 "services/release/staging.py" = ["PLR0913", "PLR0917"]
 "services/release/replay.py" = ["PLR0913", "PLR0917"]
 "services/release/finalize_candidate.py" = ["PLR0913", "PLR0917"]
+"services/release/live_builds.py" = ["N802", "N818", "B009"]
+"services/release/live_flow.py" = ["PLR0913", "PLR0917", "C901", "PLR0911", "PLR0915"]
+"services/release/live_guard.py" = ["PLR0913"]
+"services/release/live_injections.py" = ["PLR0913", "PLR2004"]
+"services/release/live_media.py" = ["PLR0913", "TRY004"]
+"services/release/live_wiring.py" = ["N802", "B009", "PLR0913", "PLR0915", "C901"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

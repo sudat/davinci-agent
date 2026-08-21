@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from services.presentation.audio_live_media import (
     FRAME_ORIGIN,
@@ -30,8 +30,15 @@ from services.resolve_bridge.lifecycle import (
 )
 
 if TYPE_CHECKING:
-    from services.resolve_bridge.connection import ResolveConnection
+    from services.resolve_bridge.connection import ProjectManagerApi
     from services.resolve_bridge.fixed_presentation_models import FixedProjectApi
+
+
+class BuilderConnection(Protocol):
+    """The build surface the parity builder needs from a connection."""
+
+    def project_manager(self) -> ProjectManagerApi: ...
+
 
 RATE_NUM = 30
 TOTAL_FRAMES = 600
@@ -42,7 +49,7 @@ BED_TONE_HZ = 220
 class ParityTimelineBuilder:
     """Build the single timeline the preview and final renders share."""
 
-    def __init__(self, *, connection: ResolveConnection, ffmpeg: Path) -> None:
+    def __init__(self, *, connection: BuilderConnection, ffmpeg: Path) -> None:
         self.connection = connection
         self.ffmpeg = ffmpeg
 

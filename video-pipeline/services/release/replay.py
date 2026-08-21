@@ -298,11 +298,70 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--uv-bin", type=Path, required=True)
     parser.add_argument("--seed-cache", type=Path)
     parser.add_argument("--pytest-arg", action="append")
+    parser.add_argument("--h1-binding", type=Path)
+    parser.add_argument("--inject")
+    parser.add_argument("--profile-swap")
     return parser
+
+
+def _run_live(arguments: argparse.Namespace) -> int:
+    """Live fault-injecting replay (Todo 67 / F3 contract)."""
+
+    from services.release.live_flow import (  # noqa: PLC0415
+        parse_injections,
+        parse_profiles,
+        revalidate_live_replay,
+        run_live_replay,
+    )
+    from services.release.live_wiring import (  # noqa: PLC0415
+        pinned_media_bins,
+        production_seams,
+        resolve_host_report,
+    )
+
+    try:
+        injections = parse_injections(arguments.inject)
+        profiles = parse_profiles(arguments.profile_swap)
+        host_report = resolve_host_report(arguments.out)
+        ffmpeg, ffprobe = pinned_media_bins()
+        seams = production_seams(
+            host_report_path=host_report,
+            ffmpeg=ffmpeg,
+            ffprobe=ffprobe,
+            out_root=arguments.out,
+        )
+    except Exception as error:  # noqa: BLE001 (typed usage failure, never a silent pass)
+        print(f"live replay inputs invalid: {error}", file=sys.stderr)
+        return 2
+    revalidated = revalidate_live_replay(arguments.out, seams=seams)
+    if revalidated is not None:
+        print(canonical_model_bytes(revalidated).decode())
+        print("live-replay: revalidated (idempotent re-run)")
+        return 0
+    summary = run_live_replay(
+        extract=arguments.candidate_extract,
+        h1_binding=arguments.h1_binding,
+        injections=injections,
+        profiles=profiles,
+        out=arguments.out,
+        seams=seams,
+    )
+    print(canonical_model_bytes(summary).decode())
+    return 0 if summary.verdict == "passed" else 1
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
+    live_flags = (arguments.h1_binding, arguments.inject, arguments.profile_swap)
+    if any(flag is not None for flag in live_flags):
+        if arguments.candidate_extract is None or any(flag is None for flag in live_flags):
+            print(
+                "live replay requires --candidate-extract together with "
+                "--h1-binding, --inject and --profile-swap",
+                file=sys.stderr,
+            )
+            return 2
+        return _run_live(arguments)
     pytest_args = tuple(arguments.pytest_arg) if arguments.pytest_arg else DEFAULT_PYTEST_ARGS
     source_input, source_kind = (
         (arguments.candidate, "candidate")
