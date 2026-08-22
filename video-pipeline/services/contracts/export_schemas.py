@@ -14,6 +14,7 @@ from services.contracts.primitives import ArtifactEnvelope
 from services.contracts.timeline_ir import TimelineIr0A, TimelineIrProduction
 from services.foundation_io import atomic_write
 from services.gates.models import GatePolicy, GateResult
+from services.media_intelligence.models import MediaIntelligenceArtifact
 
 DEFAULT_OUTPUT_DIRECTORY: Final = Path("schemas/contracts")
 DEFAULT_GATE_OUTPUT_DIRECTORY: Final = Path("schemas/gates")
@@ -48,6 +49,7 @@ def schema_documents() -> tuple[SchemaDocument, ...]:
         _model_schema_document("artifact-envelope.json", ArtifactEnvelope[str]),
         _model_schema_document("build-report-0a.json", BuildReport0A),
         SchemaDocument(filename="evidence-0a.json", payload=evidence_payload),
+        _model_schema_document("media-intelligence-v2.json", MediaIntelligenceArtifact),
         _model_schema_document("timeline-ir-0a.json", TimelineIr0A),
         _model_schema_document("timeline-ir-production.json", TimelineIrProduction),
     )
