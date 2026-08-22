@@ -72,19 +72,29 @@ def test_unknown_capability_rejected() -> None:
         validate_kit(broken)
 
 
-def test_accepted_only_with_not_accepted_status_rejected() -> None:
+def test_accepted_only_with_not_accepted_status_rejected(tmp_path: Path) -> None:
     raw = _load_raw()
     broken = copy.deepcopy(raw)
     recipes = broken["recipes"]  # type: ignore[typeddict-item]
     assert isinstance(recipes, list)
     first = dict(recipes[0])  # type: ignore[arg-type]
     binding = dict(first["capability_binding"])  # type: ignore[arg-type]
-    # Real mcp-fit statuses are all "not_available", so accepted_only=True must fail
+    capability = str(binding["capability"])
     binding["accepted_only"] = True
     first["capability_binding"] = binding
     recipes[0] = first
+    # The real matrix carries live Gate V43-0 statuses (task 11), so the
+    # rejection path is proven against a doctored copy forcing not_available.
+    mcp_fit = json.loads(
+        (VIDEO_PIPELINE / "capabilities" / "v4.3" / "mcp-fit.json").read_text(encoding="utf-8")
+    )
+    for row in mcp_fit["capabilities"]:
+        if row["capability"] == capability:
+            row["status"] = "not_available"
+    doctored = tmp_path / "mcp-fit.json"
+    doctored.write_text(json.dumps(mcp_fit), encoding="utf-8")
     with pytest.raises(ProductionKitUnacceptedCapabilityError, match="not_available"):
-        validate_kit(broken)
+        validate_kit(broken, mcp_fit_path=doctored)
 
 
 def test_eleven_recipes_count_error() -> None:
