@@ -1,0 +1,23 @@
+{
+  "switched_key": "analysis_backend",
+  "from": "legacy_local",
+  "to": "hybrid",
+  "gate": "V43-1",
+  "universal_pass": "legacy local measurements + MCP standard analysis combined (parallel evidence)",
+  "deep_review": "opt-in via the progressive scheduler (Moment Deep Review windows routed by trigger reasons)",
+  "switched_at_task": "v43-rebaseline task 19",
+  "evidence_refs": [
+    "tests/media_intelligence/test_gate_v43_1.py",
+    "tests/media_intelligence/fixtures/gate-v43-1/speaker-broll/artifact.json",
+    "tests/media_intelligence/fixtures/gate-v43-1/visual-first/artifact.json",
+    "tests/media_intelligence/fixtures/gate-v43-1/screen-product/artifact.json",
+    "capabilities/v4.3/runs/gate-v43-1/gate-summary.json",
+    ".omo/evidence/v43-rebaseline/task-19/benchmark-report.json",
+    ".omo/evidence/v43-rebaseline/task-19/pytest-targeted.txt"
+  ],
+  "notes": [
+    "execution_backend (mcp since task 11) and editorial_contract (phase1_v1) are untouched by this switch",
+    "gate evidence is synthetic mechanism verification; real-duration TTFRP measurement happens at tasks 30/43/52",
+    "recall-audit miss_rate 1.0 reflects the deterministic placeholder deep-review provider, not measured editorial judgment"
+  ]
+}

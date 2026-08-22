@@ -1,0 +1,66 @@
+{
+  "fixtures": {
+    "screen-product": {
+      "cache_hits": 3,
+      "deep_review_ratio": 0.20481927710843373,
+      "episode_id": "gate43-screen-product",
+      "frame_samples": 16,
+      "frames_deep_reviewed": 510,
+      "reanalysis_mode": "dependent_only",
+      "recall": {
+        "miss_rate": 1.0,
+        "reviewed": 3,
+        "sampled": 6,
+        "signal": "degraded"
+      },
+      "recomputed_windows": 1,
+      "reviews": 4,
+      "shots": 10,
+      "source_duration_seconds": 83.0,
+      "tokens": 0,
+      "windows_planned": 6
+    },
+    "speaker-broll": {
+      "cache_hits": 3,
+      "deep_review_ratio": 0.2,
+      "episode_id": "gate43-speaker-broll",
+      "frame_samples": 16,
+      "frames_deep_reviewed": 360,
+      "reanalysis_mode": "dependent_only",
+      "recall": {
+        "miss_rate": 1.0,
+        "reviewed": 4,
+        "sampled": 6,
+        "signal": "degraded"
+      },
+      "recomputed_windows": 1,
+      "reviews": 4,
+      "shots": 12,
+      "source_duration_seconds": 60.0,
+      "tokens": 0,
+      "windows_planned": 7
+    },
+    "visual-first": {
+      "cache_hits": 5,
+      "deep_review_ratio": 0.2268041237113402,
+      "episode_id": "gate43-visual-first",
+      "frame_samples": 24,
+      "frames_deep_reviewed": 660,
+      "reanalysis_mode": "dependent_only",
+      "recall": {
+        "miss_rate": 1.0,
+        "reviewed": 4,
+        "sampled": 6,
+        "signal": "degraded"
+      },
+      "recomputed_windows": 1,
+      "reviews": 6,
+      "shots": 10,
+      "source_duration_seconds": 97.0,
+      "tokens": 0,
+      "windows_planned": 8
+    }
+  },
+  "gate": "V43-1",
+  "schema_version": "gate-v43-1-summary-v1"
+}
