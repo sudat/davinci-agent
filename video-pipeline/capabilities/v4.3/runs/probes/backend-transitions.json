@@ -1,0 +1,52 @@
+{
+  "final_config": {
+    "analysis_backend": "legacy_local",
+    "editorial_contract": "phase1_v1",
+    "execution_backend": "mcp",
+    "schema_version": "backends-v1"
+  },
+  "transitions": [
+    {
+      "config": {
+        "analysis_backend": "legacy_local",
+        "editorial_contract": "phase1_v1",
+        "execution_backend": "mcp",
+        "schema_version": "backends-v1"
+      },
+      "smoke": {
+        "flag": "mcp",
+        "mutating_call_reached_transport": true,
+        "refusal_code": null
+      },
+      "transition": "legacy_direct->mcp"
+    },
+    {
+      "config": {
+        "analysis_backend": "legacy_local",
+        "editorial_contract": "phase1_v1",
+        "execution_backend": "legacy_direct",
+        "schema_version": "backends-v1"
+      },
+      "smoke": {
+        "flag": "legacy_direct",
+        "mutating_call_reached_transport": false,
+        "refusal_code": "backend-policy"
+      },
+      "transition": "mcp->legacy_direct"
+    },
+    {
+      "config": {
+        "analysis_backend": "legacy_local",
+        "editorial_contract": "phase1_v1",
+        "execution_backend": "mcp",
+        "schema_version": "backends-v1"
+      },
+      "smoke": {
+        "flag": "mcp",
+        "mutating_call_reached_transport": true,
+        "refusal_code": null
+      },
+      "transition": "legacy_direct->mcp(final)"
+    }
+  ]
+}

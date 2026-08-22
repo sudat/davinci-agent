@@ -41,6 +41,8 @@ TOOLS_LIST: Final = "tools-list.json"
 RESOLVE_VERSION: Final = "resolve-version.json"
 MEDIA_ANALYSIS_STANDARD: Final = "media-analysis-standard.json"
 DEEP_SHOT_ANALYSIS: Final = "deep-shot-analysis.json"
+MEDIA_ANALYSIS_STANDARD_RECORDED: Final = "media-analysis-standard.recorded.json"
+DEEP_SHOT_ANALYSIS_RECORDED: Final = "deep-shot-analysis.recorded.json"
 
 ALL_FIXTURES: Final = (
     SERVER_INFO,
@@ -48,6 +50,52 @@ ALL_FIXTURES: Final = (
     RESOLVE_VERSION,
     MEDIA_ANALYSIS_STANDARD,
     DEEP_SHOT_ANALYSIS,
+)
+
+RECORDED_FIXTURES: Final = (
+    MEDIA_ANALYSIS_STANDARD_RECORDED,
+    DEEP_SHOT_ANALYSIS_RECORDED,
+)
+
+# The pinned compound server (davinci-resolve-mcp 2.98.3) tools/list roster,
+# recorded live by the task-11 recorder.  A roster change means a server
+# version change: re-record and update this tuple together with the pin.
+PINNED_SERVER_TOOLS: Final = (
+    "color_group",
+    "dctl",
+    "edit_engine",
+    "folder",
+    "fuse_plugin",
+    "fusion_comp",
+    "gallery",
+    "gallery_stills",
+    "graph",
+    "layout_presets",
+    "media_analysis",
+    "media_pool",
+    "media_pool_item",
+    "media_pool_item_markers",
+    "media_storage",
+    "project_manager",
+    "project_manager_cloud",
+    "project_manager_database",
+    "project_manager_folders",
+    "project_settings",
+    "render",
+    "render_presets",
+    "resolve_control",
+    "script_plugin",
+    "setup",
+    "timeline",
+    "timeline_ai",
+    "timeline_frame",
+    "timeline_item",
+    "timeline_item_color",
+    "timeline_item_fusion",
+    "timeline_item_markers",
+    "timeline_item_takes",
+    "timeline_markers",
+    "timeline_versioning",
 )
 
 ROGUE_KEY: Final = "__rogue_key__"
@@ -118,7 +166,7 @@ def test_tools_list_fixture_round_trips() -> None:
     payload = _load_fixture(TOOLS_LIST)
     listing = normalize_tools_list(payload)
     names = {tool.name for tool in listing.tools}
-    assert names == {"media_analysis", "resolve_control"}
+    assert names == set(PINNED_SERVER_TOOLS)
     media_analysis = next(tool for tool in listing.tools if tool.name == "media_analysis")
     assert media_analysis.input_schema["type"] == "object"
     resolve_control = next(tool for tool in listing.tools if tool.name == "resolve_control")
@@ -198,6 +246,42 @@ def test_seed_fixtures_are_canonical_and_byte_stable(fixture_name: str) -> None:
     raw = (FIXTURES_DIR / fixture_name).read_bytes()
     parsed: object = json.loads(raw)
     assert canonical_fixture_bytes(parsed) == raw
+
+
+# ---------------------------------------------------------------------------
+# (a2) recorded live analysis payloads — provenance + by-design divergence
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("fixture_name", RECORDED_FIXTURES)
+def test_recorded_analysis_fixtures_are_canonical_with_provenance(
+    fixture_name: str,
+) -> None:
+    raw = (FIXTURES_DIR / fixture_name).read_bytes()
+    parsed: object = json.loads(raw)
+    assert canonical_fixture_bytes(parsed) == raw
+    meta: object = json.loads((FIXTURES_DIR / ".recording-meta.json").read_bytes())
+    assert isinstance(meta, dict)
+    entry = meta.get(fixture_name)
+    assert isinstance(entry, dict)
+    assert entry["server_identity"]["name"] == "DaVinciResolveMCP"
+
+
+def test_recorded_stored_visual_is_rejected_by_strict_standard_model() -> None:
+    payload = _load_fixture(MEDIA_ANALYSIS_STANDARD_RECORDED)
+    with pytest.raises(NormalizationError) as excinfo:
+        normalize_media_analysis_standard(payload)
+    message = str(excinfo.value)
+    assert "unknown key" in message
+    assert "slate" in message or "clip_summary" in message
+
+
+def test_recorded_deep_shots_are_rejected_by_strict_deep_model() -> None:
+    payload = _load_fixture(DEEP_SHOT_ANALYSIS_RECORDED)
+    with pytest.raises(NormalizationError) as excinfo:
+        normalize_deep_shot_analysis(payload)
+    message = str(excinfo.value)
+    assert "shot_uuid" in message
 
 
 # ---------------------------------------------------------------------------
@@ -287,8 +371,13 @@ def test_non_object_payload_raises_normalization_error(payload: object) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_recorder_plan_covers_every_seed_fixture() -> None:
-    assert frozenset(ALL_FIXTURES) == PLANNED_FIXTURES
+def test_recorder_plan_matches_live_and_recorded_sets() -> None:
+    live_replaced = {
+        SERVER_INFO,
+        TOOLS_LIST,
+        RESOLVE_VERSION,
+    }
+    assert frozenset(RECORDED_FIXTURES) | live_replaced == PLANNED_FIXTURES
 
 
 def test_recorder_skips_with_explicit_reason_outside_mcp_live_selection() -> None:

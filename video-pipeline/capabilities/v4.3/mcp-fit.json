@@ -2,245 +2,289 @@
   "capabilities": [
     {
       "capability": "project-timeline-creation",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/project-timeline-creation.json#sha256=2ddd2554e12ecfd985cd2bd6072f4a1d5479d61b741dc210bad952f76b62a9b3"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-project-timeline-creation-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "project 'v43-probe-183515' created+current with timelineFrameRate=30 set as a string on the fresh project (verified live: SetSetting is refused once any timeline exists); empty timeline 'v43-probe-tl-01' id=92c8eb30-d8dd-497e-bf65-53ed681bc133 created+current",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "import-media",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/import-media.json#sha256=64cd84ba8e4b4ad43d3e68c6de6e7ac3383534a8f230e91b5cf7baa1e883e070"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-import-media-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "safe_import_media imported=3 clips=['parity-src-001.mp4', 'parity-src-002.mp4', 'parity-src-003.mp4'] with media-pool ids",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "exact-source-range-placement",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/exact-source-range-placement.json#sha256=6a54e8d19a4ccca4e7d213865538716f67d7f844f065a6d1fceecff40ff943a7"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-exact-source-range-placement-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "3 placements (video+audio twins) at exact source in/out and record frames; video readback spans parity-src-001.mp4:src[10,70)@108000, parity-src-002.mp4:src[0,60)@108060, parity-src-003.mp4:src[20,50)@108120",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "source-record-readback",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/source-record-readback.json#sha256=130e97b7a439d4471019a08889f21f6223b4c7817d4041bd611ef3c5328bb287"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-source-record-readback-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "structure+source_range_report: video/audio record and source spans aligned; timeline [108000,108150) @01:00:00:00; 3 source ranges reported",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "subtitle-capability",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/subtitle-capability.json#sha256=ec9faf4c05a5637b8a32095dbebf522aee2369ddbc26ccd2651d97c012d8d578"
+      ],
       "fallback": "template_external",
       "fixture": "v43-subtitle-capability-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "subtitle_generation_probe would_generate=True; settings=None (probe-level: synthetic media carries no speech, generation itself not exercised)",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "title-text-plus",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/title-text-plus.json#sha256=b2905b041e53d253485b3b8d4e587c444e9eae27e3f08b12d32006d374e424df"
+      ],
       "fallback": "template_external",
       "fixture": "v43-title-text-plus-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "timeline set_title_text: SetProperty did not succeed; run title_property_scan, copy a real key from `properties`, and pass `property_key` (see `attempts` for diagnostics). (code=UNSPECIFIED)",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "failed"
     },
     {
       "capability": "fusion-template-insertion",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/fusion-template-insertion.json#sha256=95e0650a8575d819ad34796d7e2a649b2597b8793485ebc2041887653ecf5a25"
+      ],
       "fallback": "template_external",
       "fixture": "v43-fusion-template-insertion-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "insert_fusion_composition ok; item fusion comp count=1",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "clip-transform-punch-in",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/clip-transform-punch-in.json#sha256=5989f5454c2e610c8c232fafe9d2e16621dbb90530d5d076384a351283f0389b"
+      ],
       "fallback": "template_external",
       "fixture": "v43-clip-transform-punch-in-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "punch-in set ZoomX/ZoomY=1.25 Pan=0.05 -> readback ZoomX=1.25 ZoomY=1.25 Pan=0.05",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "transition-path",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/transition-path.json#sha256=939affd81023b3174c98283be9632b3c8d21d3fe6db4fb45131d66e292d0018f"
+      ],
       "fallback": "template_external",
       "fixture": "v43-transition-path-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "public API transition gap confirmed: edit_kernel_capabilities.unsupported.transition_cloning=\"Resolve's public scripting API does not expose timeline item transition cloning.\"; duplicate_clips(copy_properties=['transitions']) ok=False - no MCP path to ADD transitions; fallback template_external",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "failed"
     },
     {
       "capability": "audio-property-operation",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/audio-property-operation.json#sha256=38f47e6ab6eaaa01bc0b63a81d0f4a6a0679e440cfc2fe4486634432562c79c6"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-audio-property-operation-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "timeline safe_set_audio_properties: success=false (code=no-error-envelope)",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "failed"
     },
     {
       "capability": "voice-isolation",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/voice-isolation.json#sha256=6fc40d00f8e6a827af4f9666ff1c1c9091ff514afa1abad9cf5c2e08e9585e1b"
+      ],
       "fallback": "manual",
       "fixture": "v43-voice-isolation-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "track voice isolation set(isEnabled=true,amount=60) -> readback isEnabled=True amount=60; restored ok=True; caps item keys=['get_available', 'set_available', 'state']",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "bgm-track-ducking",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/bgm-track-ducking.json#sha256=598273edf8c22c2163ffeccf443f3392766e58b3fa131cc717fe549800409bdb"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-bgm-track-ducking-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "no ducking surface anywhere in timeline audio_mix_capability_report (top-level keys present: capabilities=True supported=[]); Resolve 21.0.4 scripting API exposes no Fairlight ducking control - fallback legacy_direct",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "failed"
     },
     {
       "capability": "color-grade-preset-drx",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/color-grade-preset-drx.json#sha256=519e68664bbb52d0afaeb4fbcd1dca015ece86da2624160b828735b37077d1fe"
+      ],
       "fallback": "template_external",
       "fixture": "v43-color-grade-preset-drx-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "safe_apply_drx dry_run ok + graph.ApplyGradeFromDRX applied vendor node-color-blue.drx (copied to system temp) to video item 1",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "render-configuration",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/render-configuration.json#sha256=095111f4c32de489d0a178c16b05094710630ac42d7e72a2ecef97e5d92e4179"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-render-configuration-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "set+validated settings echo {\"AudioCodec\": \"aac\", \"AudioSampleRate\": 48000, \"FormatHeight\": 1080, \"FormatWidth\": 1920, \"FrameRate\": 30.0}; GetRenderSettings is unavailable on this build (settings read back via the validated echo); format/codec readback=mp4/H264",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "render-job-lifecycle",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/render-job-lifecycle.json#sha256=7f94bdf44316b85132743c669a72c55e657693891e83cf10d87651bc082a4734"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-render-job-lifecycle-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "job 9266d3a6-0dbf-486b-9a84-19398cf629c3: add -> start -> CompletionPercentage=100 (JobStatus='完了') -> list(1 jobs) -> delete ok=True",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "gaps-overlaps-missing-media",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/gaps-overlaps-missing-media.json#sha256=26201181a0043a02cbec6b7b5096430d2b991bee989234dc44d367eb9931f1ca"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-gaps-overlaps-missing-media-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "detect_gaps_overlaps found 1 gap(s) (first: video@[108060,108120)); detect_missing_media 0 -> 1 after source rename (restored)",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "conform-source-ranges",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/conform-source-ranges.json#sha256=fd2cbfa30fbe44ac9dee56c43a1bcbcc6964818d7f6cfe4b2c767cd289482c10"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-conform-source-ranges-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "source_range_report occurrences (6 rows incl. audio twins) cover every placed source in/out frame span exactly",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "analysis-standard-pass",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/analysis-standard-pass.json#sha256=a153aa0b1da84504a47f235ee831ef1293c949bb0b9b87cfdd4cf0bb94e8ab3c"
+      ],
       "fallback": "legacy_direct",
       "fixture": "v43-analysis-standard-pass-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "analyze_clip plan ok; executed pass -> pending_host_vision_analysis with real shot_table; commit_vision stored visual.json",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "deep-shot-analysis",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/deep-shot-analysis.json#sha256=80fd0f0487b907d971b8c641ffd50d96464929759ea69d1c61bf208a43c03f44"
+      ],
       "fallback": "manual",
       "fixture": "v43-deep-shot-analysis-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "deepen estimate -> confirm (real shot rows=3) -> commit_shot_vision ok (updated=None)",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     },
     {
       "capability": "edit-engine-selects",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/edit-engine-selects.json#sha256=8fc681afb23e2e7d2db312aace4d39993b8a6f6cb4b049f5ecc5ed06510d40f7"
+      ],
       "fallback": "manual",
       "fixture": "v43-edit-engine-selects-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "edit_engine plan_selects: No shots at select_potential >= medium. Run a deep pass (media_analysis action='deepen') or lower min_select_potential. (code=UNSPECIFIED)",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "failed"
     },
     {
       "capability": "alternate-shot-similarity",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/alternate-shot-similarity.json#sha256=a2171d15fbecd8f58179088093768c49590ba222f1e4498d1e12e6e081b1918e"
+      ],
       "fallback": "manual",
       "fixture": "v43-alternate-shot-similarity-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "media_analysis build_embeddings: success=false (code=no-error-envelope)",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "failed"
     },
     {
       "capability": "advanced-delivery-qc",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "capabilities/v4.3/runs/probes/advanced-delivery-qc.json#sha256=9de99c26c0f9d9b2270414db587d9a0a445e9bf13529db1bc24b861a8d7791c6"
+      ],
       "fallback": "template_external",
       "fixture": "v43-advanced-delivery-qc-01",
       "provider": "davinci-resolve-mcp",
       "provider_version": "2.98.3",
-      "readback": "",
+      "readback": "export_render_boundary_report capabilities=['format_count', 'formats', 'guards', 'methods', 'presets', 'quick_export_presets', 'supported_settings'] + validate_render_settings ok - delivery QC surface reachable",
       "resolve_build": "21.0.4",
-      "status": "not_available"
+      "status": "accepted"
     }
   ],
   "provider": "davinci-resolve-mcp",

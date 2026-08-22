@@ -1,0 +1,7 @@
+{
+  "command": "uv run python -m services.cli.episode0 freeze-manifest (real-01)",
+  "limitation": "A full v1 editorial chain on the DJI clip is not runnable live: the clip has no transcript (no speech pipeline output available in this environment), so editorial stages beyond ingest/manifest cannot execute. The legacy-vs-mcp base-cut parity run (parity-basecut-report.json) is the base-execution-path demonstration for Gate V43-0.",
+  "returncode": 0,
+  "stderr_tail": "",
+  "stdout_tail": "manifest: /private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/pytest-of-stc/pytest-2230/test_episode0_freeze_manifest_0/manifest.json sha256=3df6f256d471 size=141816410\n"
+}

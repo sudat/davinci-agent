@@ -241,6 +241,11 @@ def _build_legacy_structure(ir: TimelineIrProduction) -> dict[str, Any]:
 # Register the only backend available in stage 1.
 _register_backend("legacy", _build_legacy_structure)
 
+# Registered after _register_backend is defined to avoid a circular import.
+from services.qa.parity_mcp import build_mcp_parity_structure  # noqa: E402
+
+_register_backend("mcp", build_mcp_parity_structure)
+
 
 def _structure_for_backend(backend: str, ir: TimelineIrProduction) -> dict[str, Any]:
     builder = _BACKENDS.get(backend)
