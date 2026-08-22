@@ -3,7 +3,8 @@
 Episode identity is deterministic (``ep-`` + sha256 of the resolved source
 folder path), one job row per episode, and the job-runner StateStore is
 the ONLY authority — listing reads the same schema through a read-only
-SQLite connection rather than a cockpit-side index.
+SQLite connection rather than a cockpit-side index. Task 47 adds the
+applied-review-command rebuild resolution read (lineage-derived stage set).
 """
 
 from __future__ import annotations
@@ -19,6 +20,12 @@ from services.episode_cockpit.errors import (
     CockpitUnprocessableError,
 )
 from services.episode_cockpit.models import BriefDraft
+from services.episode_cockpit.review_chat import (
+    DEFAULT_LINEAGE,
+    RebuildPlan,
+    load_applied_command,
+    plan_rebuild,
+)
 from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.job_runner.state_errors import StateStoreError
@@ -126,6 +133,18 @@ class JobOps(WorkspaceContext):
             "upload": upload,
             "remote_link": remote_link,
         }
+
+    def resolve_rebuild_stages(self, episode_id: str, applied_command: str) -> RebuildPlan:
+        """Resolve an applied review command to its minimal rebuild stage set (task 47).
+
+        Read-only against the episode's applied-command audit log; scheduling
+        stays out of scope (the caller records the intent via record_rebuild).
+        """
+
+        snapshot = self._require_snapshot(episode_id)
+        episode_dir = self._episode_dir(snapshot.job.episode_id)
+        applied = load_applied_command(episode_dir, applied_command)
+        return plan_rebuild(applied, DEFAULT_LINEAGE)
 
     def _list_job_rows(self) -> list[dict[str, object]]:
         if not self._state_store_path.is_file():

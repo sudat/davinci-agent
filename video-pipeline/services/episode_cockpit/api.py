@@ -13,12 +13,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import FileResponse
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import Identifier, StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
 
 # Runtime imports (NOT TYPE_CHECKING): FastAPI resolves parameter annotations
-# at decoration time via get_type_hints, so each noqa: TC001 below is load-bearing.
-from services.episode_cockpit.models import (  # noqa: TC001
+# at decoration time via get_type_hints, so these model imports stay top-level.
+from services.episode_cockpit.models import (
     ApprovalExecuteRequest,
     BriefPutRequest,
     EpisodeCreateRequest,
@@ -28,6 +28,7 @@ from services.episode_cockpit.models import (  # noqa: TC001
     ReviewChatRequest,
     Seconds,
 )
+from services.episode_cockpit.review_chat import ReviewChatContext, interpret_command
 from services.reference_learning.domain_extract import extract_domains_seeded
 
 router = APIRouter()
@@ -44,6 +45,17 @@ class ReferenceParsePreviewRequest(StrictModel):
 
     text: NonEmpty
     ts_seconds: Seconds | None = None
+
+
+class RebuildRequestWithCommand(RebuildRequest):
+    """POST /episodes/{id}/rebuild — additive optional applied_command ref (task 47).
+
+    Subclasses the task-44 request inline (same precedent as above) so the
+    rebuild-requests model stays untouched while the route can carry the
+    applied review-command reference whose lineage derives the stage hint.
+    """
+
+    applied_command: Identifier | None = None
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -99,16 +111,26 @@ def episode_flags(episode_id: str, workspace: Workspace) -> dict[str, object]:
 def review_chat(
     episode_id: str, request: ReviewChatRequest, workspace: Workspace
 ) -> dict[str, object]:
-    return workspace.append_review_chat(
+    stored = workspace.append_review_chat(
         episode_id, text=request.text, at_seconds=request.at_seconds
     )
+    draft = interpret_command(request.text, ReviewChatContext(at_seconds=request.at_seconds))
+    return stored | {"draft": draft.model_dump(mode="json")}
 
 
 @router.post("/episodes/{episode_id}/rebuild", status_code=status.HTTP_202_ACCEPTED)
 def rebuild(
-    episode_id: str, request: RebuildRequest, workspace: Workspace
+    episode_id: str, request: RebuildRequestWithCommand, workspace: Workspace
 ) -> dict[str, object]:
-    return workspace.record_rebuild(episode_id, stage_hint=request.stage_hint)
+    if request.applied_command is None:
+        return workspace.record_rebuild(episode_id, stage_hint=request.stage_hint)
+    plan = workspace.resolve_rebuild_stages(episode_id, request.applied_command)
+    stage_hint = request.stage_hint if request.stage_hint is not None else ",".join(plan.stages)
+    recorded = workspace.record_rebuild(episode_id, stage_hint=stage_hint)
+    return recorded | {
+        "applied_command": request.applied_command,
+        "rebuild_stages": list(plan.stages),
+    }
 
 
 @router.get("/episodes/{episode_id}/approvals")
