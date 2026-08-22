@@ -9,7 +9,7 @@ the same decision content always yields the same event id.
 from __future__ import annotations
 
 import hashlib
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import Field, ValidationError, model_validator
 from pydantic_core import PydanticCustomError
@@ -19,8 +19,14 @@ from services.foundation_io import canonical_model_bytes
 from services.review_command.models import ReviewCommandProposal0C, parse_proposal
 
 GENESIS_EVENT_HASH = "0" * 64
-type EventKind0C = Literal["proposal_recorded", "decision_applied", "command_deferred"]
+type EventKind0C = Literal[
+    "proposal_recorded",
+    "decision_applied",
+    "command_deferred",
+    "moment-selection-v2-committed",
+]
 type EventActor0C = Literal["operator", "model"]
+MOMENT_SELECTION_V2_COMMITTED: Final = "moment-selection-v2-committed"
 
 
 class ReviewEvent0C(StrictModel):
@@ -30,9 +36,7 @@ class ReviewEvent0C(StrictModel):
     proposal_json: str = Field(min_length=1, strict=True)
     proposal_sha256: Sha256
     base_plan_version: str = Field(pattern=r"^v[1-9][0-9]*$", strict=True)
-    result_plan_version: str | None = Field(
-        default=None, pattern=r"^v[1-9][0-9]*$", strict=True
-    )
+    result_plan_version: str | None = Field(default=None, pattern=r"^v[1-9][0-9]*$", strict=True)
     applied: bool
     actor_intent: EventActor0C
     decision_id: Identifier | None = None
@@ -63,6 +67,8 @@ class ReviewEvent0C(StrictModel):
                     "event_kind",
                     "decision_applied events must record the deciding operator",
                 )
+        elif self.kind == MOMENT_SELECTION_V2_COMMITTED:
+            self._require_moment_selection_semantics()
         else:
             if self.applied or self.result_plan_version is not None:
                 raise PydanticCustomError(
@@ -75,6 +81,20 @@ class ReviewEvent0C(StrictModel):
                     "command_deferred events must state a reason",
                 )
         return self
+
+    def _require_moment_selection_semantics(self) -> None:
+        """v2 commits are applied, advance the version; decision/reason optional."""
+
+        if not self.applied or self.result_plan_version is None:
+            raise PydanticCustomError(
+                "event_kind",
+                "moment-selection-v2-committed events must be applied with a result version",
+            )
+        if self.result_plan_version == self.base_plan_version:
+            raise PydanticCustomError(
+                "event_kind",
+                "moment-selection-v2-committed must advance the plan version",
+            )
 
 
 class EventSeal(StrictModel):
@@ -91,11 +111,26 @@ class EventStreamError(Exception):
         return self.detail
 
 
-def event_proposal(event: ReviewEvent0C) -> ReviewCommandProposal0C:
-    """Parse the bound proposal, refusing streams whose payload hash drifts."""
+def verify_proposal_hash(event: ReviewEvent0C) -> None:
+    """Refuse events whose bound payload hash drifted (kind-agnostic check)."""
 
     if hashlib.sha256(event.proposal_json.encode()).hexdigest() != event.proposal_sha256:
         raise EventStreamError(f"proposal payload hash mismatch at sequence {event.sequence}")
+
+
+def event_proposal(event: ReviewEvent0C) -> ReviewCommandProposal0C:
+    """Parse the bound proposal, refusing streams whose payload hash drifts.
+
+    v2 moment-selection events carry a different proposal contract; their
+    payload is opaque here and parsed by ``services.editorial_v2.proposal_validate``.
+    """
+
+    verify_proposal_hash(event)
+    if event.kind == MOMENT_SELECTION_V2_COMMITTED:
+        raise EventStreamError(
+            f"event at sequence {event.sequence} carries a v2 moment-selection "
+            "proposal payload, not a Phase-0C review command proposal"
+        )
     return parse_proposal(event.proposal_json)
 
 
@@ -143,7 +178,10 @@ def parse_event_stream(data: bytes) -> tuple[ReviewEvent0C, ...]:
     for expected_sequence, line in enumerate(data.splitlines(), start=1):
         try:
             event = ReviewEvent0C.model_validate_json(line)
-            event_proposal(event)
+            if event.kind == MOMENT_SELECTION_V2_COMMITTED:
+                verify_proposal_hash(event)
+            else:
+                event_proposal(event)
         except EventStreamError:
             raise
         except ValidationError as error:
@@ -169,6 +207,7 @@ def event_stream_bytes(events: tuple[ReviewEvent0C, ...]) -> bytes:
 
 __all__ = [
     "GENESIS_EVENT_HASH",
+    "MOMENT_SELECTION_V2_COMMITTED",
     "EventSeal",
     "EventStreamError",
     "ReviewEvent0C",
@@ -177,4 +216,5 @@ __all__ = [
     "event_proposal",
     "event_stream_bytes",
     "parse_event_stream",
+    "verify_proposal_hash",
 ]
