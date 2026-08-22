@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import FileResponse
 
+from services.contracts.primitives import StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
 
 # Runtime imports (NOT TYPE_CHECKING): FastAPI resolves parameter annotations
@@ -21,12 +22,28 @@ from services.episode_cockpit.models import (  # noqa: TC001
     ApprovalExecuteRequest,
     BriefPutRequest,
     EpisodeCreateRequest,
+    NonEmpty,
     RebuildRequest,
     ReferenceRegisterRequest,
     ReviewChatRequest,
+    Seconds,
 )
+from services.reference_learning.domain_extract import extract_domains_seeded
 
 router = APIRouter()
+
+
+class ReferenceParsePreviewRequest(StrictModel):
+    """POST /references/parse-preview — annotate-this-moment draft (task 50).
+
+    Defined inline (not in ``models.py``) so the task-50 backend change stays
+    confined to this one additive route file alongside the parallel task-49
+    worker; move next to the other request models when the reference surface
+    grows (task 51 wiring).
+    """
+
+    text: NonEmpty
+    ts_seconds: Seconds | None = None
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -124,6 +141,16 @@ def register_reference(
     request: ReferenceRegisterRequest, workspace: Workspace
 ) -> dict[str, object]:
     return workspace.register_reference(path=request.path, source_id=request.source_id)
+
+
+@router.post("/references/parse-preview")
+def parse_reference_preview(
+    request: ReferenceParsePreviewRequest,
+) -> dict[str, object]:
+    draft = extract_domains_seeded(request.text)
+    payload: dict[str, object] = dict(draft.model_dump(mode="json"))
+    payload["ts_seconds"] = request.ts_seconds
+    return payload
 
 
 __all__ = ["router"]

@@ -56,3 +56,9 @@ ProN", "Noto Sans JP", sans-serif`); IDs and technical values use
 - New views live under `app/<route>/page.tsx`, shared pieces in
   `components/`, all API access via `lib/api.ts` (no direct `fetch` in
   components). Reuse these tokens; do not introduce new hex values inline.
+- Task 50 (reference annotation): domain chips reuse existing tokens only —
+  polarity mapping `like → --accent` (`.chip-like`), `dislike → --danger`
+  (`.chip-dislike`), `neutral → --muted` (`.chip-neutral`); neutral hint
+  panels use `.notice-hint` (`--bg` + `--border`); the selected A/B choice
+  button uses `.choice-button[aria-pressed="true"]` (accent fill). No
+  numeric scorecard exists on this surface by contract.

@@ -1,4 +1,5 @@
 import EpisodeView from "@/components/EpisodeView";
+import ReferenceAnnotator from "@/components/ReferenceAnnotator";
 
 export default async function EpisodeStatusPage({
   params,
@@ -13,6 +14,7 @@ export default async function EpisodeStatusPage({
         <p className="page-subtitle">ステージと進捗を表示しています。</p>
       </header>
       <EpisodeView episodeId={id} />
+      <ReferenceAnnotator episodeId={id} />
     </main>
   );
 }
