@@ -1,6 +1,6 @@
 """Attack class 12: every Todo-65 CLI surface attempted with side checks.
 
-All 27 registered operations are enumerated and importable; every typed
+All 28 registered operations are enumerated and importable; every typed
 refusal class (shell/path/network/UI/unknown) is actively attempted and
 proven to spawn NOTHING; a registered dispatch passes an exact explicit
 argv (never a shell string); and the dispatch surface has no UI or
@@ -33,16 +33,16 @@ EXPECTED_OPERATIONS = (
     "ingest", "normalize", "conform", "conform-map", "phase1", "review",
     "checkpoint", "convert-review", "preview", "qc", "run-gate",
     "verify-policy", "gate-p1-faults", "gate-p2-faults", "gate-p3-faults",
-    "freeze-phase", "materialize", "toolchain-verify", "toolchain-ledger",
+    "freeze-phase", "materialize", "toolchain-verify", "mcp-doctor", "toolchain-ledger",
     "retention-gc", "metrics-report", "check-scope", "evidence-append",
     "evidence-verify", "preflight", "export-schemas", "qa-run-todo",
 )
 
 
-def test_10_exactly_27_unique_registered_operations() -> None:
+def test_10_exactly_28_unique_registered_operations() -> None:
     names = tuple(op.name for op in OPERATIONS)
-    assert len(names) == 27
-    assert len(set(names)) == 27
+    assert len(names) == 28
+    assert len(set(names)) == 28
     assert set(names) == set(EXPECTED_OPERATIONS)
     assert all(op.module.startswith("services.") for op in OPERATIONS)
 
