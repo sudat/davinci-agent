@@ -1,0 +1,358 @@
+"""Presentation intents + style-density guard tests (task 32).
+
+Given the 10 PRD 10.2 semantic presentation intents and a Channel
+Presentation Profile (PRD 10.6, all fields), the schema validates every kind
+with table-driven per-kind params, and the guard:
+
+(a) constructs + canonical-JSON round-trips all 10 kinds;
+(b) rejects unknown kinds and params/kind mismatches (malformed input);
+(c) accepts an intent set within every per-kind and global cap;
+(d) rejects a per-kind over-limit with a typed error naming the cap + count;
+(e) rejects a global per-minute over-limit;
+(f) rejects punch-in params outside the profile range;
+(g) exposes NO effect-introduction API (structural module-surface check —
+    the Gate-quota prohibition is enforced by the module surface itself);
+(h) loads the shipped default profile and round-trips it (stale state).
+
+Task-31 seam: attach_presentation_intents returns a new TimelineIrV2 with
+presentation_intent_refs set; the source IR stays untouched.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from types import FunctionType
+from typing import get_args
+
+import pytest
+from pydantic import ValidationError
+
+import services.creative_plan.presentation_intents as pi
+from services.creative_plan.ir_models_v2 import TimelineIrV2
+from services.creative_plan.presentation_intents import (
+    ALL_KINDS,
+    AudioPolicy,
+    BrandAssets,
+    ChannelPresentationProfile,
+    ClosedRange,
+    ColorPolicy,
+    DensityLimitExceededError,
+    DensityLimits,
+    DensityReport,
+    IntroOutroRules,
+    PresentationIntentKind,
+    PresentationIntentV2,
+    ProfileRangeViolationError,
+    PunchInRange,
+    SfxPolicy,
+    SubtitleStyle,
+    TitleChoices,
+    TransitionPreferences,
+    attach_presentation_intents,
+    check_density,
+    load_default_profile,
+    validate_against_profile,
+)
+from services.policy.check_scope import scan_config_tree
+
+IR_JSON = """
+{
+  "schema_version": "timeline-ir-v2",
+  "episode_id": "ep-t",
+  "rate": {"num": 30, "den": 1},
+  "video_tracks": [{
+    "role": "primary",
+    "track_id": "vt-1",
+    "items": [{
+      "item_id": "clip-1",
+      "source": {"source_id": "src-1",
+                 "span": {"start_frame": 0, "end_frame": 90,
+                          "rate": {"num": 30, "den": 1}}},
+      "record_span": {"start_frame": 0, "end_frame": 90},
+      "candidate_ref": "cand-1"
+    }]
+  }]
+}
+"""
+
+_VALID_PARAMS: dict[str, dict[str, object]] = {
+    "emphasis_punch_in": {"scale": 1.15, "duration_frames": 24},
+    "broll_cutaway": {"content_hint": "city skyline"},
+    "lower_third": {"text": "Guest: Ada L.", "duration_frames": 120},
+    "keyword_text": {"text": "30-minute rule", "duration_frames": 36},
+    "chapter_card": {"title": "Chapter 1", "duration_frames": 90},
+    "simple_dissolve": {"duration_frames": 12},
+    "motion_transition": {"duration_frames": 18},
+    "picture_in_picture": {"scale": 0.3, "corner": "bottom_right"},
+    "screen_highlight": {
+        "center_x": 0.5,
+        "center_y": 0.5,
+        "width": 0.4,
+        "height": 0.3,
+    },
+    "sfx_accent": {"cue_hint": "whoosh"},
+}
+
+EXPECTED_SURFACE = {
+    "attach_presentation_intents",
+    "check_density",
+    "load_default_profile",
+    "validate_against_profile",
+}
+
+
+def _intent(
+    kind: str,
+    params: dict[str, object] | None = None,
+    *,
+    ordinal: int = 0,
+    start: int = 0,
+) -> PresentationIntentV2:
+    payload = {
+        "intent_id": f"pi-{kind}-{ordinal}",
+        "kind": kind,
+        "target_span": {"start_frame": start, "end_frame": start + 24},
+        "params": _VALID_PARAMS[kind] if params is None else params,
+        "rationale": "test intent: emphasis for pacing",
+    }
+    return PresentationIntentV2.model_validate(payload)
+
+
+def _profile(*, per_kind_cap: float = 3.0, global_per_minute: float = 12.0):
+    return ChannelPresentationProfile(
+        schema_version="channel-presentation-profile-v1",
+        channel_id="ch-test",
+        allowed_recipe_families=(
+            "audio",
+            "branding",
+            "color",
+            "motion",
+            "subtitle",
+            "title",
+            "transitions",
+        ),
+        density=DensityLimits(
+            per_kind=dict.fromkeys(ALL_KINDS, per_kind_cap),
+            global_per_minute=global_per_minute,
+        ),
+        title_choices=TitleChoices(
+            opening="title/opening",
+            chapter="title/opening",
+            lower_third="title/lower-third",
+        ),
+        subtitle_style=SubtitleStyle(
+            recipe_id="subtitle/default", max_line_length_chars=32, font_size_px=24
+        ),
+        transition_preferences=TransitionPreferences(
+            preferred_order=("dissolve", "motion", "hard_cut"), max_duration_frames=30
+        ),
+        punch_in_range=PunchInRange(min=1.05, max=1.3),
+        audio_policy=AudioPolicy(
+            dialogue_lufs=ClosedRange(min=-23.0, max=-14.0),
+            true_peak_db=ClosedRange(min=-3.0, max=-1.0),
+            bgm_duck_level_db=ClosedRange(min=-20.0, max=-6.0),
+            sfx=SfxPolicy(allowed=True, max_per_minute=3.0),
+        ),
+        color_policy=ColorPolicy(
+            technical_normalize_required=True,
+            shot_match_required=True,
+            channel_look="color/channel-look",
+        ),
+        intro_outro=IntroOutroRules(mode="optional", max_duration_frames=180),
+        brand_assets=BrandAssets(
+            fonts=("NotoSansJP",), logo=None, safe_margin_pct=5.0, licenses=()
+        ),
+    )
+
+
+# ------------------------------------------------------ kinds + round-trip
+
+
+def test_kind_table_matches_literal_exactly_ten():
+    assert set(ALL_KINDS) == set(get_args(PresentationIntentKind))
+    assert len(ALL_KINDS) == 10
+
+
+@pytest.mark.parametrize("kind", ALL_KINDS)
+def test_every_kind_constructs_and_round_trips(kind):
+    intent = _intent(kind)
+    assert intent.kind == kind
+    parsed = PresentationIntentV2.model_validate_json(intent.model_dump_json())
+    assert parsed == intent
+    assert parsed.params == intent.params
+
+
+# ------------------------------------------------------ malformed input
+
+
+def test_unknown_kind_rejected():
+    payload = {
+        "intent_id": "pi-bad",
+        "kind": "wipe_transition",
+        "target_span": {"start_frame": 0, "end_frame": 12},
+        "params": {},
+        "rationale": "never a valid semantic kind",
+    }
+    with pytest.raises(ValidationError, match="wipe_transition"):
+        PresentationIntentV2.model_validate(payload)
+
+
+def test_params_kind_mismatch_rejected():
+    payload = {
+        "intent_id": "pi-mix",
+        "kind": "chapter_card",
+        "target_span": {"start_frame": 0, "end_frame": 60},
+        "params": {"scale": 1.2, "duration_frames": 10},
+        "rationale": "punch-in params on a chapter card",
+    }
+    with pytest.raises(ValidationError):
+        PresentationIntentV2.model_validate(payload)
+
+
+# ------------------------------------------------------ within limits
+
+
+def test_within_limits_intent_set_passes():
+    profile = _profile()
+    intents = [_intent(kind, ordinal=0) for kind in ALL_KINDS]
+    report = check_density(intents, profile, timeline_duration_seconds=600.0)
+    assert isinstance(report, DensityReport)
+    assert report.intent_count == 10
+    assert report.violations == ()
+    assert report.counts_by_kind["chapter_card"] == 1
+
+
+# ------------------------------------------------------ density caps
+
+
+def test_per_kind_over_limit_names_cap_and_count():
+    profile = _profile(per_kind_cap=3.0, global_per_minute=100.0)
+    intents = [_intent("sfx_accent", ordinal=i) for i in range(4)]
+    with pytest.raises(DensityLimitExceededError) as excinfo:
+        check_density(intents, profile, timeline_duration_seconds=60.0)
+    (violation,) = excinfo.value.report.violations
+    assert violation.scope == "per_kind"
+    assert violation.kind == "sfx_accent"
+    assert violation.count == 4
+    assert "sfx_accent" in str(excinfo.value)
+    assert "3.00/min" in str(excinfo.value)
+
+
+def test_global_over_limit_rejected():
+    profile = _profile(per_kind_cap=50.0, global_per_minute=5.0)
+    intents = [_intent("sfx_accent", ordinal=i) for i in range(6)]
+    with pytest.raises(DensityLimitExceededError) as excinfo:
+        check_density(intents, profile, timeline_duration_seconds=60.0)
+    (violation,) = excinfo.value.report.violations
+    assert violation.scope == "global"
+    assert violation.kind is None
+    assert "global" in str(excinfo.value)
+
+
+def test_non_positive_duration_rejected():
+    with pytest.raises(ValueError, match="positive"):
+        check_density([_intent("sfx_accent")], _profile(), timeline_duration_seconds=0.0)
+
+
+# ------------------------------------------------ punch-in profile range
+
+
+def test_punch_in_out_of_profile_range_rejected():
+    profile = _profile()
+    hot = _intent("emphasis_punch_in", {"scale": 1.6, "duration_frames": 24})
+    with pytest.raises(ProfileRangeViolationError, match="punch_in"):
+        validate_against_profile([hot], profile)
+
+
+def test_punch_in_within_profile_range_accepted():
+    profile = _profile()
+    ok = _intent("emphasis_punch_in", {"scale": 1.2, "duration_frames": 24})
+    assert validate_against_profile([ok], profile) is None
+
+
+# ------------------------------------------- no effect-introduction API
+
+
+def test_no_effect_introduction_api():
+    own_functions = {
+        name
+        for name, member in vars(pi).items()
+        if isinstance(member, FunctionType)
+        and not name.startswith("_")
+        and member.__module__ == pi.__name__
+    }
+    assert own_functions == EXPECTED_SURFACE
+    assert not [
+        name
+        for name in own_functions
+        if re.search(r"(?i)insert|append|ensure|satisfy|spawn|create", name)
+    ]
+    for model in (pi.PresentationIntentV2, pi.ChannelPresentationProfile, pi.DensityReport):
+        assert not [
+            m for m in vars(model) if re.search(r"(?i)insert|append|ensure|satisfy|spawn", m)
+        ]
+
+
+# ------------------------------------------------------ default profile
+
+
+def test_default_profile_loads_and_round_trips():
+    profile = load_default_profile()
+    assert profile.channel_id == "default"
+    assert profile.density.global_per_minute > 0
+    assert all(profile.density.per_kind[kind] > 0 for kind in ALL_KINDS)
+    assert profile.punch_in_range.min >= 1.0
+    again = ChannelPresentationProfile.model_validate_json(profile.model_dump_json())
+    assert again == profile
+
+
+def test_default_profile_config_keys_pass_scope_guard():
+    # Kind names (e.g. motion_transition) must be wire VALUES, never JSON
+    # keys — config keys carrying phase-4 tokens break check_scope --config.
+    violations = scan_config_tree(Path(__file__).resolve().parents[2])
+    assert violations == []
+
+
+def test_density_wire_entry_duplicate_kind_rejected():
+    payload = {
+        "per_kind": [
+            {"kind": "sfx_accent", "cap_per_minute": 1.0},
+            {"kind": "sfx_accent", "cap_per_minute": 2.0},
+        ],
+        "global_per_minute": 5.0,
+    }
+    with pytest.raises(ValidationError, match="twice"):
+        DensityLimits.model_validate(payload)
+
+
+def test_density_missing_kind_cap_rejected():
+    payload = {
+        "per_kind": [{"kind": "sfx_accent", "cap_per_minute": 1.0}],
+        "global_per_minute": 5.0,
+    }
+    with pytest.raises(ValidationError, match="missing"):
+        DensityLimits.model_validate(payload)
+
+
+# ---------------------------------------------------- task-31 IR seam
+
+
+def test_attach_presentation_intents_sets_refs_additively():
+    ir = TimelineIrV2.model_validate_json(IR_JSON)
+    intents = [
+        _intent("lower_third", ordinal=0),
+        _intent("keyword_text", ordinal=1),
+    ]
+    attached = attach_presentation_intents(ir, intents)
+    assert attached.presentation_intent_refs == ("pi-lower_third-0", "pi-keyword_text-1")
+    assert ir.presentation_intent_refs == ()
+    assert attached.episode_id == ir.episode_id
+
+
+def test_attach_rejects_duplicate_intent_ids():
+    ir = TimelineIrV2.model_validate_json(IR_JSON)
+    first = _intent("sfx_accent", ordinal=0)
+    second = _intent("sfx_accent", ordinal=0)
+    with pytest.raises(ValueError, match="unique"):
+        attach_presentation_intents(ir, [first, second])

@@ -1,0 +1,79 @@
+{
+  "schema_version": "channel-presentation-profile-v1",
+  "channel_id": "default",
+  "allowed_recipe_families": [
+    "audio",
+    "branding",
+    "color",
+    "motion",
+    "subtitle",
+    "title",
+    "transitions"
+  ],
+  "density": {
+    "per_kind": [
+      {"kind": "emphasis_punch_in", "cap_per_minute": 2.0},
+      {"kind": "broll_cutaway", "cap_per_minute": 4.0},
+      {"kind": "lower_third", "cap_per_minute": 2.0},
+      {"kind": "keyword_text", "cap_per_minute": 3.0},
+      {"kind": "chapter_card", "cap_per_minute": 1.0},
+      {"kind": "simple_dissolve", "cap_per_minute": 4.0},
+      {"kind": "motion_transition", "cap_per_minute": 2.0},
+      {"kind": "picture_in_picture", "cap_per_minute": 1.0},
+      {"kind": "screen_highlight", "cap_per_minute": 2.0},
+      {"kind": "sfx_accent", "cap_per_minute": 3.0}
+    ],
+    "global_per_minute": 12.0
+  },
+  "title_choices": {
+    "opening": "title/opening",
+    "chapter": "title/opening",
+    "lower_third": "title/lower-third"
+  },
+  "subtitle_style": {
+    "recipe_id": "subtitle/default",
+    "max_line_length_chars": 32,
+    "font_size_px": 24
+  },
+  "transition_preferences": {
+    "preferred_order": ["dissolve", "motion", "hard_cut"],
+    "max_duration_frames": 30
+  },
+  "punch_in_range": {
+    "min": 1.05,
+    "max": 1.3
+  },
+  "audio_policy": {
+    "dialogue_lufs": {
+      "min": -23.0,
+      "max": -14.0
+    },
+    "true_peak_db": {
+      "min": -3.0,
+      "max": -1.0
+    },
+    "bgm_duck_level_db": {
+      "min": -20.0,
+      "max": -6.0
+    },
+    "sfx": {
+      "allowed": true,
+      "max_per_minute": 3.0
+    }
+  },
+  "color_policy": {
+    "technical_normalize_required": true,
+    "shot_match_required": true,
+    "channel_look": "color/channel-look"
+  },
+  "intro_outro": {
+    "mode": "optional",
+    "max_duration_frames": 180
+  },
+  "brand_assets": {
+    "fonts": ["NotoSansJP"],
+    "logo": null,
+    "safe_margin_pct": 5.0,
+    "licenses": []
+  }
+}
