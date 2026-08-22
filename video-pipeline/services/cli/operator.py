@@ -76,6 +76,7 @@ OPERATIONS: Final[tuple[Operation, ...]] = (
     Operation("materialize", "services.fixtures.materialize", "materialize frozen fixtures"),
     Operation("toolchain-verify", "services.toolchain.verify", "verify the pinned toolchain"),
     Operation("mcp-doctor", "services.cli.mcp_doctor", "verify the pinned davinci-resolve-mcp"),
+    Operation("episode0", "services.cli.episode0", "episode-0 longitudinal baseline tooling"),
     Operation(
         "toolchain-ledger", "services.toolchain.execution_ledger", "execution ledger events"
     ),
