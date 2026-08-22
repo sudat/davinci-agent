@@ -1,5 +1,5 @@
 /**
- * Typed thin client for the episode cockpit backend (task 44).
+ * Typed thin client for the episode cockpit backend (task 44 + 46).
  *
  * Contract notes (read from video-pipeline/services/episode_cockpit/*):
  * - POST /episodes takes a STRICT body: only `source_folder` and
@@ -12,31 +12,19 @@
  *   cross-origin (localhost:3100 → 127.0.0.1:8765 is CORS-blocked).
  *   Set COCKPIT_API (server-side rewrite target) or
  *   NEXT_PUBLIC_COCKPIT_API (direct browser base) to override.
+ * - Task-46 optional fields (eta_minutes / work_units / before_after /
+ *   flags.at_seconds) render ONLY when the payload carries them — the UI
+ *   never invents precision (PRD 13.2).
  */
 
-export const DEFAULT_API_BASE = "/cockpit-api";
+import {
+  apiBase,
+  CockpitApiError,
+  request,
+  type FetchLike,
+} from "@/lib/http";
 
-/**
- * Sanitize an env value: treat missing, empty, and the literal strings
- * "undefined"/"null" as unset. (Some test transforms inline
- * `process.env.<KEY>` as the STRING "undefined" in src modules, so a bare
- * trim/empty check is not enough.)
- */
-function sanitizeEnv(value: string | undefined): string {
-  if (value === undefined) return "";
-  const trimmed = value.trim();
-  return trimmed === "" || trimmed === "undefined" || trimmed === "null"
-    ? ""
-    : trimmed;
-}
-
-export function apiBase(): string {
-  return (
-    sanitizeEnv(process.env.NEXT_PUBLIC_COCKPIT_API) ||
-    sanitizeEnv(process.env.COCKPIT_API) ||
-    DEFAULT_API_BASE
-  );
-}
+export { apiBase, CockpitApiError, DEFAULT_API_BASE } from "@/lib/http";
 
 export type EpisodeCreateInput = {
   source_folder: string;
@@ -57,6 +45,25 @@ export type StageRun = {
   last_error_code: string | null;
 };
 
+/** Completed/remaining work units — present only when the backend counts them. */
+export type WorkUnits = {
+  completed: number;
+  remaining: number;
+};
+
+/** Before-vs-after comparison — embedded in the detail payload when the
+ *  backend has one; absent otherwise (render-when-present, task 46). */
+export type BeforeAfterItem = {
+  label: string;
+  before: string;
+  after: string;
+};
+
+export type BeforeAfterSummary = {
+  summary: string;
+  items?: BeforeAfterItem[];
+};
+
 export type EpisodeStatus = {
   episode_id: string;
   job_id: string;
@@ -65,93 +72,27 @@ export type EpisodeStatus = {
   created_at_seq: number;
   updated_at_seq: number;
   stage_runs: StageRun[];
+  /** Measured-history ETA in minutes. ABSENT until the backend measures
+   *  historical stage timing — the UI never invents it (PRD 13.2). */
+  eta_minutes?: number;
+  work_units?: WorkUnits;
+  before_after?: BeforeAfterSummary;
 };
 
-export class CockpitApiError extends Error {
-  readonly code: string;
-  readonly status: number;
-  readonly detail: string;
+/** One flagged review item. `at_seconds` is optional: the task-44 flags
+ *  payload carries sequence/kind/reason only; timestamps arrive when the
+ *  backend surfaces them — until then flags render without seek. */
+export type ReviewFlag = {
+  sequence: number;
+  kind: string;
+  reason: string | null;
+  at_seconds?: number;
+};
 
-  constructor(code: string, status: number, detail: string) {
-    super(`${code} (HTTP ${status}): ${detail}`);
-    this.name = "CockpitApiError";
-    this.code = code;
-    this.status = status;
-    this.detail = detail;
-  }
-}
-
-type FetchLike = typeof fetch;
-
-function stringifyDetail(detail: unknown): string {
-  if (typeof detail === "string") return detail;
-  if (detail === undefined || detail === null) return "";
-  try {
-    return JSON.stringify(detail);
-  } catch {
-    return String(detail);
-  }
-}
-
-function errorFromEnvelope(body: unknown, status: number): CockpitApiError | null {
-  if (typeof body !== "object" || body === null) return null;
-  const envelope = body as { error?: unknown };
-  if (typeof envelope.error !== "object" || envelope.error === null) return null;
-  const inner = envelope.error as { code?: unknown; detail?: unknown };
-  const code = typeof inner.code === "string" && inner.code !== "" ? inner.code : "unknown-error";
-  return new CockpitApiError(code, status, stringifyDetail(inner.detail));
-}
-
-async function request<T>(
-  path: string,
-  init: RequestInit,
-  fetchImpl: FetchLike,
-): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetchImpl(`${apiBase()}${path}`, {
-      ...init,
-      headers: { "content-type": "application/json", ...init.headers },
-    });
-  } catch (cause) {
-    throw new CockpitApiError(
-      "network-error",
-      0,
-      `バックエンドに接続できません: ${String(cause)}`,
-    );
-  }
-
-  const text = await response.text();
-  let body: unknown;
-  let parsed = false;
-  if (text !== "") {
-    try {
-      body = JSON.parse(text);
-      parsed = true;
-    } catch {
-      parsed = false;
-    }
-  }
-
-  if (!response.ok) {
-    const fromEnvelope = errorFromEnvelope(body, response.status);
-    if (fromEnvelope !== null) throw fromEnvelope;
-    throw new CockpitApiError(
-      `http-${response.status}`,
-      response.status,
-      text.slice(0, 200),
-    );
-  }
-
-  if (!parsed) {
-    throw new CockpitApiError(
-      "unexpected-response",
-      response.status,
-      `JSONではありません: ${text.slice(0, 200)}`,
-    );
-  }
-  return body as T;
-}
+export type FlagsPayload = {
+  flags: ReviewFlag[];
+  not_yet_generated: boolean;
+};
 
 export async function createEpisode(
   input: EpisodeCreateInput,
@@ -171,6 +112,109 @@ export async function getEpisodeStatus(
   return request<EpisodeStatus>(
     `/episodes/${encodeURIComponent(episodeId)}`,
     { method: "GET" },
+    fetchImpl,
+  );
+}
+
+export async function getEpisodeFlags(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<FlagsPayload> {
+  return request<FlagsPayload>(
+    `/episodes/${encodeURIComponent(episodeId)}/flags`,
+    { method: "GET" },
+    fetchImpl,
+  );
+}
+
+export function previewUrl(episodeId: string): string {
+  return `${apiBase()}/episodes/${encodeURIComponent(episodeId)}/preview`;
+}
+
+/** Probe GET /episodes/{id}/preview with a 2-byte Range request (the
+ *  FastAPI route answers 405 to HEAD): 2xx → file exists; anything else →
+ *  not generated (episode existence is already known from status). */
+export async function probeEpisodePreview(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await fetchImpl(previewUrl(episodeId), {
+      method: "GET",
+      headers: { range: "bytes=0-1" },
+    });
+  } catch (cause) {
+    throw new CockpitApiError(
+      "network-error",
+      0,
+      `バックエンドに接続できません: ${String(cause)}`,
+    );
+  }
+  return response.ok;
+}
+
+// Reference learning surface (task 50)
+
+export const PREFERENCE_DOMAINS = [
+  "story_structure",
+  "pacing",
+  "color",
+  "subtitle",
+  "b_roll",
+  "framing_graphics",
+  "audio",
+] as const;
+
+export type PreferenceDomain = (typeof PREFERENCE_DOMAINS)[number];
+
+export type Polarity = "like" | "dislike" | "neutral" | "unspecified";
+
+export type DomainPolarities = Partial<Record<PreferenceDomain, Polarity>>;
+
+export type ParsePreviewDraft = {
+  named_domains: PreferenceDomain[];
+  domains: DomainPolarities;
+  needs_review: boolean;
+  rationale: string;
+  confidence: number;
+  ts_seconds: number | null;
+};
+
+export type ParsePreviewInput = {
+  text: string;
+  ts_seconds?: number;
+};
+
+export async function parseReferencePreview(
+  input: ParsePreviewInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<ParsePreviewDraft> {
+  return request<ParsePreviewDraft>(
+    "/references/parse-preview",
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+}
+
+export type ReferenceRegisterInput = {
+  path: string;
+  source_id?: string;
+};
+
+export type ReferenceRegisterResult = {
+  source_id: string;
+  sha256: string;
+  library_version: number;
+};
+
+export async function registerReference(
+  input: ReferenceRegisterInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<ReferenceRegisterResult> {
+  return request<ReferenceRegisterResult>(
+    "/references",
+    { method: "POST", body: JSON.stringify(input) },
     fetchImpl,
   );
 }

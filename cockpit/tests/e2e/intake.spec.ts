@@ -35,7 +35,10 @@ test("intake → Create → episode status view (backend receives POST)", async 
   page,
   request,
 }) => {
-  const consoleErrors = trackConsoleErrors(page);
+  // 404 allow-list: the episode view (task 46) probes
+  // GET /episodes/{id}/preview while polling — expected 404s until the
+  // preview is generated; Chromium logs every failed resource load.
+  const consoleErrors = trackConsoleErrors(page, [404]);
 
   await page.goto("/");
   await expect(page).toHaveURL(/\/new-episode$/);

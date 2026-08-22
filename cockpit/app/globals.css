@@ -315,3 +315,131 @@ table.stage-runs th {
   margin-bottom: var(--space-4);
   color: var(--accent);
 }
+
+.section-title {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin: var(--space-2) 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-caption);
+}
+
+.chip select {
+  width: auto;
+  font-size: var(--font-size-caption);
+  padding: 0 var(--space-1);
+}
+
+.chip-like {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip-dislike {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.chip-neutral {
+  color: var(--muted);
+}
+
+.notice-hint {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+  margin: var(--space-2) 0;
+}
+
+.choice-button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.card-title {
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+.video-player {
+  display: block;
+  width: 100%;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.preview-pending {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--muted);
+  padding: var(--space-4);
+  margin: 0;
+}
+
+.preview-pending .field-hint {
+  margin-bottom: 0;
+}
+
+.work-units {
+  margin: 0 0 var(--space-2);
+  font-weight: 600;
+}
+
+.flag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.flag-list > li {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.flag-meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+}
+
+.flag-reason {
+  margin: var(--space-1) 0 0;
+}
+
+.flag-jump-row {
+  margin-top: var(--space-2);
+}
+
+.flag-jump-row .field-hint {
+  margin: var(--space-1) 0 0;
+}
+
+.before-after-summary {
+  margin: 0 0 var(--space-3);
+}

@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  getEpisodeFlags,
   getEpisodeStatus,
+  probeEpisodePreview,
   CockpitApiError,
   type EpisodeStatus,
+  type FlagsPayload,
 } from "@/lib/api";
 import ErrorNotice from "@/components/ErrorNotice";
+import EpisodeProgress from "@/components/EpisodeProgress";
+import PreviewPlayer, { type PreviewAvailability } from "@/components/PreviewPlayer";
+import FlagList from "@/components/FlagList";
+import BeforeAfterSummary from "@/components/BeforeAfterSummary";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -16,17 +23,22 @@ type EpisodeViewProps = {
 };
 
 /**
- * Simple stage/progress readout over GET /episodes/{id} with polling.
- * No ETA — historical stage timing is not measured yet (PRD 13.2: never
- * invent precision). Later tasks (46+) extend this view with the preview
- * player, flags and review chat.
+ * Episode status view: polling progress (ETA only when measured),
+ * preview player, flagged review items with timestamp jump, and the
+ * before/after summary when the payload carries one (task 46).
  */
 export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const [status, setStatus] = useState<EpisodeStatus | null>(null);
-  const [error, setError] = useState<{ code: string; detail: string } | null>(
-    null,
-  );
+  const [flags, setFlags] = useState<FlagsPayload | null>(null);
+  const [preview, setPreview] = useState<PreviewAvailability>("checking");
+  const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const seekTo = useCallback((seconds: number) => {
+    const video = videoRef.current;
+    if (video !== null) video.currentTime = seconds;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +50,15 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         if (cancelled) return;
         setStatus(next);
         setError(null);
+        const [flagsResult, previewResult] = await Promise.allSettled([
+          getEpisodeFlags(episodeId),
+          probeEpisodePreview(episodeId),
+        ]);
+        if (cancelled) return;
+        if (flagsResult.status === "fulfilled") setFlags(flagsResult.value);
+        if (previewResult.status === "fulfilled") {
+          setPreview(previewResult.value ? "available" : "not_generated");
+        }
       } catch (cause) {
         if (cancelled) return;
         if (cause instanceof CockpitApiError) {
@@ -47,10 +68,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             return; // stop polling — the episode does not exist
           }
         } else {
-          setError({
-            code: "unexpected-client-error",
-            detail: String(cause),
-          });
+          setError({ code: "unexpected-client-error", detail: String(cause) });
         }
       }
       if (!cancelled) {
@@ -72,6 +90,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       </Link>
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       <section className="card">
+        <h2 className="card-title">進捗</h2>
         <dl className="status-list">
           <div>
             <dt>エピソード</dt>
@@ -88,35 +107,32 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             </dd>
           </div>
         </dl>
-        {status !== null && status.stage_runs.length > 0 ? (
-          <table className="stage-runs">
-            <thead>
-              <tr>
-                <th>ステージ</th>
-                <th>状態</th>
-                <th>リトライ</th>
-                <th>最終エラー</th>
-              </tr>
-            </thead>
-            <tbody>
-              {status.stage_runs.map((run) => (
-                <tr key={run.stage_name}>
-                  <td>{run.stage_name}</td>
-                  <td>{run.status}</td>
-                  <td>{run.retry_count}</td>
-                  <td>{run.last_error_code ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {notFound ? (
+          <p className="empty-note">このエピソードは見つかりません。</p>
+        ) : status !== null ? (
+          <EpisodeProgress status={status} />
         ) : (
-          <p className="empty-note">
-            {notFound
-              ? "このエピソードは見つかりません。"
-              : "ステージ実行はまだありません。2秒ごとに自動更新します。"}
-          </p>
+          <p className="empty-note">読み込み中…</p>
         )}
       </section>
+      <section className="card">
+        <h2 className="card-title">プレビュー</h2>
+        <PreviewPlayer episodeId={episodeId} state={preview} videoRef={videoRef} />
+      </section>
+      <section className="card">
+        <h2 className="card-title">レビューflag</h2>
+        {flags !== null ? (
+          <FlagList
+            flags={flags.flags}
+            notYetGenerated={flags.not_yet_generated}
+            canSeek={preview === "available"}
+            onSeek={seekTo}
+          />
+        ) : (
+          <p className="empty-note">レビューflagの有無を確認しています…</p>
+        )}
+      </section>
+      <BeforeAfterSummary summary={status?.before_after ?? null} />
     </div>
   );
 }
