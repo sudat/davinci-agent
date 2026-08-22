@@ -1,0 +1,176 @@
+/**
+ * Typed thin client for the episode cockpit backend (task 44).
+ *
+ * Contract notes (read from video-pipeline/services/episode_cockpit/*):
+ * - POST /episodes takes a STRICT body: only `source_folder` and
+ *   `brief_text` (extra keys are rejected with 422 validation-error), so
+ *   this client must never add intake-only UI fields to the request.
+ * - Every backend failure is `{error: {code, detail}}`; `detail` may be a
+ *   string OR a structured array (validation-error). Both are preserved.
+ * - Default base is the SAME-ORIGIN proxy path (/cockpit-api → next.config
+ *   rewrites → COCKPIT_API): the browser must not call the backend
+ *   cross-origin (localhost:3100 → 127.0.0.1:8765 is CORS-blocked).
+ *   Set COCKPIT_API (server-side rewrite target) or
+ *   NEXT_PUBLIC_COCKPIT_API (direct browser base) to override.
+ */
+
+export const DEFAULT_API_BASE = "/cockpit-api";
+
+/**
+ * Sanitize an env value: treat missing, empty, and the literal strings
+ * "undefined"/"null" as unset. (Some test transforms inline
+ * `process.env.<KEY>` as the STRING "undefined" in src modules, so a bare
+ * trim/empty check is not enough.)
+ */
+function sanitizeEnv(value: string | undefined): string {
+  if (value === undefined) return "";
+  const trimmed = value.trim();
+  return trimmed === "" || trimmed === "undefined" || trimmed === "null"
+    ? ""
+    : trimmed;
+}
+
+export function apiBase(): string {
+  return (
+    sanitizeEnv(process.env.NEXT_PUBLIC_COCKPIT_API) ||
+    sanitizeEnv(process.env.COCKPIT_API) ||
+    DEFAULT_API_BASE
+  );
+}
+
+export type EpisodeCreateInput = {
+  source_folder: string;
+  brief_text: string;
+};
+
+export type EpisodeCreateResult = {
+  episode_id: string;
+  job_id: string;
+  status: string;
+  brief_status: string;
+};
+
+export type StageRun = {
+  stage_name: string;
+  status: string;
+  retry_count: number;
+  last_error_code: string | null;
+};
+
+export type EpisodeStatus = {
+  episode_id: string;
+  job_id: string;
+  status: string;
+  current_stage: string;
+  created_at_seq: number;
+  updated_at_seq: number;
+  stage_runs: StageRun[];
+};
+
+export class CockpitApiError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly detail: string;
+
+  constructor(code: string, status: number, detail: string) {
+    super(`${code} (HTTP ${status}): ${detail}`);
+    this.name = "CockpitApiError";
+    this.code = code;
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+type FetchLike = typeof fetch;
+
+function stringifyDetail(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (detail === undefined || detail === null) return "";
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
+  }
+}
+
+function errorFromEnvelope(body: unknown, status: number): CockpitApiError | null {
+  if (typeof body !== "object" || body === null) return null;
+  const envelope = body as { error?: unknown };
+  if (typeof envelope.error !== "object" || envelope.error === null) return null;
+  const inner = envelope.error as { code?: unknown; detail?: unknown };
+  const code = typeof inner.code === "string" && inner.code !== "" ? inner.code : "unknown-error";
+  return new CockpitApiError(code, status, stringifyDetail(inner.detail));
+}
+
+async function request<T>(
+  path: string,
+  init: RequestInit,
+  fetchImpl: FetchLike,
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${apiBase()}${path}`, {
+      ...init,
+      headers: { "content-type": "application/json", ...init.headers },
+    });
+  } catch (cause) {
+    throw new CockpitApiError(
+      "network-error",
+      0,
+      `バックエンドに接続できません: ${String(cause)}`,
+    );
+  }
+
+  const text = await response.text();
+  let body: unknown;
+  let parsed = false;
+  if (text !== "") {
+    try {
+      body = JSON.parse(text);
+      parsed = true;
+    } catch {
+      parsed = false;
+    }
+  }
+
+  if (!response.ok) {
+    const fromEnvelope = errorFromEnvelope(body, response.status);
+    if (fromEnvelope !== null) throw fromEnvelope;
+    throw new CockpitApiError(
+      `http-${response.status}`,
+      response.status,
+      text.slice(0, 200),
+    );
+  }
+
+  if (!parsed) {
+    throw new CockpitApiError(
+      "unexpected-response",
+      response.status,
+      `JSONではありません: ${text.slice(0, 200)}`,
+    );
+  }
+  return body as T;
+}
+
+export async function createEpisode(
+  input: EpisodeCreateInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<EpisodeCreateResult> {
+  return request<EpisodeCreateResult>(
+    "/episodes",
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+}
+
+export async function getEpisodeStatus(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<EpisodeStatus> {
+  return request<EpisodeStatus>(
+    `/episodes/${encodeURIComponent(episodeId)}`,
+    { method: "GET" },
+    fetchImpl,
+  );
+}

@@ -10,3 +10,10 @@ video-pipeline/jobs/
 *.mov
 *.mkv
 .DS_Store
+cockpit/node_modules/
+cockpit/.next/
+cockpit/playwright-report/
+cockpit/test-results/
+cockpit/.e2e/
+cockpit/next-env.d.ts
+cockpit/tsconfig.tsbuildinfo
