@@ -1,4 +1,4 @@
-"""Job-state operations: intake, listing, status, publish stub.
+"""Job-state operations: intake, listing, status, publish-status read path.
 
 Episode identity is deterministic (``ep-`` + sha256 of the resolved source
 folder path), one job row per episode, and the job-runner StateStore is
@@ -12,6 +12,8 @@ import hashlib
 import sqlite3
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from services.episode_cockpit.errors import (
     CockpitConflictError,
     CockpitUnprocessableError,
@@ -21,9 +23,12 @@ from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.job_runner.state_errors import StateStoreError
 from services.job_runner.state_store import StateStore
+from services.publish.idempotency import UploadLedger, UploadLedgerError
+from services.publish.models import PublishPackageV1
 
 INTAKE_STAGE = "intake"
 BRIEF_NAME = "brief.json"
+PUBLISH_PACKAGE_RELATIVE = ("publish", "package.json")
 
 
 class JobOps(WorkspaceContext):
@@ -85,8 +90,42 @@ class JobOps(WorkspaceContext):
         }
 
     def publish_status(self, episode_id: str) -> dict[str, object]:
-        self._require_snapshot(episode_id)
-        return {"available": False, "reason": "publish-models-not-yet-available"}
+        """Read-only publish surface: package file + upload ledger, never a write."""
+        episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
+        package_path = episode_dir.joinpath(*PUBLISH_PACKAGE_RELATIVE)
+        if not package_path.is_file():
+            return {"available": False, "reason": "publish-package-not-built"}
+        try:
+            package = PublishPackageV1.model_validate_json(package_path.read_bytes())
+            ledger_record = UploadLedger(
+                package_path.parent, package.channel_target
+            ).lookup(package.idempotency_key)
+        except (OSError, ValidationError, UploadLedgerError) as error:
+            raise CockpitUnprocessableError("publish-state-unreadable", str(error)) from error
+        upload: dict[str, object] | None = None
+        remote_link: str | None = None
+        if ledger_record is not None:
+            upload = {
+                "status": ledger_record.status,
+                "video_id": ledger_record.video_id,
+                "reason": ledger_record.reason,
+            }
+            if ledger_record.status == "completed" and ledger_record.video_id:
+                remote_link = f"https://youtu.be/{ledger_record.video_id}"
+        return {
+            "available": True,
+            "package": {
+                "selected_title": package.selected_title,
+                "title_candidates": list(package.title_candidates),
+                "visibility": package.visibility,
+                "channel_target": package.channel_target,
+                "idempotency_key": package.idempotency_key,
+                "schedule_time": package.schedule_time,
+                "remote_video_id": package.remote_video_id,
+            },
+            "upload": upload,
+            "remote_link": remote_link,
+        }
 
     def _list_job_rows(self) -> list[dict[str, object]]:
         if not self._state_store_path.is_file():
@@ -115,4 +154,9 @@ class JobOps(WorkspaceContext):
         ]
 
 
-__all__ = ["BRIEF_NAME", "INTAKE_STAGE", "JobOps"]
+__all__ = [
+    "BRIEF_NAME",
+    "INTAKE_STAGE",
+    "PUBLISH_PACKAGE_RELATIVE",
+    "JobOps",
+]
