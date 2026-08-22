@@ -24,6 +24,7 @@ import duckdb
 
 from services.foundation_io import canonical_model_bytes
 from services.media_intelligence.models import MediaIntelligenceArtifact, Shot
+from services.media_intelligence.moment_review import MomentDeepReviewV1, review_rows
 from services.media_query.v2_models import ApiIndexErrorV2
 
 V2_SCHEMA_MARKER: Final = "media-intelligence-v2-index"
@@ -37,6 +38,7 @@ V2_INDEX_TABLES: Final[tuple[str, ...]] = (
     "mi_audio",
     "mi_similarity",
     "mi_search_texts",
+    "mi_moment_reviews",
 )
 
 _V2_DDL: Final[tuple[str, ...]] = (
@@ -71,6 +73,11 @@ _V2_DDL: Final[tuple[str, ...]] = (
     """CREATE TABLE mi_search_texts (shot_id TEXT NOT NULL, artifact_sha TEXT NOT NULL,
         seq INTEGER NOT NULL, field TEXT NOT NULL, text TEXT NOT NULL,
         PRIMARY KEY (shot_id, artifact_sha, seq))""",
+    """CREATE TABLE mi_moment_reviews (episode_id TEXT NOT NULL, review_id TEXT NOT NULL,
+        artifact_sha TEXT NOT NULL, start_frame BIGINT NOT NULL, end_frame BIGINT NOT NULL,
+        prev_shot_id TEXT, next_shot_id TEXT, overall_confidence DOUBLE NOT NULL,
+        provider TEXT NOT NULL, provider_version TEXT NOT NULL, tool TEXT NOT NULL,
+        PRIMARY KEY (review_id, artifact_sha))""",
 )
 
 
@@ -233,8 +240,17 @@ def open_read_only(index_path: Path) -> duckdb.DuckDBPyConnection:
 def build_index(
     artifacts: MediaIntelligenceArtifact | Sequence[MediaIntelligenceArtifact],
     db_path: Path,
+    *,
+    reviews: Sequence[MomentDeepReviewV1] = (),
 ) -> Path:
-    """Build (or idempotently rebuild) the v2 index file and return its path."""
+    """Build (or idempotently rebuild) the v2 index and return its path.
+
+    ``reviews`` is the task-17 additive input: committed
+    ``MomentDeepReviewV1`` artifacts indexed as ``mi_moment_reviews`` rows
+    (deterministically ordered via :func:`review_rows`). Indexes built
+    without reviews simply leave that table empty; the query surface treats
+    a missing table as zero reviews for pre-task-17 files.
+    """
 
     batch = [artifacts] if isinstance(artifacts, MediaIntelligenceArtifact) else list(artifacts)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -249,6 +265,11 @@ def build_index(
         connection.execute("INSERT INTO mi_meta VALUES ('schema', ?)", [V2_SCHEMA_MARKER])
         for artifact in batch:
             _insert_artifact_rows(connection, artifact, artifact_content_sha(artifact))
+        _executemany(
+            connection,
+            "INSERT INTO mi_moment_reviews VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            list(review_rows(reviews)),
+        )
         connection.execute("COMMIT")
     except BaseException:
         connection.execute("ROLLBACK")

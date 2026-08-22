@@ -185,12 +185,13 @@ def _page() -> vm.V2Pagination:
 # ---------------------------------------------------------------- surface
 
 
-def test_public_surface_is_exactly_the_ten_v2_methods(api: MediaQueryApiV2) -> None:
+def test_public_surface_is_exactly_the_v2_method_allowlist(api: MediaQueryApiV2) -> None:
     public = {
         name for name in dir(api) if not name.startswith("_") and callable(getattr(api, name))
     }
     assert public == vm.V2_PUBLIC_SURFACE
-    assert len(vm.V2_METHOD_ALLOWLIST) == 10
+    # 11 = the ten PRD 7.4 methods + the task-17 additive moment_reviews read path
+    assert len(vm.V2_METHOD_ALLOWLIST) == 11
 
 
 # ---------------------------------------------------------------- happy paths

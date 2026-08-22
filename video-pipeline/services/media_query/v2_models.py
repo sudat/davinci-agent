@@ -28,7 +28,11 @@ V2_ROW_BUDGET: Final = 500
 V2_METHOD_ALLOWLIST: Final[frozenset[str]] = frozenset({
     "shots", "shot_detail", "best_moments", "transcript_range", "semantic_shot_search",
     "similar_shots", "visible_text_candidates", "visual_quality_ranges",
-    "audio_energy_ranges", "scene_summary"})
+    "audio_energy_ranges", "scene_summary",
+    # 11th ADDITIVE method (task 17 / PRD 7.6): moment deep-review evidence
+    # lookup. The original ten PRD 7.4 methods are unchanged; additive growth
+    # of the allowlist is the documented extension path.
+    "moment_reviews"})
 V2_PUBLIC_SURFACE: Final[frozenset[str]] = V2_METHOD_ALLOWLIST | frozenset({"open", "close"})
 
 ShotIdValue = Annotated[str, StringConstraints(
@@ -136,6 +140,13 @@ class AudioEnergyRangesRequest(StrictModel):
 
 class SceneSummaryRequest(StrictModel):
     pass
+
+
+class MomentReviewsRequest(StrictModel):
+    """Task-17 additive request: deep-review rows overlapping an optional span."""
+
+    span: FrameSpan | None = None
+    pagination: V2Pagination
 
 
 class _LineageRow(StrictModel):
@@ -274,6 +285,24 @@ class SceneSummaryResponse(_BoundedV2):
     rows: tuple[SceneSummaryRow, ...]
 
 
+class MomentReviewRow(_LineageRow):
+    """One moment deep-review row; ``artifact_sha`` is the review content sha."""
+
+    review_id: str
+    episode_id: str
+    span: FrameSpan
+    prev_shot_id: str | None = None
+    next_shot_id: str | None = None
+    overall_confidence: float = Field(ge=0.0, le=1.0)
+    provider: str
+    provider_version: str
+    tool: str
+
+
+class MomentReviewsResponse(_PagedV2):
+    rows: tuple[MomentReviewRow, ...]
+
+
 __all__ = [
     "V2_MAX_PAGE_SIZE",
     "V2_METHOD_ALLOWLIST",
@@ -289,6 +318,9 @@ __all__ = [
     "BestMomentsRequest",
     "BestMomentsResponse",
     "FrameSpan",
+    "MomentReviewRow",
+    "MomentReviewsRequest",
+    "MomentReviewsResponse",
     "NameCount",
     "QualityRangeV2Row",
     "SceneSummaryRequest",

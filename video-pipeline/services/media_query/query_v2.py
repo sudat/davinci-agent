@@ -279,5 +279,34 @@ class MediaQueryApiV2:
                          []))
         return vm.SceneSummaryResponse(total=len(summary_rows), rows=summary_rows)
 
+    def moment_reviews(self, request: vm.MomentReviewsRequest) -> vm.MomentReviewsResponse:
+        """11th ADDITIVE read path (task 17 / PRD 7.6) — evidence rows only.
+
+        Returns deep-review rows overlapping the optional span. Indexes built
+        before task 17 lack ``mi_moment_reviews``; a missing table reads as
+        zero reviews rather than an error (the schema marker is unchanged).
+        """
+
+        if self.__scalar(
+            "SELECT count(*) FROM duckdb_tables() WHERE table_name = 'mi_moment_reviews'", []
+        ) == 0:
+            return vm.MomentReviewsResponse(total=0, rows=(), **self.__echo(request.pagination))
+        where, params = [], []
+        _apply_span(where, params, request.span)
+        clause = " AND ".join(where) or "1=1"
+        return self.__paged(
+            "moment_reviews", request.pagination,
+            count_sql=f"SELECT count(*) FROM mi_moment_reviews WHERE {clause}",  # noqa: S608
+            count_params=[*params],
+            page_sql="SELECT review_id, episode_id, artifact_sha, start_frame, end_frame, "  # noqa: S608
+                     f"prev_shot_id, next_shot_id, overall_confidence, provider, "
+                     f"provider_version, tool FROM mi_moment_reviews WHERE {clause} "
+                     f"ORDER BY start_frame, end_frame, review_id, artifact_sha "
+                     f"LIMIT ? OFFSET ?",
+            page_params=[*params, request.pagination.limit, request.pagination.offset],
+            build_row=rows.moment_review_row,
+            build_response=lambda total, built: vm.MomentReviewsResponse(
+                total=total, rows=built, **self.__echo(request.pagination)))
+
 
 __all__ = ["MediaQueryApiV2"]

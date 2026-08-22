@@ -82,6 +82,16 @@ def similar_shot_row(r: _FetchedRow, shot_id: str) -> vm.SimilarShotRow:
         artifact_sha=_str(r[2]))
 
 
+def moment_review_row(r: _FetchedRow) -> vm.MomentReviewRow:
+    return vm.MomentReviewRow(
+        review_id=_str(r[0]), episode_id=_str(r[1]), artifact_sha=_str(r[2]),
+        span=vm.FrameSpan(start_frame=_int(r[3]), end_frame=_int(r[4])),
+        prev_shot_id=None if r[5] is None else _str(r[5]),
+        next_shot_id=None if r[6] is None else _str(r[6]),
+        overall_confidence=require_float(r[7]), provider=_str(r[8]),
+        provider_version=_str(r[9]), tool=_str(r[10]))
+
+
 @dataclass(frozen=True, slots=True)
 class SemanticHit:
     score: int
@@ -162,7 +172,8 @@ def scene_summary_rows(
 
 
 __all__ = [
-    "SemanticHit", "audio_energy_row", "best_moment_row", "optional_float", "quality_row",
-    "require_float", "scene_summary_rows", "semantic_hit_row", "semantic_ranked_hits",
-    "shot_row", "similar_shot_row", "transcript_range_row", "visible_text_row",
+    "SemanticHit", "audio_energy_row", "best_moment_row", "moment_review_row", "optional_float",
+    "quality_row", "require_float", "scene_summary_rows", "semantic_hit_row",
+    "semantic_ranked_hits", "shot_row", "similar_shot_row", "transcript_range_row",
+    "visible_text_row",
 ]
