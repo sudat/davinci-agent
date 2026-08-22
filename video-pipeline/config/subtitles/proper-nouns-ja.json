@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "canonical": "DaVinci Resolve",
+      "variants": ["ダビンチリゾルブ", "ダヴィンチリゾルブ", "ダビンンチ Resolve"]
+    },
+    {
+      "canonical": "YouTube",
+      "variants": ["ユーチューブ", "ゆうちゅーぶ"]
+    },
+    {
+      "canonical": "macOS",
+      "variants": ["マックオーエス", "マックOS"]
+    }
+  ],
+  "schema_version": "proper-nouns-ja-v1"
+}
