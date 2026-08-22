@@ -1,0 +1,455 @@
+"""Typed result models for the MCP probe/parity operations surface (task 11).
+
+These models sit BETWEEN the raw tool payloads and the application: every
+:class:`~services.mcp_client.ops.McpOps` method parses its tool response into
+one of these frozen models.  Unlike domain artifacts (``extra="forbid"`` in
+:mod:`services.mcp_client.response_normalize`) these are *envelope-tolerant*
+readback models — the live compound server adds keys freely between builds,
+so unknown keys are ignored, but every field the probes assert on is REQUIRED
+and therefore fails loudly when the server stops reporting it.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from pydantic import BeforeValidator, ConfigDict, Field
+
+from services.contracts.primitives import StrictModel
+
+
+def _to_tuple(value: object) -> object:
+    """Coerce a JSON array to a tuple (StrictModel strict mode rejects lists)."""
+    if isinstance(value, list):
+        return tuple(value)
+    return value
+
+
+def _to_float(value: object) -> object:
+    """Coerce an integer metric to float (strict mode rejects int for float)."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        return float(value)
+    return value
+
+
+def _coerce_error(value: object) -> object:
+    """Legacy handlers return ``{"error": "<message>"}`` with a STRING error."""
+    if isinstance(value, str):
+        return {"message": value}
+    return value
+
+
+class McpErrorEnvelope(StrictModel):
+    """The compound server's structured error block (``_err`` shape)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    message: str
+    code: str = "UNSPECIFIED"
+    category: str = "resolve_api_failed"
+    retryable: bool = False
+
+
+class McpActionOutcome(StrictModel):
+    """Base result: success flag plus the structured error envelope.
+
+    ``ok`` is the derived verdict: a response is ok when it carries no error
+    envelope and did not report ``success: false``.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    success: bool | None = None
+    error: Annotated[McpErrorEnvelope | None, BeforeValidator(_coerce_error)] = None
+    status: str | None = None
+    confirm_token: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None and self.success is not False
+
+
+class ProjectResult(McpActionOutcome):
+    """``project_manager {create|get_current}`` readback."""
+
+    name: str | None = None
+
+
+class TimelineResult(McpActionOutcome):
+    """``media_pool {create_timeline*}`` / ``timeline {get_current}`` readback."""
+
+    name: str | None = None
+    id: str | None = None
+    created_new: bool | None = None
+    start_frame: int | None = None
+    end_frame: int | None = None
+    start_timecode: str | None = None
+
+
+class ClipSummary(StrictModel):
+    """One imported media-pool clip (``{name, id}`` from ``_clip_summaries``)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    name: str
+    clip_id: str = Field(alias="id")
+
+    @property
+    def id(self) -> str:
+        return self.clip_id
+
+
+class ImportResult(McpActionOutcome):
+    """``media_pool {safe_import_media}`` readback."""
+
+    imported: int = 0
+    clips: Annotated[tuple[ClipSummary, ...], BeforeValidator(_to_tuple)] = ()
+
+
+class AppendedItem(StrictModel):
+    """One ``append_to_timeline`` result item."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    timeline_item_id: str | None = None
+
+
+class AppendResult(McpActionOutcome):
+    """``media_pool {append_to_timeline}`` readback (verified operation)."""
+
+    count: int | None = None
+    items: Annotated[tuple[AppendedItem, ...], BeforeValidator(_to_tuple)] = ()
+    verification_status: str | None = None
+
+
+class StructureItem(StrictModel):
+    """One item row of ``timeline {probe_timeline_structure}``.
+
+    ``start``/``end`` are absolute RECORD frames (end exclusive);
+    ``source_start``/``source_end`` are FILE-relative SOURCE frames (end
+    exclusive, counted in the media's own rate — see ``source_fps``).
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    name: str | None = None
+    timeline_item_id: str | None = None
+    track_type: str | None = None
+    track_index: int | None = None
+    item_index: int | None = None
+    start: int | None = None
+    end: int | None = None
+    duration: int | None = None
+    source_start: int | None = None
+    source_end: int | None = None
+    source_fps: Annotated[float | None, BeforeValidator(_to_float)] = None
+    media_pool_item_id: str | None = None
+    media_pool_item_name: str | None = None
+    file_path: str | None = None
+
+
+class TrackRow(StrictModel):
+    """One track's row in the structure snapshot."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    track_index: int
+    item_count: int
+    items: Annotated[tuple[StructureItem, ...], BeforeValidator(_to_tuple)] = ()
+
+
+class TrackGroup(StrictModel):
+    """All tracks of one ``track_type`` in the structure snapshot."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    track_count: int
+    tracks: Annotated[tuple[TrackRow, ...], BeforeValidator(_to_tuple)] = ()
+
+
+class StructureSnapshot(McpActionOutcome):
+    """``timeline {probe_timeline_structure}`` — the conform readback."""
+
+    name: str
+    id: str
+    start_frame: int
+    end_frame: int
+    start_timecode: str
+    item_count: int
+    tracks: dict[str, TrackGroup]
+
+
+class TransformReadback(McpActionOutcome):
+    """``timeline_item {get_transform}`` values (punch-in readback)."""
+
+    Pan: Annotated[float | None, BeforeValidator(_to_float)] = None
+    Tilt: Annotated[float | None, BeforeValidator(_to_float)] = None
+    ZoomX: Annotated[float | None, BeforeValidator(_to_float)] = None
+    ZoomY: Annotated[float | None, BeforeValidator(_to_float)] = None
+    RotationAngle: Annotated[float | None, BeforeValidator(_to_float)] = None
+
+
+class AudioPropertyRow(StrictModel):
+    """One property row of ``timeline {safe_set_audio_properties}``."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    requested: object = None
+    original: object = None
+    write: bool | None = None
+    readback: object = None
+
+
+class AudioPropertiesResult(McpActionOutcome):
+    """``timeline {safe_set_audio_properties}`` readback."""
+
+    results: dict[str, AudioPropertyRow] = Field(default_factory=dict)
+
+
+class VoiceIsolationStateReadback(McpActionOutcome):
+    """``timeline {get_voice_isolation_state}`` track state."""
+
+    is_enabled: bool | None = Field(default=None, alias="isEnabled")
+    amount: int | None = None
+
+
+class VoiceIsolationReport(McpActionOutcome):
+    """``timeline {voice_isolation_capabilities}`` readback.
+
+    The two sub-blobs are opaque capability documentation dictionaries; the
+    typed envelope proves the call shape, the probe logs the raw payload.
+    """
+
+    timeline_track: dict[str, object] | None = None
+    item: dict[str, object] | None = None
+
+
+class SubtitleProbeResult(McpActionOutcome):
+    """``timeline {subtitle_generation_probe}`` readback."""
+
+    would_generate: bool | None = None
+    settings: dict[str, object] | None = None
+
+
+class FormatCodecResult(McpActionOutcome):
+    """``render {set_format_and_codec|get_format_and_codec}`` readback."""
+
+    format: str | None = None
+    codec: str | None = None
+    format_id: str | None = None
+    codec_id: str | None = None
+
+
+class RenderSettingsReadback(McpActionOutcome):
+    """``render {get_settings}`` — the fields the parity structure needs."""
+
+    FormatWidth: int | None = None
+    FormatHeight: int | None = None
+    FrameRate: Annotated[float | None, BeforeValidator(_to_float)] = None
+    AudioCodec: str | None = None
+    AudioSampleRate: int | None = None
+
+
+class SourceRangeOccurrence(StrictModel):
+    """One row of ``timeline {source_range_report}`` occurrences."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    key: str | None = None
+    source_range: Annotated[tuple[int, ...] | None, BeforeValidator(_to_tuple)] = None
+    timeline_range: Annotated[tuple[int, ...] | None, BeforeValidator(_to_tuple)] = None
+    timeline_item_id: str | None = None
+
+
+class RenderJobStatus(McpActionOutcome):
+    """``render {get_job_status}`` readback (wire keys are PascalCase,
+    ``JobStatus`` is LOCALIZED by Resolve — compare via the percentage)."""
+
+    model_config = ConfigDict(
+        extra="ignore", frozen=True, strict=True, populate_by_name=True
+    )
+
+    job_status: str | None = Field(default=None, alias="JobStatus")
+    completion_percentage: Annotated[float | None, BeforeValidator(_to_float)] = Field(
+        default=None, alias="CompletionPercentage"
+    )
+
+
+class RenderJobList(McpActionOutcome):
+    """``render {list_jobs}`` readback."""
+
+    jobs: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
+
+
+class AddJobResult(McpActionOutcome):
+    """``render {add_job}`` readback (job ids are UUID strings on 21.x)."""
+
+    job_id: str | None = None
+
+
+class GapRecord(StrictModel):
+    """One gap/overlap row from ``timeline {detect_gaps_overlaps}``."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    track_type: str | None = None
+    track_index: int | None = None
+    start: int | None = None
+    end: int | None = None
+    duration: int | None = None
+
+
+class GapsOverlapsResult(McpActionOutcome):
+    """``timeline {detect_gaps_overlaps}`` readback."""
+
+    gaps: Annotated[tuple[GapRecord, ...], BeforeValidator(_to_tuple)] = ()
+    overlaps: Annotated[tuple[GapRecord, ...], BeforeValidator(_to_tuple)] = ()
+
+
+class MissingMediaResult(McpActionOutcome):
+    """``timeline {detect_missing_media}`` readback."""
+
+    missing_count: int | None = None
+
+
+class SourceRangeResult(McpActionOutcome):
+    """``timeline {source_range_report}`` readback.
+
+    ``ranges`` maps a media key to its used SOURCE ranges (dict on the wire);
+    ``occurrences`` lists per-item placements with source and timeline spans.
+    """
+
+    ranges: dict[str, object] | None = None
+    occurrences: Annotated[
+        tuple[SourceRangeOccurrence, ...], BeforeValidator(_to_tuple)
+    ] = ()
+
+
+class AnalysisPlanResult(McpActionOutcome):
+    """``media_analysis {analyze_clip}`` readback (dry-run plan or executed)."""
+
+    pending_action: dict[str, object] | str | None = None
+    manifest: dict[str, object] | None = None
+
+
+class CommitVisionResult(McpActionOutcome):
+    """``media_analysis {commit_vision}`` readback."""
+
+    visual_json: str | None = None
+    clip_dir: str | None = None
+    analysis_json: str | None = None
+
+
+class DeepenResult(McpActionOutcome):
+    """``media_analysis {deepen}`` readback (estimate or deferred payload).
+
+    The confirmed payload carries the real shot rows under ``shot_table``
+    (each with shot_uuid, time bounds, and sampled frame indices).
+    """
+
+    confirm_token: str | None = None
+    vision_token: str | None = None
+    shot_table: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
+
+
+class CommitShotResult(McpActionOutcome):
+    """``media_analysis {commit_shot_vision}`` readback."""
+
+    updated: int | None = None
+
+
+class FindSimilarResult(McpActionOutcome):
+    """``media_analysis {find_similar}`` readback."""
+
+    results: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
+    matches: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
+
+
+class EditPlanResult(McpActionOutcome):
+    """``edit_engine {plan_selects}`` readback."""
+
+    plan_id: str | None = None
+
+
+class EditExecuteResult(McpActionOutcome):
+    """``edit_engine {execute_selects}`` readback."""
+
+    executed: int | None = None
+
+
+class CompCountResult(McpActionOutcome):
+    """``timeline_item_fusion {get_comp_count}`` readback."""
+
+    count: int | None = None
+
+
+class CapabilityReport(McpActionOutcome):
+    """Capability-report readbacks (edit kernel / audio mix).
+
+    The sub-sections are opaque documentation dictionaries; the typed
+    envelope proves the call shape and the probe logs the raw payload.
+    """
+
+    supported: dict[str, object] | None = None
+    partially_supported: dict[str, object] | None = None
+    unsupported: dict[str, object] | None = None
+    capabilities: dict[str, object] | None = None
+
+
+class RenderBoundaryReport(McpActionOutcome):
+    """``render {export_render_boundary_report}`` readback."""
+
+    capabilities: dict[str, object] | None = None
+    settings: dict[str, object] | None = None
+
+
+class ValidatedSettings(McpActionOutcome):
+    """``render {validate_render_settings}`` readback (validated echo)."""
+
+    valid: bool | None = None
+    settings: dict[str, object] | None = None
+    errors: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
+    warnings: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
+
+
+__all__ = [
+    "AddJobResult",
+    "AnalysisPlanResult",
+    "AppendResult",
+    "AppendedItem",
+    "AudioPropertiesResult",
+    "AudioPropertyRow",
+    "CapabilityReport",
+    "ClipSummary",
+    "CommitShotResult",
+    "CommitVisionResult",
+    "CompCountResult",
+    "DeepenResult",
+    "EditExecuteResult",
+    "EditPlanResult",
+    "FindSimilarResult",
+    "FormatCodecResult",
+    "GapRecord",
+    "GapsOverlapsResult",
+    "ImportResult",
+    "McpActionOutcome",
+    "McpErrorEnvelope",
+    "MissingMediaResult",
+    "ProjectResult",
+    "RenderBoundaryReport",
+    "RenderJobList",
+    "RenderJobStatus",
+    "RenderSettingsReadback",
+    "SourceRangeOccurrence",
+    "SourceRangeResult",
+    "StructureItem",
+    "StructureSnapshot",
+    "SubtitleProbeResult",
+    "TimelineResult",
+    "TrackGroup",
+    "TrackRow",
+    "TransformReadback",
+    "ValidatedSettings",
+    "VoiceIsolationReport",
+    "VoiceIsolationStateReadback",
+]

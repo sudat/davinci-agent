@@ -7,7 +7,7 @@ from services.mcp_client.client import (
     McpToolCallError,
     McpToolInfo,
     McpToolResult,
-    ResolveVersionReport,
+    ResolveVersionPayload,
 )
 from services.mcp_client.errors import McpClientError
 from services.mcp_client.transport import (
@@ -37,7 +37,7 @@ __all__ = [
     "McpToolResult",
     "McpTransportError",
     "McpVersionDriftError",
-    "ResolveVersionReport",
+    "ResolveVersionPayload",
     "ServerIdentity",
     "StdioJsonRpcTransport",
     "StdioTransportConfig",

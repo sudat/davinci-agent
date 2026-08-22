@@ -61,8 +61,10 @@ def test_resolve_get_version_round_trips_typed_payload() -> None:
     with _client() as client:
         client.connect()
         report = client.resolve_get_version()
-    assert report.connected is True
-    assert report.version == "21.0.4.5"
+    assert report.product == "DaVinci Resolve Studio"
+    assert report.version == (21, 0, 4, 5, "")
+    assert report.version_string == "21.0.4.5"
+    assert report.mcp.version == "2.98.3"
 
 
 def test_slow_tool_times_out_with_typed_error_and_bounded_wall_clock() -> None:

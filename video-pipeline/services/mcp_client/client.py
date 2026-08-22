@@ -20,6 +20,10 @@ from pydantic import ConfigDict, Field, ValidationError
 
 from services.contracts.primitives import StrictModel
 from services.mcp_client.errors import McpClientError
+from services.mcp_client.response_normalize import (
+    ResolveVersionPayload,
+    normalize_resolve_version,
+)
 from services.mcp_client.transport import (
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
     StdioJsonRpcTransport,
@@ -94,17 +98,6 @@ class McpToolResult(StrictModel):
     is_error: bool
 
 
-class ResolveVersionReport(StrictModel):
-    """Seed shape of ``resolve_control {action: get_version}`` text payload.
-
-    Synthetic seed contract for the fake server; task 9/11 replace it with
-    the recorded live fixture contract before Gate V43-0 acceptance.
-    """
-
-    connected: bool
-    version: str
-
-
 class McpClient:
     """Typed, single-writer client; one client owns one server process."""
 
@@ -176,21 +169,10 @@ class McpClient:
             raise McpClientError(f"unparsable tools/list result: {exc}") from exc
         return tuple(envelope.tools)
 
-    def resolve_get_version(self) -> ResolveVersionReport:
-        """``resolve_control {action: get_version}`` as a typed report."""
-        result = self._call_tool(RESOLVE_CONTROL_TOOL, {"action": "get_version"})
-        try:
-            payload: object = json.loads(result.text)
-        except json.JSONDecodeError as exc:
-            raise McpToolCallError(
-                RESOLVE_CONTROL_TOOL, "version payload is not JSON"
-            ) from exc
-        try:
-            return ResolveVersionReport.model_validate(payload)
-        except ValidationError as exc:
-            raise McpToolCallError(
-                RESOLVE_CONTROL_TOOL, "version payload shape mismatch"
-            ) from exc
+    def resolve_get_version(self) -> ResolveVersionPayload:
+        """``resolve_control {action: get_version}`` as a typed report (live shape)."""
+        payload = self._call_action_json(RESOLVE_CONTROL_TOOL, "get_version", {})
+        return normalize_resolve_version(payload)
 
     def close(self) -> None:
         """Stop the server subprocess group (idempotent)."""
@@ -202,10 +184,18 @@ class McpClient:
     def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
         self.close()
 
-    def _call_tool(self, name: str, arguments: Mapping[str, object]) -> McpToolResult:
+    def _call_tool(
+        self,
+        name: str,
+        arguments: Mapping[str, object],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> McpToolResult:
         """Typed-method base: one tools/call round-trip, envelope parsed."""
         response = self._transport.request(
-            "tools/call", {"name": name, "arguments": dict(arguments)}
+            "tools/call",
+            {"name": name, "arguments": dict(arguments)},
+            timeout_seconds=timeout_seconds,
         )
         try:
             envelope = _ToolCallResult.model_validate(response.get("result"))
@@ -216,11 +206,36 @@ class McpClient:
             raise McpToolCallError(name, f"server reported error: {text}")
         return McpToolResult(text=text, is_error=envelope.is_error)
 
+    def _call_action_json(
+        self,
+        tool: str,
+        action: str,
+        params: Mapping[str, object],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> object:
+        """JSON parse seam for the typed ops surface (task 11).
+
+        Returns the decoded ``{action, params}`` payload as a JSON object;
+        callers (:mod:`services.mcp_client.ops`) immediately validate it into
+        a frozen result model — this is a package-private seam, not public
+        surface.
+        """
+        result = self._call_tool(
+            tool, {"action": action, "params": dict(params)},
+            timeout_seconds=timeout_seconds,
+        )
+        try:
+            payload: object = json.loads(result.text)
+        except json.JSONDecodeError as exc:
+            raise McpToolCallError(tool, f"{action} payload is not JSON") from exc
+        return payload
+
 
 __all__ = [
     "McpClient",
     "McpToolCallError",
     "McpToolInfo",
     "McpToolResult",
-    "ResolveVersionReport",
+    "ResolveVersionPayload",
 ]
