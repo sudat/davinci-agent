@@ -1,0 +1,250 @@
+{
+  "capabilities": [
+    {
+      "capability": "project-timeline-creation",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-project-timeline-creation-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "import-media",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-import-media-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "exact-source-range-placement",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-exact-source-range-placement-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "source-record-readback",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-source-record-readback-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "subtitle-capability",
+      "evidence_refs": [],
+      "fallback": "template_external",
+      "fixture": "v43-subtitle-capability-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "title-text-plus",
+      "evidence_refs": [],
+      "fallback": "template_external",
+      "fixture": "v43-title-text-plus-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "fusion-template-insertion",
+      "evidence_refs": [],
+      "fallback": "template_external",
+      "fixture": "v43-fusion-template-insertion-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "clip-transform-punch-in",
+      "evidence_refs": [],
+      "fallback": "template_external",
+      "fixture": "v43-clip-transform-punch-in-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "transition-path",
+      "evidence_refs": [],
+      "fallback": "template_external",
+      "fixture": "v43-transition-path-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "audio-property-operation",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-audio-property-operation-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "voice-isolation",
+      "evidence_refs": [],
+      "fallback": "manual",
+      "fixture": "v43-voice-isolation-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "bgm-track-ducking",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-bgm-track-ducking-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "color-grade-preset-drx",
+      "evidence_refs": [],
+      "fallback": "template_external",
+      "fixture": "v43-color-grade-preset-drx-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "render-configuration",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-render-configuration-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "render-job-lifecycle",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-render-job-lifecycle-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "gaps-overlaps-missing-media",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-gaps-overlaps-missing-media-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "conform-source-ranges",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-conform-source-ranges-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "analysis-standard-pass",
+      "evidence_refs": [],
+      "fallback": "legacy_direct",
+      "fixture": "v43-analysis-standard-pass-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "deep-shot-analysis",
+      "evidence_refs": [],
+      "fallback": "manual",
+      "fixture": "v43-deep-shot-analysis-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "edit-engine-selects",
+      "evidence_refs": [],
+      "fallback": "manual",
+      "fixture": "v43-edit-engine-selects-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "alternate-shot-similarity",
+      "evidence_refs": [],
+      "fallback": "manual",
+      "fixture": "v43-alternate-shot-similarity-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    },
+    {
+      "capability": "advanced-delivery-qc",
+      "evidence_refs": [],
+      "fallback": "template_external",
+      "fixture": "v43-advanced-delivery-qc-01",
+      "provider": "davinci-resolve-mcp",
+      "provider_version": "2.98.3",
+      "readback": "",
+      "resolve_build": "21.0.4",
+      "status": "not_available"
+    }
+  ],
+  "provider": "davinci-resolve-mcp",
+  "provider_version": "2.98.3",
+  "resolve_build": "21.0.4",
+  "schema_version": "mcp-fit-v1"
+}
