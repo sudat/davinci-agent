@@ -1,6 +1,6 @@
 """Attack class 12: every Todo-65 CLI surface attempted with side checks.
 
-All 30 registered operations are enumerated and importable; every typed
+All 33 registered operations are enumerated and importable; every typed
 refusal class (shell/path/network/UI/unknown) is actively attempted and
 proven to spawn NOTHING; a registered dispatch passes an exact explicit
 argv (never a shell string); and the dispatch surface has no UI or
@@ -30,20 +30,46 @@ from services.cli.operator import (
 )
 
 EXPECTED_OPERATIONS = (
-    "ingest", "normalize", "conform", "conform-map", "phase1", "review",
-    "checkpoint", "convert-review", "preview", "qc", "run-gate",
-    "verify-policy", "gate-p1-faults", "gate-p2-faults", "gate-p3-faults",
-    "freeze-phase", "materialize", "toolchain-verify", "mcp-doctor", "episode0",
-    "toolchain-ledger", "retention-gc", "metrics-report", "check-scope",
-    "evidence-append", "evidence-verify", "preflight", "export-schemas",
-    "qa-run-todo", "cockpit",
+    "ingest",
+    "normalize",
+    "conform",
+    "conform-map",
+    "phase1",
+    "review",
+    "checkpoint",
+    "convert-review",
+    "preview",
+    "qc",
+    "run-gate",
+    "verify-policy",
+    "gate-p1-faults",
+    "gate-p2-faults",
+    "gate-p3-faults",
+    "freeze-phase",
+    "materialize",
+    "toolchain-verify",
+    "mcp-doctor",
+    "episode0",
+    "episode-report",
+    "toolchain-ledger",
+    "retention-gc",
+    "metrics-report",
+    "kpi",
+    "check-scope",
+    "evidence-append",
+    "evidence-verify",
+    "preflight",
+    "export-schemas",
+    "qa-run-todo",
+    "cockpit",
+    "legacy-report",
 )
 
 
 def test_10_exactly_28_unique_registered_operations() -> None:
     names = tuple(op.name for op in OPERATIONS)
-    assert len(names) == 30
-    assert len(set(names)) == 30
+    assert len(names) == 33
+    assert len(set(names)) == 33
     assert set(names) == set(EXPECTED_OPERATIONS)
     assert all(op.module.startswith("services.") for op in OPERATIONS)
 
@@ -119,9 +145,7 @@ def test_30_dispatch_passes_explicit_argv_never_a_shell(
     monkeypatch.setattr(operator.subprocess, "run", fake_run)
     hostile_args = ["--target", "; rm -rf /", "$(whoami)", "`id`", "../../etc/passwd"]
     assert dispatch(["evidence-append", *hostile_args]) == 7
-    assert captured == [
-        [sys.executable, "-m", "services.evidence.append_event", *hostile_args]
-    ]
+    assert captured == [[sys.executable, "-m", "services.evidence.append_event", *hostile_args]]
 
 
 def test_40_operator_surface_has_no_ui_or_network_dependency() -> None:

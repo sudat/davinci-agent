@@ -27,15 +27,47 @@ FORBIDDEN_SHELL: Final = frozenset(
 )
 FORBIDDEN_PATH: Final = frozenset(
     {
-        "cat", "read", "read-file", "write", "write-file", "rm", "del", "delete",
-        "delete-file", "mv", "move", "cp", "copy", "touch", "mkdir", "edit",
-        "edit-file", "open", "ls", "list", "list-files", "find", "path",
+        "cat",
+        "read",
+        "read-file",
+        "write",
+        "write-file",
+        "rm",
+        "del",
+        "delete",
+        "delete-file",
+        "mv",
+        "move",
+        "cp",
+        "copy",
+        "touch",
+        "mkdir",
+        "edit",
+        "edit-file",
+        "open",
+        "ls",
+        "list",
+        "list-files",
+        "find",
+        "path",
     }
 )
 FORBIDDEN_NETWORK: Final = frozenset(
     {
-        "curl", "wget", "http", "https", "ftp", "ssh", "scp", "net", "network",
-        "fetch", "download", "upload", "request", "post",
+        "curl",
+        "wget",
+        "http",
+        "https",
+        "ftp",
+        "ssh",
+        "scp",
+        "net",
+        "network",
+        "fetch",
+        "download",
+        "upload",
+        "request",
+        "post",
     }
 )
 FORBIDDEN_UI: Final = frozenset(
@@ -57,9 +89,7 @@ OPERATIONS: Final[tuple[Operation, ...]] = (
     Operation("conform-map", "services.conform.map_cli", "emit the conform map"),
     Operation("phase1", "services.cli.phase1", "run the phase-1 editorial chain on an episode"),
     Operation("review", "services.cli.review", "apply natural-language review instructions"),
-    Operation(
-        "checkpoint", "services.cli.checkpoint", "show/record/export operator checkpoints"
-    ),
+    Operation("checkpoint", "services.cli.checkpoint", "show/record/export operator checkpoints"),
     Operation(
         "convert-review",
         "services.approvals.review_convert",
@@ -78,10 +108,14 @@ OPERATIONS: Final[tuple[Operation, ...]] = (
     Operation("mcp-doctor", "services.cli.mcp_doctor", "verify the pinned davinci-resolve-mcp"),
     Operation("episode0", "services.cli.episode0", "episode-0 longitudinal baseline tooling"),
     Operation(
-        "toolchain-ledger", "services.toolchain.execution_ledger", "execution ledger events"
+        "episode-report",
+        "services.cli.episode_report",
+        "episode A/B/C run reports + Phase-6 aggregation + footage decision",
     ),
+    Operation("toolchain-ledger", "services.toolchain.execution_ledger", "execution ledger events"),
     Operation("retention-gc", "services.retention.gc", "plan-first retention garbage collection"),
     Operation("metrics-report", "services.metrics.report", "derive and validate metrics"),
+    Operation("kpi", "services.cli.kpi", "aggregate phase-9 KPI reports from episode runs"),
     Operation("check-scope", "services.policy.check_scope", "enforce scope boundaries"),
     Operation("evidence-append", "services.evidence.append_event", "append an evidence event"),
     Operation("evidence-verify", "services.evidence.verify", "verify evidence bundles"),
@@ -89,6 +123,7 @@ OPERATIONS: Final[tuple[Operation, ...]] = (
     Operation("export-schemas", "services.contracts.export_schemas", "export JSON schemas"),
     Operation("qa-run-todo", "services.qa.run_todo", "run a Todo QA matrix"),
     Operation("cockpit", "services.cli.cockpit", "serve the loopback-only episode cockpit API"),
+    Operation("legacy-report", "services.cli.legacy_report", "legacy removal decision report"),
 )
 
 _REPORT_NAMES: Final = (

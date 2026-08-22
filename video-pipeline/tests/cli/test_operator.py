@@ -73,6 +73,10 @@ def test_30_dispatch_delegates_to_a_registered_module() -> None:
     delegated = run_cli(["metrics-report", "--help"])
     assert delegated.returncode == 0
     assert "--events" in delegated.stdout
+    kpi = run_cli(["kpi", "--help"])
+    assert kpi.returncode == 0
+    assert "evaluate" in kpi.stdout
+    assert "summary" in kpi.stdout
 
 
 def test_40_registry_modules_are_importable() -> None:
