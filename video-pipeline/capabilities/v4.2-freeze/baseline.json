@@ -1,0 +1,36 @@
+{
+  "schema_version": "v42-freeze-v1",
+  "commit": "5890c840fdb3f13af21a86697937f5a39f4143f9",
+  "tag": "v4.2-foundation-freeze",
+  "test_summary": {
+    "command": "uv run pytest -q",
+    "total": 2115,
+    "passed": 2072,
+    "failed": 0,
+    "skipped": 43,
+    "errors": 0,
+    "warnings": 0,
+    "duration_seconds": 529.32,
+    "run_1_digest": "f6cef46d3bb98fd8597f41d1f0c550db0440b97060d50b5a689f75c96564fcd0",
+    "run_2_digest": "77126cfb9ce4f7755a120f4a8fbadfa929b2a38a7860e9120555e7b0009523b4"
+  },
+  "python_version": "Python 3.12.10",
+  "resolve_version": "21.0.4",
+  "os": "Darwin 25.5.0",
+  "frozen_at": "2026-08-22T00:13:35Z",
+  "rollback_command": "git checkout v4.2-foundation-freeze",
+  "files_exist": {
+    "services/cli/": true,
+    "pyproject.toml": true,
+    "services/job_runner/stage_runner.py": true,
+    "services/media_query/api_models.py": true,
+    "services/editorial/models.py": true,
+    "services/editorial/candidate_models.py": true,
+    "services/editorial/evidence.py": true,
+    "services/editorial/director.py": true,
+    "services/contracts/timeline_ir.py": true,
+    "services/preview/": true,
+    "services/resolve_bridge/fixed_presentation_subtitle.py": true,
+    "services/resolve_adapter/package.py": true
+  }
+}
