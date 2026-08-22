@@ -88,6 +88,7 @@ OPERATIONS: Final[tuple[Operation, ...]] = (
     Operation("preflight", "services.execution.preflight", "worker preflight binding"),
     Operation("export-schemas", "services.contracts.export_schemas", "export JSON schemas"),
     Operation("qa-run-todo", "services.qa.run_todo", "run a Todo QA matrix"),
+    Operation("cockpit", "services.cli.cockpit", "serve the loopback-only episode cockpit API"),
 )
 
 _REPORT_NAMES: Final = (
