@@ -27,6 +27,13 @@ if TYPE_CHECKING:
 
 RUN_DIR_NAME: Final = "run"
 PREVIEW_DIR_NAME: Final = "preview-v1"
+REVIEW_STORE_DIR_NAME: Final = "review-store"
+# Cockpit review-store layout (episode_files REVIEW_*_RELATIVE): the sealed
+# event log moves OUT of the store dir; plan/IR versions + index live under
+# review/store/. The mirror maps the chain's flat run/review-store/ into it.
+COCKPIT_REVIEW_LOG_RELATIVE: Final = ("review", "events.jsonl")
+COCKPIT_REVIEW_STORE_RELATIVE: Final = ("review", "store")
+_LOG_FILE_NAMES: Final = ("events.jsonl", "events.jsonl.seal")
 VIDEO_EXTENSIONS: Final = frozenset({".mov", ".mp4", ".m4v", ".mts", ".m2ts"})
 
 
@@ -77,10 +84,12 @@ def write_chain_manifest(episode_root: Path, episode_id: str, video: Path) -> No
     )
 
 
-def publish_preview(episode_root: Path, log: BinaryIO) -> None:
-    """Link run/preview-v1/preview.mp4 to previews/preview.mp4 (cockpit path)."""
+def publish_preview(
+    episode_root: Path, log: BinaryIO, source_dir: str = PREVIEW_DIR_NAME
+) -> None:
+    """Link run/<source_dir>/preview.mp4 to previews/preview.mp4 (cockpit path)."""
 
-    source = episode_root / RUN_DIR_NAME / PREVIEW_DIR_NAME / PREVIEW_NAME
+    source = episode_root / RUN_DIR_NAME / source_dir / PREVIEW_NAME
     target = episode_root / "previews" / PREVIEW_NAME
     target.parent.mkdir(parents=True, exist_ok=True)
     target.unlink(missing_ok=True)
@@ -88,14 +97,56 @@ def publish_preview(episode_root: Path, log: BinaryIO) -> None:
         os.link(source, target)
     except OSError:
         shutil.copyfile(source, target)
-    log_event(log, "preview_published", path=str(target))
+    log_event(log, "preview_published", path=str(target), source=source_dir)
+
+
+def mirror_review_store(episode_root: Path, log: BinaryIO) -> bool:
+    """Copy the chain's run/review-store into the cockpit review layout.
+
+    Task-9 review-store adaptation: the cockpit apply path (episode_files
+    REVIEW_*_RELATIVE) commits new plan versions under ``review/``, so the
+    initial run hands its genesis store over in that layout. COPIES, not
+    hard-links: events/seal/versions mutate on later commits and the chain
+    copy under ``run/`` stays frozen as the initial-run evidence. Idempotent
+    guard: an existing cockpit store (later version already applied) is
+    never clobbered.
+    """
+
+    source_dir = episode_root / RUN_DIR_NAME / REVIEW_STORE_DIR_NAME
+    if not source_dir.is_dir():
+        log_event(log, "review_store_mirror_skipped", reason="chain store absent")
+        return False
+    log_target = episode_root.joinpath(*COCKPIT_REVIEW_LOG_RELATIVE)
+    store_target = episode_root.joinpath(*COCKPIT_REVIEW_STORE_RELATIVE)
+    if (store_target / "versions.json").is_file():
+        log_event(log, "review_store_mirror_skipped", reason="cockpit store exists")
+        return False
+    log_target.parent.mkdir(parents=True, exist_ok=True)
+    store_target.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for entry in sorted(source_dir.iterdir()):
+        if not entry.is_file():
+            continue
+        destination = (
+            log_target.parent / entry.name
+            if entry.name in _LOG_FILE_NAMES
+            else store_target / entry.name
+        )
+        shutil.copyfile(entry, destination)
+        copied += 1
+    log_event(log, "review_store_mirrored", files=copied)
+    return True
 
 
 __all__ = [
+    "COCKPIT_REVIEW_LOG_RELATIVE",
+    "COCKPIT_REVIEW_STORE_RELATIVE",
     "PREVIEW_DIR_NAME",
+    "REVIEW_STORE_DIR_NAME",
     "RUN_DIR_NAME",
     "VIDEO_EXTENSIONS",
     "WorkspaceAdaptationError",
+    "mirror_review_store",
     "principal_video",
     "publish_preview",
     "write_chain_manifest",

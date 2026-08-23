@@ -277,7 +277,9 @@ def test_review_chat_apply_returns_applied_command_and_lineage_rebuild(
         json={"applied_command": applied["command_id"]},
     )
     assert rebuilt.status_code == 202
-    assert rebuilt.json()["rebuild_stages"] == list(rebuild["stages"])
+    assert rebuilt.json()["scheduled"] is True
+    assert rebuilt.json()["stages"] == list(rebuild["stages"])
+    assert rebuilt.json()["runner_log"].endswith("runner.log")
 
 
 def test_review_chat_apply_unconfirmed_draft_is_structured_422(

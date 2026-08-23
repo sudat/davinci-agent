@@ -8,13 +8,20 @@ StateStore stays the ONLY job-state authority. ``episode_runner_editorial``
 gates the editorial runtime mode fail-fast before the chain, and
 ``episode_runner_workspace`` adapts the cockpit episode directory into
 the chain's expected episode_root layout (no media copies; preview
-linked into ``<episode-root>/previews/``).
+linked into ``<episode-root>/previews/``). Task 9 adds the
+``--from-stage`` stage-subset re-entry (``episode_runner_rebuild``):
+plan/compile/preview against the CURRENT committed review store, then
+always re-render + republish the preview.
 
 Exit codes: 0 success, 1 blocked (typed reason in runner.log + a
 ``failed_blocked`` stage run through existing state semantics), 2
 malformed input. If the runner dies hard, the last StateStore-recorded
 stage stands (crash containment; nothing is invented post-mortem).
 """
+
+# allow: SIZE_OK — 25x pure LOC: plan-pinned single-file orchestrator (task 7
+# four-module split + task 9's mandated re-entry branch + flag surface); the
+# per-stage work lives in the _state/_workspace/_rebuild satellites.
 
 from __future__ import annotations
 
@@ -36,6 +43,11 @@ from services.cli.episode_runner_editorial import (
     require_production_ready,
     sanitized_env,
 )
+from services.cli.episode_runner_rebuild import (
+    REENTRY_FROM_STAGES,
+    RebuildStageError,
+    run_reentry,
+)
 from services.cli.episode_runner_state import (
     STAGE_OF_STATUS,
     RunContext,
@@ -50,6 +62,7 @@ from services.cli.episode_runner_state import (
 from services.cli.episode_runner_workspace import (
     RUN_DIR_NAME,
     WorkspaceAdaptationError,
+    mirror_review_store,
     principal_video,
     publish_preview,
     write_chain_manifest,
@@ -92,6 +105,7 @@ class RunnerInvocation:
     stop: str
     state_store_path: Path
     from_stage: str | None = None
+    applied_command: str | None = None
     editorial_runtime: Path | None = None
 
 
@@ -157,15 +171,35 @@ def _verify_reached(store: StateStore, ctx: RunContext) -> None:
         )
 
 
-def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
-    log_event(log, "runner_started", run_id=run_id, pid=os.getpid(), stop=call.stop)
-    if call.from_stage is not None:
-        log_event(
-            log,
-            "from_stage_ignored",
-            stage=call.from_stage,
-            note="stage-subset re-entry lands with task 9; running the full chain",
+def _reentry_exit(store: StateStore, ctx: RunContext, call: RunnerInvocation, log: BinaryIO) -> int:
+    """Validate the re-entry flags, then execute the stage-subset rebuild."""
+
+    if call.applied_command is None or call.from_stage not in REENTRY_FROM_STAGES:
+        raise RunnerMalformedError(
+            "reentry-malformed",
+            f"--from-stage needs --applied-command and one of {REENTRY_FROM_STAGES}",
         )
+    if call.stop != "PREVIEW_READY":
+        raise RunnerMalformedError(
+            "stop-unsupported-for-reentry",
+            "re-entry always re-renders the preview; --stop must be PREVIEW_READY",
+        )
+    try:
+        return run_reentry(store, ctx, call, log)
+    except RebuildStageError as error:
+        raise RunnerBlockedError(error.code, error.detail) from error
+
+
+def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
+    log_event(
+        log,
+        "runner_started",
+        run_id=run_id,
+        pid=os.getpid(),
+        stop=call.stop,
+        from_stage=call.from_stage,
+        applied_command=call.applied_command,
+    )
     if call.stop not in STAGE_ORDER:
         raise RunnerMalformedError(
             "stop-unknown", f"--stop must be one of {STAGE_ORDER}"
@@ -179,6 +213,8 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
             raise RunnerMalformedError(
                 "job-missing", f"no cockpit job row for {ctx.job_id}: {error}"
             ) from error
+        if call.from_stage is not None:
+            return _reentry_exit(store, ctx, call, log)
         record_stage(
             store, ctx, "intake", "succeeded",
             adopted=sha256_file(call.episode_root / INTAKE_NAME),
@@ -202,16 +238,18 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
         _verify_reached(store, ctx)
         if call.stop == "PREVIEW_READY":
             publish_preview(call.episode_root, log)
+            mirror_review_store(call.episode_root, log)
         log_event(log, "chain_finished", stop=call.stop)
         return EXIT_SUCCESS
 
 
-def run(
+def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
     *,
     episode_root: Path,
     stop: str = "PREVIEW_READY",
     state_store_path: Path | None = None,
     from_stage: str | None = None,
+    applied_command: str | None = None,
     editorial_runtime: Path | None = None,
 ) -> int:
     """Advance one cockpit episode through the existing chain; 0/1/2."""
@@ -222,6 +260,7 @@ def run(
         state_store_path if state_store_path is not None
         else episode_root.parent / "state.db",
         from_stage,
+        applied_command,
         editorial_runtime,
     )
     call.episode_root.mkdir(parents=True, exist_ok=True)
@@ -251,8 +290,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--stop", choices=STAGE_ORDER, default="PREVIEW_READY")
     parser.add_argument(
         "--from-stage",
+        choices=REENTRY_FROM_STAGES,
         default=None,
-        help="reserved for task 9 (partial rebuild re-entry); ignored with a log line",
+        help="task-9 stage-subset re-entry: re-run [stage..preview] against the "
+        "committed review store (requires --applied-command)",
+    )
+    parser.add_argument(
+        "--applied-command",
+        default=None,
+        help="applied review command id the re-entry rebuilds from",
     )
     parser.add_argument("--editorial-runtime", type=Path, default=None)
     parser.add_argument(
@@ -271,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:
         stop=arguments.stop,
         state_store_path=arguments.state_store,
         from_stage=arguments.from_stage,
+        applied_command=arguments.applied_command,
         editorial_runtime=arguments.editorial_runtime,
     )
 

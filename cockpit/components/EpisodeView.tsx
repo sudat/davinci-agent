@@ -136,6 +136,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       <ReviewChatPanel
         episodeId={episodeId}
         getAtSeconds={() => videoRef.current?.currentTime ?? null}
+        status={status}
       />
       <BeforeAfterSummary summary={status?.before_after ?? null} />
     </div>

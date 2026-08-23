@@ -323,9 +323,16 @@ export async function applyReviewCommand(
 export type RebuildResult = {
   stage_hint: string | null;
   scheduled: boolean;
-  note: string;
+  note?: string;
   applied_command?: string;
   rebuild_stages?: string[];
+  /** Task-9 fields (present when the backend schedules the runner):
+   *  stages = the lineage-derived stage set the rebuild plan covers;
+   *  runner_log = the episode's runner.log path; reason = the honest
+   *  refusal note for not-yet-executable command kinds. */
+  stages?: string[];
+  runner_log?: string;
+  reason?: string;
 };
 
 export async function postRebuild(
@@ -403,6 +410,87 @@ export async function executeApproval(
     `/episodes/${encodeURIComponent(episodeId)}/approvals/${encodeURIComponent(
       approvalId,
     )}`,
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+}
+
+// Kit recipe A/B previews (task 11: GET manifest + POST operator selection)
+
+export type KitPreviewBounds = Record<
+  string,
+  { min: number; max: number; default: number; unit?: string | null }
+>;
+
+export type KitPreviewCandidate = {
+  recipe_id: string;
+  semantic_intent: string;
+  resolved_params: Record<string, number>;
+  parameter_bounds: KitPreviewBounds;
+  file: string;
+};
+
+export type KitPreviewSnippet = {
+  origin: "best_moment" | "shot" | "explicit";
+  media_path: string;
+  start_frame: number;
+  end_frame: number;
+  duration_seconds: number;
+};
+
+export type KitPreviewDomain = {
+  domain: string;
+  intents: string[];
+  snippet: KitPreviewSnippet;
+  candidates: KitPreviewCandidate[];
+  /** Latest recorded recipe_id for the domain; null = none/keep-current. */
+  selection: string | null;
+};
+
+export type KitPreviewsPayload = {
+  available: boolean;
+  domains: KitPreviewDomain[];
+};
+
+export type KitSelectionResult = {
+  domain: string;
+  recipe_id: string | null;
+  semantic_intent: string | null;
+  note: string | null;
+  recorded_at: string;
+  entries: number;
+};
+
+export async function getKitPreviews(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<KitPreviewsPayload> {
+  return request<KitPreviewsPayload>(
+    `/episodes/${encodeURIComponent(episodeId)}/kit-previews`,
+    { method: "GET" },
+    fetchImpl,
+  );
+}
+
+/** Candidate mp4 URL; `file` is "domain/name.mp4" (each segment encoded). */
+export function kitPreviewFileUrl(episodeId: string, file: string): string {
+  const encoded = file
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${apiBase()}/episodes/${encodeURIComponent(episodeId)}/kit-previews/${encoded}`;
+}
+
+export async function selectKitRecipe(
+  episodeId: string,
+  domain: string,
+  input: { recipe_id?: string | null; note?: string | null },
+  fetchImpl: FetchLike = fetch,
+): Promise<KitSelectionResult> {
+  return request<KitSelectionResult>(
+    `/episodes/${encodeURIComponent(episodeId)}/kit-previews/${encodeURIComponent(
+      domain,
+    )}/select`,
     { method: "POST", body: JSON.stringify(input) },
     fetchImpl,
   );

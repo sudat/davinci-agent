@@ -9,7 +9,9 @@ applied-review-command rebuild resolution read (lineage-derived stage set).
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
+import os
 import sqlite3
 import subprocess
 import sys
@@ -23,12 +25,6 @@ from services.episode_cockpit.errors import (
     CockpitUnprocessableError,
 )
 from services.episode_cockpit.models import BriefDraft, IntakeRecordV1
-from services.episode_cockpit.review_chat import (
-    DEFAULT_LINEAGE,
-    RebuildPlan,
-    load_applied_command,
-    plan_rebuild,
-)
 from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.job_runner.state_errors import StateStoreError
@@ -40,18 +36,47 @@ INTAKE_STAGE = "intake"
 BRIEF_NAME = "brief.json"
 INTAKE_NAME = "intake.json"
 RUNNER_LOG_NAME = "runner.log"
+RUNNER_LOCK_NAME = "runner.lock"
 RUNNER_MODULE = "services.cli.episode_runner"
 RUNNER_STOP = "PREVIEW_READY"
 _PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _spawn_runner(argv: list[str], *, cwd: Path, log_path: Path) -> None:
-    """Detach one one-shot runner; never wait (POST /episodes stays O(ms))."""
+    """Detach one one-shot runner; never wait (POST stays O(ms)).
 
-    with log_path.open("ab") as stream:
-        subprocess.Popen(
-            argv, cwd=cwd, start_new_session=True, stdout=stream, stderr=stream
-        )
+    The spawn takes an exclusive ``flock`` on ``<episode-dir>/runner.lock``
+    and hands the descriptor to the child (``pass_fds``): the lock lives
+    exactly as long as the child process — the kernel releases it on exit
+    or crash — so a later rebuild POST can refuse with a typed 409 while
+    any runner is still alive, with no pid bookkeeping to go stale.
+    """
+
+    lock_path = log_path.parent / RUNNER_LOCK_NAME
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            raise CockpitConflictError(
+                "runner-active",
+                "a pipeline runner is already running for this episode; "
+                f"retry the rebuild after it finishes ({error})",
+            ) from error
+        with log_path.open("ab") as stream:
+            subprocess.Popen(
+                argv,
+                cwd=cwd,
+                start_new_session=True,
+                stdout=stream,
+                stderr=stream,
+                pass_fds=(descriptor,),
+            )
+    finally:
+        os.close(descriptor)
+
+
 PUBLISH_PACKAGE_RELATIVE = ("publish", "package.json")
 
 
@@ -183,18 +208,6 @@ class JobOps(WorkspaceContext):
             "remote_link": remote_link,
         }
 
-    def resolve_rebuild_stages(self, episode_id: str, applied_command: str) -> RebuildPlan:
-        """Resolve an applied review command to its minimal rebuild stage set (task 47).
-
-        Read-only against the episode's applied-command audit log; scheduling
-        stays out of scope (the caller records the intent via record_rebuild).
-        """
-
-        snapshot = self._require_snapshot(episode_id)
-        episode_dir = self._episode_dir(snapshot.job.episode_id)
-        applied = load_applied_command(episode_dir, applied_command)
-        return plan_rebuild(applied, DEFAULT_LINEAGE)
-
     def _list_job_rows(self) -> list[dict[str, object]]:
         if not self._state_store_path.is_file():
             return []
@@ -227,6 +240,7 @@ __all__ = [
     "INTAKE_NAME",
     "INTAKE_STAGE",
     "PUBLISH_PACKAGE_RELATIVE",
+    "RUNNER_LOCK_NAME",
     "RUNNER_LOG_NAME",
     "RUNNER_MODULE",
     "RUNNER_STOP",

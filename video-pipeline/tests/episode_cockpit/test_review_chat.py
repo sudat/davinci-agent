@@ -372,11 +372,12 @@ def test_rebuild_accepts_applied_command_ref_with_derived_stage_hint(
     assert response.status_code == 202
     body = response.json()
     assert body["applied_command"] == command_id
-    assert body["rebuild_stages"][0] == "plan"
-    assert "ingest" not in body["rebuild_stages"]
-    assert "selection" not in body["rebuild_stages"]
-    assert body["stage_hint"] == ",".join(body["rebuild_stages"])
-    assert body["scheduled"] is False
+    assert body["stages"][0] == "plan"
+    assert "ingest" not in body["stages"]
+    assert "selection" not in body["stages"]
+    assert body["stage_hint"] == ",".join(body["stages"])
+    assert body["scheduled"] is True
+    assert body["runner_log"].endswith("runner.log")
 
 
 def test_rebuild_with_unknown_applied_command_is_structured_404(

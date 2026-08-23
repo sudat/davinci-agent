@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   applyReviewCommand,
   postRebuild,
   postReviewChat,
   CockpitApiError,
+  type EpisodeStatus,
   type RebuildResult,
   type ReviewApplyResult,
   type ReviewCommandDraft,
@@ -27,21 +28,33 @@ const COMMAND_KIND_LABEL: Record<string, string> = {
   episode_only: "このエピソード限定",
 };
 
+type RebuildPhase = "done" | "running" | "scheduled" | "recorded";
+
+const REBUILD_PHASE_LABEL: Record<Exclude<RebuildPhase, "recorded">, string> = {
+  scheduled: "再build予約済み",
+  running: "再build実行中",
+  done: "再build完了",
+};
+
 type ReviewChatPanelProps = {
   episodeId: string;
   getAtSeconds: () => number | null;
+  status: EpisodeStatus | null;
   fetchImpl?: typeof fetch;
 };
 
 /**
  * Review chat (PRD 13.3): natural-language correction -> structured
  * command preview (the echoed draft, shown verbatim with its parsed
- * kind/target/delta) -> apply -> lineage-scoped partial rebuild recorded
- * with HTTP 202. Ambiguous drafts stay unappliable until rephrased.
+ * kind/target/delta) -> apply -> lineage-scoped partial rebuild, executed
+ * by the detached runner. The indicator derives scheduled/running/done
+ * from the page's job-status polling (stage_runs). Ambiguous drafts stay
+ * unappliable until rephrased.
  */
 export default function ReviewChatPanel({
   episodeId,
   getAtSeconds,
+  status,
   fetchImpl,
 }: ReviewChatPanelProps) {
   const [text, setText] = useState("");
@@ -51,6 +64,9 @@ export default function ReviewChatPanel({
   const [draft, setDraft] = useState<ReviewCommandDraft | null>(null);
   const [applyResult, setApplyResult] = useState<ReviewApplyResult | null>(null);
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null);
+  const [baselinePreviewRuns, setBaselinePreviewRuns] = useState<number | null>(null);
+  const statusRef = useRef<EpisodeStatus | null>(null);
+  statusRef.current = status;
 
   const send = async () => {
     if (text.trim() === "") return;
@@ -92,6 +108,13 @@ export default function ReviewChatPanel({
         fetchImpl,
       );
       setRebuildResult(rebuilt);
+      setBaselinePreviewRuns(
+        statusRef.current !== null
+          ? statusRef.current.stage_runs.filter(
+              (run) => run.stage_name === "preview" && run.status === "succeeded",
+            ).length
+          : null,
+      );
     } catch (cause) {
       setError(failure(cause));
     } finally {
@@ -99,11 +122,31 @@ export default function ReviewChatPanel({
     }
   };
 
+  const rebuildPhase = useMemo<RebuildPhase | null>(() => {
+    if (rebuildResult === null) return null;
+    if (!rebuildResult.scheduled) return "recorded";
+    if (status === null) return "scheduled";
+    const hasRunning = status.stage_runs.some((run) => run.status === "running");
+    if (hasRunning) return "running";
+    // "compile" rows only ever come from a rebuild (the initial chain
+    // never records one), so a succeeded compile needs no baseline.
+    const compileDone = status.stage_runs.some(
+      (run) => run.stage_name === "compile" && run.status === "succeeded",
+    );
+    const previewDone = status.stage_runs.filter(
+      (run) => run.stage_name === "preview" && run.status === "succeeded",
+    ).length;
+    if (compileDone || (baselinePreviewRuns !== null && previewDone > baselinePreviewRuns)) {
+      return "done";
+    }
+    return "scheduled";
+  }, [rebuildResult, status, baselinePreviewRuns]);
+
   return (
     <section className="card" data-testid="review-chat-panel">
       <h2 className="card-title">修正チャット</h2>
       <p className="page-subtitle" style={{ marginBottom: "var(--space-3)" }}>
-        自然言語で修正を伝えると、構造化コマンドの解釈プレビューを返します。確認して適用すると、影響stageのみの部分rebuildを記録します。
+        自然言語で修正を伝えると、構造化コマンドの解釈プレビューを返します。確認して適用すると、影響stageのみの部分rebuildが実行されます。
       </p>
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       <label className="field" htmlFor="review-chat-input">
@@ -175,14 +218,36 @@ export default function ReviewChatPanel({
       ) : null}
       {rebuildResult !== null && applyResult !== null ? (
         <div className="card" data-testid="rebuild-indicator" style={{ marginTop: "var(--space-3)" }}>
+          {rebuildPhase !== null && rebuildPhase !== "recorded" ? (
+            <p data-testid="rebuild-phase">
+              {REBUILD_PHASE_LABEL[rebuildPhase]}
+              {rebuildPhase === "scheduled" ? "（runner起動待ち・進捗は自動更新）" : ""}
+            </p>
+          ) : (
+            <p data-testid="rebuild-phase">再build未実行（コマンドは記録済み）</p>
+          )}
           <p>
-            部分rebuildを受け付けました（HTTP 202・適用コマンド{" "}
-            <span className="mono">{applyResult.applied.command_id}</span>）
+            適用コマンド <span className="mono">{applyResult.applied.command_id}</span>
           </p>
           <p>
-            再build stage: <span className="mono" data-testid="rebuild-stage-hint">{rebuildResult.stage_hint}</span>
+            再build stage:{" "}
+            <span className="mono" data-testid="rebuild-stage-hint">
+              {rebuildResult.stage_hint ??
+                (rebuildResult.stages !== undefined
+                  ? rebuildResult.stages.join(",")
+                  : "")}
+            </span>
           </p>
-          <p className="field-hint">{rebuildResult.note}</p>
+          {rebuildResult.reason !== undefined ? (
+            <p className="field-hint" data-testid="rebuild-reason">
+              {rebuildResult.reason}
+            </p>
+          ) : null}
+          {rebuildResult.runner_log !== undefined ? (
+            <p className="field-hint">
+              runner log: <span className="mono">{rebuildResult.runner_log}</span>
+            </p>
+          ) : null}
         </div>
       ) : null}
     </section>

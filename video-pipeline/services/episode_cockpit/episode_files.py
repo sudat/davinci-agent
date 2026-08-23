@@ -9,11 +9,23 @@ is an explicit not-yet-generated stub, never a fabricated list.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from pydantic import ValidationError
 
-from services.episode_cockpit.errors import CockpitConflictError, CockpitNotFoundError
+from services.episode_cockpit.episode_ops import (
+    _PIPELINE_ROOT,
+    RUNNER_LOG_NAME,
+    RUNNER_MODULE,
+    RUNNER_STOP,
+    _spawn_runner,
+)
+from services.episode_cockpit.errors import (
+    CockpitConflictError,
+    CockpitNotFoundError,
+    CockpitUnprocessableError,
+)
 from services.episode_cockpit.models import (
     BriefDraft,
     RebuildRequestEntry,
@@ -25,6 +37,7 @@ from services.episode_cockpit.review_chat import (
     ReviewStoreLocation,
     apply_command,
     interpret_command,
+    load_applied_command,
     plan_rebuild,
     record_applied_command,
 )
@@ -42,6 +55,8 @@ REBUILD_LOG_NAME = "rebuild-requests.jsonl"
 REVIEW_EVENTS_RELATIVE = ("review", "events.jsonl")
 REVIEW_STORE_RELATIVE = ("review", "store")
 PREVIEW_RELATIVE = ("previews", PREVIEW_NAME)
+EXECUTABLE_DOMAIN = "edit_plan"
+NOT_EXECUTABLE_REASON = "command kind not rebuild-executable yet"
 
 
 class FileOps(WorkspaceContext):
@@ -142,17 +157,76 @@ class FileOps(WorkspaceContext):
             "rebuild": plan.model_dump(mode="json"),
         }
 
-    def record_rebuild(self, episode_id: str, *, stage_hint: str | None) -> dict[str, object]:
-        episode_dir = self._require_snapshot(episode_id).job.episode_id
-        log_path = self._episode_dir(episode_dir) / REBUILD_LOG_NAME
+    def record_rebuild(
+        self, episode_id: str, *, stage_hint: str | None, applied_command: str | None = None
+    ) -> dict[str, object]:
+        """Record one rebuild intent; with an applied command, schedule it (task 9).
+
+        Deterministic path stays authoritative: the rebuild consumes the
+        sealed events + plan version the apply route committed — this only
+        derives the lineage stage set (``plan_rebuild``) and detaches the
+        runner with a stage-subset re-entry. Only ``edit_plan``-domain
+        commands (the three span-translatable kinds) are rebuild-executable
+        today; the other nine kinds stay intent-only with an honest reason.
+        """
+
+        episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
+        log_path = episode_dir / REBUILD_LOG_NAME
+        if applied_command is None:
+            entry = RebuildRequestEntry(
+                sequence=self._next_sequence(log_path), stage_hint=stage_hint
+            )
+            self._append_jsonl(log_path, entry)
+            return {
+                "stage_hint": entry.stage_hint,
+                "scheduled": False,
+                "note": "rebuild scheduling is not implemented yet; intent recorded",
+            }
+        applied = load_applied_command(episode_dir, applied_command)
+        plan = plan_rebuild(applied, DEFAULT_LINEAGE)
+        resolved_hint = stage_hint if stage_hint is not None else ",".join(plan.stages)
         entry = RebuildRequestEntry(
-            sequence=self._next_sequence(log_path), stage_hint=stage_hint
+            sequence=self._next_sequence(log_path), stage_hint=resolved_hint
         )
         self._append_jsonl(log_path, entry)
+        if applied.affected_domain != EXECUTABLE_DOMAIN:
+            return {
+                "stage_hint": resolved_hint,
+                "scheduled": False,
+                "reason": NOT_EXECUTABLE_REASON,
+                "applied_command": applied.command_id,
+                "rebuild_stages": list(plan.stages),
+            }
+        try:
+            _spawn_runner(
+                [
+                    sys.executable,
+                    "-m",
+                    RUNNER_MODULE,
+                    "--episode-root",
+                    str(episode_dir),
+                    "--stop",
+                    RUNNER_STOP,
+                    "--from-stage",
+                    plan.stages[0],
+                    "--applied-command",
+                    applied.command_id,
+                    "--state-store",
+                    str(self._state_store_path),
+                ],
+                cwd=_PIPELINE_ROOT,
+                log_path=episode_dir / RUNNER_LOG_NAME,
+            )
+        except OSError as error:
+            raise CockpitUnprocessableError(
+                "runner-spawn-failed", f"cannot start the rebuild runner: {error}"
+            ) from error
         return {
-            "stage_hint": entry.stage_hint,
-            "scheduled": False,
-            "note": "rebuild scheduling is not implemented yet; intent recorded",
+            "stage_hint": resolved_hint,
+            "scheduled": True,
+            "stages": list(plan.stages),
+            "runner_log": str(episode_dir / RUNNER_LOG_NAME),
+            "applied_command": applied.command_id,
         }
 
     def _load_brief(self, episode_id: str) -> BriefDraft:

@@ -129,15 +129,9 @@ def review_chat(
 def rebuild(
     episode_id: str, request: RebuildRequestWithCommand, workspace: Workspace
 ) -> dict[str, object]:
-    if request.applied_command is None:
-        return workspace.record_rebuild(episode_id, stage_hint=request.stage_hint)
-    plan = workspace.resolve_rebuild_stages(episode_id, request.applied_command)
-    stage_hint = request.stage_hint if request.stage_hint is not None else ",".join(plan.stages)
-    recorded = workspace.record_rebuild(episode_id, stage_hint=stage_hint)
-    return recorded | {
-        "applied_command": request.applied_command,
-        "rebuild_stages": list(plan.stages),
-    }
+    return workspace.record_rebuild(
+        episode_id, stage_hint=request.stage_hint, applied_command=request.applied_command
+    )
 
 
 @router.get("/episodes/{episode_id}/approvals")
