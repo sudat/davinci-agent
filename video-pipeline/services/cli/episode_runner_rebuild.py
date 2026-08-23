@@ -21,6 +21,7 @@ mirror discipline).
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -213,8 +214,12 @@ def _update_bundle(
     save_bundle(
         bundle.model_copy(
             update={
-                "store_dir": plan_dir.relative_to(bundle_file.parent).as_posix(),
-                "events_log": log_path.relative_to(bundle_file.parent).as_posix(),
+                # relpath (not Path.relative_to): the cockpit review store
+                # is a SIBLING of run/, so the bundle must carry resolvable
+                # ../review/... paths — relative_to cannot emit "..", which
+                # crashed the real rebuild preview stage (T10 live catch).
+                "store_dir": os.path.relpath(plan_dir, bundle_file.parent),
+                "events_log": os.path.relpath(log_path, bundle_file.parent),
                 "current": target,
                 "applied_event_ids": applied,
             }

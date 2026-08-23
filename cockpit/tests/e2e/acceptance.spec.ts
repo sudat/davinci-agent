@@ -444,7 +444,12 @@ test("NL修正→構造化プレビュー→適用→部分rebuild 202", async (
   await page.getByTestId("review-apply-button").click();
 
   await expect(page.getByTestId("rebuild-indicator")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("rebuild-indicator")).toContainText("202");
+  // T9 contract: the indicator shows the scheduled/running/done phase (the
+  // route itself is 202 + {"scheduled": true}) instead of a status string.
+  await expect(page.getByTestId("rebuild-phase")).toHaveText(
+    /再build(予約済み|実行中|完了)/,
+    { timeout: 20_000 },
+  );
   const stageHint = await page.getByTestId("rebuild-stage-hint").textContent();
   expect(stageHint ?? "").toContain("plan");
   expect(stageHint ?? "").toContain("render");
@@ -453,7 +458,7 @@ test("NL修正→構造化プレビュー→適用→部分rebuild 202", async (
   record(
     "nl-correction-structured-partial-rebuild",
     "pass",
-    `「この後2秒残して」→ draft echo (keep_longer/+2s/target 1s) → 適用 → rebuild 202 + stage hint "${stageHint}"（selection/ingest等の無関係stageは再実行対象外）`,
+    `「この後2秒残して」→ draft echo (keep_longer/+2s/target 1s) → 適用 → rebuild scheduled (202) + phase「再build」+ stage hint "${stageHint}"（selection/ingest等の無関係stageは再実行対象外）`,
   );
 
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);

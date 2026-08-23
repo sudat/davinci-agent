@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import fs from "node:fs";
 import path from "node:path";
 
 const backendPort = 8765;
@@ -9,6 +10,21 @@ const frontendPort = 3100;
 const backendBase = `http://127.0.0.1:${backendPort}`;
 const frontendBase = `http://localhost:${frontendPort}`;
 const stateRoot = path.resolve(__dirname, ".e2e", "state");
+
+// Live (non-seeded) real-chain lane (task 10): only when LIVE_V44_E2E=1,
+// the backend additionally boots with EDITORIAL_RUNTIME_CONFIG pinned to an
+// explicit heuristic_diagnostic runtime json, so the detached runner
+// subprocesses (which inherit the backend env) run the chain in diagnostic
+// editorial mode with zero credentials. Default runs get NO env change.
+const liveLane = process.env.LIVE_V44_E2E === "1";
+const editorialRuntimePath = path.join(stateRoot, "editorial-runtime-heuristic.json");
+if (liveLane) {
+  fs.mkdirSync(stateRoot, { recursive: true });
+  fs.writeFileSync(
+    editorialRuntimePath,
+    `${JSON.stringify({ mode: "heuristic_diagnostic" })}\n`,
+  );
+}
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -32,6 +48,9 @@ export default defineConfig({
       timeout: 120_000,
       reuseExistingServer: false,
       stdout: "ignore",
+      ...(liveLane
+        ? { env: { ...process.env, EDITORIAL_RUNTIME_CONFIG: editorialRuntimePath } }
+        : {}),
     },
     {
       command: `bun dev --port ${frontendPort}`,

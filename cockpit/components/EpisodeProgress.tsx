@@ -45,8 +45,11 @@ export default function EpisodeProgress({ status }: EpisodeProgressProps) {
             </tr>
           </thead>
           <tbody>
-            {status.stage_runs.map((run) => (
-              <tr key={run.stage_name}>
+            {status.stage_runs.map((run, index) => (
+              // Index key: rebuilds append fresh rows per run, so stage_name
+              // repeats (plan/preview appear again post-rebuild) — only the
+              // row position is unique in the payload.
+              <tr key={`${run.stage_name}-${index}`}>
                 <td>{run.stage_name}</td>
                 <td>{run.status}</td>
                 <td>{run.retry_count}</td>

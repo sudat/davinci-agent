@@ -1,0 +1,3 @@
+# The root .gitignore guards footage (*.mp4); this committed Tier C fixture
+# is the deliberate, provenance-documented exception (see FIXTURES.md).
+!*.mp4

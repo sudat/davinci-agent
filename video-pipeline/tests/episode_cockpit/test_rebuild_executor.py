@@ -13,6 +13,7 @@ store. Nothing is seeded past what the chain itself would have written.
 from __future__ import annotations
 
 import fcntl
+import io
 import json
 import os
 import sys
@@ -24,10 +25,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.cli import episode_runner, episode_runner_rebuild
-from services.cli.bundle import ReviewTarget, assemble_real_bundle, save_bundle
+from services.cli.bundle import (
+    ReviewTarget,
+    assemble_real_bundle,
+    load_bundle,
+    save_bundle,
+)
 from services.cli.episode_runner_workspace import publish_preview
 from services.cli.project import init_review_store, plan_sha256
 from services.cli.real_chain import JOB_ID as CHAIN_JOB
+from services.cli.review_common import store_ir, store_plan
 from services.contracts.edit_plan_0c import (
     EditPlan0C,
     EditPlanBody0C,
@@ -41,12 +48,13 @@ from services.foundation_io import sha256_file
 from services.job_runner.cas import apply_transition, current_job_state
 from services.job_runner.state_store import StateStore
 from services.job_runner.transitions import MAIN_PATH
+from services.preview.render import PREVIEW_NAME, TRACE_NAME
+from services.review_command.store import HeadState, load_head
 
 if TYPE_CHECKING:
     from typing import BinaryIO
 
     from services.contracts.timeline_ir import TimelineIr0C
-    from services.review_command.store import HeadState
 
 PIPELINE_ROOT = Path(episode_ops.__file__).resolve().parents[2]
 RATE = RationalFrameRate(num=30, den=1)
@@ -484,3 +492,61 @@ def test_reentry_at_preview_only_rerenders_latest_version(
         (episode_dir / "rebuild-metrics.jsonl").read_bytes().splitlines()[0]
     )
     assert metric["stages"] == ["preview"]
+
+
+# ---------------------------------------------------------------------------
+# (e) task-10 live Tier C catch: the REAL stage_preview bundle hand-off must
+#     repoint store_dir/events_log at the cockpit review layout with
+#     resolvable ../review/... paths (Path.relative_to cannot emit "..", so
+#     the real rebuild preview stage crashed; the fake above had hidden it).
+# ---------------------------------------------------------------------------
+
+
+def test_stage_preview_repoints_bundle_at_cockpit_review_store(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                      monkeypatch)
+    applied = _apply_remove(client, episode_id)
+    assert applied["result_plan_version"] == "v2"
+    log_path = episode_dir / "review" / "events.jsonl"
+    plan_dir = episode_dir / "review" / "store"
+    head = load_head(log_path, plan_dir)
+    assert head.version == 2
+    plan = store_plan(plan_dir / "plan-v2.json")
+    ir = store_ir(plan_dir / "ir-v2.json")
+
+    def fake_render(*_args: object, **_kwargs: object) -> None:
+        preview_dir = episode_dir / "run" / "preview-v2"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        (preview_dir / PREVIEW_NAME).write_bytes(b"regression-preview-v2")
+        (preview_dir / TRACE_NAME).write_text('{"note": "fake trace"}')
+
+    monkeypatch.setattr(episode_runner_rebuild, "render_review_preview", fake_render)
+    monkeypatch.setattr(
+        episode_runner_rebuild, "previous_trace", lambda *_args: object()
+    )
+    monkeypatch.setattr(
+        episode_runner_rebuild, "AppliedDecision", lambda **kwargs: kwargs
+    )
+    monkeypatch.setattr(episode_runner_rebuild, "load_tools", object)
+
+    preview_sha = episode_runner_rebuild.stage_preview(
+        episode_dir, head, plan, ir, io.BytesIO()
+    )
+
+    bundle_file = episode_dir / "run" / "review-bundle.json"
+    bundle = load_bundle(bundle_file)
+    assert bundle.store_dir == "../review/store"
+    assert bundle.events_log == "../review/events.jsonl"
+    assert (bundle_file.parent / bundle.store_dir / "plan-v2.json").is_file()
+    assert (bundle_file.parent / bundle.events_log).is_file()
+    assert bundle.current.plan_version == "v2"
+    assert bundle.current.preview_dir == "preview-v2"
+    assert preview_sha == sha256_file(
+        episode_dir / "run" / "preview-v2" / PREVIEW_NAME
+    )
+    assert (episode_dir / "previews" / "preview.mp4").read_bytes() == b"regression-preview-v2"
