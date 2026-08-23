@@ -19,6 +19,15 @@ from services.episode_cockpit.models import (
     RebuildRequestEntry,
     ReviewChatEntry,
 )
+from services.episode_cockpit.review_chat import (
+    DEFAULT_LINEAGE,
+    ReviewChatContext,
+    ReviewStoreLocation,
+    apply_command,
+    interpret_command,
+    plan_rebuild,
+    record_applied_command,
+)
 from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.preview.render import PREVIEW_NAME
@@ -89,6 +98,34 @@ class FileOps(WorkspaceContext):
         )
         self._append_jsonl(log_path, entry)
         return {"received": True, "sequence": entry.sequence}
+
+    def apply_review_command(
+        self, episode_id: str, *, text: str, at_seconds: float | None
+    ) -> dict[str, object]:
+        """Task 51 wiring: apply one NL correction and derive its rebuild plan.
+
+        Interpretation is deterministic, so re-interpreting the same
+        (text, at_seconds) reproduces the echoed draft's command exactly;
+        the applied command lands in the episode audit log and the
+        lineage-scoped stage set comes back for the rebuild indicator.
+        """
+
+        snapshot = self._require_snapshot(episode_id)
+        episode_dir = self._episode_dir(snapshot.job.episode_id)
+        draft = interpret_command(text, ReviewChatContext(at_seconds=at_seconds))
+        applied = apply_command(
+            draft,
+            store=ReviewStoreLocation(
+                log_path=episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
+                plan_dir=episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
+            ),
+        )
+        record_applied_command(episode_dir, applied)
+        plan = plan_rebuild(applied, DEFAULT_LINEAGE)
+        return {
+            "applied": applied.model_dump(mode="json"),
+            "rebuild": plan.model_dump(mode="json"),
+        }
 
     def record_rebuild(self, episode_id: str, *, stage_hint: str | None) -> dict[str, object]:
         episode_dir = self._require_snapshot(episode_id).job.episode_id

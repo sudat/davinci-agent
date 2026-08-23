@@ -17,6 +17,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [["list"]],
+  globalTeardown: path.resolve(__dirname, "tests", "e2e", "teardown-backend-port.ts"),
   use: { baseURL: frontendBase },
   webServer: [
     {

@@ -218,3 +218,189 @@ export async function registerReference(
     fetchImpl,
   );
 }
+
+// Reference library listing (task 51: GET /references over the persisted file)
+
+export type LibraryReference = {
+  source_id: string;
+  kind: string;
+  location: string;
+  sha256: string;
+  created_at: string | null;
+};
+
+export type ReferencesListResult = {
+  available: boolean;
+  references: LibraryReference[];
+};
+
+export async function listReferences(
+  fetchImpl: FetchLike = fetch,
+): Promise<ReferencesListResult> {
+  return request<ReferencesListResult>("/references", { method: "GET" }, fetchImpl);
+}
+
+// Review chat -> structured command -> partial rebuild (task 47 + 51 wiring)
+
+export type ReviewCommandDraft = {
+  schema_version: string;
+  command_id: string;
+  command_kind: string | null;
+  text: string;
+  target_seconds: number | null;
+  seconds_delta: number | null;
+  scope: "episode" | "channel";
+  needs_confirmation: boolean;
+  confirmation_reason: string | null;
+};
+
+export type ReviewChatResult = {
+  received: boolean;
+  sequence: number;
+  draft: ReviewCommandDraft;
+};
+
+export type ReviewChatInput = {
+  text: string;
+  at_seconds?: number | null;
+};
+
+export async function postReviewChat(
+  episodeId: string,
+  input: ReviewChatInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<ReviewChatResult> {
+  return request<ReviewChatResult>(
+    `/episodes/${encodeURIComponent(episodeId)}/review-chat`,
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+}
+
+export type AppliedCommand = {
+  schema_version: string;
+  command_id: string;
+  command_kind: string;
+  affected_domain: string;
+  event_id: string | null;
+  base_plan_version: string | null;
+  result_plan_version: string | null;
+  deferred: boolean;
+  reason: string | null;
+  target_seconds: number | null;
+  seconds_delta: number | null;
+};
+
+export type RebuildPlan = {
+  schema_version: string;
+  command_id: string;
+  command_kind: string;
+  affected_domain: string;
+  stages: string[];
+  excluded_stages: string[];
+};
+
+export type ReviewApplyResult = {
+  applied: AppliedCommand;
+  rebuild: RebuildPlan;
+};
+
+export async function applyReviewCommand(
+  episodeId: string,
+  input: ReviewChatInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<ReviewApplyResult> {
+  return request<ReviewApplyResult>(
+    `/episodes/${encodeURIComponent(episodeId)}/review-chat/apply`,
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+}
+
+export type RebuildResult = {
+  stage_hint: string | null;
+  scheduled: boolean;
+  note: string;
+  applied_command?: string;
+  rebuild_stages?: string[];
+};
+
+export async function postRebuild(
+  episodeId: string,
+  input: { applied_command?: string; stage_hint?: string },
+  fetchImpl: FetchLike = fetch,
+): Promise<RebuildResult> {
+  return request<RebuildResult>(
+    `/episodes/${encodeURIComponent(episodeId)}/rebuild`,
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+}
+
+// Approval sessions (task 49 bundling + task 51 wiring)
+
+export type PendingApprovalItem = {
+  record_id: string;
+  purpose: string;
+  target_hash: string;
+};
+
+export type ApprovalSession = {
+  session_key: string;
+  kind: "normal" | "exception";
+  purposes: string[];
+  items: PendingApprovalItem[];
+  explanation: string | null;
+};
+
+export type DecidedApproval = {
+  record_id: string;
+  purpose: string;
+  decision: string;
+};
+
+export type ApprovalSessionsPayload = {
+  available: boolean;
+  sessions: ApprovalSession[];
+  blocking_session_count: number;
+  decided: DecidedApproval[];
+};
+
+export async function getApprovalSessions(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<ApprovalSessionsPayload> {
+  return request<ApprovalSessionsPayload>(
+    `/episodes/${encodeURIComponent(episodeId)}/approval-sessions`,
+    { method: "GET" },
+    fetchImpl,
+  );
+}
+
+export type ApprovalExecuteInput = {
+  decision: "approve" | "reject";
+  actor_id: string;
+};
+
+export type ApprovalExecuteResult = {
+  record_id: string;
+  decision: string;
+  superseded_record_id: string | null;
+  runner_class: string;
+  fixture_only: boolean;
+};
+
+export async function executeApproval(
+  episodeId: string,
+  approvalId: string,
+  input: ApprovalExecuteInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<ApprovalExecuteResult> {
+  return request<ApprovalExecuteResult>(
+    `/episodes/${encodeURIComponent(episodeId)}/approvals/${encodeURIComponent(
+      approvalId,
+    )}`,
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+}

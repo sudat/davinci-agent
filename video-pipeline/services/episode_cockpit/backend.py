@@ -11,7 +11,9 @@ snapshot guard) and four single-purpose mixins:
 - ``ApprovalOps`` — approvals read + automation-class append through
   the append-only OperationRecordStore;
 - ``ReferenceOps`` — real reference_learning ingest into one library
-  file at the episodes root.
+  file at the episodes root;
+- ``ApprovalSessionsOps`` — pending approvals bundled into at most two
+  normal blocking sessions (task 51).
 
 No method here may introduce a second state machine: every write goes
 through an existing service API, and cockpit-owned files are
@@ -23,12 +25,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from services.episode_cockpit.approval_sessions import ApprovalSessionsOps
 from services.episode_cockpit.episode_files import FileOps
 from services.episode_cockpit.episode_ops import JobOps
 from services.episode_cockpit.side_desks import ApprovalOps, ReferenceOps
 
 
-class CockpitWorkspace(JobOps, FileOps, ApprovalOps, ReferenceOps):
+class CockpitWorkspace(
+    JobOps, FileOps, ApprovalOps, ReferenceOps, ApprovalSessionsOps
+):
     """All cockpit state access, rooted at one StateStore path + episodes root."""
 
     def __init__(self, *, state_store_path: Path, episodes_root: Path) -> None:

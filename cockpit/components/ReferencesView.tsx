@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  listReferences,
   registerReference,
   CockpitApiError,
+  type LibraryReference,
 } from "@/lib/api";
 import { DOMAIN_LABEL, POLARITY_LABEL } from "@/lib/domains";
 import {
@@ -21,11 +23,11 @@ type ReferencesViewProps = {
 };
 
 /**
- * Saved-reference surface (task 50): register local reference files into the
- * persistent backend library (POST /references) and list this session's
- * references + annotations. The backend has no list GET yet, so the list is
- * session-scoped by contract (note rendered below; wiring gap recorded for
- * task 51).
+ * Saved-reference surface (task 50 + 51 wiring): register local reference
+ * files into the persistent backend library (idempotent POST
+ * /references), list the PERSISTED library (GET /references — survives
+ * restarts), and keep this session's registrations + annotations beside
+ * it.
  */
 export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const [path, setPath] = useState("");
@@ -33,11 +35,25 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [references, setReferences] = useState<RegisteredReference[]>([]);
   const [annotations, setAnnotations] = useState<SavedAnnotation[]>([]);
+  const [library, setLibrary] = useState<LibraryReference[] | null>(null);
+
+  const refreshLibrary = useCallback(async () => {
+    try {
+      setLibrary((await listReferences(fetchImpl)).references);
+    } catch (cause) {
+      if (cause instanceof CockpitApiError) {
+        setError({ code: cause.code, detail: cause.detail });
+      } else {
+        setError({ code: "unexpected-client-error", detail: String(cause) });
+      }
+    }
+  }, [fetchImpl]);
 
   useEffect(() => {
     setReferences(loadReferences());
     setAnnotations(loadAnnotations());
-  }, []);
+    void refreshLibrary();
+  }, [refreshLibrary]);
 
   const register = async () => {
     if (path.trim() === "") return;
@@ -55,6 +71,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
         }),
       );
       setPath("");
+      await refreshLibrary();
     } catch (cause) {
       if (cause instanceof CockpitApiError) {
         setError({ code: cause.code, detail: cause.detail });
@@ -100,10 +117,30 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
         </div>
       </section>
       <section className="card">
-        <h2 className="section-title">保存済みの参照（このセッション）</h2>
-        <p className="field-hint" data-testid="session-scope-note">
-          ※一覧はこのセッションで登録・保存した分のみ表示します（バックエンドに参照一覧APIがまだないため）。登録自体はバックエンドの参照ライブラリに永続化されています。
-        </p>
+        <h2 className="section-title">保存済みの参照ライブラリ（バックエンド永続化）</h2>
+        {library === null ? (
+          <p className="empty-note">ライブラリを読み込んでいます…</p>
+        ) : library.length > 0 ? (
+          <ul className="list-plain" data-testid="library-reference-list">
+            {library.map((item) => (
+              <li
+                key={item.source_id}
+                data-testid="library-reference-item"
+                style={{ flexDirection: "column", alignItems: "stretch" }}
+              >
+                <span>{item.source_id}</span>
+                <span>{item.location}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty-note" data-testid="library-reference-empty">
+            ライブラリに保存済みの参照はまだありません。
+          </p>
+        )}
+        <h3 className="section-title" style={{ marginTop: "var(--space-4)" }}>
+          このセッションで登録
+        </h3>
         {references.length > 0 ? (
           <ul className="list-plain" data-testid="reference-list">
             {references.map((item, index) => (

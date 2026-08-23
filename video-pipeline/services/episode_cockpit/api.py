@@ -165,6 +165,11 @@ def register_reference(
     return workspace.register_reference(path=request.path, source_id=request.source_id)
 
 
+@router.get("/references")
+def list_references(workspace: Workspace) -> dict[str, object]:
+    return workspace.list_references()
+
+
 @router.post("/references/parse-preview")
 def parse_reference_preview(
     request: ReferenceParsePreviewRequest,

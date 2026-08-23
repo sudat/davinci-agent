@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from services.episode_cockpit.api import router
+from services.episode_cockpit.api_review import router as review_router
 from services.episode_cockpit.backend import CockpitWorkspace
 from services.episode_cockpit.errors import (
     CockpitBindError,
@@ -112,6 +113,7 @@ def create_cockpit_app(
         state_store_path=state_store_path, episodes_root=episodes_root
     )
     app.include_router(router)
+    app.include_router(review_router)
     _register_error_handlers(app)
     return app
 

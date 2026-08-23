@@ -6,11 +6,14 @@ fixture-marked record (``record_fixture_operation``) — operator-grade
 records require the controlling-TTY ingress by contract and cannot be
 minted over HTTP. References: the real
 ``services.reference_learning.ingest`` call over one library file at the
-episodes root.
+episodes root; registration is idempotent by CONTENT hash (the same
+bytes return the existing source instead of duplicating, task 51) and
+the persisted library lists read-only over GET /references.
 """
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -88,6 +91,20 @@ class ReferenceOps(WorkspaceContext):
     def register_reference(self, *, path: str, source_id: str | None) -> dict[str, object]:
         library = self._load_library()
         try:
+            content_sha = _file_sha256(Path(path))
+        except OSError as error:
+            raise CockpitUnprocessableError("reference-unavailable", str(error)) from error
+        existing = next(
+            (source for source in library.sources if source.sha256 == content_sha), None
+        )
+        if existing is not None:
+            return {
+                "source_id": existing.source_id,
+                "sha256": existing.sha256,
+                "library_version": library.version,
+                "idempotent": True,
+            }
+        try:
             result = ingest_local_reference(path, library=library, source_id=source_id)
         except LocalReferenceUnavailable as error:
             raise CockpitUnprocessableError("reference-unavailable", str(error)) from error
@@ -98,6 +115,28 @@ class ReferenceOps(WorkspaceContext):
             "source_id": result.source_id,
             "sha256": result.sha256,
             "library_version": result.library.version,
+            "idempotent": False,
+        }
+
+    def list_references(self) -> dict[str, object]:
+        """Read-only persisted-library listing (task 51 GET /references)."""
+
+        path: Path = self._episodes_root / LIBRARY_NAME
+        if not path.is_file():
+            return {"available": False, "references": []}
+        library = ReferenceLibraryV1.model_validate_json(path.read_bytes())
+        return {
+            "available": bool(library.sources),
+            "references": [
+                {
+                    "source_id": source.source_id,
+                    "kind": source.kind,
+                    "location": source.location,
+                    "sha256": source.sha256,
+                    "created_at": source.created_at,
+                }
+                for source in library.sources
+            ],
         }
 
     def _load_library(self) -> ReferenceLibraryV1:
@@ -110,6 +149,14 @@ class ReferenceOps(WorkspaceContext):
                 created_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             )
         return ReferenceLibraryV1.model_validate_json(path.read_bytes())
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 __all__ = ["ApprovalOps", "ReferenceOps"]

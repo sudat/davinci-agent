@@ -15,6 +15,7 @@ import EpisodeProgress from "@/components/EpisodeProgress";
 import PreviewPlayer, { type PreviewAvailability } from "@/components/PreviewPlayer";
 import FlagList from "@/components/FlagList";
 import BeforeAfterSummary from "@/components/BeforeAfterSummary";
+import ReviewChatPanel from "@/components/ReviewChatPanel";
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -132,6 +133,10 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           <p className="empty-note">レビューflagの有無を確認しています…</p>
         )}
       </section>
+      <ReviewChatPanel
+        episodeId={episodeId}
+        getAtSeconds={() => videoRef.current?.currentTime ?? null}
+      />
       <BeforeAfterSummary summary={status?.before_after ?? null} />
     </div>
   );

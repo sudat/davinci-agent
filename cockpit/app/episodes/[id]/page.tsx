@@ -1,3 +1,4 @@
+import ApprovalSessions from "@/components/ApprovalSessions";
 import EpisodeView from "@/components/EpisodeView";
 import ReferenceAnnotator from "@/components/ReferenceAnnotator";
 
@@ -14,6 +15,7 @@ export default async function EpisodeStatusPage({
         <p className="page-subtitle">ステージと進捗を表示しています。</p>
       </header>
       <EpisodeView episodeId={id} />
+      <ApprovalSessions episodeId={id} />
       <ReferenceAnnotator episodeId={id} />
     </main>
   );

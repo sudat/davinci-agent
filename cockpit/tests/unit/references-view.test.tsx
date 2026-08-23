@@ -6,21 +6,49 @@ const REGISTER_OK = {
   source_id: "ref-def456",
   sha256: "b".repeat(64),
   library_version: 2,
+  idempotent: false,
 };
+
+const EMPTY_LIBRARY = {
+  available: false,
+  references: [],
+};
+
+const POPULATED_LIBRARY = {
+  available: true,
+  references: [
+    {
+      source_id: "ref-def456",
+      kind: "local_file",
+      location: "/tmp/style-ref.mp4",
+      sha256: "b".repeat(64),
+      created_at: "2026-01-01T00:00:00Z",
+    },
+  ],
+};
+
+function jsonResponse(payload: object, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 beforeEach(() => {
   sessionStorage.clear();
 });
 
-describe("ReferencesView（参照登録とセッション一覧）", () => {
-  it("参照を登録するとAPIへPOSTし、一覧にsource_idが出る", async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+describe("ReferencesView（参照登録と永続化ライブラリ一覧）", () => {
+  it("参照を登録するとAPIへPOSTし、セッション一覧と永続化ライブラリに出る", async () => {
+    let postSeen = false;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       expect(url).toBe("/cockpit-api/references");
-      return new Response(JSON.stringify(REGISTER_OK), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      if (init?.method === "POST") {
+        postSeen = true;
+        return jsonResponse(REGISTER_OK);
+      }
+      return jsonResponse(postSeen ? POPULATED_LIBRARY : EMPTY_LIBRARY);
     });
     render(<ReferencesView fetchImpl={fetchImpl as unknown as typeof fetch} />);
 
@@ -40,10 +68,20 @@ describe("ReferencesView（参照登録とセッション一覧）", () => {
     expect(item.textContent).toContain("ref-def456");
     expect(item.textContent).toContain("ライブラリ版 2");
 
-    const [url, init] = (fetchImpl as ReturnType<typeof vi.fn>).mock
-      .calls[0] as [string, RequestInit];
-    expect(url).toBe("/cockpit-api/references");
-    expect(JSON.parse(init.body as string)).toEqual({ path: "/tmp/style-ref.mp4" });
+    const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock
+      .calls as Array<[string, RequestInit?]>;
+    const postCall = calls.find(([, init]) => init?.method === "POST");
+    expect(postCall).toBeDefined();
+    expect(JSON.parse((postCall![1]!.body as string) ?? "{}")).toEqual({
+      path: "/tmp/style-ref.mp4",
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("library-reference-item")).toHaveLength(1);
+    });
+    expect(screen.getByTestId("library-reference-item").textContent).toContain(
+      "/tmp/style-ref.mp4",
+    );
 
     const stored = JSON.parse(
       sessionStorage.getItem("cockpit.references.v1") ?? "[]",
@@ -52,13 +90,14 @@ describe("ReferencesView（参照登録とセッション一覧）", () => {
   });
 
   it("バックエンド構造化エラーはそのまま表示される（存在しないパス）", async () => {
-    const fetchImpl = vi.fn(async (): Promise<Response> => {
-      return new Response(
-        JSON.stringify({
-          error: { code: "reference-unavailable", detail: "Local reference not found" },
-        }),
-        { status: 422, headers: { "content-type": "application/json" } },
-      );
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return jsonResponse(
+          { error: { code: "reference-unavailable", detail: "Local reference not found" } },
+          422,
+        );
+      }
+      return jsonResponse(EMPTY_LIBRARY);
     });
     render(<ReferencesView fetchImpl={fetchImpl as unknown as typeof fetch} />);
 
@@ -76,12 +115,13 @@ describe("ReferencesView（参照登録とセッション一覧）", () => {
     expect(screen.queryAllByTestId("reference-item")).toHaveLength(0);
   });
 
-  it("セッション範囲の注記とスコアカード不在を検証する", () => {
-    const fetchImpl = vi.fn();
+  it("永続化ライブラリが空のときは空表示、スコアカードも出ない", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(EMPTY_LIBRARY));
     render(<ReferencesView fetchImpl={fetchImpl as unknown as typeof fetch} />);
-    expect(screen.getByTestId("session-scope-note").textContent).toContain(
-      "このセッション",
-    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("library-reference-empty")).toBeTruthy();
+    });
     expect(document.querySelectorAll('input[type="range"]')).toHaveLength(0);
     expect(screen.queryByTestId("scorecard")).toBeNull();
     expect(screen.queryByTestId("pairwise-prompt")).toBeNull();
