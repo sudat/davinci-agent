@@ -13,7 +13,9 @@ snapshot guard) and four single-purpose mixins:
 - ``ReferenceOps`` — real reference_learning ingest into one library
   file at the episodes root;
 - ``ApprovalSessionsOps`` — pending approvals bundled into at most two
-  normal blocking sessions (task 51).
+  normal blocking sessions (task 51);
+- ``KitPreviewOps`` — task-11 kit preview manifest reads + runtime
+  operator selection record (kit-previews/kit-selections files only).
 
 No method here may introduce a second state machine: every write goes
 through an existing service API, and cockpit-owned files are
@@ -28,11 +30,12 @@ from pathlib import Path
 from services.episode_cockpit.approval_sessions import ApprovalSessionsOps
 from services.episode_cockpit.episode_files import FileOps
 from services.episode_cockpit.episode_ops import JobOps
+from services.episode_cockpit.kit_previews import KitPreviewOps
 from services.episode_cockpit.side_desks import ApprovalOps, ReferenceOps
 
 
 class CockpitWorkspace(
-    JobOps, FileOps, ApprovalOps, ReferenceOps, ApprovalSessionsOps
+    JobOps, FileOps, ApprovalOps, ReferenceOps, ApprovalSessionsOps, KitPreviewOps
 ):
     """All cockpit state access, rooted at one StateStore path + episodes root."""
 
