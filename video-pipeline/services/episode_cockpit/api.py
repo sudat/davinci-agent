@@ -28,7 +28,8 @@ from services.episode_cockpit.models import (
     ReviewChatRequest,
     Seconds,
 )
-from services.episode_cockpit.review_chat import ReviewChatContext, interpret_command
+from services.episode_cockpit.review_chat import ReviewChatContext
+from services.episode_cockpit.review_interpreter import build_review_llm_call, interpret
 from services.reference_learning.domain_extract import extract_domains_seeded
 
 router = APIRouter()
@@ -114,7 +115,13 @@ def review_chat(
     stored = workspace.append_review_chat(
         episode_id, text=request.text, at_seconds=request.at_seconds
     )
-    draft = interpret_command(request.text, ReviewChatContext(at_seconds=request.at_seconds))
+    nearby = workspace.nearby_context(episode_id, at_seconds=request.at_seconds)
+    draft = interpret(
+        request.text,
+        ReviewChatContext(at_seconds=request.at_seconds),
+        nearby,
+        build_review_llm_call(),
+    )
     return stored | {"draft": draft.model_dump(mode="json")}
 
 

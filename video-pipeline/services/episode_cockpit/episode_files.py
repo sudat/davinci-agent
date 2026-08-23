@@ -28,6 +28,10 @@ from services.episode_cockpit.review_chat import (
     plan_rebuild,
     record_applied_command,
 )
+from services.episode_cockpit.review_interpreter import (
+    NearbyContext,
+    build_nearby_context,
+)
 from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.preview.render import PREVIEW_NAME
@@ -98,6 +102,17 @@ class FileOps(WorkspaceContext):
         )
         self._append_jsonl(log_path, entry)
         return {"received": True, "sequence": entry.sequence}
+
+    def nearby_context(self, episode_id: str, *, at_seconds: float | None) -> NearbyContext:
+        """Tolerant v2-index context around the player position (task 8).
+
+        Read-only hint for the LLM interpreter; any missing/unreadable
+        index degrades to the position-only context — never an error the
+        review-chat route has to surface.
+        """
+
+        episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
+        return build_nearby_context(episode_dir, at_seconds)
 
     def apply_review_command(
         self, episode_id: str, *, text: str, at_seconds: float | None
