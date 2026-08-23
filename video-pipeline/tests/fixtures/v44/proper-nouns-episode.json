@@ -1,0 +1,13 @@
+{
+  "schema_version": "proper-nouns-ja-v1",
+  "entries": [
+    {
+      "canonical": "OpenCode",
+      "variants": ["オープンコード", "オープン コード", "オパンコード"]
+    },
+    {
+      "canonical": "DaVinci Resolve",
+      "variants": ["ダビンシーリゾルブ"]
+    }
+  ]
+}

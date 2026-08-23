@@ -1,0 +1,34 @@
+{
+  "schema_version": "v44-transcript-sample-v1",
+  "segments": [
+    {
+      "start_ms": 0,
+      "end_ms": 3681,
+      "text": "今日は動画編集のワークフローについて話します。"
+    },
+    {
+      "start_ms": 3681,
+      "end_ms": 10719,
+      "text": "DaVinci Resolveは色補正とタイムライン編集が一体になった強力なツールです。"
+    },
+    {
+      "start_ms": 10719,
+      "end_ms": 16320,
+      "text": "一方、OpenCodeはターミナルで動くコーディングエージェントです。"
+    },
+    {
+      "start_ms": 16320,
+      "end_ms": 21753,
+      "text": "この二つを組み合わせると、撮影から公開までの作業を大きく減らせます。"
+    },
+    {
+      "start_ms": 21753,
+      "end_ms": 23679,
+      "text": "それでは、始めましょう。"
+    }
+  ],
+  "proper_nouns": {
+    "pn-opencode": "OpenCode",
+    "pn-davinci-resolve": "DaVinci Resolve"
+  }
+}
