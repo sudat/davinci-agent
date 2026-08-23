@@ -7,9 +7,12 @@ Subcommands:
   run             — phase rerun harness:
                      ``run --phase editorial-v2`` executes brief →
                      media-intelligence v2 → Director v2 three-pass
-                     (llm_call=None) → validation+commit → synthetic Review
-                     Event correction → Timeline IR v2 → Editorial Preview →
-                     measurement report + Gate V43-2 checklist.
+                     (production_model via the pinned gpt-5.6-sol transport,
+                     or heuristic_diagnostic with llm_call=None; production
+                     mode BLOCKS without credentials) → validation+commit →
+                     synthetic Review Event correction → Timeline IR v2 →
+                     Editorial Preview → measurement report + Gate V43-2
+                     checklist.
                      ``run --phase full-build`` (task 43) continues past the
                      editorial stages: presentation intents (T32, within
                      density) → subtitle/audio/color plans (T33/T34/T35) →
@@ -42,6 +45,12 @@ from typing import TYPE_CHECKING, Literal, cast, get_args
 
 from pydantic import BaseModel, ValidationError
 
+from services.cli.live_editorial_v2 import (
+    CREDENTIALS_ENV,
+    NETWORK_ENV,
+    EditorialTransportGatedError,
+    make_http_post,
+)
 from services.config.backends import BackendsConfigError, load_backends, set_backend
 from services.contracts.primitives import RationalFrameRate
 from services.creative_plan.audio_finishing import (
@@ -96,6 +105,12 @@ from services.editorial_v2.episode_brief import (
     require_approved,
 )
 from services.editorial_v2.evidence_v2 import assemble_evidence_v2
+from services.editorial_v2.model_provider import (
+    EDITORIAL_RUNTIME_PATH,
+    build_llm_call,
+    load_editorial_pin,
+    load_editorial_runtime,
+)
 from services.editorial_v2.moment_models import MomentSelectionProposalV2
 from services.editorial_v2.proposal_validate import (
     MomentSelectionStore,
@@ -184,7 +199,7 @@ from services.review_command.events import MOMENT_SELECTION_V2_COMMITTED
 from services.review_command.store import load_events
 
 if TYPE_CHECKING:
-    from services.editorial_v2.director_v2 import ThreePassResult
+    from services.editorial_v2.director_v2 import LlmCallV2, ThreePassResult
     from services.editorial_v2.evidence_v2 import EvidenceBundleV2
     from services.editorial_v2.proposal_validate import CommitReceipt, ValidationResult
     from services.editorial_v2.story_plan import StoryPlanV1
@@ -236,6 +251,13 @@ class Episode0RerunError(Exception):
         super().__init__(f"{code}: {detail}")
         self.code = code
         self.detail = detail
+
+
+def _print_blocked(exc: Episode0BlockedError) -> None:
+    """The BLOCKED escalation pattern shared by every run command."""
+
+    print(f"blocked: {exc.code}: {exc.detail}", file=sys.stderr)
+    print("BLOCKED — escalated to operator. Not continuing.", file=sys.stderr)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -291,6 +313,15 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_MCP_PIN,
         help="davinci-resolve-mcp pin contract (live executor only)",
+    )
+    run.add_argument(
+        "--editorial-runtime",
+        type=Path,
+        default=EDITORIAL_RUNTIME_PATH,
+        help=(
+            "editorial runtime config (mode + model pins); production_model "
+            "BLOCKS without the credential/network env gate"
+        ),
     )
 
     return parser
@@ -422,6 +453,7 @@ class _RunInputs:
     taste_path: Path | None
     source_media: Path | None
     rate: RationalFrameRate
+    editorial_runtime: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -507,9 +539,44 @@ def _input_ref(path: Path) -> ArtifactFileRef:
 
 
 def _stage_director(
-    brief: EpisodeBriefV1, api: MediaQueryApiV2, taste: DerivedTasteProfileV1 | None
+    brief: EpisodeBriefV1,
+    api: MediaQueryApiV2,
+    taste: DerivedTasteProfileV1 | None,
+    *,
+    runtime_path: Path = EDITORIAL_RUNTIME_PATH,
+    env: Mapping[str, str] | None = None,
 ) -> ThreePassResult:
-    return DirectorV2().run_three_pass(brief, api, taste_profile=taste, llm_call=None)
+    """Editorial brain selection per the editorial-runtime config (task 3).
+
+    ``production_model`` wires the three DirectorV2 passes to the pinned
+    gpt-5.6-sol transport; a gated transport is a typed BLOCKED escalation
+    (never a silent heuristic fallback). ``heuristic_diagnostic`` runs the
+    deterministic planner with ``llm_call=None`` behind an explicit banner.
+    """
+
+    runtime = load_editorial_runtime(runtime_path)
+    llm_call: LlmCallV2 | None = None
+    if runtime.mode == "production_model":
+        try:
+            http_post = make_http_post(env)
+        except EditorialTransportGatedError as exc:
+            raise Episode0BlockedError(
+                "production-model-unavailable",
+                f"editorial runtime mode is production_model but the live model "
+                f"transport is gated ({exc.code}: {exc.detail}). ESCALATION to "
+                f"operator: export {CREDENTIALS_ENV} with the provider key and set "
+                f"{NETWORK_ENV}=1, or switch {runtime_path} to heuristic_diagnostic "
+                f"for an explicit no-LLM diagnostic run. The editorial-v2 rerun "
+                f"was NOT started.",
+            ) from exc
+        pin = load_editorial_pin(Path(runtime.director_pin_path))
+        llm_call = build_llm_call(pin, http_post)
+    else:
+        print(
+            "editorial runtime: heuristic_diagnostic mode — llm_call=None "
+            "(deterministic diagnostic planner; NOT a production editorial result)"
+        )
+    return DirectorV2().run_three_pass(brief, api, taste_profile=taste, llm_call=llm_call)
 
 
 @dataclass(frozen=True, slots=True)
@@ -686,7 +753,7 @@ def _run_editorial_stages(inputs: _RunInputs) -> _EditorialOutcome:
             source_id=artifact.sources[0].source_id,
             store=MomentSelectionStore(plan_dir=inputs.run_dir / "moment-selection"),
         )
-        result = _stage_director(brief, api, taste)
+        result = _stage_director(brief, api, taste, runtime_path=inputs.editorial_runtime)
         committed = _stage_commit(deps, result)
         corrected, correction_receipt, corrected_id = _stage_correct(deps, result, committed)
         compile_outcome = _stage_compile(deps, result, corrected)
@@ -817,6 +884,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         taste_path=args.taste_profile,
         source_media=args.source_media,
         rate=rate,
+        editorial_runtime=args.editorial_runtime,
     )
     if args.phase == "full-build":
         return _cmd_run_full_build(args, inputs, previous)
@@ -842,9 +910,12 @@ def _cmd_run_editorial_v2(args: argparse.Namespace, inputs: _RunInputs, previous
     try:
         outcome = _run_editorial_stages(inputs)
         report, evidence = outcome.report, outcome.evidence
+    except Episode0BlockedError as exc:
+        _print_blocked(exc)
+        failure: BaseException | None = exc
     except Exception as exc:  # noqa: BLE001 (CLI boundary funnel: named failure, exit 1)
         print(f"run_failed: {type(exc).__name__}: {exc}", file=sys.stderr)
-        failure: BaseException | None = exc
+        failure = exc
     else:
         failure = None
     finally:
@@ -1598,6 +1669,9 @@ def _cmd_run_full_build(
             executor_name=executor_name,
             executor=executor,
         )
+    except Episode0BlockedError as exc:
+        _print_blocked(exc)
+        failure = exc
     except Exception as exc:  # noqa: BLE001 (CLI boundary funnel: named failure, exit 1)
         print(f"run_failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         failure = exc

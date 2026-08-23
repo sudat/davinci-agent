@@ -34,6 +34,7 @@ from services.metrics.episode0_gate_v43_3 import (
 )
 from tests.editorial_v2.fixtures.three_pass_fixture import make_brief
 from tests.metrics.test_episode0_rerun import (
+    _HEURISTIC_RUNTIME,
     _preview_compatible_artifact,
     _write_backends,
     _write_baseline,
@@ -84,8 +85,14 @@ class _FullBuildWorkspace:
         self.runs_root = root / "runs"
         self.brief_path = root / "brief.json"
         self.mi_path = root / "media-intelligence.json"
+        # NO-LLM harness by design: the shipped default is production_model
+        # (BLOCKS without credentials), so these runs opt into heuristic mode.
+        self.editorial_runtime_path = root / "editorial-runtime.json"
         atomic_write(self.brief_path, canonical_model_bytes(make_brief()))
         atomic_write(self.mi_path, canonical_model_bytes(_preview_compatible_artifact()))
+        atomic_write(
+            self.editorial_runtime_path, canonical_model_bytes(_HEURISTIC_RUNTIME)
+        )
 
     def argv(self, *, run_id: str, backends: Path, extra: tuple[str, ...] = ()) -> list[str]:
         return [
@@ -102,6 +109,8 @@ class _FullBuildWorkspace:
             str(self.mi_path),
             "--backends",
             str(backends),
+            "--editorial-runtime",
+            str(self.editorial_runtime_path),
             "--run-id",
             run_id,
             *extra,

@@ -1,0 +1,1 @@
+{"director_pin_path":"config/toolchains/pins/editorial-director-v2.json","mode":"production_model","moment_review_pin_path":"config/toolchains/pins/moment-review-multimodal.json","review_interpreter_pin_path":"config/toolchains/pins/review-interpreter.json","schema_version":"editorial-runtime-v1"}

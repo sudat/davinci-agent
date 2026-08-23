@@ -27,6 +27,7 @@ import pytest
 
 from services.cli.episode0 import main
 from services.config.backends import BackendsConfig, load_backends
+from services.editorial_v2.model_provider import EditorialRuntimeV1
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.metrics.episode0_baseline import (
     Episode0BaselineLogV1,
@@ -57,6 +58,13 @@ GATE_REQUIREMENTS = {
     "no-invented-spans-ids",
     "review-event-corrections",
 }
+_HEURISTIC_RUNTIME = EditorialRuntimeV1(
+    schema_version="editorial-runtime-v1",
+    mode="heuristic_diagnostic",
+    director_pin_path="config/toolchains/pins/editorial-director-v2.json",
+    moment_review_pin_path="config/toolchains/pins/moment-review-multimodal.json",
+    review_interpreter_pin_path="config/toolchains/pins/review-interpreter.json",
+)
 
 
 def _baseline_log_dict() -> dict[str, object]:
@@ -173,8 +181,17 @@ class _Workspace:
         self.runs_root = root / "runs"
         self.brief_path = root / "brief.json"
         self.mi_path = root / "media-intelligence.json"
-        atomic_write(self.brief_path, canonical_model_bytes(make_brief()))
+        # NO-LLM harness by design: the shipped default is production_model
+        # (BLOCKS without credentials), so these runs opt into heuristic mode.
+        self.editorial_runtime_path = root / "editorial-runtime.json"
+        atomic_write(
+            self.brief_path, canonical_model_bytes(make_brief())
+        )
         atomic_write(self.mi_path, canonical_model_bytes(_preview_compatible_artifact()))
+        atomic_write(
+            self.editorial_runtime_path,
+            canonical_model_bytes(_HEURISTIC_RUNTIME),
+        )
 
     def run_argv(self, *, run_id: str, backends: Path, extra: tuple[str, ...] = ()) -> list[str]:
         return [
@@ -191,6 +208,8 @@ class _Workspace:
             str(self.mi_path),
             "--backends",
             str(backends),
+            "--editorial-runtime",
+            str(self.editorial_runtime_path),
             "--run-id",
             run_id,
             *extra,
