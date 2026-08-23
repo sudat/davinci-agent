@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import NamedTuple
 
 from services.contracts.primitives import StrictModel
 from services.reference_learning.ingest import ReferenceIngestError
@@ -71,27 +70,11 @@ def _has_compliant_path(cfg: YoutubeCompliantConfig) -> bool:
     return p.exists() and p.is_file()
 
 
-class _YoutubeIngestReturn(ReferenceSourceV1):
-    """Unpackable YouTube source return (source, library)."""
+class YoutubeIngestResult(NamedTuple):
+    """A newly registered source and the library version that includes it."""
 
-    def __iter__(  # type: ignore[override]
-        self,
-    ) -> Iterator[ReferenceLibraryV1 | ReferenceSourceV1]:
-        yield self
-        yield object.__getattribute__(self, "_library")
-
-    def __getitem__(  # type: ignore[override]
-        self, index: int
-    ) -> ReferenceLibraryV1 | ReferenceSourceV1:
-        if index == 0:
-            return self
-        if index == 1:
-            return object.__getattribute__(self, "_library")
-        raise IndexError(index)
-
-    @property
-    def library(self) -> ReferenceLibraryV1:
-        return object.__getattribute__(self, "_library")
+    source: ReferenceSourceV1
+    library: ReferenceLibraryV1
 
 
 def ingest_youtube_reference(
@@ -101,7 +84,7 @@ def ingest_youtube_reference(
     config: YoutubeCompliantConfig | None = None,
     source_id: str | None = None,
     created_at: str | None = None,
-) -> _YoutubeIngestReturn:
+) -> YoutubeIngestResult:
     """Ingest a YouTube URL only via a compliant path.
 
     Raises YoutubeReferenceUnavailable with a local-file request message when
@@ -126,7 +109,7 @@ def ingest_youtube_reference(
 
     resolved_created_at = created_at if created_at is not None else _now_iso()
 
-    source_plain = ReferenceSourceV1(
+    source = ReferenceSourceV1(
         source_id=resolved_source_id,
         kind="youtube_url",
         location=url,
@@ -135,13 +118,10 @@ def ingest_youtube_reference(
         sha256=None,
     )
 
-    payload: dict[str, Any] = source_plain.model_dump(mode="json")
-    ret = _YoutubeIngestReturn.model_validate(payload)
     new_library = library.model_copy(
         update={
             "version": library.version + 1,
-            "sources": (*library.sources, ret),
+            "sources": (*library.sources, source),
         }
     )
-    object.__setattr__(ret, "_library", new_library)
-    return ret
+    return YoutubeIngestResult(source=source, library=new_library)
