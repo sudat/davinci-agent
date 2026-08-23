@@ -1,12 +1,20 @@
 """``python -m services.cli.v44_real01`` — v44-real-01 episode protocol scaffolding.
 
+# allow: SIZE_OK — 366 pure LOC: embedded templates must live in code
+# (``private/`` is git-ignored, nothing inside it can be committed) plus
+# the V44-1 observer wiring below is a thin delegation to
+# ``services.cli.v44_observe`` (pure observation + note logic, ≤250 LOC)
+# — same precedent as ``services/cli/episode_runner_rebuild.py``.
+
 Thin argparse CLI. Templates are embedded in this module (``private/`` is
 git-ignored, so nothing inside it can be committed).
 
 Subcommands:
-  init    --episode <dir>            create scaffold
-  prepare --episode <dir> --source-folder <path>  copy footage + manifest
-  status  --episode <dir>            presence checks
+  init                 --episode <dir>                           create scaffold
+  prepare              --episode <dir> --source-folder <path>     copy footage + manifest
+  status               --episode <dir>                           presence checks
+  observe-v44-1        --episode <cockpit-ep> --out <dir>          T15 observer (refuses seeded)
+  record-operator-note --episode <cockpit-ep> --note <text>       T15 sign-off path
 
 Manifest logic reuses ``services.foundation_io`` utilities (``sha256_file``,
 ``atomic_write``, ``canonical_model_bytes``) — the same primitives that
@@ -434,6 +442,74 @@ def _cmd_status(episode_dir: Path) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_state_paths(
+    episodes_root: str | None, state_store: str | None
+) -> tuple[Path, Path]:
+    pipeline_root = Path(__file__).resolve().parents[2]
+    if episodes_root is not None:
+        p = Path(episodes_root)
+        ep_root = p if p.is_absolute() else (_repo_root() / p).resolve()
+    else:
+        ep_root = pipeline_root / "jobs" / "episodes"
+    if state_store is not None:
+        p = Path(state_store)
+        st_path = p if p.is_absolute() else (_repo_root() / p).resolve()
+    else:
+        st_path = pipeline_root / "jobs" / "state.db"
+    return ep_root, st_path
+
+
+def _cmd_observe_v44_1(args: argparse.Namespace) -> int:
+    from services.cli.v44_observe import (  # noqa: PLC0415  (lazy: keep scaffolding imports lean)
+        V44ObserveError,
+        build_observation_record,
+        collect_observation_inputs,
+        write_observation,
+    )
+
+    episodes_root, state_store = _resolve_state_paths(
+        getattr(args, "episodes_root", None), getattr(args, "state_store", None)
+    )
+    raw_out = str(args.out)
+    out_dir = Path(raw_out)
+    if not out_dir.is_absolute():
+        out_dir = (_repo_root() / out_dir).resolve()
+    episode_id = str(args.episode)
+    try:
+        inputs = collect_observation_inputs(
+            episode_id, episodes_root=episodes_root, state_store_path=state_store
+        )
+        record = build_observation_record(inputs)
+        out_path = write_observation(out_dir, record)
+    except V44ObserveError as error:
+        if error.code == "seeded-state-refused":
+            print(f"seeded-state-refused: {error.detail}", file=sys.stderr)
+            return 3
+        print(f"{error.code}: {error.detail}", file=sys.stderr)
+        return 2
+    print(f"observe-v44-1: wrote {out_path} (episode={episode_id})")
+    return 0
+
+
+def _cmd_record_operator_note(args: argparse.Namespace) -> int:
+    from services.cli.v44_observe import V44ObserveError, record_operator_note  # noqa: PLC0415
+
+    episodes_root, _ = _resolve_state_paths(
+        getattr(args, "episodes_root", None), None
+    )
+    episode_id = str(args.episode)
+    note = str(args.note)
+    try:
+        out_path = record_operator_note(
+            episode_id=episode_id, note=note, episodes_root=episodes_root
+        )
+    except V44ObserveError as error:
+        print(f"{error.code}: {error.detail}", file=sys.stderr)
+        return 2
+    print(f"record-operator-note: appended to {out_path}")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m services.cli.v44_real01")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -463,12 +539,69 @@ def _parser() -> argparse.ArgumentParser:
         help="episode dir (default: private/reference-episodes/v44-real-01)",
     )
 
+    p_observe = sub.add_parser(
+        "observe-v44-1",
+        help="observe one cockpit episode (refuses seeded state)",
+    )
+    p_observe.add_argument(
+        "--episode",
+        type=str,
+        required=True,
+        help="cockpit episode id (ep-...)",
+    )
+    p_observe.add_argument(
+        "--out",
+        type=str,
+        required=True,
+        help="output dir for observation.json",
+    )
+    p_observe.add_argument(
+        "--episodes-root",
+        type=str,
+        default=None,
+        help="cockpit episodes root (default: video-pipeline/jobs/episodes)",
+    )
+    p_observe.add_argument(
+        "--state-store",
+        type=str,
+        default=None,
+        help="cockpit state store path (default: video-pipeline/jobs/state.db)",
+    )
+
+    p_note = sub.add_parser(
+        "record-operator-note",
+        help="append one operator note (sign-off path)",
+    )
+    p_note.add_argument(
+        "--episode",
+        type=str,
+        required=True,
+        help="cockpit episode id (ep-...)",
+    )
+    p_note.add_argument(
+        "--note",
+        type=str,
+        required=True,
+        help="operator note text (non-empty)",
+    )
+    p_note.add_argument(
+        "--episodes-root",
+        type=str,
+        default=None,
+        help="cockpit episodes root (default: video-pipeline/jobs/episodes)",
+    )
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
+
+    if args.command == "observe-v44-1":
+        return _cmd_observe_v44_1(args)
+    if args.command == "record-operator-note":
+        return _cmd_record_operator_note(args)
 
     episode_dir = _resolve_episode_dir(getattr(args, "episode", None))
 
