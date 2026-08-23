@@ -14,9 +14,11 @@ authoritative artifact) at ``<episode-root>/finishing/finishing-run.json``.
 
 Subcommands ``record-publishability`` (RECORDS the operator verdict into
 the existing PublishabilityReviewV1; refuses on unfinished states) and
-``record-time`` (bootstrap AHT phase log) complete the operator protocol.
+``record-time`` (bootstrap AHT phase log) complete the operator protocol;
+``gate-summary`` (T16) derives the strict ``v44-gate-summary-v1`` from the
+run evidence and refuses to emit ``passed`` without it.
 Orchestration lives in ``_v44_finishing_run``; recorders in
-``_v44_finishing_record``.
+``_v44_finishing_record``; the summary writer in ``_v44_gate_summary``.
 
 Exit codes: 0 gate pass / 1 blocked (blocked domain names on stderr,
 QualityGateResult reject semantics) / 2 malformed.
@@ -30,12 +32,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from services.cli._v44_finishing_build import FinishingError, FinishingMalformedError
 from services.cli._v44_finishing_record import record_publishability, record_time
 from services.cli._v44_finishing_run import cmd_run
+from services.cli._v44_gate_summary import cmd_gate_summary
 from services.config.backends import BackendsConfigError
 
 if TYPE_CHECKING:
@@ -47,6 +51,12 @@ EXIT_MALFORMED: Final = 2
 DEFAULT_MCP_PIN: Final = Path("config/toolchains/davinci-resolve-mcp.pin.json")
 DEFAULT_BACKENDS: Final = Path("config/backends.json")
 DEFAULT_RUNTIME: Final = Path("config/editorial-runtime.json")
+
+#: Subcommands that own their whole exit code (no recorder printing after).
+_DIRECT_COMMANDS: Final[dict[str, Callable[[argparse.Namespace], int]]] = {
+    "run": cmd_run,
+    "gate-summary": cmd_gate_summary,
+}
 
 
 def _positive_float(value: str) -> float:
@@ -118,6 +128,22 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
     )
     time_parser.add_argument("--minutes", type=_positive_float, required=True)
+    gate_parser = sub.add_parser(
+        "gate-summary",
+        help="derive + write the v44-gate-summary-v1 (refuses to pass without evidence)",
+    )
+    gate_parser.add_argument("--episode-root", type=Path, required=True)
+    gate_parser.add_argument(
+        "--out", type=Path, default=None,
+        help="output path; default <episode-root>/finishing/gate-summary.json",
+    )
+    gate_parser.add_argument(
+        "--commit-sha", default=None, help="40-hex commit SHA; default git HEAD"
+    )
+    gate_parser.add_argument(
+        "--subtitle-proof-ref", default=None,
+        help="reference to the Japanese subtitle proof (when it ran)",
+    )
     return parser
 
 
@@ -137,8 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     review: PublishabilityReviewV1 | None = None
     try:
-        if args.command == "run":
-            return cmd_run(args)
+        if args.command in _DIRECT_COMMANDS:
+            return _DIRECT_COMMANDS[args.command](args)
         review = _dispatch_record(args)
     except FinishingMalformedError as error:
         print(f"malformed: {error.code}: {error.detail}", file=sys.stderr)
