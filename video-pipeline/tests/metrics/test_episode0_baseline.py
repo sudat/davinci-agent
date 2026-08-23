@@ -16,6 +16,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from services.metrics.episode0_baseline import (
+    Episode0BaselineLogV1,
+    compare_reports,
+    compute_source_manifest,
+    generate_report,
+)
+
 
 def _sample_log_dict() -> dict[str, object]:
     return {
@@ -38,9 +45,8 @@ def _sample_log_dict() -> dict[str, object]:
 
 
 def test_manifest_freeze_deterministic(tmp_path: Path) -> None:
-    """Given: tmp fake video file; When: compute manifest twice; Then: sha/size stable, duration not fabricated."""
-    from services.metrics.episode0_baseline import compute_source_manifest
-
+    """Given tmp fake video; When manifest computed twice; Then sha/size stable
+    and duration is either probed or absent — never fabricated."""
     fake = tmp_path / "fake.mp4"
     content = b"fake video content 123"
     fake.write_bytes(content)
@@ -66,13 +72,8 @@ def test_manifest_freeze_deterministic(tmp_path: Path) -> None:
 
 
 def test_full_log_to_report_stable_canonical_bytes(tmp_path: Path) -> None:
-    """Given: full log + manifest; When: report generated twice; Then: stable canonical bytes on disk."""
-    from services.metrics.episode0_baseline import (
-        Episode0BaselineLogV1,
-        compute_source_manifest,
-        generate_report,
-    )
-
+    """Given full log + manifest; When report generated twice; Then stable
+    canonical bytes on disk."""
     fake = tmp_path / "fake2.mp4"
     fake.write_bytes(b"hello world baseline")
     manifest = compute_source_manifest(fake)
@@ -86,8 +87,13 @@ def test_full_log_to_report_stable_canonical_bytes(tmp_path: Path) -> None:
     first_json: object = json.loads(first_bytes)
     assert isinstance(first_json, dict)
     # stable keys via canonical: sort_keys separators
-    canonical = json.dumps(first_json, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    assert first_bytes == canonical or first_bytes == canonical + b"\n" or first_bytes.strip() == canonical
+    canonical = json.dumps(
+        first_json, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode()
+    stripped = first_bytes.strip()
+    assert (
+        first_bytes == canonical or first_bytes == canonical + b"\n" or stripped == canonical
+    )
 
     # second invocation must produce identical bytes (stale_state probe)
     second_path = generate_report(log, manifest, run_id="baseline", runs_root=runs_root)
@@ -95,9 +101,7 @@ def test_full_log_to_report_stable_canonical_bytes(tmp_path: Path) -> None:
 
 
 def test_missing_required_field_raises_validation_error() -> None:
-    """Given: log dict missing a required field; When: validated; Then: ValidationError."""
-    from services.metrics.episode0_baseline import Episode0BaselineLogV1
-
+    """Given log dict missing a required field; When validated; Then ValidationError."""
     bad = _sample_log_dict()
     bad.pop("active_human_time_minutes")
     with pytest.raises(ValidationError) as exc:
@@ -106,31 +110,31 @@ def test_missing_required_field_raises_validation_error() -> None:
 
 
 def test_compare_emits_delta(tmp_path: Path) -> None:
-    """Given: two reports with differing timing; When: compared; Then: delta summary names the change."""
-    from services.metrics.episode0_baseline import (
-        Episode0BaselineLogV1,
-        compare_reports,
-        compute_source_manifest,
-        generate_report,
-    )
-
+    """Given two reports with differing timing; When compared; Then delta
+    summary names the change with exact numeric values."""
     fake = tmp_path / "fake3.mp4"
     fake.write_bytes(b"compare content")
     manifest = compute_source_manifest(fake)
 
-    log_a = Episode0BaselineLogV1.model_validate({**_sample_log_dict(), "active_human_time_minutes": 30.0})
-    log_b = Episode0BaselineLogV1.model_validate({**_sample_log_dict(), "active_human_time_minutes": 45.0})
+    log_a = Episode0BaselineLogV1.model_validate(
+        {**_sample_log_dict(), "active_human_time_minutes": 30.0}
+    )
+    log_b = Episode0BaselineLogV1.model_validate(
+        {**_sample_log_dict(), "active_human_time_minutes": 45.0}
+    )
 
     report_a = generate_report(log_a, manifest, run_id="run-a", runs_root=tmp_path / "runs")
     report_b = generate_report(log_b, manifest, run_id="run-b", runs_root=tmp_path / "runs")
 
     delta = compare_reports(report_a, report_b)
     assert isinstance(delta, dict)
-    # must mention active_human_time in some delta key/value
-    joined = json.dumps(delta, sort_keys=True)
-    assert "active_human_time_minutes" in joined
-    # numeric delta should be 15.0 (b - a)
-    assert "15" in joined or 15 in str(delta.values()) or 15.0 in str(delta.values())
+    aht = delta.get("active_human_time_minutes")
+    assert isinstance(aht, dict)
+    assert aht.get("a") == 30.0
+    assert aht.get("b") == 45.0
+    aht_delta = aht.get("delta")
+    assert isinstance(aht_delta, float)
+    assert aht_delta == 15.0
 
 
 def test_cli_help_smoke() -> None:

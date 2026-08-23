@@ -22,7 +22,7 @@ from services.production_kit.recipe_select import (
     select_recipe,
 )
 from services.production_kit.registry import load_kit
-from services.reference_learning.models import DerivedTasteEntryV1
+from services.reference_learning.models import DerivedTasteEntryV1, PreferenceDomain
 
 
 def _kit():
@@ -67,7 +67,7 @@ def test_taste_evidence_within_bounds_adjusts_param() -> None:
 
     # also via DerivedTasteEntryV1 statement parsing
     entry = DerivedTasteEntryV1(
-        domain="color",
+        domain=PreferenceDomain.color,
         statement="saturation 1.1",
         polarity="like",
         confidence=0.9,

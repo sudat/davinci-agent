@@ -37,9 +37,9 @@ DOMAINS = (
 
 
 def _full_statuses(spec: dict[str, str]) -> tuple[dict[str, str], ...]:
-    base = dict.fromkeys(DOMAINS, "applied")
+    base: dict[str, str] = dict.fromkeys(DOMAINS, "applied")
     base.update(spec)
-    return ({"domain": d, "status": s} for d, s in base.items())
+    return tuple({"domain": d, "status": s} for d, s in base.items())
 
 
 def make_report(i: int, **overrides: object) -> Report:

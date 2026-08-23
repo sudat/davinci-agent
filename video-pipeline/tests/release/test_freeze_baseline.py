@@ -60,7 +60,6 @@ def test_baseline_schema_fields_present_and_well_formed() -> None:
     python_version = data.get("python_version")
     assert isinstance(python_version, str)
     assert python_version.startswith("Python ")
-    assert python_version.startswith("Python "), f"bad python_version {python_version!r}"
 
     os_val = data.get("os")
     assert isinstance(os_val, str)
@@ -130,11 +129,6 @@ def test_baseline_commit_equals_tag_target() -> None:
     assert HEX40.match(tag_commit), f"tag resolved to non-hex40 {tag_commit!r}"
     assert baseline_commit == tag_commit, (
         f"baseline commit {baseline_commit!r} != tag commit {tag_commit!r}"
-    )
-    # Also verify tag commit shape
-    assert HEX40.match(tag_commit)
-    assert tag_commit == "5890c840fdb3f13af21a86697937f5a39f4143f9" or HEX40.match(
-        tag_commit
     )
 
 

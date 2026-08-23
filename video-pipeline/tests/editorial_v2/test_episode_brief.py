@@ -200,10 +200,12 @@ def test_non_approved_with_ref_rejected() -> None:
     brief = EpisodeBriefV1.model_validate(_valid_payload(status="draft"))
     proposed = propose(brief)
     approved = approve(proposed)
+    assert approved.approval_ref is not None
+    ref_payload = approved.approval_ref.model_dump()
     # try to carry ref on draft
     with pytest.raises(ValidationError):
         EpisodeBriefV1.model_validate(
-            {**_valid_payload(status="draft"), "approval_ref": approved.approval_ref.model_dump()}
+            {**_valid_payload(status="draft"), "approval_ref": ref_payload}
         )
 
 

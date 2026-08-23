@@ -105,16 +105,18 @@ class ReferenceOps(WorkspaceContext):
                 "idempotent": True,
             }
         try:
-            result = ingest_local_reference(path, library=library, source_id=source_id)
+            source, new_library = ingest_local_reference(
+                path, library=library, source_id=source_id
+            )
         except LocalReferenceUnavailable as error:
             raise CockpitUnprocessableError("reference-unavailable", str(error)) from error
         atomic_write(
-            self._episodes_root / LIBRARY_NAME, canonical_model_bytes(result.library)
+            self._episodes_root / LIBRARY_NAME, canonical_model_bytes(new_library)
         )
         return {
-            "source_id": result.source_id,
-            "sha256": result.sha256,
-            "library_version": result.library.version,
+            "source_id": source.source_id,
+            "sha256": source.sha256,
+            "library_version": new_library.version,
             "idempotent": False,
         }
 

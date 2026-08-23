@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from services.contracts.primitives import RationalFrameRate
 from services.mcp_client.response_normalize import (
@@ -14,6 +13,7 @@ from services.mcp_client.response_normalize import (
 )
 from services.media_intelligence.mcp_import import (
     AnalysisLineage,
+    McpImportError,
     MissingLineageError,
     import_deep_shots,
     import_standard_analysis,
@@ -345,11 +345,13 @@ def test_deep_round_trip_through_canonical_model() -> None:
 
 
 def test_unknown_field_in_raw_payload_raises_typed_import_error() -> None:
-    raw: dict[str, object] = dict(_standard_payload())
+    standard = _standard_payload()
+    assert isinstance(standard, dict)
+    raw: dict[str, object] = {str(key): value for key, value in standard.items()}
     raw["unknown_field"] = "oops"
 
-    with pytest.raises((NormalizationError, ValidationError, Exception)) as exc:
-        import_standard_analysis(  # type: ignore[arg-type]
+    with pytest.raises(McpImportError) as exc:
+        import_standard_analysis(
             raw,
             episode_id=EPISODE_ID,
             source_id=SOURCE_ID,

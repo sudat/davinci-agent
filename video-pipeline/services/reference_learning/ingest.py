@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, NamedTuple
 
 from services.reference_learning.models import ReferenceLibraryV1, ReferenceSourceV1
 
@@ -22,23 +21,11 @@ class LocalReferenceUnavailable(ReferenceIngestError):  # noqa: N818
     """Typed error when a local reference file cannot be ingested."""
 
 
-class _LocalIngestReturn(ReferenceSourceV1):
-    """ReferenceSourceV1 that is also unpackable as (source, library)."""
+class LocalIngestResult(NamedTuple):
+    """A newly registered source and the library version that includes it."""
 
-    def __iter__(self) -> Iterator[ReferenceLibraryV1 | ReferenceSourceV1]:  # type: ignore[override]
-        yield self
-        yield object.__getattribute__(self, "_library")
-
-    def __getitem__(self, index: int) -> ReferenceLibraryV1 | ReferenceSourceV1:  # type: ignore[override]
-        if index == 0:
-            return self
-        if index == 1:
-            return object.__getattribute__(self, "_library")
-        raise IndexError(index)
-
-    @property
-    def library(self) -> ReferenceLibraryV1:
-        return object.__getattribute__(self, "_library")
+    source: ReferenceSourceV1
+    library: ReferenceLibraryV1
 
 
 def _now_iso() -> str:
@@ -58,9 +45,9 @@ def ingest_local_reference(
     *,
     library: ReferenceLibraryV1,
     source_id: str | None = None,
-    provenance: Producer | None = None,  # type: ignore[name-defined]
+    provenance: Producer | None = None,
     created_at: str | None = None,
-) -> _LocalIngestReturn:
+) -> LocalIngestResult:
     """Ingest a local reference file.
 
     Local files are always accepted (existence + readable check only).
@@ -84,7 +71,7 @@ def ingest_local_reference(
     resolved_provenance = provenance if provenance is not None else library.provenance
     resolved_created_at = created_at if created_at is not None else _now_iso()
 
-    source_plain = ReferenceSourceV1(
+    source = ReferenceSourceV1(
         source_id=resolved_source_id,
         kind="local_file",
         location=str(p),
@@ -93,14 +80,10 @@ def ingest_local_reference(
         sha256=sha,
     )
 
-    payload: dict[str, Any] = source_plain.model_dump(mode="json")
-    ret = _LocalIngestReturn.model_validate(payload)
-
     new_library = library.model_copy(
         update={
             "version": library.version + 1,
-            "sources": (*library.sources, ret),
+            "sources": (*library.sources, source),
         }
     )
-    object.__setattr__(ret, "_library", new_library)
-    return ret
+    return LocalIngestResult(source=source, library=new_library)
