@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+import subprocess
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -19,7 +22,7 @@ from services.episode_cockpit.errors import (
     CockpitConflictError,
     CockpitUnprocessableError,
 )
-from services.episode_cockpit.models import BriefDraft
+from services.episode_cockpit.models import BriefDraft, IntakeRecordV1
 from services.episode_cockpit.review_chat import (
     DEFAULT_LINEAGE,
     RebuildPlan,
@@ -35,6 +38,20 @@ from services.publish.models import PublishPackageV1
 
 INTAKE_STAGE = "intake"
 BRIEF_NAME = "brief.json"
+INTAKE_NAME = "intake.json"
+RUNNER_LOG_NAME = "runner.log"
+RUNNER_MODULE = "services.cli.episode_runner"
+RUNNER_STOP = "PREVIEW_READY"
+_PIPELINE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _spawn_runner(argv: list[str], *, cwd: Path, log_path: Path) -> None:
+    """Detach one one-shot runner; never wait (POST /episodes stays O(ms))."""
+
+    with log_path.open("ab") as stream:
+        subprocess.Popen(
+            argv, cwd=cwd, start_new_session=True, stdout=stream, stderr=stream
+        )
 PUBLISH_PACKAGE_RELATIVE = ("publish", "package.json")
 
 
@@ -65,11 +82,43 @@ class JobOps(WorkspaceContext):
             self._episode_dir(episode_id) / BRIEF_NAME,
             canonical_model_bytes(BriefDraft(episode_id=episode_id, brief_text=brief_text)),
         )
+        atomic_write(
+            self._episode_dir(episode_id) / INTAKE_NAME,
+            canonical_model_bytes(
+                IntakeRecordV1(
+                    episode_id=episode_id,
+                    source_folder=str(folder.resolve()),
+                    brief_text=brief_text,
+                    created_at=datetime.now(UTC).isoformat(),
+                )
+            ),
+        )
+        try:
+            _spawn_runner(
+                [
+                    sys.executable,
+                    "-m",
+                    RUNNER_MODULE,
+                    "--episode-root",
+                    str(self._episode_dir(episode_id)),
+                    "--stop",
+                    RUNNER_STOP,
+                    "--state-store",
+                    str(self._state_store_path),
+                ],
+                cwd=_PIPELINE_ROOT,
+                log_path=self._episode_dir(episode_id) / RUNNER_LOG_NAME,
+            )
+        except OSError as error:
+            raise CockpitUnprocessableError(
+                "runner-spawn-failed", f"cannot start the pipeline runner: {error}"
+            ) from error
         return {
             "episode_id": episode_id,
             "job_id": episode_id,
             "status": "CREATED",
             "brief_status": "draft",
+            "pipeline": "started",
         }
 
     def list_episodes(self) -> dict[str, object]:
@@ -175,7 +224,11 @@ class JobOps(WorkspaceContext):
 
 __all__ = [
     "BRIEF_NAME",
+    "INTAKE_NAME",
     "INTAKE_STAGE",
     "PUBLISH_PACKAGE_RELATIVE",
+    "RUNNER_LOG_NAME",
+    "RUNNER_MODULE",
+    "RUNNER_STOP",
     "JobOps",
 ]

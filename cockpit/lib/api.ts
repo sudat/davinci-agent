@@ -36,6 +36,9 @@ export type EpisodeCreateResult = {
   job_id: string;
   status: string;
   brief_status: string;
+  /** Task-7 additive field: "started" once the detached pipeline runner is
+   *  spawned. Render-when-present; absent on older backend responses. */
+  pipeline?: string;
 };
 
 export type StageRun = {

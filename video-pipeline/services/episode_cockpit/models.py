@@ -78,6 +78,23 @@ class BriefDraft(StrictModel):
     brief_text: NonEmpty
 
 
+class IntakeRecordV1(StrictModel):
+    """Intake fact record (task 7): what the runner needs from intake.
+
+    Written atomically next to the brief at create time so the detached
+    one-shot runner can resolve the ACTUAL camera source folder without
+    re-deriving it from the episode id; the BriefDraft schema stays
+    untouched (this is a cockpit-owned communication file, never job
+    state — the StateStore remains the only authority).
+    """
+
+    schema_version: Literal["cockpit-intake-v1"] = "cockpit-intake-v1"
+    episode_id: Identifier
+    source_folder: NonEmpty
+    brief_text: NonEmpty
+    created_at: NonEmpty
+
+
 class ReviewChatEntry(StrictModel):
     """One append-only raw review message (review-events.jsonl convention)."""
 
@@ -100,6 +117,7 @@ __all__ = [
     "BriefDraft",
     "BriefPutRequest",
     "EpisodeCreateRequest",
+    "IntakeRecordV1",
     "RebuildRequest",
     "RebuildRequestEntry",
     "ReferenceRegisterRequest",
