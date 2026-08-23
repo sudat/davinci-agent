@@ -269,13 +269,14 @@ class ProductProofReportV1(StrictModel):
 
     schema_version: Literal["product-proof-report-v1"] = "product-proof-report-v1"
     run: RunIdentity
-    editorial: EditorialMetrics
+    editorial: EditorialMetrics | None = None
     progressive_lift: ProgressiveLift | None = None
     evidence_quality: EvidenceQualityMetrics | None = None
     operator: OperatorVerdict = Field(default_factory=OperatorVerdict)
     efficiency: EfficiencyMetrics | None = None
     pass_policy: PassPolicyBlock = Field(default_factory=PassPolicyBlock)
     notes: str | None = None
+    summary: str | None = None
 
 
 class PassPolicyResult(StrictModel):
@@ -614,6 +615,8 @@ def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # n
     The string names in failed/pending are stable and asserted in tests.
     """
     pending: list[str] = []
+    if report.editorial is None:
+        pending.append("editorial")
     if report.operator.continuation_yes_no is None:
         pending.append("operator_continuation_yes_no")
     if report.operator.publishability is None:
@@ -622,14 +625,14 @@ def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # n
 
     failed: list[str] = []
 
-    # must_keep recall 1.0
-    if report.editorial.must_keep_recall < 1.0 - _EPS:
+    # must_keep recall 1.0 (skip when editorial is None — pending)
+    if report.editorial is not None and report.editorial.must_keep_recall < 1.0 - _EPS:
         failed.append("must_keep_recall")
     # catastrophic 0
-    if report.editorial.catastrophic_removal_count > 0:
+    if report.editorial is not None and report.editorial.catastrophic_removal_count > 0:
         failed.append("catastrophic_removal")
     # must_remove retention <= 0.25
-    if report.editorial.must_remove_retention > 0.25 + _EPS:
+    if report.editorial is not None and report.editorial.must_remove_retention > 0.25 + _EPS:
         failed.append("must_remove_retention")
 
     # B-lift OR operator verdict (when lift exists, require at least one positive;
@@ -897,6 +900,8 @@ def build_progressive_report(
     progressive result); progressive_lift holds the deltas. Operator and
     efficiency are carried from B if present, else A.
     """
+    if report_a.editorial is None or report_b.editorial is None:
+        raise ValueError("build_progressive_report requires editorial metrics")
     deltas = deep_review_lift(
         report_a.editorial,
         report_b.editorial,

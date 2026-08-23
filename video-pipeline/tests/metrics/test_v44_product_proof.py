@@ -397,6 +397,7 @@ def test_arm_b_with_fake_real_lineage_reviews() -> None:
         reviews.append(rec)
 
     result = run_arm_b(ctx, reviews, llm_call=fake_llm)
+    assert result.report.editorial is not None
     assert result.report.editorial.must_keep_recall == 1.0
     assert len(result.deep_reviews) == 2
     # Real lineage should pass gate
