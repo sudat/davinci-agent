@@ -34,6 +34,7 @@ import pytest
 from pydantic import ValidationError
 
 from services.cli.episode0 import Episode0BlockedError, _stage_director
+from services.cli.live_editorial_codex import CodexTransportGatedError
 from services.cli.live_editorial_v2 import (
     CREDENTIALS_ENV,
     NETWORK_ENV,
@@ -50,6 +51,8 @@ from services.editorial_v2.model_provider import (
     EditorialRuntimeError,
     EditorialRuntimeV1,
     build_llm_call,
+    build_llm_call_codex,
+    extract_json_object,
     load_editorial_pin,
     load_editorial_runtime,
 )
@@ -122,17 +125,55 @@ class _ScriptedHttpPost:
         return result
 
 
+@dataclass(slots=True)
+class _RecordedRunnerCall:
+    prompt: str
+    model: str
+    images: tuple[Path, ...]
+    timeout_s: float
+
+
+class _ScriptedCodexRunner:
+    """Fake codex runner: replays canned final messages, records every call."""
+
+    def __init__(self, results: Sequence[str | BaseException]) -> None:
+        self._results = list(results)
+        self.calls: list[_RecordedRunnerCall] = []
+
+    def __call__(
+        self, prompt: str, *, model: str, images: tuple[Path, ...], timeout_s: float
+    ) -> str:
+        self.calls.append(_RecordedRunnerCall(prompt, model, tuple(images), timeout_s))
+        result = self._results.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return str(result)
+
+
+def _canned_messages(baseline: ThreePassResult) -> list[str]:
+    """The heuristic baseline's own drafts as codex final messages (clean_fake)."""
+
+    return [
+        json.dumps({"story_plan": baseline.story_plan.model_dump(mode="json")}),
+        json.dumps(baseline.moment_selection.model_dump(mode="json")),
+        json.dumps(baseline.creative_edit.model_dump(mode="json")),
+    ]
+
+
 def _write_runtime(
-    tmp_path: Path, mode: Literal["production_model", "heuristic_diagnostic"]
+    tmp_path: Path,
+    mode: Literal["production_model", "heuristic_diagnostic"],
+    transport: Literal["codex-exec", "openai-api"] = "openai-api",
 ) -> Path:
     runtime = EditorialRuntimeV1(
         schema_version="editorial-runtime-v1",
         mode=mode,
+        transport=transport,
         director_pin_path=str(DIRECTOR_PIN_PATH),
         moment_review_pin_path="config/toolchains/pins/moment-review-multimodal.json",
         review_interpreter_pin_path="config/toolchains/pins/review-interpreter.json",
     )
-    path = tmp_path / f"editorial-runtime-{mode}.json"
+    path = tmp_path / f"editorial-runtime-{mode}-{transport}.json"
     atomic_write(path, canonical_model_bytes(runtime))
     return path
 
@@ -363,6 +404,7 @@ def test_stage_director_heuristic_mode_runs_deterministic_planner(
 def test_default_runtime_and_pins_validate_and_resolve() -> None:
     runtime = load_editorial_runtime()
     assert runtime.mode == "production_model"
+    assert runtime.transport == "codex-exec"  # owner decision: codex default
     paths = {
         runtime.director_pin_path,
         runtime.moment_review_pin_path,
@@ -449,3 +491,231 @@ def test_runtime_with_missing_pin_file_is_typed_unavailable(tmp_path: Path) -> N
         load_editorial_runtime(path)
     assert error.value.code == "production-model-unavailable"
     assert "does-not-exist.json" in error.value.detail
+
+
+# ------------------------------- codex-exec transport (owner decision, v4.4 delta)
+#
+# Tier A with an injected fake runner — NO codex subprocess anywhere.
+
+
+def test_codex_transport_three_pass_completes_over_injected_runner(
+    api: MediaQueryApiV2,
+) -> None:
+    """Given: a scripted codex runner replaying the baseline drafts (one
+    message fenced, two bare); When: DirectorV2 runs with the codex-built
+    llm_call; Then: a valid ThreePassResult and three runner calls against
+    the pin's model_id with the pass prompt + schema contract + request DATA."""
+
+    baseline = _run(api)
+    canned = _canned_messages(baseline)
+    canned[0] = f"Sure — here it is:\n```json\n{canned[0]}\n```"
+    runner = _ScriptedCodexRunner(canned)
+    built = build_llm_call_codex(_director_pin(), runner)
+
+    through = DirectorV2().run_three_pass(make_brief(), api, llm_call=built)
+
+    assert isinstance(through, ThreePassResult)
+    assert through.moment_selection.proposal == baseline.moment_selection.proposal
+    assert through.story_plan == baseline.story_plan
+    assert len(runner.calls) == 3
+
+    pin = _director_pin()
+    first = runner.calls[0]
+    assert first.model == pin.model_id == "gpt-5.6-sol"
+    assert first.images == ()
+    assert first.timeout_s == REQUEST_TIMEOUT_SECONDS == 120
+    assert first.prompt.startswith(PROMPT_A)
+    assert "OUTPUT CONTRACT" in first.prompt
+    assert "JSON Schema" in first.prompt
+    # The request rides as serialized DATA after an explicit marker — never
+    # merged into the instruction text (same rule as the openai surface).
+    request_json = first.prompt.split("REQUEST DATA", 1)[1].split("\n", 1)[1]
+    request_payload = json.loads(request_json)
+    assert request_payload["stage"] == "pass_a"
+    assert request_payload["brief"]["episode_id"] == baseline.story_plan.episode_id
+
+
+def test_codex_parse_failure_retries_once_then_fails_typed(api: MediaQueryApiV2) -> None:
+    """Given: a runner answering garbage forever; Then: exactly TWO runner
+    calls (one retry) and a typed model-bad-response recording the retry."""
+
+    runner = _ScriptedCodexRunner(["not json at all", "still not {json}"])
+    built = build_llm_call_codex(_director_pin(), runner)
+    with pytest.raises(EditorialRuntimeError) as error:
+        DirectorV2().run_three_pass(make_brief(), api, llm_call=built)
+    assert error.value.code == "model-bad-response"
+    assert "1 retry (2 attempts)" in error.value.detail
+    assert len(runner.calls) == 2
+
+
+def test_codex_parse_failure_retry_recovers(api: MediaQueryApiV2) -> None:
+    """Given: garbage first, a valid object second; Then: the pass succeeds
+    on the single retry — fabrication never enters the picture."""
+
+    baseline = _run(api)
+    good = _canned_messages(baseline)
+    runner = _ScriptedCodexRunner(["garbage prose", good[0], good[1], good[2]])
+    built = build_llm_call_codex(_director_pin(), runner)
+    through = DirectorV2().run_three_pass(make_brief(), api, llm_call=built)
+    assert through.story_plan == baseline.story_plan
+    assert len(runner.calls) == 4  # pass_a retried; pass_b/c single-shot
+
+
+def test_codex_timeout_is_typed_without_retry(api: MediaQueryApiV2) -> None:
+    runner = _ScriptedCodexRunner([TimeoutError("codex exec hung")])
+    built = build_llm_call_codex(_director_pin(), runner)
+    with pytest.raises(EditorialRuntimeError) as error:
+        DirectorV2().run_three_pass(make_brief(), api, llm_call=built)
+    assert error.value.code == "model-timeout"
+    assert len(runner.calls) == 1  # timeouts are never retried
+
+
+def test_codex_transport_error_is_typed_without_retry(api: MediaQueryApiV2) -> None:
+    """Given: the CLI transport already typed a failure (non-zero exit);
+    Then: it propagates as-is — no retry, no heuristic fallback."""
+
+    runner = _ScriptedCodexRunner([
+        EditorialRuntimeError("production-model-unavailable", "codex exec exited 2: boom")
+    ])
+    built = build_llm_call_codex(_director_pin(), runner)
+    with pytest.raises(EditorialRuntimeError) as error:
+        DirectorV2().run_three_pass(make_brief(), api, llm_call=built)
+    assert error.value.code == "production-model-unavailable"
+    assert "boom" in error.value.detail
+    assert len(runner.calls) == 1
+
+
+def test_codex_seam_stays_raw_director_validates(api: MediaQueryApiV2) -> None:
+    """Given: a well-formed JSON object violating the draft contract; Then:
+    the director's own validation refuses it (the codex seam stays raw)."""
+
+    runner = _ScriptedCodexRunner([json.dumps({"story_plan": {"bogus": True}})])
+    built = build_llm_call_codex(_director_pin(), runner)
+    with pytest.raises(ValidationError):
+        DirectorV2().run_three_pass(make_brief(), api, llm_call=built)
+
+
+# ------------------------------- fenced/garbage JSON extraction (both surfaces)
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ('{"a": 1}', {"a": 1}),
+        ('```json\n{"a": 1}\n```', {"a": 1}),
+        ('```\n{"a": 1}\n```', {"a": 1}),
+        ('prose before\n```json\n{"a": {"b": 2}}\n```\nprose after', {"a": {"b": 2}}),
+        ('Here: {"b": [1, 2]} — done', {"b": [1, 2]}),
+        ('{"s": "text with } brace"}', {"s": "text with } brace"}),
+    ],
+)
+def test_extract_json_object_tolerates_realistic_shapes(
+    message: str, expected: dict[str, object]
+) -> None:
+    assert extract_json_object(message) == expected
+
+
+@pytest.mark.parametrize("message", ["", "   ", "no json here", "[1, 2, 3]", '"scalar"', "42"])
+def test_extract_json_object_refuses_non_objects(message: str) -> None:
+    with pytest.raises(EditorialRuntimeError) as error:
+        extract_json_object(message)
+    assert error.value.code == "model-bad-response"
+
+
+# ------------------------------- pin surface widths + runtime transport field
+
+
+def test_pin_accepts_codex_exec_surface_and_refuses_half_configured() -> None:
+    codex_pin = EditorialPinV2.model_validate(
+        {
+            "schema_version": "editorial-pin-v2",
+            "purpose": "editorial-director-v2",
+            "model_id": "gpt-5.6-sol",
+            "api_surface": "codex-exec",
+        }
+    )
+    assert codex_pin.model_id == "gpt-5.6-sol"
+
+    with pytest.raises(ValidationError):
+        EditorialPinV2.model_validate(
+            {
+                "schema_version": "editorial-pin-v2",
+                "purpose": "drifted",
+                "model_id": "gpt-5.6-sol",
+                "api_surface": "codex-exec",
+                "endpoint": "https://api.openai.com/v1/responses",
+            }
+        )
+    with pytest.raises(ValidationError):
+        EditorialPinV2.model_validate(
+            {
+                "schema_version": "editorial-pin-v2",
+                "purpose": "drifted",
+                "model_id": "gpt-5.6-sol",
+                "api_surface": "openai-responses-structured-output",
+            }
+        )
+
+
+def test_runtime_transport_default_is_codex_and_round_trips(tmp_path: Path) -> None:
+    """Given: the shipped default; Then: transport defaults to codex-exec,
+    survives the canonical round trip, and rejects unknown values."""
+
+    runtime = EditorialRuntimeV1(
+        schema_version="editorial-runtime-v1",
+        mode="production_model",
+        director_pin_path=str(DIRECTOR_PIN_PATH),
+        moment_review_pin_path="config/toolchains/pins/moment-review-multimodal.json",
+        review_interpreter_pin_path="config/toolchains/pins/review-interpreter.json",
+    )
+    assert runtime.transport == "codex-exec"
+    path = tmp_path / "runtime-transport.json"
+    atomic_write(path, canonical_model_bytes(runtime))
+    loaded = load_editorial_runtime(path)
+    assert loaded.transport == "codex-exec"
+
+    raw = json.loads(path.read_text())
+    with pytest.raises(ValidationError):
+        EditorialRuntimeV1.model_validate(dict(raw, transport="ollama"))
+
+
+def test_stage_director_codex_gate_blocked_zero_subprocess(
+    api: MediaQueryApiV2,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Given: production runtime with codex transport but a gated codex CLI;
+    Then: typed BLOCKED with the operator-actionable codex message — the
+    factory never ran, so no subprocess of any kind exists."""
+
+    runtime = _write_runtime(tmp_path, "production_model", transport="codex-exec")
+
+    def gated() -> object:
+        raise CodexTransportGatedError("codex-not-logged-in", "Not logged in — run `codex login`")
+
+    monkeypatch.setattr("services.cli.episode0.make_codex_runner", gated)
+    with pytest.raises(Episode0BlockedError) as error:
+        _stage_director(make_brief(), api, None, runtime_path=runtime)
+    assert error.value.code == "production-model-unavailable"
+    assert "codex login" in error.value.detail
+    assert "openai-api" in error.value.detail  # the switch-back path is named
+
+
+def test_stage_director_codex_transport_wires_injected_runner(
+    api: MediaQueryApiV2,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Given: production runtime with codex transport + a monkeypatched codex
+    factory; Then: _stage_director wires the codex llm through DirectorV2
+    end-to-end (same clean_fake replay as the openai variant)."""
+
+    runtime = _write_runtime(tmp_path, "production_model", transport="codex-exec")
+    baseline = _run(api)
+    runner = _ScriptedCodexRunner(_canned_messages(baseline))
+    monkeypatch.setattr("services.cli.episode0.make_codex_runner", lambda: runner)
+
+    result = _stage_director(make_brief(), api, None, runtime_path=runtime)
+
+    assert result.moment_selection.proposal == baseline.moment_selection.proposal
+    assert len(runner.calls) == 3

@@ -91,12 +91,18 @@ def _require_bootstrapped_toolchain() -> Phase1TechnicalToolchainLock:
 class LiveWorkspace:
     """One real cockpit workspace (episodes root + StateStore) in tmp."""
 
-    def __init__(self, root: Path, mode: str) -> None:
+    def __init__(self, root: Path, mode: str, transport: str | None = None) -> None:
         root.mkdir(parents=True, exist_ok=True)
         self.episodes_root = root / "episodes"
         self.state_store = root / "state.db"
         runtime = root / "editorial-runtime.json"
-        runtime.write_text(json.dumps({"mode": mode}), encoding="utf-8")
+        # transport=None keeps the shipped default (codex-exec); the blocked
+        # variant pins openai-api so the test's "no credentials" premise
+        # matches the transport it gates on.
+        config: dict[str, str] = {"mode": mode}
+        if transport is not None:
+            config["transport"] = transport
+        runtime.write_text(json.dumps(config), encoding="utf-8")
         self.runtime_config = runtime
         self.app = create_cockpit_app(
             state_store_path=self.state_store, episodes_root=self.episodes_root
@@ -262,7 +268,9 @@ def test_live_production_mode_without_credentials_blocks_honestly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _require_live_env()
-    workspace = LiveWorkspace(tmp_path / "blocked", "production_model")
+    # openai-api transport: the no-credentials premise is exactly what this
+    # gate blocks (the codex-exec default gates on the codex probe instead).
+    workspace = LiveWorkspace(tmp_path / "blocked", "production_model", transport="openai-api")
     monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(workspace.runtime_config))
     for var in CREDENTIAL_VARS:
         monkeypatch.delenv(var, raising=False)

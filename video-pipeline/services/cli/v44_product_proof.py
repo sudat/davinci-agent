@@ -54,9 +54,38 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def _try_production_gate() -> None:
-    """Attempt to build the production transport; gate failure = blocked exit."""
-    # Import here so the module stays importable even before T3 lands in some checkouts.
+def _try_production_gate(transport: str = "codex-exec") -> None:
+    """Attempt to build the production transport; gate failure = blocked exit.
+
+    ``codex-exec`` (the runtime default) gates on the codex CLI probe;
+    ``openai-api`` keeps the env-var gate. Both block typed
+    ``production-model-unavailable`` — never a heuristic fallback.
+    """
+    import os  # noqa: PLC0415
+
+    if transport == "codex-exec":
+        try:
+            from services.cli.live_editorial_codex import (  # noqa: PLC0415
+                CodexTransportGatedError,
+                make_codex_runner,
+            )
+        except ImportError as exc:
+            print(
+                f"blocked: production-model-unavailable — codex transport not "
+                f"available: {exc}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from exc
+        try:
+            make_codex_runner()
+        except CodexTransportGatedError as exc:
+            print(
+                f"blocked: production-model-unavailable — codex gate failed "
+                f"({exc.code}: {exc.detail}); run `codex login`",
+                file=sys.stderr,
+            )
+            raise SystemExit(1) from exc
+        return
     try:
         from services.cli.live_editorial_v2 import make_http_post  # noqa: PLC0415
     except ImportError as exc:
@@ -65,8 +94,6 @@ def _try_production_gate() -> None:
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
-    import os  # noqa: PLC0415
-
     env = dict(os.environ)
     try:
         make_http_post(env)
@@ -174,6 +201,26 @@ def _editorial_mode() -> str:
     return "production_model"
 
 
+def _editorial_transport() -> str:
+    """Read the runtime transport; absent/unreadable → codex-exec default."""
+    candidates = [
+        _repo_root() / "video-pipeline" / "config" / "editorial-runtime.json",
+        Path("config/editorial-runtime.json").resolve(),
+        Path(__file__).resolve().parents[2] / "config" / "editorial-runtime.json",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            try:
+                data: object = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if isinstance(data, dict):
+                transport = data.get("transport")
+                if isinstance(transport, str) and transport in ("codex-exec", "openai-api"):
+                    return transport
+    return "codex-exec"
+
+
 def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
     arm: Literal["A", "B", "C"] = args.arm
     episode_root = Path(args.episode_root)
@@ -188,7 +235,9 @@ def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR09
         print(f"run-arm failed: invalid ground truth {gt_path}: {exc}", file=sys.stderr)
         return 2
 
-    # Production gate: if mode is production_model, require live transport
+    # Production gate: if mode is production_model, require a live transport
+    # (codex-exec probe by default, or the openai-api env gate per the
+    # runtime config's transport field).
     mode = _editorial_mode()
     if mode == "production_model" and not dry_run:
         # In dry-run we still gate? Spec says without env gate -> blocked.
@@ -197,7 +246,7 @@ def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR09
         # (toy harness). Otherwise gate.
         is_toy = str(gt.episode_id).startswith("test-")
         if not is_toy:
-            _try_production_gate()
+            _try_production_gate(_editorial_transport())
 
     # Dry-run assertion: operator fields must stay pending and passed must be False
     # (anti-fabrication). We enforce after report build.

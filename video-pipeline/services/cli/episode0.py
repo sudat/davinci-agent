@@ -45,6 +45,10 @@ from typing import TYPE_CHECKING, Literal, cast, get_args
 
 from pydantic import BaseModel, ValidationError
 
+from services.cli.live_editorial_codex import (
+    CodexTransportGatedError,
+    make_codex_runner,
+)
 from services.cli.live_editorial_v2 import (
     CREDENTIALS_ENV,
     NETWORK_ENV,
@@ -108,6 +112,7 @@ from services.editorial_v2.evidence_v2 import assemble_evidence_v2
 from services.editorial_v2.model_provider import (
     EDITORIAL_RUNTIME_PATH,
     build_llm_call,
+    build_llm_call_codex,
     load_editorial_pin,
     load_editorial_runtime,
 )
@@ -549,28 +554,51 @@ def _stage_director(
     """Editorial brain selection per the editorial-runtime config (task 3).
 
     ``production_model`` wires the three DirectorV2 passes to the pinned
-    gpt-5.6-sol transport; a gated transport is a typed BLOCKED escalation
-    (never a silent heuristic fallback). ``heuristic_diagnostic`` runs the
-    deterministic planner with ``llm_call=None`` behind an explicit banner.
+    gpt-5.6-sol model over the runtime-configured transport — ``codex-exec``
+    (DEFAULT, owner decision: the Codex subscription via ``codex exec``,
+    gated on the codex CLI being installed and logged in) or ``openai-api``
+    (the env-gated API-key transport). A gated transport is a typed BLOCKED
+    escalation (never a silent heuristic fallback). ``heuristic_diagnostic``
+    runs the deterministic planner with ``llm_call=None`` behind an explicit
+    banner.
     """
 
     runtime = load_editorial_runtime(runtime_path)
     llm_call: LlmCallV2 | None = None
     if runtime.mode == "production_model":
-        try:
-            http_post = make_http_post(env)
-        except EditorialTransportGatedError as exc:
-            raise Episode0BlockedError(
-                "production-model-unavailable",
-                f"editorial runtime mode is production_model but the live model "
-                f"transport is gated ({exc.code}: {exc.detail}). ESCALATION to "
-                f"operator: export {CREDENTIALS_ENV} with the provider key and set "
-                f"{NETWORK_ENV}=1, or switch {runtime_path} to heuristic_diagnostic "
-                f"for an explicit no-LLM diagnostic run. The editorial-v2 rerun "
-                f"was NOT started.",
-            ) from exc
         pin = load_editorial_pin(Path(runtime.director_pin_path))
-        llm_call = build_llm_call(pin, http_post)
+        if runtime.transport == "codex-exec":
+            try:
+                runner = make_codex_runner()
+            except CodexTransportGatedError as exc:
+                raise Episode0BlockedError(
+                    "production-model-unavailable",
+                    f"editorial runtime mode is production_model with transport "
+                    f"codex-exec but the codex gate failed ({exc.code}: {exc.detail}). "
+                    f"ESCALATION to operator: run `codex login` (and put codex-cli "
+                    f"on PATH), or switch {runtime_path} transport to openai-api "
+                    f"({CREDENTIALS_ENV} + {NETWORK_ENV}=1) or mode to "
+                    f"heuristic_diagnostic. The editorial-v2 rerun was NOT started.",
+                ) from exc
+            print(
+                "editorial runtime: production_model transport=codex-exec "
+                f"(model {pin.model_id} via codex exec)"
+            )
+            llm_call = build_llm_call_codex(pin, runner)
+        else:
+            try:
+                http_post = make_http_post(env)
+            except EditorialTransportGatedError as exc:
+                raise Episode0BlockedError(
+                    "production-model-unavailable",
+                    f"editorial runtime mode is production_model but the live model "
+                    f"transport is gated ({exc.code}: {exc.detail}). ESCALATION to "
+                    f"operator: export {CREDENTIALS_ENV} with the provider key and set "
+                    f"{NETWORK_ENV}=1, or switch {runtime_path} to heuristic_diagnostic "
+                    f"for an explicit no-LLM diagnostic run. The editorial-v2 rerun "
+                    f"was NOT started.",
+                ) from exc
+            llm_call = build_llm_call(pin, http_post)
     else:
         print(
             "editorial runtime: heuristic_diagnostic mode — llm_call=None "

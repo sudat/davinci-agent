@@ -86,7 +86,9 @@ from services.media_intelligence.moment_review_real import (
     RealReviewSetup,
     RealTranscriptLookup,
     SyntheticLineageError,
+    TranscriptSegmentText,
     build_assessment_call,
+    build_assessment_call_codex,
     execute_real_review,
     is_synthetic_provider,
     require_real_lineage,
@@ -411,6 +413,90 @@ def test_transport_failure_is_typed_rejection() -> None:
         provider.assess(_bundle())
 
 
+# ------------------------------------------- codex-exec assessment call (v4.4)
+
+
+@dataclass(slots=True)
+class _RecordedCodexCall:
+    prompt: str
+    model: str
+    images: tuple[Path, ...]
+    timeout_s: float
+
+
+class FakeCodexRunner:
+    """Replays canned final messages/exceptions; records every call."""
+
+    def __init__(self, results: list[str | BaseException]) -> None:
+        self._results = list(results)
+        self.calls: list[_RecordedCodexCall] = []
+
+    def __call__(
+        self, prompt: str, *, model: str, images: tuple[Path, ...], timeout_s: float
+    ) -> str:
+        self.calls.append(_RecordedCodexCall(prompt, model, tuple(images), timeout_s))
+        result = self._results.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return str(result)
+
+
+def test_codex_assessment_happy_path_resolves_frame_refs_to_attachments() -> None:
+    """Given: a codex runner replaying the canned assessment (fenced); Then:
+    the frames become -i attachments (never embedded payload bytes), the
+    prompt carries the evidence as DATA, and the outcome validates."""
+
+    frame = tmp_frame = Path("/var/empty/moment-review-never-fetched.png")
+    runner = FakeCodexRunner(
+        ["```json\n" + json.dumps(CANNED_RESPONSE) + "\n```"]
+    )
+    provider = build_assessment_call_codex(PIN, runner)
+    bundle = AssessmentEvidenceBundle(
+        episode_id=EPISODE_ID,
+        window=WINDOW,
+        frame_refs=(frame.as_uri(),),
+        transcript_segments=(
+            TranscriptSegmentText(
+                segment_id="tr-1", start_frame=6, end_frame=12, text="本編セリフ"
+            ),
+        ),
+    )
+
+    outcome = provider.assess(bundle)
+
+    assert outcome.assessment.subject_action_evolution == CANNED_RESPONSE["assessment"][
+        "subject_action_evolution"
+    ]
+    call = runner.calls[0]
+    assert call.model == "gpt-5.6-sol"
+    assert call.images == (tmp_frame,)  # file:// ref resolved to a real path
+    assert call.timeout_s == 120.0
+    assert call.prompt.startswith(PROMPT_MOMENT_REVIEW)
+    assert "OUTPUT CONTRACT" in call.prompt
+    assert "tr-1" in call.prompt  # evidence rides as DATA
+    assert "本編セリフ" in call.prompt
+    assert "\\x89PNG" not in call.prompt  # no embedded image bytes, refs only
+
+
+def test_codex_assessment_parse_failure_retries_once_then_typed() -> None:
+    """Given: garbage, then still-garbage final messages; Then: exactly two
+    runner calls and a typed AssessmentBadResponseError recording the retry."""
+
+    runner = FakeCodexRunner(["no json", "[1, 2]"])
+    provider = build_assessment_call_codex(PIN, runner)
+    with pytest.raises(AssessmentBadResponseError, match="1 retry"):
+        provider.assess(_bundle())
+    assert len(runner.calls) == 2
+
+
+def test_codex_assessment_transport_failure_is_typed_no_retry() -> None:
+    runner = FakeCodexRunner([TimeoutError("codex exec hung")])
+    provider = build_assessment_call_codex(PIN, runner)
+    with pytest.raises(AssessmentTransportError, match="codex exec hung"):
+        provider.assess(_bundle())
+    assert len(runner.calls) == 1  # transport failures are never retried
+
+
 def test_window_beyond_source_is_still_typed_via_record_review(
     api: MediaQueryApiV2, real_media: Path, tmp_path: Path
 ) -> None:
@@ -437,9 +523,20 @@ def test_extractor_beyond_decoded_frames_is_typed_error(real_media: Path, tmp_pa
 def test_module_stays_decoupled_and_network_free() -> None:
     source = inspect.getsource(real_module)
     assert "services.editorial_v2" not in source
+
+    # urllib.parse is pure string handling (no network I/O) and explicitly
+    # allowed anywhere by the services-wide AST guard (translator.py
+    # precedent): the codex provider uses unquote to resolve file:// frame
+    # refs. Every other urllib/network import stays forbidden.
+    def _is_parse_only(import_line: str) -> bool:
+        return import_line.startswith("from urllib.parse")
+
     for network_import in ("urllib", "http.client", "socket", "httpx", "requests"):
-        assert not re.search(rf"^\s*import {network_import}", source, re.MULTILINE)
-        assert not re.search(rf"^\s*from {network_import}", source, re.MULTILINE)
+        for match in re.finditer(rf"^\s*(import|from) {network_import}.*$", source, re.MULTILINE):
+            assert _is_parse_only(match.group(0)), f"network import: {match.group(0)}"
+    assert re.findall(r"^from urllib\.parse import .*$", source, re.MULTILINE) == [
+        "from urllib.parse import unquote"
+    ]
     forbidden_defs = re.compile(
         r"^(\s*)?(async )?def (mutate|apply|commit|write|insert|update|delete|patch)\w*",
         re.MULTILINE,

@@ -27,10 +27,26 @@ Run every command from `video-pipeline/` (the pipeline root). 実コマンド例
    入力すること。T6 が置いた古いプレースホルダ（`sample: null`）のままでは T12 ハーネスは
    `sample-parse-error` で失敗する（正しい失敗）。記入例は
    `video-pipeline/tests/fixtures/v44/sample-corrected.json` を参照。
-4. **T5 の注意（本番ゲートにテスト用バイパスはない）**: `v44-real-01` は
-   episode_id が `test-` で始まらないため、production model モードでは必ず本番クレデンシャル
-   （`EDITORIAL_DIRECTOR_API_KEY` + `EDITORIAL_DIRECTOR_NETWORK_ENABLED=1`）が必要。
-   無い場合は `production-model-unavailable` でブロックされる（仕様どおり）。
+4. **本番エディトリアル・トランスポート（2択、正本は `config/editorial-runtime.json` の `transport` フィールド）**:
+   - **`codex-exec`（デフォルト）**: Codex サブスクリプション経由。事前に
+     `codex login` 済みであること（codex-cli が PATH にあること）。API キー不要。
+     未ログインの場合は `production-model-unavailable` でブロックされる
+     （メッセージに `codex login` が示される。仕様どおりの正しい失敗）。
+   - **`openai-api`**: OpenAI API キー経由。`EDITORIAL_DIRECTOR_API_KEY` +
+     `EDITORIAL_DIRECTOR_NETWORK_ENABLED=1` の両環境変数が必要。
+   - どちらのトランスポートでも `v44-real-01` は episode_id が `test-` 始まりで
+     ないため本番ゲートは免除されず、ゲート不通はブロックされる（テスト用
+     バイパスなし）。モデルピンはトランスポートによらず `gpt-5.6-sol`。
+   - 確認コマンド（オペレーター実行; `bash` ブロックはオフライン確認用）:
+
+   ```bash
+   # オフライン確認: どちらのトランスポートが設定されているか
+   uv run python -c "import json; print(json.load(open('config/editorial-runtime.json'))['transport'])"
+   ```
+
+   ```text
+   codex login status
+   ```
 5. **キット A/B 済み**: `<episode-root>/kit-selections.json` に subtitle / audio / color
    各ドメインのオペレーター選択が記録済みであること（T11 の Cockpit 画面または
    `POST /episodes/{id}/kit-previews/<domain>/select`）。

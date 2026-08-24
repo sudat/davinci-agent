@@ -40,6 +40,7 @@ from services.cli.episode_runner_editorial import (
     PRODUCTION_MODE,
     EditorialGateError,
     editorial_mode,
+    editorial_transport,
     require_production_ready,
     sanitized_env,
 )
@@ -222,7 +223,8 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
         try:
             mode = editorial_mode(call.editorial_runtime, log)
             if mode == PRODUCTION_MODE:
-                require_production_ready(store, ctx)
+                transport = editorial_transport(call.editorial_runtime, log)
+                require_production_ready(store, ctx, transport)
         except EditorialGateError as error:
             raise _gate_error(error) from error
         chain_env = dict(os.environ) if mode == PRODUCTION_MODE else sanitized_env()

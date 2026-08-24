@@ -17,9 +17,9 @@ messages, records, or error details.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal, Protocol
+from typing import TYPE_CHECKING, Final, Literal, Protocol, Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from services.contracts.primitives import StrictModel
 from services.foundation_io import canonical_model_bytes
@@ -70,38 +70,80 @@ class HttpPost(Protocol):
     ) -> bytes: ...
 
 
+class CodexRunner(Protocol):
+    """One bounded ``codex exec`` call → the assistant's FINAL message text.
+
+    The Codex-subscription transport of the editorial pins (owner decision,
+    v44-first-publish-delta): the real implementation (binary gate, login
+    probe, read-only sandbox subprocess, ``--output-last-message`` capture)
+    lives in the CLI layer only (``services/cli/live_editorial_codex.py``);
+    services code receives it injected, exactly like :class:`HttpPost`.
+    """
+
+    def __call__(
+        self, prompt: str, *, model: str, images: tuple[Path, ...], timeout_s: float
+    ) -> str: ...
+
+
 class EditorialPinV2(StrictModel):
     """One logical production-model pin (three independent pins; no framework).
 
     Same model family today, but each editorial purpose carries its OWN pin
     so any one purpose can be re-pinned without touching the others
-    (user decision D2). ``external_credentials`` lists env-var NAMES ONLY.
+    (user decision D2). ``external_credentials`` lists env-var NAMES ONLY —
+    and is meaningful ONLY on the ``openai-responses-structured-output``
+    surface: a ``codex-exec`` pin authenticates via ``codex login`` (CLI
+    state, no env credential), so it carries neither endpoint nor env names.
     """
 
     schema_version: Literal["editorial-pin-v2"]
     purpose: str = Field(min_length=1, strict=True)
     model_id: str = Field(min_length=1, strict=True)
-    api_surface: Literal["openai-responses-structured-output"]
-    endpoint: str = Field(min_length=1, strict=True)
-    external_credentials: tuple[str, ...] = Field(min_length=1)
-    network_env: str = Field(min_length=1, strict=True)
+    api_surface: Literal["openai-responses-structured-output", "codex-exec"]
+    endpoint: str | None = Field(default=None, min_length=1, strict=True)
+    external_credentials: tuple[str, ...] = Field(default=())
+    network_env: str | None = Field(default=None, min_length=1, strict=True)
     structured_output_schemas: dict[str, str] | None = None
 
     @field_validator("endpoint")
     @classmethod
-    def https_only(cls, value: str) -> str:
-        if not value.startswith(_HTTPS_PREFIX):
+    def https_only(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith(_HTTPS_PREFIX):
             raise ValueError(f"endpoint {value!r} must be an https:// URL (pinned surface)")
         return value
 
     @field_validator("external_credentials", "network_env")
     @classmethod
-    def names_not_values(cls, value: str | tuple[str, ...]) -> str | tuple[str, ...]:
+    def names_not_values(
+        cls, value: str | tuple[str, ...] | None
+    ) -> str | tuple[str, ...] | None:
         names = value if isinstance(value, tuple) else (value,)
         for name in names:
-            if not name.isupper() or " " in name or "=" in name:
+            if name is not None and (not name.isupper() or " " in name or "=" in name):
                 raise ValueError(f"credential env entry {name!r} {_ENV_NAME_PATTERN}")
         return value
+
+    @model_validator(mode="after")
+    def surface_fields_are_consistent(self) -> Self:
+        """Endpoint/env-credential fields exist ONLY where the surface uses them.
+
+        A half-configured pin (codex pin still naming an endpoint, or an
+        openai pin missing its endpoint/env gate names) is a DRIFTED pin —
+        refuse it rather than guess which field wins.
+        """
+
+        if self.api_surface == "openai-responses-structured-output":
+            if self.endpoint is None or not self.external_credentials or self.network_env is None:
+                raise ValueError(
+                    "api_surface openai-responses-structured-output requires endpoint, "
+                    "external_credentials, and network_env (env-var names only)"
+                )
+        elif self.endpoint is not None or self.external_credentials or self.network_env is not None:
+            raise ValueError(
+                "api_surface codex-exec authenticates via `codex login`; endpoint, "
+                "external_credentials, and network_env must be absent"
+            )
+        return self
 
 
 class EditorialRuntimeV1(StrictModel):
@@ -111,10 +153,16 @@ class EditorialRuntimeV1(StrictModel):
     passes to the pinned model and BLOCKS when the provider is unavailable;
     ``heuristic_diagnostic`` is the explicit no-LLM diagnostic path. Paths
     are relative to the video-pipeline root.
+
+    ``transport`` selects HOW the pinned model is reached (owner decision,
+    v44-first-publish-delta): ``codex-exec`` (DEFAULT — the Codex
+    subscription via ``codex exec``; gates on the codex CLI being installed
+    and logged in) or ``openai-api`` (the env-gated OpenAI API key path).
     """
 
     schema_version: Literal["editorial-runtime-v1"]
     mode: Literal["production_model", "heuristic_diagnostic"]
+    transport: Literal["codex-exec", "openai-api"] = "codex-exec"
     director_pin_path: str = Field(min_length=1, strict=True)
     moment_review_pin_path: str = Field(min_length=1, strict=True)
     review_interpreter_pin_path: str = Field(min_length=1, strict=True)
@@ -172,6 +220,7 @@ __all__ = [
     "EDITORIAL_RUNTIME_PATH",
     "MOMENT_REVIEW_PIN_PATH",
     "REVIEW_INTERPRETER_PIN_PATH",
+    "CodexRunner",
     "EditorialHttpResponseError",
     "EditorialPinV2",
     "EditorialRedirectRefusedError",

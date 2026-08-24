@@ -24,6 +24,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.cli import episode_runner, episode_runner_editorial
+from services.cli.episode_runner_state import RunContext
+from services.cli.live_editorial_codex import CodexTransportGatedError
 from services.cli.real_chain import RealChainError
 from services.episode_cockpit import episode_ops
 from services.episode_cockpit.app import create_cockpit_app
@@ -212,12 +214,16 @@ def test_run_advances_episode_to_preview_ready(
 
 
 # ---------------------------------------------------------------------------
-# (2) blocked mode: production editorial runtime without credentials fails
-#     fast with the typed error code — never a silent heuristic fallback.
+# (2) blocked mode: production editorial runtime fails fast with the typed
+#     error code per TRANSPORT — openai-api gates on the env vars (cleared
+#     by the autouse hermetic fixture), codex-exec gates on the codex probe
+#     (faked) — never a silent heuristic fallback either way.
 # ---------------------------------------------------------------------------
 
 
-def test_production_mode_without_credentials_blocks(
+@pytest.mark.parametrize("transport", ["openai-api", "codex-exec"])
+def test_production_mode_gate_blocks_per_transport(  # noqa: PLR0913, PLR0917 (six pytest fixtures, all used)
+    transport: str,
     client: TestClient,
     workspace: dict[str, Path],
     source_folder: Path,
@@ -225,9 +231,18 @@ def test_production_mode_without_credentials_blocks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+    if transport == "codex-exec":
+
+        def gated() -> object:
+            raise CodexTransportGatedError(
+                "codex-not-logged-in", "Not logged in — run `codex login`"
+            )
+
+        monkeypatch.setattr(episode_runner_editorial, "make_codex_runner", gated)
     config = tmp_path / "editorial-runtime.json"
     config.write_text(json.dumps({"schema_version": "editorial-runtime-v1",
-                                  "mode": "production_model"}))
+                                  "mode": "production_model",
+                                  "transport": transport}))
     body = _create_episode(client, source_folder)
     episode_id = str(body["episode_id"])
     episode_dir = workspace["episodes_root"] / episode_id
@@ -248,7 +263,33 @@ def test_production_mode_without_credentials_blocks(
         event for event in _runner_log_events(episode_dir) if event["event"] == "blocked"
     )
     assert blocked_event["code"] == "production-model-unavailable"
-    assert "EDITORIAL_DIRECTOR_API_KEY" in str(blocked_event["detail"])
+    if transport == "openai-api":
+        assert "EDITORIAL_DIRECTOR_API_KEY" in str(blocked_event["detail"])
+    else:
+        assert "codex login" in str(blocked_event["detail"])
+
+
+def test_production_mode_codex_probe_ok_proceeds_past_gate(
+    workspace: dict[str, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Given: codex transport with a passing (faked) probe; Then: the gate
+    proceeds — no block is recorded, proving production WITHOUT API keys is
+    no longer blocked when codex is logged in."""
+
+    monkeypatch.setattr(episode_runner_editorial, "make_codex_runner", object)
+    config = tmp_path / "editorial-runtime.json"
+    config.write_text(json.dumps({"schema_version": "editorial-runtime-v1",
+                                  "mode": "production_model",
+                                  "transport": "codex-exec"}))
+    with (tmp_path / "gate.log").open("ab") as log:
+        episode_runner_editorial.editorial_transport(config, log)
+        with StateStore.open(workspace["state_store"]) as store:
+            ctx = RunContext(
+                workspace["state_store"], "job-gate-codex-ok", "run-1", "PREVIEW_READY", log
+            )
+            episode_runner_editorial.require_production_ready(store, ctx, "codex-exec")
 
 
 def test_production_mode_with_gate_but_missing_provider_module_blocks(
@@ -267,7 +308,8 @@ def test_production_mode_with_gate_but_missing_provider_module_blocks(
     )
     config = tmp_path / "editorial-runtime.json"
     config.write_text(json.dumps({"schema_version": "editorial-runtime-v1",
-                                  "mode": "production_model"}))
+                                  "mode": "production_model",
+                                  "transport": "openai-api"}))
     body = _create_episode(client, source_folder)
     episode_dir = workspace["episodes_root"] / str(body["episode_id"])
 
