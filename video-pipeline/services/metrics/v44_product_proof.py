@@ -755,13 +755,15 @@ def _build_report_from_context(  # noqa: PLR0913
     )
 
 
-def run_arm_a(
+def run_arm_a(  # noqa: PLR0913 (arm kwargs mirror the harness pinning surface)
     ctx: EpisodeContext,
     *,
     llm_call: object | None = None,
     commit_sha: str = "0" * 40,
     model_pin: str = "test-model",
     analysis_provider_pin: str = "test-analysis",
+    notes: str | None = None,
+    evidence_quality: EvidenceQualityMetrics | None = None,
 ) -> ArmResult:
     """Arm A: coarse evidence only (no deep review).
 
@@ -781,7 +783,9 @@ def run_arm_a(
         run_kind="v44-0-arm",
         model_pin=model_pin,
         analysis_provider_pin=analysis_provider_pin,
+        evidence_quality=evidence_quality,
         efficiency_wall_clock=ctx.wall_clock_seconds,
+        notes=notes,
     )
     return ArmResult(report=report)
 
@@ -794,6 +798,8 @@ def run_arm_b(  # noqa: PLR0913
     commit_sha: str = "0" * 40,
     model_pin: str = "test-model",
     analysis_provider_pin: str = "test-analysis",
+    notes: str | None = None,
+    evidence_quality: EvidenceQualityMetrics | None = None,
 ) -> ArmResult:
     """Arm B: same as A plus progressive real deep reviews.
 
@@ -807,7 +813,9 @@ def run_arm_b(  # noqa: PLR0913
         run_kind="v44-0-arm",
         model_pin=model_pin,
         analysis_provider_pin=analysis_provider_pin,
+        evidence_quality=evidence_quality,
         efficiency_wall_clock=ctx.wall_clock_seconds,
+        notes=notes,
     )
     return ArmResult(report=report, deep_reviews=tuple(deep_reviews))
 

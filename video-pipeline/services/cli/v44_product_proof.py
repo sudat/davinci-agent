@@ -19,9 +19,12 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from services.editorial_v2.model_provider import CodexRunner
 
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 from services.metrics.v44_product_proof import (
@@ -183,45 +186,54 @@ def _resolve_commit_sha() -> str:
     return "0" * _COMMIT_SHA_LEN
 
 
-def _editorial_mode() -> str:
-    """Read editorial-runtime.json mode; default production_model per T3."""
-    candidates = [
+def _runtime_config_candidates() -> list[Path]:
+    return [
         _repo_root() / "video-pipeline" / "config" / "editorial-runtime.json",
         Path("config/editorial-runtime.json").resolve(),
         Path(__file__).resolve().parents[2] / "config" / "editorial-runtime.json",
     ]
-    for candidate in candidates:
+
+
+def _runtime_config_path() -> Path | None:
+    for candidate in _runtime_config_candidates():
         if candidate.is_file():
-            try:
-                data: object = json.loads(candidate.read_text(encoding="utf-8"))
-                if isinstance(data, dict) and isinstance(data.get("mode"), str):
-                    return str(data["mode"])
-            except (OSError, ValueError, json.JSONDecodeError):
-                continue
+            return candidate
+    return None
+
+
+def _video_pipeline_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _editorial_mode() -> str:
+    """Read editorial-runtime.json mode; default production_model per T3."""
+    candidate = _runtime_config_path()
+    if candidate is not None:
+        try:
+            data: object = json.loads(candidate.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and isinstance(data.get("mode"), str):
+                return str(data["mode"])
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
     return "production_model"
 
 
 def _editorial_transport() -> str:
     """Read the runtime transport; absent/unreadable → codex-exec default."""
-    candidates = [
-        _repo_root() / "video-pipeline" / "config" / "editorial-runtime.json",
-        Path("config/editorial-runtime.json").resolve(),
-        Path(__file__).resolve().parents[2] / "config" / "editorial-runtime.json",
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            try:
-                data: object = json.loads(candidate.read_text(encoding="utf-8"))
-            except (OSError, ValueError, json.JSONDecodeError):
-                continue
-            if isinstance(data, dict):
-                transport = data.get("transport")
-                if isinstance(transport, str) and transport in ("codex-exec", "openai-api"):
-                    return transport
+    candidate = _runtime_config_path()
+    if candidate is not None:
+        try:
+            data: object = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, dict):
+            transport = data.get("transport")
+            if isinstance(transport, str) and transport in ("codex-exec", "openai-api"):
+                return transport
     return "codex-exec"
 
 
-def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
+def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0911, PLR0912, PLR0915
     arm: Literal["A", "B", "C"] = args.arm
     episode_root = Path(args.episode_root)
     gt_path = Path(args.ground_truth)
@@ -235,31 +247,38 @@ def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR09
         print(f"run-arm failed: invalid ground truth {gt_path}: {exc}", file=sys.stderr)
         return 2
 
-    # Production gate: if mode is production_model, require a live transport
-    # (codex-exec probe by default, or the openai-api env gate per the
-    # runtime config's transport field).
-    mode = _editorial_mode()
-    if mode == "production_model" and not dry_run:
-        # In dry-run we still gate? Spec says without env gate -> blocked.
-        # Dry-run is still a product run, so gate applies unless heurisitc.
-        # For testability, allow bypass if episode_id starts with "test-"
-        # (toy harness). Otherwise gate.
-        is_toy = str(gt.episode_id).startswith("test-")
-        if not is_toy:
-            _try_production_gate(_editorial_transport())
-
-    # Dry-run assertion: operator fields must stay pending and passed must be False
-    # (anti-fabrication). We enforce after report build.
-
-    # Assemble a minimal EpisodeContext from the T6 layout.
-    # The real harness would run DirectorV2 + deep reviews; here we compute
-    # editorial metrics from the anchors plus a toy kept-span set (all must_keep kept).
-    # This is deterministic and testable; T14 will drive the real Director.
     episode_id = str(gt.episode_id)
-    # Toy: keep every must_keep anchor as a kept span, keep no must_remove
+    is_toy = episode_id.startswith("test-")
+
+    # Real pipeline (T14): arms A/B on a real episode, never in dry-run.
+    # Dry-run is CLI/policy verification ONLY — toy path, no transport gate.
+    mode = _editorial_mode()
+    if not dry_run and not is_toy and arm in ("A", "B"):
+        if mode != "production_model":
+            print(
+                f"blocked: production-model-unavailable — run-arm real arms require "
+                f"editorial-runtime mode production_model, got {mode!r}; refusing to "
+                f"measure a heuristic toy as the production editorial result",
+                file=sys.stderr,
+            )
+            return 1
+        return _run_real_arm(arm, episode_root, gt, out_path, args)
+
+    # Arm C on a real episode (diagnostic) keeps the transport gate (no dry-run).
+    if mode == "production_model" and not dry_run and not is_toy:
+        _try_production_gate(_editorial_transport())
+
+    # Toy path: deterministic, testable; T14's real harness replaced this for
+    # arms A/B on real episodes (see services/cli/v44_arm_pipeline.py).
     kept_spans: list[tuple[int, int]] = [
         (int(a.start_frame), int(a.end_frame)) for a in gt.anchors if a.label == "must_keep"
     ]
+    toy_notes = (
+        "dry-run-toy: real pipeline skipped; kept_spans are the trivial toy "
+        "(all must_keep anchors kept) — CLI/policy verification only"
+        if dry_run
+        else None
+    )
 
     ctx = EpisodeContext(
         episode_id=episode_id,
@@ -273,7 +292,7 @@ def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR09
 
     # Dispatch arm
     if arm == "A":
-        result = run_arm_a(ctx, commit_sha=commit_sha)
+        result = run_arm_a(ctx, commit_sha=commit_sha, notes=toy_notes)
         report = result.report
     elif arm == "B":
         # For B we need at least one real-lineage review if any must_keep is uncertain.
@@ -347,10 +366,10 @@ def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR09
             reviews.append(rec)
         # If no must_keep, create an empty list (arm B with no reviews is valid)
         if not reviews:
-            result = run_arm_a(ctx, commit_sha=commit_sha)
+            result = run_arm_a(ctx, commit_sha=commit_sha, notes=toy_notes)
             report = result.report
         else:
-            result = run_arm_b(ctx, reviews, commit_sha=commit_sha)
+            result = run_arm_b(ctx, reviews, commit_sha=commit_sha, notes=toy_notes)
             report = result.report
     elif arm == "C":
         # Arm C diagnostic: consume corrected-evidence JSON if present
@@ -408,6 +427,240 @@ def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR09
             return 1
 
     atomic_write(out_path, canonical_model_bytes(report))
+    print(f"run-arm {arm}: {out_path} sha256={sha256_file(out_path)[:12]}")
+    return 0
+
+
+class _CountingCodexRunner:
+    """Codex runner wrapper counting every exec call (codex reports no usage)."""
+
+    __slots__ = ("_inner", "count")
+
+    def __init__(self, inner: CodexRunner) -> None:
+        self._inner = inner
+        self.count = 0
+
+    def __call__(
+        self, prompt: str, *, model: str, images: tuple[Path, ...], timeout_s: float
+    ) -> str:
+        self.count += 1
+        return self._inner(prompt, model=model, images=images, timeout_s=timeout_s)
+
+
+def _arm_failure_code(exc: BaseException) -> str:
+    code = getattr(exc, "code", None)
+    return str(code) if isinstance(code, str) and code else type(exc).__name__
+
+
+def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
+    arm: Literal["A", "B"],
+    episode_root: Path,
+    gt: EditorialGroundTruthV1,
+    out_path: Path,
+    args: argparse.Namespace,
+) -> int:
+    """Drive the REAL pipeline (chain stages → DirectorV2 codex → commit).
+
+    Any typed failure in the real chain IS the honest result: print the
+    code/detail and exit 1 — never a toy fallback, never a fabricated report.
+    """
+    import time  # noqa: PLC0415
+
+    from services.cli.live_editorial_codex import (  # noqa: PLC0415
+        CodexTransportGatedError,
+        make_codex_runner,
+    )
+    from services.cli.v44_arm_evidence import (  # noqa: PLC0415
+        FRAME_SPACE_NOTE,
+        ArmEvidenceError,
+        compose_arm_brief,
+        compute_arm_evidence_quality,
+        escalated_anchor_ids,
+        mezz_span_to_anchor_space,
+    )
+    from services.cli.v44_arm_pipeline import (  # noqa: PLC0415
+        ArmPipelineInputs,
+        run_arm_pipeline,
+    )
+    from services.cli.v44_arm_stages import (  # noqa: PLC0415
+        ArmPipelineError,
+        whisper_provider_pin,
+    )
+    from services.editorial_v2.director_v2 import DirectorV2Error  # noqa: PLC0415
+    from services.editorial_v2.editorial_pins import (  # noqa: PLC0415
+        EditorialRuntimeError,
+        load_editorial_pin,
+        load_editorial_runtime,
+    )
+    from services.editorial_v2.evidence_v2 import EvidenceIncompleteV2  # noqa: PLC0415
+    from services.editorial_v2.model_provider import build_llm_call_codex  # noqa: PLC0415
+    from services.editorial_v2.proposal_validate import (  # noqa: PLC0415
+        MomentCommitError,
+        MomentValidationError,
+    )
+    from services.media_intelligence.moment_review_real import (  # noqa: PLC0415
+        AssessmentPinSummary,
+        MomentReviewRealError,
+        build_assessment_call_codex,
+    )
+    from services.normalize.errors import NormalizeError  # noqa: PLC0415
+
+    started = time.monotonic()
+    episode_id = str(gt.episode_id)
+    try:
+        runner = make_codex_runner()
+    except CodexTransportGatedError as exc:
+        print(
+            f"blocked: production-model-unavailable — codex gate failed "
+            f"({exc.code}: {exc.detail}); run `codex login`",
+            file=sys.stderr,
+        )
+        return 1
+    counting = _CountingCodexRunner(runner)
+    runtime_path = _runtime_config_path()
+    if runtime_path is None:
+        print("run-arm failed: editorial-runtime-missing", file=sys.stderr)
+        return 1
+    try:
+        analysis_pin = whisper_provider_pin(_video_pipeline_root())
+    except ArmPipelineError as exc:
+        print(f"run-arm failed: {exc.code}: {exc.detail}", file=sys.stderr)
+        return 1
+    try:
+        runtime = load_editorial_runtime(runtime_path)
+        pin = load_editorial_pin(
+            runtime_path.parent.parent / runtime.director_pin_path
+        )
+        llm_call = build_llm_call_codex(pin, counting)
+        assessment = (
+            build_assessment_call_codex(
+                AssessmentPinSummary(provider="codex-exec", model_id=pin.model_id),
+                counting,
+            )
+            if arm == "B"
+            else None
+        )
+    except EditorialRuntimeError as exc:
+        print(f"run-arm failed: {exc.code}: {exc.detail}", file=sys.stderr)
+        return 1
+    workspace_arg = getattr(args, "workspace", None)
+    workspace = Path(workspace_arg) if workspace_arg else episode_root / "runs" / f"arm-{arm}"
+    inputs = ArmPipelineInputs(
+        episode_root=episode_root,
+        workspace=workspace,
+        episode_id=episode_id,
+        brief=compose_arm_brief(episode_root, episode_id, operator=str(gt.operator)),
+        llm_call=llm_call,
+        assessment=assessment,
+        assessment_pin=("codex-exec", pin.model_id),
+    )
+    failure_types: tuple[type[BaseException], ...] = (
+        ArmPipelineError,
+        ArmEvidenceError,
+        DirectorV2Error,
+        EditorialRuntimeError,
+        EvidenceIncompleteV2,
+        MomentReviewRealError,
+        MomentValidationError,
+        MomentCommitError,
+        NormalizeError,
+        ValidationError,
+        OSError,
+    )
+    try:
+        result = run_arm_pipeline(inputs)
+    except failure_types as exc:
+        print(
+            f"run-arm failed: {_arm_failure_code(exc)}: {exc} — honest typed failure, "
+            f"no report written",
+            file=sys.stderr,
+        )
+        return 1
+    wall = time.monotonic() - started
+    kept_spans = tuple(mezz_span_to_anchor_space(s, e) for s, e in result.kept_spans_mezz)
+    escalated_spans = tuple(
+        mezz_span_to_anchor_space(s, e) for s, e in result.escalated_spans_mezz
+    )
+    escalated_ids = escalated_anchor_ids(gt.anchors, escalated_spans)
+    ctx = EpisodeContext(
+        episode_id=episode_id,
+        ground_truth=gt,
+        kept_spans=kept_spans,
+        escalated_ids=escalated_ids,
+        wall_clock_seconds=wall,
+        provider_cost=None,
+    )
+    evidence_quality = None
+    evidence_note = "evidence_quality: no corrected transcript sample"
+    sample_path = episode_root / "transcript-sample-corrected.json"
+    if sample_path.is_file():
+        try:
+            sample = TranscriptSampleV1.model_validate(
+                json.loads(sample_path.read_text(encoding="utf-8"))
+            )
+            evidence_quality = compute_arm_evidence_quality(
+                sample, result.hypothesis_segments_ms
+            )
+            evidence_note = (
+                "evidence_quality: JP metrics vs transcript-sample-corrected "
+                "(hypothesis is post-proper-noun-substitution, matching the "
+                "director-visible transcript)"
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            evidence_note = f"evidence_quality: unreadable sample ({exc})"
+    escalation_policy = (
+        "reviews target <=3 lowest-confidence keeps; confidence<0.5 demotes+escalates; "
+        "escalated anchor ids = anchors overlapping demoted spans"
+        if arm == "B"
+        else "none (arm A has no reviews)"
+    )
+    notes = "; ".join(
+        [
+            (
+                "pipeline=real: DirectorV2 three-pass (codex-exec), kept_spans from "
+                "the committed selection"
+            ),
+            (
+                f"transport=codex-exec model={pin.model_id} codex_calls={counting.count} "
+                "(codex exec reports no token usage; provider_cost=null)"
+            ),
+            f"workspace={workspace}",
+            *result.notes,
+            FRAME_SPACE_NOTE,
+            f"escalation_policy: {escalation_policy}",
+            evidence_note,
+            f"wall_seconds={wall:.1f} (incl. analysis + gates)",
+        ]
+    )
+    commit_sha = _resolve_commit_sha()
+    if arm == "A":
+        report = run_arm_a(
+            ctx,
+            commit_sha=commit_sha,
+            model_pin=pin.model_id,
+            analysis_provider_pin=analysis_pin,
+            notes=notes,
+            evidence_quality=evidence_quality,
+        ).report
+    else:
+        report = run_arm_b(
+            ctx,
+            result.reviews,
+            commit_sha=commit_sha,
+            model_pin=pin.model_id,
+            analysis_provider_pin=analysis_pin,
+            notes=notes,
+            evidence_quality=evidence_quality,
+        ).report
+    atomic_write(out_path, canonical_model_bytes(report))
+    print(
+        f"run-arm {arm} real: codex_calls={counting.count} "
+        f"committed=v{result.commit_version} kept={len(result.kept_spans_mezz)}/"
+        f"{result.candidate_count} escalated={len(result.escalated_candidate_ids)} "
+        f"reviews={len(result.reviews)} wall={wall:.1f}s"
+    )
+    preview = ", ".join(result.kept_candidate_ids[:12])
+    print(f"kept candidates (first 12): {preview or '(none)'}")
     print(f"run-arm {arm}: {out_path} sha256={sha256_file(out_path)[:12]}")
     return 0
 
@@ -518,6 +771,12 @@ def _parser() -> argparse.ArgumentParser:
     p_run.add_argument("--out", type=str, required=True, help="output report path")
     p_run.add_argument(
         "--dry-run", action="store_true", help="compute without operator verdict, assert pending"
+    )
+    p_run.add_argument(
+        "--workspace",
+        type=str,
+        default=None,
+        help="arm workspace dir (real arms; default <episode-root>/runs/arm-<ARM>)",
     )
 
     p_rec = sub.add_parser("record-operator-verdict", help="record operator verdict into report")

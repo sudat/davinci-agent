@@ -21,6 +21,7 @@ mirror discipline).
 
 from __future__ import annotations
 
+import json as _json
 import os
 import time
 from dataclasses import dataclass
@@ -30,7 +31,14 @@ from typing import TYPE_CHECKING, BinaryIO, Final
 
 from pydantic import Field
 
-from services.cli.bundle import ReviewBundle, ReviewTarget, load_bundle, save_bundle
+from services.cli.bundle import (
+    BundleDriftError,
+    ReviewBundle,
+    ReviewTarget,
+    assemble_real_bundle,
+    load_bundle,
+    save_bundle,
+)
 from services.cli.episode_runner_state import RunContext, block_stage, log_event, record_stage
 from services.cli.episode_runner_workspace import (
     COCKPIT_REVIEW_LOG_RELATIVE,
@@ -160,7 +168,15 @@ def stage_preview(
     run_dir = episode_root / RUN_DIR_NAME
     bundle_file = run_dir / BUNDLE_NAME
     try:
-        bundle = load_bundle(bundle_file)
+        try:
+            bundle = load_bundle(bundle_file)
+        except BundleDriftError as error:
+            if error.code != "bundle_unreadable":
+                raise
+            bundle = _bootstrap_bundle(bundle_file)
+            if bundle is None:
+                raise
+            log_event(log, "review_bundle_bootstrapped", bundle=str(bundle_file))
         preview_dir = run_dir / f"preview-v{head.version}"
         decision = AppliedDecision(
             decision_id=f"decision-rebuild-{bundle.episode_id}-v{head.version}",
@@ -226,6 +242,95 @@ def _update_bundle(
         ),
         bundle_file,
     )
+
+
+def _bootstrap_bundle(bundle_file: Path) -> ReviewBundle | None:  # noqa: C901, PLR0912
+    """Bootstrap run/review-bundle.json when a manual render skipped its write.
+
+    Mirrors the review-store bootstrap's resilience class: render_preview_tail's
+    save_bundle was bypassed, so the rebuild re-entry reconstructs the bundle
+    with identical assemble_real_bundle semantics from the on-disk v1 artifacts.
+    """
+
+    run_dir = bundle_file.parent
+    episode_dir = run_dir.parent
+    mezzanine = run_dir / "media" / "edit-source.mov"
+    preview_v1_dir = run_dir / "preview-v1"
+    preview_v1 = preview_v1_dir / PREVIEW_NAME
+    trace_v1 = preview_v1_dir / TRACE_NAME
+    episode_manifest = run_dir / "episode.json"
+    resolved_policy = run_dir / "resolved-policy.json"
+    source_manifest = run_dir / "source-manifest.json"
+    orchestration = run_dir / "episode" / "analyze-state" / "orchestration-state.json"
+    cockpit_plan_v1 = episode_dir / "review" / "store" / "plan-v1.json"
+    cockpit_ir_v1 = episode_dir / "review" / "store" / "ir-v1.json"
+    for required in (
+        mezzanine,
+        preview_v1,
+        trace_v1,
+        episode_manifest,
+        source_manifest,
+        cockpit_plan_v1,
+        cockpit_ir_v1,
+    ):
+        if not required.is_file():
+            return None
+    try:
+        episode_payload = _json.loads(episode_manifest.read_bytes())
+        episode_id: str = episode_payload["episode_id"]
+        source_payload = _json.loads(source_manifest.read_bytes())
+        eligibility_status: str = source_payload.get("eligibility", {}).get(
+            "verdict", "supported"
+        )
+        if eligibility_status not in ("supported", "assisted", "unsupported"):
+            eligibility_status = "supported"
+    except (OSError, ValueError, KeyError):
+        return None
+    edit_source_world_sha256: str | None = None
+    try:
+        if orchestration.is_file():
+            orch = _json.loads(orchestration.read_bytes())
+            for binding in orch.get("bindings", {}).values():
+                candidate = binding.get("edit_source_sha256")
+                if isinstance(candidate, str) and len(candidate) == 64:  # noqa: PLR2004
+                    edit_source_world_sha256 = candidate
+                    break
+    except (OSError, ValueError):
+        pass
+    if edit_source_world_sha256 is None:
+        return None
+    policy_sha: str | None = None
+    for candidate_path in (resolved_policy, Path("config/gates/phase-0c-v1.json")):
+        if candidate_path.is_file():
+            try:
+                policy_sha = sha256_file(candidate_path)
+                break
+            except OSError:
+                continue
+    if policy_sha is None:
+        return None
+    try:
+        target = ReviewTarget(
+            plan_version="v1",
+            plan_sha256=sha256_file(cockpit_plan_v1),
+            ir_sha256=sha256_file(cockpit_ir_v1),
+            preview_dir="preview-v1",
+            preview_sha256=sha256_file(preview_v1),
+            trace_sha256=sha256_file(trace_v1),
+        )
+        bundle = assemble_real_bundle(
+            episode_id=episode_id,
+            eligibility_status=eligibility_status,  # type: ignore[arg-type]
+            mezzanine_sha256=sha256_file(mezzanine),
+            edit_source_world_sha256=edit_source_world_sha256,
+            episode_manifest_sha256=sha256_file(episode_manifest),
+            policy_sha256=policy_sha,
+            target=target,
+        )
+    except OSError:
+        return None
+    save_bundle(bundle, bundle_file)
+    return bundle
 
 
 def _execute(
