@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 from fractions import Fraction
+from math import ceil
 from pathlib import Path
 from typing import Final
 
@@ -18,7 +19,28 @@ from services.ingest.probe import ProbeExecutionError, parse_rate_rational
 from services.ingest.records import rotation_degrees as stream_rotation
 from services.normalize.errors import NormalizeVerificationError
 
-PROBE_TIMEOUT_SECONDS: Final = 120
+# Decode-time budgets, SCALED by media size (PRD §2.5 measured blocker: the
+# original frozen 120 s constant was sized for <=30 s synthetic fixtures and
+# the representative 282 s 4K episode needs an honest budget).
+#
+# MEASURED 2026-08-24, this machine class (pinned ffmpeg/ffprobe 7.1.1,
+# software decode of the REAL v44-real-01 episode and a mezzanine-class
+# clip of it):
+# - HEVC Main10 4K input, ``ffprobe -count_frames``: 333 s in round 1,
+#   437 s re-measured mid-run under sustained load (8459 frames; 39.4 →
+#   51.7 ms/frame — run-to-run variance ~+31%, thermal throttling class).
+# - H.264 8-bit 4K cfr30 (h264_videotoolbox mezzanine class, 10 s real
+#   clip through the locked recipe): ``-count_frames`` 5.67 s / 300 frames
+#   = 18.9 ms/frame; decoded rawvideo->sha256 6.82 s / 300 frames
+#   = 22.7 ms/frame.
+# Budget: 70 ms/frame (+35% over the WORST observed 51.7 ms/frame), a
+# 120 s FLOOR so small/test media keep today's behavior and speed, and a
+# 1200 s (20 min) hard CEILING so the hung-command guard survives. A real
+# decode that outgrows the budget still fails as the SAME typed
+# ``ProbeExecutionError`` — the guard is scaled, never removed.
+PROBE_TIMEOUT_FLOOR_SECONDS: Final = 120
+PROBE_TIMEOUT_CEILING_SECONDS: Final = 1200
+DECODE_PER_FRAME_BUDGET_MS: Final = 70
 PROBE_ARGUMENTS: Final = (
     "-v",
     "error",
@@ -28,6 +50,89 @@ PROBE_ARGUMENTS: Final = (
     "-show_format",
     "-count_frames",
 )
+
+
+def decode_probe_timeout_seconds(frame_hint: int | None) -> int:
+    """Media-size-scaled decode budget for a frame-count hint.
+
+    The hint only SIZES the budget; correctness never depends on it — a
+    hint that underestimates real footage produces the same typed
+    timeout, never a silent pass.
+    """
+
+    if frame_hint is None or frame_hint <= 0:
+        return PROBE_TIMEOUT_FLOOR_SECONDS
+    scaled = ceil(frame_hint * DECODE_PER_FRAME_BUDGET_MS / 1000)
+    return min(PROBE_TIMEOUT_CEILING_SECONDS, max(PROBE_TIMEOUT_FLOOR_SECONDS, scaled))
+
+
+def _metadata_frame_hint(ffprobe: Path, media: Path) -> int | None:
+    """Fast metadata-only frame estimate (container claims, no decode).
+
+    ``r_frame_rate x duration`` is exact for the CFR media this probe
+    verifies and close enough everywhere else — the estimate only scales
+    the decode budget of the ``-count_frames`` run that follows. A
+    metadata probe that cannot produce a hint returns ``None`` (floor
+    budget); a media that is truly broken then fails typed in the real
+    probe below.
+    """
+
+    argv = (
+        str(ffprobe),
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_streams",
+        "-show_format",
+        str(media),
+    )
+    try:
+        result = subprocess.run(
+            argv, check=False, capture_output=True, text=True, timeout=PROBE_TIMEOUT_FLOOR_SECONDS
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ProbeExecutionError(
+            f"ffprobe metadata probe exceeded the bounded {PROBE_TIMEOUT_FLOOR_SECONDS}s timeout"
+        ) from error
+    if result.returncode != 0:
+        return None
+    return _hint_from_payload(result.stdout)
+
+
+def _hint_from_payload(stdout: str) -> int | None:
+    """``r_frame_rate x duration`` from a metadata-probe JSON payload."""
+
+    try:
+        payload: object = json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    streams = payload.get("streams")
+    if not isinstance(streams, list):
+        return None
+    video = next(
+        (stream for stream in streams if _is_video_stream(stream)),
+        None,
+    )
+    media_format = payload.get("format")
+    duration_text = (
+        media_format.get("duration") if isinstance(media_format, dict) else None
+    ) or (video.get("duration") if video is not None else None)
+    rate_text = video.get("r_frame_rate") if video is not None else None
+    if not isinstance(duration_text, str) or not isinstance(rate_text, str):
+        return None
+    try:
+        rate_num, rate_den = parse_rate_rational(rate_text, "r_frame_rate")
+        duration = float(duration_text)
+    except (ProbeExecutionError, ValueError):
+        return None
+    return int(Fraction(rate_num, rate_den) * duration) if duration > 0 else None
+
+
+def _is_video_stream(stream: object) -> bool:
+    return isinstance(stream, dict) and stream.get("codec_type") == "video"
 
 
 class VideoFacts(StrictModel):
@@ -63,16 +168,19 @@ class MediaFacts(StrictModel):
 
 
 def probe_media_json(ffprobe: Path, media: Path) -> dict[str, object]:
+    timeout = decode_probe_timeout_seconds(_metadata_frame_hint(ffprobe, media))
     try:
         result = subprocess.run(
             (str(ffprobe), *PROBE_ARGUMENTS, str(media)),
             check=False,
             capture_output=True,
             text=True,
-            timeout=PROBE_TIMEOUT_SECONDS,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as error:
-        raise ProbeExecutionError("ffprobe exceeded the bounded timeout") from error
+        raise ProbeExecutionError(
+            f"ffprobe exceeded the bounded timeout of {timeout}s"
+        ) from error
     if result.returncode != 0 or result.stderr.strip():
         detail = result.stderr.strip() or "ffprobe exited without success"
         raise ProbeExecutionError(detail)
@@ -180,9 +288,14 @@ def probe_media_facts(ffprobe: Path, media: Path) -> MediaFacts:
     return parse_media_facts(probe_media_json(ffprobe, media))
 
 
-def decoded_video_sha256(ffmpeg: Path, media: Path) -> str:
-    """Semantic replay anchor: sha256 over fully decoded raw video frames."""
+def decoded_video_sha256(ffmpeg: Path, media: Path, *, frame_hint: int) -> str:
+    """Semantic replay anchor: sha256 over fully decoded raw video frames.
 
+    ``frame_hint`` (the verified output frame count at the call site) only
+    scales the decode budget — measured rationale in the module header.
+    """
+
+    timeout = decode_probe_timeout_seconds(frame_hint)
     try:
         result = subprocess.run(
             (
@@ -193,10 +306,12 @@ def decoded_video_sha256(ffmpeg: Path, media: Path) -> str:
             check=False,
             capture_output=True,
             text=True,
-            timeout=PROBE_TIMEOUT_SECONDS,
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as error:
-        raise ProbeExecutionError("decoded-video hash exceeded the timeout") from error
+        raise ProbeExecutionError(
+            f"decoded-video hash exceeded the bounded timeout of {timeout}s"
+        ) from error
     if result.returncode != 0 or not result.stdout.startswith("SHA256="):
         raise ProbeExecutionError("decoded video hash output is malformed")
     return result.stdout.strip().removeprefix("SHA256=")

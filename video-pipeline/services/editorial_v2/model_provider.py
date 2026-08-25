@@ -52,8 +52,15 @@ if TYPE_CHECKING:
     from services.editorial_v2.director_v2 import LlmCallV2
     from services.editorial_v2.prompt_v2 import PassName
 
-#: Bounded per-call budget (task 3): a hung model call fails typed at 120 s.
-REQUEST_TIMEOUT_SECONDS: Final = 120.0
+#: Bounded per-call budget: a hung model call still fails typed. MEASURED
+#: 2026-08-24 (v44-real-01 arm A, round 2): the director's selection pass
+#: with the real ~99-candidate payload is a LONG structured output — the
+#: exact prompt replayed standalone through ``codex exec`` completed rc=0
+#: in 366 s (valid proposal JSON), after walling at both 120 s and 300 s
+#: in-pipeline. Budget 600 s (~1.6x the measured completion) as a PRD §2.5
+#: measured-blocker fix; a call that outgrows 600 s is a payload-redesign
+#: signal, not a budget knob.
+REQUEST_TIMEOUT_SECONDS: Final = 600.0
 
 #: The three DirectorV2 passes map to exactly these draft models; the
 #: director pin's ``structured_output_schemas`` record is cross-checked

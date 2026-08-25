@@ -517,6 +517,38 @@ def test_extractor_beyond_decoded_frames_is_typed_error(real_media: Path, tmp_pa
         extractor.extract(ReviewWindow(start_frame=28, end_frame=40))
 
 
+def test_extractor_decodes_only_the_review_window(
+    real_media: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given: the real 30-frame fixture; Then: extraction decodes exactly
+    the window's frames (accurate-seek window decode), never the whole
+    mezzanine — the PRD §2.5 measured blocker behind round-1 BLOCKED."""
+
+    calls: list[tuple[int, int]] = []
+    real_decode = real_module.decode_luma_window
+
+    def recording_decode(media, facts, *, tools, start_frame, end_frame):
+        calls.append((start_frame, end_frame))
+        return real_decode(
+            media, facts, tools=tools, start_frame=start_frame, end_frame=end_frame
+        )
+
+    monkeypatch.setattr(real_module, "decode_luma_window", recording_decode)
+    extractor = RealFrameExtractor(
+        media_path=real_media,
+        media_sha256=sha256_file(real_media),
+        analysis_dir=tmp_path,
+        density=4,
+    )
+    entries = extractor.extract(ReviewWindow(start_frame=6, end_frame=24))
+
+    assert calls == [(6, 24)]  # window-bounded, not (0, 30)
+    assert len(entries) == 4
+    for entry in entries:
+        assert 6 <= entry.frame < 24
+        assert Path(entry.ref.removeprefix("file://")).is_file()
+
+
 # ------------------------------------------------------------ static contracts
 
 

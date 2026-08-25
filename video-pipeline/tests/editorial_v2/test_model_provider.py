@@ -38,13 +38,13 @@ from services.cli.live_editorial_codex import CodexTransportGatedError
 from services.cli.live_editorial_v2 import (
     CREDENTIALS_ENV,
     NETWORK_ENV,
-    REQUEST_TIMEOUT_SECONDS,
     EditorialTransportGatedError,
     make_http_post,
 )
 from services.editorial_v2.director_v2 import DirectorV2, ThreePassResult
 from services.editorial_v2.model_provider import (
     DIRECTOR_PIN_PATH,
+    REQUEST_TIMEOUT_SECONDS,
     EditorialHttpResponseError,
     EditorialPinV2,
     EditorialRedirectRefusedError,
@@ -207,7 +207,7 @@ def test_production_three_pass_completes_over_injected_transport(
     # The provider seam carries no credential — the bearer lives ONLY in the
     # CLI transport, added at the socket boundary.
     assert "Authorization" not in first.headers
-    assert first.timeout_s == REQUEST_TIMEOUT_SECONDS == 120
+    assert first.timeout_s == REQUEST_TIMEOUT_SECONDS == 600.0
 
     document = json.loads(first.body)
     assert document["model"] == pin.model_id
@@ -295,7 +295,7 @@ def test_timeout_is_typed(api: MediaQueryApiV2) -> None:
     with pytest.raises(EditorialRuntimeError) as error:
         DirectorV2().run_three_pass(make_brief(), api, llm_call=built)
     assert error.value.code == "model-timeout"
-    assert "120" in error.value.detail
+    assert "600" in error.value.detail
 
 
 # --------------------------------------------- (d,e) BLOCKED semantics + env gate
@@ -523,7 +523,7 @@ def test_codex_transport_three_pass_completes_over_injected_runner(
     first = runner.calls[0]
     assert first.model == pin.model_id == "gpt-5.6-sol"
     assert first.images == ()
-    assert first.timeout_s == REQUEST_TIMEOUT_SECONDS == 120
+    assert first.timeout_s == REQUEST_TIMEOUT_SECONDS == 600.0
     assert first.prompt.startswith(PROMPT_A)
     assert "OUTPUT CONTRACT" in first.prompt
     assert "JSON Schema" in first.prompt

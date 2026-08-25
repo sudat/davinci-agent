@@ -197,7 +197,9 @@ def normalize_one(
                 lock_sha256=lock_sha256,
                 prediction=prediction,
                 output_facts=output_facts,
-                decoded_video_sha256=decoded_video_sha256(context.ffmpeg, output),
+                decoded_video_sha256=decoded_video_sha256(
+                    context.ffmpeg, output, frame_hint=output_facts.video.nb_read_frames
+                ),
                 declared_video_pix_fmt=declared_video_pix_fmt,
                 declared_conversions=declared_conversions,
             )

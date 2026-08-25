@@ -97,11 +97,35 @@ def speech_segments(
         position += 1
         start = _frame(raw.start_ms, end=False) // LATTICE * LATTICE
         end = _ceil_lattice(max(_frame(raw.end_ms, end=True), start + 1))
-        if start < previous_end or end > total_frames:
+        # Lattice residue, MEASURED on v44-real-01 real speech (99 segments,
+        # 73 collisions): adjacent segments share one boundary timestamp, and
+        # ceil-end (N → next multiple of 3) vs floor-start (same N → previous
+        # multiple of 3) collide by up to LATTICE frames. Collapse that
+        # residue to contiguity (previous end == next start — the same true
+        # boundary, no frame invented or lost) and clamp the same ≤LATTICE
+        # residue at the source tail (ceil pushed 8467.44 → 8469 past 8467).
+        # A GENUINE overlap beyond the residue is still a typed refusal.
+        if start < previous_end:
+            if previous_end - start > LATTICE:
+                raise RealPoolError(
+                    "speech_span_invalid",
+                    f"transcript segment {position} span [{start},{end}) overlaps the "
+                    f"previous segment by {previous_end - start} frames",
+                )
+            start = previous_end
+        if end > total_frames:
+            if end - total_frames > LATTICE:
+                raise RealPoolError(
+                    "speech_span_invalid",
+                    f"transcript segment {position} span [{start},{end}) exceeds the "
+                    f"edit source [0,{total_frames})",
+                )
+            end = total_frames
+        if end <= start:
             raise RealPoolError(
                 "speech_span_invalid",
-                f"transcript segment {position} span [{start},{end}) overlaps the "
-                f"previous segment or exceeds the edit source [0,{total_frames})",
+                f"transcript segment {position} span collapses at [{start},{end}) "
+                f"inside [0,{total_frames})",
             )
         previous_end = end
         segments.append(
