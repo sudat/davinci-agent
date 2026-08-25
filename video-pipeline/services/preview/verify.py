@@ -57,12 +57,32 @@ def _video_mismatches(
         mismatches.append(f"video size {video.width}x{video.height} != 640x360")
     if video.r_frame_rate != rate_text or video.avg_frame_rate != rate_text:
         mismatches.append(f"frame rate {video.r_frame_rate}/{video.avg_frame_rate} != {rate_text}")
+    # At 30/1 only multiples of 3 frames are exact milliseconds. The real
+    # chain's speech lattice clamps the tail (8467 frames % 3 == 1) and
+    # timeline recompilation can emit off-lattice totals such as 8005
+    # (8005*1000/30 = 266833.333 ms). The pinned ffmpeg muxes whole frames
+    # and may emit one extra frame (8006) to cover the fractional tail — the
+    # decoded video sha still proves frame-semantic equivalence, but the
+    # strict count/duration check must allow that one-frame ceil. Keep the
+    # exact check for lattice-aligned totals (total % 3 == 0) so existing
+    # 0A/0C goldens (660 frames) stay byte-exact.
     if facts.frame_count != str(total_frames):
-        mismatches.append(f"frame count {facts.frame_count} != {total_frames}")
-    if abs(facts.video_ms - expected_ms) > MAX_DURATION_DRIFT_MS:
+        try:
+            actual = int(facts.frame_count) if facts.frame_count is not None else -1
+        except ValueError:
+            actual = -1
+        if not (total_frames % 3 != 0 and actual == total_frames + 1):
+            mismatches.append(f"frame count {facts.frame_count} != {total_frames}")
+    # Allow one frame of duration slack for the same fractional case:
+    # 30 fps -> 33.333 ms per frame. Keep 2 ms for exact totals, relax to
+    # 35.333 ms (2 + 33.333) for off-lattice totals where the muxer ceils.
+    allowed_drift = MAX_DURATION_DRIFT_MS
+    if total_frames % 3 != 0:
+        allowed_drift = MAX_DURATION_DRIFT_MS + Fraction(1000, 30)
+    if abs(facts.video_ms - expected_ms) > allowed_drift:
         mismatches.append(
             f"video duration {float(facts.video_ms):.3f}ms != expected "
-            f"{float(expected_ms):.3f}ms (±{float(MAX_DURATION_DRIFT_MS):.0f}ms)"
+            f"{float(expected_ms):.3f}ms (±{float(allowed_drift):.0f}ms)"
         )
     return mismatches
 

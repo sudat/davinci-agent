@@ -7,8 +7,6 @@ here. Cue bounds are integer milliseconds derived from record-frame spans.
 
 from __future__ import annotations
 
-from fractions import Fraction
-
 from pydantic import model_validator
 from pydantic_core import PydanticCustomError
 
@@ -34,14 +32,34 @@ class SubtitleCue(StrictModel):
 
 
 def cue_from_record_span(span: RecordFrameSpan, rate: RationalFrameRate, text: str) -> SubtitleCue:
-    start = Fraction(span.start_frame * rate.den * 1000, rate.num)
-    end = Fraction(span.end_frame * rate.den * 1000, rate.num)
-    if start.denominator != 1 or end.denominator != 1:
+    """Map a record-frame span to integer-millisecond SRT bounds.
+
+    The frozen invariant required exact millisecond bounds (``denominator == 1``)
+    at the locked mezzanine rate ``30/1``. At 30 fps one frame is 33.333 ms
+    and only spans whose endpoints are multiples of 3 frames are exact — the
+    real speech lattice (``LATTICE = 3`` in ``services.cli.real_pool``) keeps
+    most bounds lattice-aligned, but the tail clamp (8467 frames, not divisible
+    by 3) and timeline recompilation can emit off-lattice bounds such as
+    ``[7926, 8005)`` (8005 * 1000/30 = 266833.333 ms). SRT requires integer
+    milliseconds, so we round to the nearest ms (half-up). Max drift vs the
+    exact frame instant is ``< 0.5 ms`` (at 30/1 the residue is at most
+    ``1/3 ms ≈ 0.33 ms``; at ``30000/1001`` the same formula applies). The
+    strict validator therefore remains safe: the cue is still ordered
+    (``end_ms > start_ms`` is checked by ``SubtitleCue``) and the rendered
+    SRT is integer ms.
+    """
+
+    start_ms = (span.start_frame * rate.den * 1000 + rate.num // 2) // rate.num
+    end_ms = (span.end_frame * rate.den * 1000 + rate.num // 2) // rate.num
+    # Keep a narrow guard: a collapsed or inverted rounded cue is still a
+    # programming error (e.g. zero-length span) — surface as PreviewTraceError
+    # so callers see the same error family as before.
+    if end_ms <= start_ms:
         raise PreviewTraceError(
             f"subtitle record span [{span.start_frame},{span.end_frame}) "
-            f"is not an exact millisecond bound at {rate.num}/{rate.den}"
+            f"collapses to [{start_ms},{end_ms}) ms at {rate.num}/{rate.den}"
         )
-    return SubtitleCue(start_ms=int(start), end_ms=int(end), text=text)
+    return SubtitleCue(start_ms=start_ms, end_ms=end_ms, text=text)
 
 
 def _stamp(ms: int) -> str:

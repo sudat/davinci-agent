@@ -109,3 +109,39 @@ def test_repeat_render_is_semantically_equivalent(
     assert trace_second.record_to_decision == trace_first.record_to_decision
     assert trace_second.timeline_binding == trace_first.timeline_binding
     assert trace_second.inputs == trace_first.inputs
+
+
+def test_cue_from_record_span_rounds_off_lattice_at_30fps() -> None:
+    """Regression for V44-1 preview: [7926,8005) at 30/1 was a hard error.
+
+    At 30/1 one frame = 33.333 ms; only multiples of 3 frames are exact ms.
+    The real chain's speech lattice clamps the tail (8467 frames % 3 == 1) and
+    timeline recompilation can emit off-lattice spans such as this one. The
+    SRT layer must round to nearest ms (half-up) with max drift < 0.5 ms
+    (here 0.333 ms) and keep the arm path byte-identical (arm has no preview
+    tail, so this change is invisible there).
+    """
+
+    cue = cue_from_record_span(
+        RecordFrameSpan(start_frame=7926, end_frame=8005),
+        RationalFrameRate(num=30, den=1),
+        "わかんねえってわけ",
+    )
+    assert cue.start_ms == 264200
+    assert cue.end_ms == 266833
+    # exact instants: 264200.0 and 266833.333… — nearest ms
+    assert cue.end_ms - cue.start_ms == 2633
+    # one-frame off-lattice sanity: 1 frame -> 33 ms, 2 frames -> 67 ms
+    one = cue_from_record_span(
+        RecordFrameSpan(start_frame=0, end_frame=1),
+        RationalFrameRate(num=30, den=1),
+        "a",
+    )
+    assert one.start_ms == 0
+    assert one.end_ms == 33
+    two = cue_from_record_span(
+        RecordFrameSpan(start_frame=0, end_frame=2),
+        RationalFrameRate(num=30, den=1),
+        "a",
+    )
+    assert two.end_ms == 67
