@@ -32,6 +32,7 @@ from services.episode_cockpit.errors import (
     CockpitNotFoundError,
     CockpitUnprocessableError,
 )
+from services.review_command.store import ReviewCommitError
 
 LOOPBACK_HOST: Final = "127.0.0.1"
 DEFAULT_PORT: Final = 8642
@@ -82,6 +83,15 @@ def _register_error_handlers(app: FastAPI) -> None:
             content=_error_envelope(code, str(exc.detail)),
             headers=getattr(exc, "headers", None),
         )
+
+    @app.exception_handler(ReviewCommitError)
+    def review_commit(_request: Request, exc: ReviewCommitError) -> JSONResponse:
+        code = (
+            "review-store-not-initialized"
+            if exc.code == "store_not_initialized"
+            else exc.code.replace("_", "-")
+        )
+        return JSONResponse(status_code=422, content=_error_envelope(code, exc.detail))
 
     @app.exception_handler(CockpitError)
     def cockpit_error(_request: Request, exc: CockpitError) -> JSONResponse:

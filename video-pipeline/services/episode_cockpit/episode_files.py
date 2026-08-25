@@ -7,8 +7,15 @@ review_command store (plan-version-bound); anything absent or unparsable
 is an explicit not-yet-generated stub, never a fabricated list.
 """
 
+# allow: SIZE_OK — the FileOps mixin (one cockpit-owned-file concern per
+# method: brief/preview/flags/chat/apply/rebuild-scheduling); the V44-1
+# multi-command delta grew apply+rebuild here rather than forking a second
+# workspace mixin — split rebuild scheduling out when the next task touches it.
+
 from __future__ import annotations
 
+import logging
+import shutil
 import sys
 from pathlib import Path
 
@@ -31,15 +38,17 @@ from services.episode_cockpit.models import (
     RebuildRequestEntry,
     ReviewChatEntry,
 )
+from services.episode_cockpit.review_apply import apply_drafts, echoed_draft
 from services.episode_cockpit.review_chat import (
     DEFAULT_LINEAGE,
+    PIPELINE_STAGES,
+    AppliedCommand,
     ReviewChatContext,
+    ReviewCommandDraft,
     ReviewStoreLocation,
-    apply_command,
     interpret_command,
     load_applied_command,
     plan_rebuild,
-    record_applied_command,
 )
 from services.episode_cockpit.review_interpreter import (
     NearbyContext,
@@ -54,6 +63,12 @@ CHAT_LOG_NAME = "review-chat.jsonl"
 REBUILD_LOG_NAME = "rebuild-requests.jsonl"
 REVIEW_EVENTS_RELATIVE = ("review", "events.jsonl")
 REVIEW_STORE_RELATIVE = ("review", "store")
+# Mirror of services/cli/episode_runner_workspace.py constants — kept inline
+# so services/ does not depend on cli/ (dependency direction guard).
+_RUN_REVIEW_STORE_RELATIVE: tuple[str, ...] = ("run", "review-store")
+_LOG_FILE_NAMES: frozenset[str] = frozenset({"events.jsonl", "events.jsonl.seal"})
+
+_LOGGER = logging.getLogger(__name__)
 PREVIEW_RELATIVE = ("previews", PREVIEW_NAME)
 EXECUTABLE_DOMAIN = "edit_plan"
 NOT_EXECUTABLE_REASON = "command kind not rebuild-executable yet"
@@ -129,38 +144,99 @@ class FileOps(WorkspaceContext):
         episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
         return build_nearby_context(episode_dir, at_seconds)
 
-    def apply_review_command(
-        self, episode_id: str, *, text: str, at_seconds: float | None
-    ) -> dict[str, object]:
-        """Task 51 wiring: apply one NL correction and derive its rebuild plan.
+    def _bootstrap_review_store_if_needed(self, episode_dir: Path) -> bool:
+        if (episode_dir.joinpath(*REVIEW_STORE_RELATIVE) / "versions.json").is_file():
+            return False
+        source_dir = episode_dir.joinpath(*_RUN_REVIEW_STORE_RELATIVE)
+        if not (source_dir / "versions.json").is_file():
+            return False
+        log_target = episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE)
+        store_target = episode_dir.joinpath(*REVIEW_STORE_RELATIVE)
+        store_target.mkdir(parents=True, exist_ok=True)
+        log_target.parent.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        for entry in sorted(source_dir.iterdir()):
+            if not entry.is_file():
+                continue
+            destination = (
+                log_target.parent / entry.name
+                if entry.name in _LOG_FILE_NAMES
+                else store_target / entry.name
+            )
+            shutil.copyfile(entry, destination)
+            copied += 1
+        _LOGGER.info("review_store_bootstrapped files=%s source=%s", copied, source_dir)
+        return copied > 0
 
-        Interpretation is deterministic, so re-interpreting the same
-        (text, at_seconds) reproduces the echoed draft's command exactly;
-        the applied command lands in the episode audit log and the
-        lineage-scoped stage set comes back for the rebuild indicator.
+    def apply_review_command(
+        self,
+        episode_id: str,
+        *,
+        text: str,
+        at_seconds: float | None,
+        drafts: tuple[ReviewCommandDraft, ...] | None = None,
+    ) -> dict[str, object]:
+        """Apply one NL correction (or a batch of echoed drafts) + rebuild plan.
+
+        ``drafts=None`` keeps the deterministic path: re-interpreting the
+        same (text, at_seconds) reproduces the echoed draft's command
+        exactly. With echoed ``drafts`` (the multi-command V44-1 flow, and
+        any LLM-interpreted draft the deterministic parser could not
+        reproduce) each draft is integrity-checked against the
+        interpreter's command_id contract, then applied through the SAME
+        sealed-event apply machinery — each command is its own
+        AppliedCommand + plan version; ONE union rebuild plan comes back.
         """
 
         snapshot = self._require_snapshot(episode_id)
         episode_dir = self._episode_dir(snapshot.job.episode_id)
-        draft = interpret_command(text, ReviewChatContext(at_seconds=at_seconds))
-        applied = apply_command(
-            draft,
-            store=ReviewStoreLocation(
-                log_path=episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
-                plan_dir=episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
-            ),
+        self._bootstrap_review_store_if_needed(episode_dir)
+        store = ReviewStoreLocation(
+            log_path=episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
+            plan_dir=episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
         )
-        record_applied_command(episode_dir, applied)
-        plan = plan_rebuild(applied, DEFAULT_LINEAGE)
-        return {
-            "applied": applied.model_dump(mode="json"),
+        try:
+            if drafts is None:
+                applied_list, plan = apply_drafts(
+                    [interpret_command(text, ReviewChatContext(at_seconds=at_seconds))],
+                    episode_dir=episode_dir,
+                    store=store,
+                )
+            else:
+                applied_list, plan = apply_drafts(
+                    [echoed_draft(draft, text) for draft in drafts],
+                    episode_dir=episode_dir,
+                    store=store,
+                )
+        except ReviewCommitError as exc:
+            if exc.code == "store_not_initialized":
+                raise CockpitUnprocessableError(
+                    "review-store-not-initialized",
+                    "review store is not ready — run the pipeline to PREVIEW_READY "
+                    "or ensure run/review-store exists",
+                ) from exc
+            raise CockpitUnprocessableError(
+                exc.code.replace("_", "-"), exc.detail
+            ) from exc
+        result: dict[str, object] = {
+            "applied": applied_list[0].model_dump(mode="json"),
             "rebuild": plan.model_dump(mode="json"),
         }
+        if len(applied_list) > 1:
+            result["applied_commands"] = [
+                applied.model_dump(mode="json") for applied in applied_list
+            ]
+        return result
 
     def record_rebuild(
-        self, episode_id: str, *, stage_hint: str | None, applied_command: str | None = None
+        self,
+        episode_id: str,
+        *,
+        stage_hint: str | None,
+        applied_command: str | None = None,
+        applied_commands: tuple[str, ...] | None = None,
     ) -> dict[str, object]:
-        """Record one rebuild intent; with an applied command, schedule it (task 9).
+        """Record one rebuild intent; with applied command(s), schedule it (task 9).
 
         Deterministic path stays authoritative: the rebuild consumes the
         sealed events + plan version the apply route committed — this only
@@ -168,66 +244,127 @@ class FileOps(WorkspaceContext):
         runner with a stage-subset re-entry. Only ``edit_plan``-domain
         commands (the three span-translatable kinds) are rebuild-executable
         today; the other nine kinds stay intent-only with an honest reason.
+        A batch (``applied_commands``, V44-1 multi-command fix) schedules
+        ONE runner over the UNION of the per-command stage sets; a batch is
+        rebuild-executable only when EVERY command is.
         """
 
         episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
         log_path = episode_dir / REBUILD_LOG_NAME
-        if applied_command is None:
-            entry = RebuildRequestEntry(
-                sequence=self._next_sequence(log_path), stage_hint=stage_hint
+        if applied_commands is not None:
+            return self._record_batch_rebuild(
+                episode_dir,
+                log_path,
+                stage_hint=stage_hint,
+                applied_commands=applied_commands,
             )
-            self._append_jsonl(log_path, entry)
-            return {
-                "stage_hint": entry.stage_hint,
-                "scheduled": False,
-                "note": "rebuild scheduling is not implemented yet; intent recorded",
-            }
-        applied = load_applied_command(episode_dir, applied_command)
-        plan = plan_rebuild(applied, DEFAULT_LINEAGE)
-        resolved_hint = stage_hint if stage_hint is not None else ",".join(plan.stages)
+        if applied_command is not None:
+            applied = load_applied_command(episode_dir, applied_command)
+            plan = plan_rebuild(applied, DEFAULT_LINEAGE)
+            return self._schedule_rebuild(
+                episode_dir,
+                log_path,
+                stage_hint=stage_hint,
+                applied=[applied],
+                stages=tuple(plan.stages),
+            )
+        entry = RebuildRequestEntry(
+            sequence=self._next_sequence(log_path), stage_hint=stage_hint
+        )
+        self._append_jsonl(log_path, entry)
+        return {
+            "stage_hint": entry.stage_hint,
+            "scheduled": False,
+            "note": "rebuild scheduling is not implemented yet; intent recorded",
+        }
+
+    def _record_batch_rebuild(
+        self,
+        episode_dir: Path,
+        log_path: Path,
+        *,
+        stage_hint: str | None,
+        applied_commands: tuple[str, ...],
+    ) -> dict[str, object]:
+        if not applied_commands:
+            raise CockpitUnprocessableError(
+                "applied-commands-empty", "applied_commands must name at least one command"
+            )
+        applied = [
+            load_applied_command(episode_dir, command_id)
+            for command_id in applied_commands
+        ]
+        stage_sets = [set(plan_rebuild(command, DEFAULT_LINEAGE).stages) for command in applied]
+        union = tuple(
+            stage for stage in PIPELINE_STAGES if any(stage in s for s in stage_sets)
+        )
+        return self._schedule_rebuild(
+            episode_dir,
+            log_path,
+            stage_hint=stage_hint,
+            applied=applied,
+            stages=union,
+        )
+
+    def _schedule_rebuild(
+        self,
+        episode_dir: Path,
+        log_path: Path,
+        *,
+        stage_hint: str | None,
+        applied: list[AppliedCommand],
+        stages: tuple[str, ...],
+    ) -> dict[str, object]:
+        resolved_hint = stage_hint if stage_hint is not None else ",".join(stages)
         entry = RebuildRequestEntry(
             sequence=self._next_sequence(log_path), stage_hint=resolved_hint
         )
         self._append_jsonl(log_path, entry)
-        if applied.affected_domain != EXECUTABLE_DOMAIN:
-            return {
+        primary = applied[0]
+        result: dict[str, object]
+        if any(command.affected_domain != EXECUTABLE_DOMAIN for command in applied):
+            result = {
                 "stage_hint": resolved_hint,
                 "scheduled": False,
                 "reason": NOT_EXECUTABLE_REASON,
-                "applied_command": applied.command_id,
-                "rebuild_stages": list(plan.stages),
+                "applied_command": primary.command_id,
+                "rebuild_stages": list(stages),
             }
-        try:
-            _spawn_runner(
-                [
-                    sys.executable,
-                    "-m",
-                    RUNNER_MODULE,
-                    "--episode-root",
-                    str(episode_dir),
-                    "--stop",
-                    RUNNER_STOP,
-                    "--from-stage",
-                    plan.stages[0],
-                    "--applied-command",
-                    applied.command_id,
-                    "--state-store",
-                    str(self._state_store_path),
-                ],
-                cwd=_PIPELINE_ROOT,
-                log_path=episode_dir / RUNNER_LOG_NAME,
-            )
-        except OSError as error:
-            raise CockpitUnprocessableError(
-                "runner-spawn-failed", f"cannot start the rebuild runner: {error}"
-            ) from error
-        return {
-            "stage_hint": resolved_hint,
-            "scheduled": True,
-            "stages": list(plan.stages),
-            "runner_log": str(episode_dir / RUNNER_LOG_NAME),
-            "applied_command": applied.command_id,
-        }
+        else:
+            try:
+                _spawn_runner(
+                    [
+                        sys.executable,
+                        "-m",
+                        RUNNER_MODULE,
+                        "--episode-root",
+                        str(episode_dir),
+                        "--stop",
+                        RUNNER_STOP,
+                        "--from-stage",
+                        stages[0],
+                        "--applied-command",
+                        primary.command_id,
+                        "--state-store",
+                        str(self._state_store_path),
+                    ],
+                    cwd=_PIPELINE_ROOT,
+                    log_path=episode_dir / RUNNER_LOG_NAME,
+                )
+            except OSError as error:
+                raise CockpitUnprocessableError(
+                    "runner-spawn-failed", f"cannot start the rebuild runner: {error}"
+                ) from error
+            result = {
+                "stage_hint": resolved_hint,
+                "scheduled": True,
+                "stages": list(stages),
+                "runner_log": str(episode_dir / RUNNER_LOG_NAME),
+                "applied_command": primary.command_id,
+            }
+        if len(applied) > 1:
+            result["applied_commands"] = [command.command_id for command in applied]
+        return result
 
     def _load_brief(self, episode_id: str) -> BriefDraft:
         path = self._episode_dir(episode_id) / "brief.json"

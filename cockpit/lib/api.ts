@@ -261,6 +261,9 @@ export type ReviewChatResult = {
   received: boolean;
   sequence: number;
   draft: ReviewCommandDraft;
+  /** V44-1: present ONLY when one message proposed SEVERAL commands
+   *  (multi-target LLM interpretation); `draft` is the first of these. */
+  drafts?: ReviewCommandDraft[];
 };
 
 export type ReviewChatInput = {
@@ -306,11 +309,22 @@ export type RebuildPlan = {
 export type ReviewApplyResult = {
   applied: AppliedCommand;
   rebuild: RebuildPlan;
+  /** V44-1: present when a message applied SEVERAL commands;
+   *  `applied` is the first of these. */
+  applied_commands?: AppliedCommand[];
+};
+
+/** The echoed drafts ride along (V44-1): the backend integrity-checks
+ *  each command_id server-side, so only previewed drafts ever apply. */
+export type ReviewApplyInput = {
+  text: string;
+  at_seconds?: number | null;
+  drafts?: ReviewCommandDraft[];
 };
 
 export async function applyReviewCommand(
   episodeId: string,
-  input: ReviewChatInput,
+  input: ReviewApplyInput,
   fetchImpl: FetchLike = fetch,
 ): Promise<ReviewApplyResult> {
   return request<ReviewApplyResult>(
@@ -325,6 +339,9 @@ export type RebuildResult = {
   scheduled: boolean;
   note?: string;
   applied_command?: string;
+  /** V44-1 batch rebuild: every applied command id in the batch
+   *  (present only when more than one was applied). */
+  applied_commands?: string[];
   rebuild_stages?: string[];
   /** Task-9 fields (present when the backend schedules the runner):
    *  stages = the lineage-derived stage set the rebuild plan covers;
@@ -337,7 +354,7 @@ export type RebuildResult = {
 
 export async function postRebuild(
   episodeId: string,
-  input: { applied_command?: string; stage_hint?: string },
+  input: { applied_command?: string; applied_commands?: string[]; stage_hint?: string },
   fetchImpl: FetchLike = fetch,
 ): Promise<RebuildResult> {
   return request<RebuildResult>(

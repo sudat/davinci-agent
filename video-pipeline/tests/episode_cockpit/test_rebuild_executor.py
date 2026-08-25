@@ -44,6 +44,11 @@ from services.contracts.edit_plan_0c import (
 from services.contracts.primitives import Producer, RationalFrameRate, SourceFrameSpan
 from services.episode_cockpit import episode_ops
 from services.episode_cockpit.app import create_cockpit_app
+from services.episode_cockpit.review_chat import (
+    ReviewCommandDraft,
+    ReviewCommandKind,
+    _command_id,
+)
 from services.foundation_io import sha256_file
 from services.job_runner.cas import apply_transition, current_job_state
 from services.job_runner.state_store import StateStore
@@ -329,6 +334,114 @@ def test_remove_section_rebuild_executes_stop_bounded_lineage(
     assert "rebuild_finished" in kinds
     skipped = [event for event in events if event["event"] == "rebuild_stage_skipped"]
     assert [event["stage"] for event in skipped] == ["resolve_build", "qc", "render"]
+
+
+# ---------------------------------------------------------------------------
+# (a2) multi-command apply (V44-1): echoed drafts → 2 AppliedCommands +
+#      ONE union rebuild scheduled + the re-entry consumes the latest head.
+# ---------------------------------------------------------------------------
+
+
+def _echo_draft(
+    kind: ReviewCommandKind, target: float, text: str, *, delta: float | None = None
+) -> ReviewCommandDraft:
+    return ReviewCommandDraft.model_validate(
+        {
+            "command_id": _command_id(kind, target, delta, text),
+            "command_kind": kind,
+            "text": text,
+            "target_seconds": target,
+            "seconds_delta": delta,
+            "scope": "episode",
+            "needs_confirmation": False,
+            "confirmation_reason": None,
+        }
+    )
+
+
+def test_multi_draft_apply_two_commands_one_union_rebuild(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                      monkeypatch)
+    text = "冒頭のあいさスを削除して、あとのところは2秒長く残して"
+    drafts = [
+        _echo_draft("remove_section", 0.5, text),
+        _echo_draft("keep_longer", 1.0, text, delta=2.0),
+    ]
+
+    applied_response = client.post(
+        f"/episodes/{episode_id}/review-chat/apply",
+        json={
+            "text": text,
+            "at_seconds": None,
+            "drafts": [draft.model_dump(mode="json") for draft in drafts],
+        },
+    )
+    assert applied_response.status_code == 200
+    body = applied_response.json()
+    assert [a["target_seconds"] for a in body["applied_commands"]] == [0.5, 1.0]
+    assert body["applied"]["command_id"] == body["applied_commands"][0]["command_id"]
+    versions = [a["result_plan_version"] for a in body["applied_commands"]]
+    assert versions == ["v2", "v3"]  # each command its own sealed plan version
+    union_stages = ["plan", "compile", "preview", "resolve_build", "qc", "render"]
+    assert list(body["rebuild"]["stages"]) == union_stages  # edit_plan lineage union
+
+    rebuilt = client.post(
+        f"/episodes/{episode_id}/rebuild",
+        json={"applied_commands": [a["command_id"] for a in body["applied_commands"]]},
+    )
+    assert rebuilt.status_code == 202
+    rebuild_body = rebuilt.json()
+    assert rebuild_body["scheduled"] is True
+    assert rebuild_body["stages"] == union_stages
+    assert rebuild_body["applied_command"] == body["applied_commands"][0]["command_id"]
+    assert rebuild_body["applied_commands"] == [
+        a["command_id"] for a in body["applied_commands"]
+    ]
+    assert len(runner_spawn_calls) == 2  # intake spawn + ONE rebuild spawn
+    rebuild_argv = cast("list[str]", runner_spawn_calls[1]["argv"])
+    assert rebuild_argv[rebuild_argv.index("--from-stage") + 1] == "plan"
+    assert (
+        rebuild_argv[rebuild_argv.index("--applied-command") + 1]
+        == body["applied_commands"][0]["command_id"]
+    )
+
+    monkeypatch.setattr(episode_runner_rebuild, "stage_preview", _fake_stage_preview)
+    exit_code = episode_runner.run(
+        episode_root=episode_dir,
+        stop="PREVIEW_READY",
+        state_store_path=workspace["state_store"],
+        from_stage="plan",
+        applied_command=str(body["applied_commands"][0]["command_id"]),
+    )
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    assert (episode_dir / "previews" / "preview.mp4").read_bytes() == b"fake-preview-v3"
+
+
+def test_multi_draft_apply_rejects_forged_command_id(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, _episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                       monkeypatch)
+    text = "0:00と0:02のあいさりとテストのところを削除して"
+    forged = _echo_draft("remove_section", 0.5, text).model_dump(mode="json")
+    forged["target_seconds"] = 1.0  # id no longer matches the echoed fields
+
+    response = client.post(
+        f"/episodes/{episode_id}/review-chat/apply",
+        json={"text": text, "at_seconds": None, "drafts": [forged]},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "draft-echo-mismatch"
+    assert "draft-not-confirmed" not in response.text
 
 
 # ---------------------------------------------------------------------------

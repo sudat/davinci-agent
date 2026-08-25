@@ -1,11 +1,15 @@
 """Hermetic environment for cockpit tests.
 
 Task 8 wires ``POST /review-chat`` through the tolerant LLM factory: with
-the production editorial runtime config present (task 3) AND credentials
-in the developer shell, the route would otherwise issue REAL network
-calls from unit tests. Every cockpit test therefore runs with the two
-env-gate variables cleared — the deterministic regex path is the only
-behavior under test here; live-path coverage is the gated Tier C lane.
+the production editorial runtime config present (task 3) the route would
+otherwise issue REAL model calls from unit tests — on the openai-api
+transport via developer-shell credentials, and on the DEFAULT codex-exec
+transport via the locally logged-in codex CLI (V44-1). Every cockpit test
+therefore runs with the openai env-gate variables cleared AND the route's
+factory stubbed to None (regex-only); live-path coverage is the gated
+Tier C lane. Tests that WANT a fake LLM monkeypatch
+``services.episode_cockpit.api.build_review_llm_call`` on top of this
+stub (stacked monkeypatch restores compose correctly).
 
 Task 7 additionally detaches a real pipeline runner from
 ``create_episode``; Tier A tests must not leak processes. The
@@ -20,6 +24,7 @@ from __future__ import annotations
 
 import pytest
 
+from services.episode_cockpit import api as cockpit_api
 from services.episode_cockpit import episode_ops
 
 _GATE_VARS = ("EDITORIAL_DIRECTOR_API_KEY", "EDITORIAL_DIRECTOR_NETWORK_ENABLED")
@@ -29,6 +34,7 @@ _GATE_VARS = ("EDITORIAL_DIRECTOR_API_KEY", "EDITORIAL_DIRECTOR_NETWORK_ENABLED"
 def _hermetic_editorial_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in _GATE_VARS:
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(cockpit_api, "build_review_llm_call", lambda: None)
 
 
 @pytest.fixture(autouse=True)

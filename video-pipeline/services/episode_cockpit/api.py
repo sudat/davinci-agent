@@ -12,6 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import FileResponse
+from pydantic import BeforeValidator
 
 from services.contracts.primitives import Identifier, StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
@@ -29,7 +30,10 @@ from services.episode_cockpit.models import (
     Seconds,
 )
 from services.episode_cockpit.review_chat import ReviewChatContext
-from services.episode_cockpit.review_interpreter import build_review_llm_call, interpret
+from services.episode_cockpit.review_interpreter import (
+    build_review_llm_call,
+    interpret_message,
+)
 from services.reference_learning.domain_extract import extract_domains_seeded
 
 router = APIRouter()
@@ -49,14 +53,19 @@ class ReferenceParsePreviewRequest(StrictModel):
 
 
 class RebuildRequestWithCommand(RebuildRequest):
-    """POST /episodes/{id}/rebuild — additive optional applied_command ref (task 47).
+    """POST /episodes/{id}/rebuild — additive optional applied-command refs.
 
     Subclasses the task-44 request inline (same precedent as above) so the
     rebuild-requests model stays untouched while the route can carry the
     applied review-command reference whose lineage derives the stage hint.
+    ``applied_commands`` (V44-1) names a BATCH of applied commands whose
+    lineage stage sets are unioned into ONE rebuild.
     """
 
     applied_command: Identifier | None = None
+    applied_commands: (
+        Annotated[tuple[Identifier, ...], BeforeValidator(tuple)] | None
+    ) = None
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -116,13 +125,18 @@ def review_chat(
         episode_id, text=request.text, at_seconds=request.at_seconds
     )
     nearby = workspace.nearby_context(episode_id, at_seconds=request.at_seconds)
-    draft = interpret(
+    drafts = interpret_message(
         request.text,
         ReviewChatContext(at_seconds=request.at_seconds),
         nearby,
         build_review_llm_call(),
     )
-    return stored | {"draft": draft.model_dump(mode="json")}
+    # ``draft`` stays the primary (first) command for compatibility;
+    # ``drafts`` rides along only when the interpreter proposed SEVERAL.
+    response = stored | {"draft": drafts[0].model_dump(mode="json")}
+    if len(drafts) > 1:
+        response["drafts"] = [draft.model_dump(mode="json") for draft in drafts]
+    return response
 
 
 @router.post("/episodes/{episode_id}/rebuild", status_code=status.HTTP_202_ACCEPTED)
@@ -130,7 +144,10 @@ def rebuild(
     episode_id: str, request: RebuildRequestWithCommand, workspace: Workspace
 ) -> dict[str, object]:
     return workspace.record_rebuild(
-        episode_id, stage_hint=request.stage_hint, applied_command=request.applied_command
+        episode_id,
+        stage_hint=request.stage_hint,
+        applied_command=request.applied_command,
+        applied_commands=request.applied_commands,
     )
 
 

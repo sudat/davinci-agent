@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BeforeValidator, Field
 
 from services.contracts.primitives import StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
@@ -25,8 +26,11 @@ from services.episode_cockpit.backend import CockpitWorkspace
 # Runtime imports (NOT TYPE_CHECKING): FastAPI resolves request-model
 # annotations at decoration time via get_type_hints (task-44 convention).
 from services.episode_cockpit.models import NonEmpty, Seconds  # noqa: TC001
+from services.episode_cockpit.review_chat import ReviewCommandDraft
 
 router = APIRouter()
+
+type DraftSequence = Annotated[tuple[ReviewCommandDraft, ...], BeforeValidator(tuple)]
 
 
 class ReviewChatApplyRequest(StrictModel):
@@ -35,10 +39,16 @@ class ReviewChatApplyRequest(StrictModel):
     Carries the same (text, at_seconds) the operator sent, so the
     deterministic re-interpretation reproduces the previewed command
     exactly — the apply path can never diverge from what was echoed.
+    ``drafts`` (V44-1 multi-command fix) echoes the previewed drafts
+    themselves: each is integrity-checked against the interpreter's
+    command_id contract server-side, so the client can mint no command
+    that was never previewed — this is how LLM-interpreted (and
+    multi-target) corrections become appliable.
     """
 
     text: NonEmpty
     at_seconds: Seconds | None = None
+    drafts: DraftSequence | None = Field(default=None, min_length=1)
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -59,7 +69,10 @@ def review_chat_apply(
     episode_id: str, request: ReviewChatApplyRequest, workspace: Workspace
 ) -> dict[str, object]:
     return workspace.apply_review_command(
-        episode_id, text=request.text, at_seconds=request.at_seconds
+        episode_id,
+        text=request.text,
+        at_seconds=request.at_seconds,
+        drafts=request.drafts,
     )
 
 

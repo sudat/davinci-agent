@@ -12,21 +12,7 @@ import {
   type ReviewCommandDraft,
 } from "@/lib/api";
 import ErrorNotice from "@/components/ErrorNotice";
-
-const COMMAND_KIND_LABEL: Record<string, string> = {
-  remove_section: "区間を削除",
-  keep_longer: "長めに残す",
-  quiet_longer: "静かな場面を長く",
-  use_other_take: "別テイクを使用",
-  insert_broll: "Bロールを追加",
-  mark_boring: "退屈とマーク",
-  subtitle_shorter: "字幕を短く",
-  remove_effect: "効果を削除",
-  lower_bgm: "BGMを下げる",
-  match_color: "色を合わせる",
-  channel_lower_third: "チャンネル限定テロップ",
-  episode_only: "このエピソード限定",
-};
+import ReviewDraftCard from "@/components/ReviewDraftCard";
 
 type RebuildPhase = "done" | "running" | "scheduled" | "recorded";
 
@@ -45,11 +31,10 @@ type ReviewChatPanelProps = {
 
 /**
  * Review chat (PRD 13.3): natural-language correction -> structured
- * command preview (the echoed draft, shown verbatim with its parsed
- * kind/target/delta) -> apply -> lineage-scoped partial rebuild, executed
- * by the detached runner. The indicator derives scheduled/running/done
- * from the page's job-status polling (stage_runs). Ambiguous drafts stay
- * unappliable until rephrased.
+ * command preview (echoed drafts, shown verbatim with parsed
+ * kind/target/delta — SEVERAL when one message named several corrections)
+ * -> apply -> lineage-scoped partial rebuild, executed by the detached
+ * runner. Ambiguous drafts stay unappliable until rephrased (safety rule).
  */
 export default function ReviewChatPanel({
   episodeId,
@@ -61,7 +46,7 @@ export default function ReviewChatPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [sentAt, setSentAt] = useState<number | null>(null);
-  const [draft, setDraft] = useState<ReviewCommandDraft | null>(null);
+  const [drafts, setDrafts] = useState<ReviewCommandDraft[] | null>(null);
   const [applyResult, setApplyResult] = useState<ReviewApplyResult | null>(null);
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null);
   const [baselinePreviewRuns, setBaselinePreviewRuns] = useState<number | null>(null);
@@ -72,7 +57,7 @@ export default function ReviewChatPanel({
     if (text.trim() === "") return;
     setBusy(true);
     setError(null);
-    setDraft(null);
+    setDrafts(null);
     setApplyResult(null);
     setRebuildResult(null);
     const atSeconds = getAtSeconds();
@@ -83,7 +68,7 @@ export default function ReviewChatPanel({
         { text: text.trim(), at_seconds: atSeconds },
         fetchImpl,
       );
-      setDraft(result.draft);
+      setDrafts(result.drafts ?? [result.draft]);
     } catch (cause) {
       setError(failure(cause));
     } finally {
@@ -92,19 +77,28 @@ export default function ReviewChatPanel({
   };
 
   const applyAndRebuild = async () => {
-    if (draft === null || sentAt === null) return;
+    // sentAt may be null (no player position): the drafts carry explicit
+    // targets, so the echo applies regardless — position is only a hint.
+    if (drafts === null || drafts.length === 0) return;
     setBusy(true);
     setError(null);
     try {
       const applied = await applyReviewCommand(
         episodeId,
-        { text: draft.text, at_seconds: sentAt },
+        { text: drafts[0].text, at_seconds: sentAt, drafts },
         fetchImpl,
       );
       setApplyResult(applied);
+      const commandIds =
+        applied.applied_commands?.map((command) => command.command_id) ?? [
+          applied.applied.command_id,
+        ];
       const rebuilt = await postRebuild(
         episodeId,
-        { applied_command: applied.applied.command_id },
+        {
+          applied_command: commandIds[0],
+          ...(commandIds.length > 1 ? { applied_commands: commandIds } : {}),
+        },
         fetchImpl,
       );
       setRebuildResult(rebuilt);
@@ -142,6 +136,8 @@ export default function ReviewChatPanel({
     return "scheduled";
   }, [rebuildResult, status, baselinePreviewRuns]);
 
+  const anyAmbiguous = drafts?.some((draft) => draft.needs_confirmation) ?? false;
+
   return (
     <section className="card" data-testid="review-chat-panel">
       <h2 className="card-title">修正チャット</h2>
@@ -171,49 +167,27 @@ export default function ReviewChatPanel({
           送信
         </button>
       </div>
-      {draft !== null ? (
-        <div className="card" data-testid="review-draft" style={{ marginTop: "var(--space-3)" }}>
-          <p>
-            <span className="mono">{draft.command_id}</span>
-          </p>
-          <dl className="status-list">
-            <div>
-              <dt>解釈</dt>
-              <dd data-testid="review-draft-kind">
-                {draft.command_kind !== null
-                  ? (COMMAND_KIND_LABEL[draft.command_kind] ?? draft.command_kind)
-                  : "解釈なし"}
-              </dd>
-            </div>
-            <div>
-              <dt>対象時刻</dt>
-              <dd className="mono" data-testid="review-draft-target">
-                {draft.target_seconds !== null ? `${draft.target_seconds}s` : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>時間差</dt>
-              <dd className="mono" data-testid="review-draft-delta">
-                {draft.seconds_delta !== null ? `+${draft.seconds_delta}s` : "—"}
-              </dd>
-            </div>
-          </dl>
-          {draft.needs_confirmation ? (
-            <p className="field-hint" data-testid="review-draft-needs-confirmation">
-              曖昧のため確認が必要: {draft.confirmation_reason}
-            </p>
-          ) : null}
-          <div className="actions">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void applyAndRebuild()}
-              disabled={busy || draft.needs_confirmation}
-              data-testid="review-apply-button"
-            >
-              適用して部分rebuild
-            </button>
-          </div>
+      {drafts !== null && drafts.length > 0 ? (
+        drafts.map((draft, index) => (
+          <ReviewDraftCard
+            key={draft.command_id}
+            draft={draft}
+            index={index}
+            multi={drafts.length > 1}
+          />
+        ))
+      ) : null}
+      {drafts !== null && drafts.length > 0 ? (
+        <div className="actions">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => void applyAndRebuild()}
+            disabled={busy || anyAmbiguous}
+            data-testid="review-apply-button"
+          >
+            {drafts.length > 1 ? "この修正をすべて適用" : "この修正を適用"}
+          </button>
         </div>
       ) : null}
       {rebuildResult !== null && applyResult !== null ? (
@@ -227,7 +201,12 @@ export default function ReviewChatPanel({
             <p data-testid="rebuild-phase">再build未実行（コマンドは記録済み）</p>
           )}
           <p>
-            適用コマンド <span className="mono">{applyResult.applied.command_id}</span>
+            適用コマンド{" "}
+            <span className="mono">
+              {(applyResult.applied_commands ?? [applyResult.applied])
+                .map((command) => command.command_id)
+                .join("、")}
+            </span>
           </p>
           <p>
             再build stage:{" "}
