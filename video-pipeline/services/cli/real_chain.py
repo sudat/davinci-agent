@@ -98,7 +98,7 @@ def _normalize(
     return record, mezzanine
 
 
-def run_real_chain(
+def run_real_chain(  # noqa: C901, PLR0915
     episode_root: Path,
     stop: str,
     out_dir: Path,
@@ -137,6 +137,16 @@ def run_real_chain(
     total_frames = normalize_record.drop_dup.expected.output_frames
     _advance(state, "INGESTED", sha256_file(mezzanine))
     _advance(state, "NORMALIZED", normalize_record.output.sha256)
+
+    has_budget_env = "V44_MAX_DECODE_FRAMES" in environment
+    has_budget_os = os.environ.get("V44_MAX_DECODE_FRAMES") is not None
+    if not has_budget_env and not has_budget_os:
+        from services.cli.decode_budget import scaled_decode_budget  # noqa: PLC0415
+
+        _budget = scaled_decode_budget(total_frames)
+        if _budget is not None:
+            os.environ["V44_MAX_DECODE_FRAMES"] = str(_budget)
+            environment["V44_MAX_DECODE_FRAMES"] = str(_budget)
 
     source_id = f"{manifest.episode_id}-edit-source"
     try:

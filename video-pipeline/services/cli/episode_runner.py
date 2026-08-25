@@ -26,6 +26,7 @@ stage stands (crash containment; nothing is invented post-mortem).
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import threading
 import traceback
@@ -108,6 +109,56 @@ class RunnerInvocation:
     from_stage: str | None = None
     applied_command: str | None = None
     editorial_runtime: Path | None = None
+
+
+def _frame_count_from_normalize_record(episode_root: Path) -> int | None:
+    """Read the already-normalized frame count if the run already exists."""
+
+    record_path = episode_root / RUN_DIR_NAME / "normalize-record.json"
+    if not record_path.is_file():
+        return None
+    try:
+        payload = json.loads(record_path.read_bytes())
+        return int(payload["drop_dup"]["expected"]["output_frames"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _ensure_decode_budget(episode_root: Path, log: BinaryIO) -> None:
+    """Scale V44_MAX_DECODE_FRAMES from the SOURCE frame count when env-unset.
+
+    The cockpit backend boots WITHOUT the operator's V44_MAX_DECODE_FRAMES
+    export, so its detached Popen child inherits 900 and typed-fails at
+    analyze for the real 4K episode (8467 > 900). Scaling keeps the typed
+    refusal for absurd sizes (24000 ceiling) and preserves operator
+    override (env already set -> untouched). A runner.log line
+    ``decode_budget_scaled`` evidences the decision.
+    """
+
+    if os.environ.get("V44_MAX_DECODE_FRAMES") is not None:
+        return
+    from services.cli.decode_budget import scaled_decode_budget  # noqa: PLC0415
+
+    frame_count = _frame_count_from_normalize_record(episode_root)
+    budget = scaled_decode_budget(frame_count)
+    if budget is None:
+        log_event(
+            log,
+            "decode_budget_scaled",
+            skipped=True,
+            frame_count=frame_count,
+            reason="below_or_at_default",
+        )
+        return
+    os.environ["V44_MAX_DECODE_FRAMES"] = str(budget)
+    source = "normalize_record" if frame_count is not None else "fallback"
+    log_event(
+        log,
+        "decode_budget_scaled",
+        frame_count=frame_count,
+        budget=budget,
+        source=source,
+    )
 
 
 def _load_intake(episode_root: Path) -> IntakeRecordV1:
@@ -227,7 +278,10 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
                 require_production_ready(store, ctx, transport)
         except EditorialGateError as error:
             raise _gate_error(error) from error
+        _ensure_decode_budget(call.episode_root, log)
         chain_env = dict(os.environ) if mode == PRODUCTION_MODE else sanitized_env()
+        if "V44_MAX_DECODE_FRAMES" in os.environ and "V44_MAX_DECODE_FRAMES" not in chain_env:
+            chain_env["V44_MAX_DECODE_FRAMES"] = os.environ["V44_MAX_DECODE_FRAMES"]
         try:
             video = principal_video(Path(intake.source_folder))
             write_chain_manifest(call.episode_root, ctx.job_id, video)

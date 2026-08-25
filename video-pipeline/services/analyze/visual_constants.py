@@ -22,17 +22,58 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import Final
 
 ANALYZER_NAME: Final = "analyze-visual"
 ANALYZER_VERSION: Final = "todo35-v1"
 
-# bounded decode (frozen): raw gray luma at a fixed analysis size
+# bounded decode (frozen): raw gray luma at a fixed analysis size.
+#
+# DECODE_TIMEOUT_SEC is the FLOOR of a per-frame-scaled budget (see
+# visual_decode.decode_budget_seconds) — MEASURED 2026-08-24 on the real
+# v44-real-01 mezzanine class (4K h264_videotoolbox, 64x36 gray decode):
+# 1.24 s / 300 frames = 4.1 ms/frame; the full 8468-frame mezzanine
+# projects to ~35 s, comfortably inside the 120 s floor, and the scaled
+# formula keeps longer real episodes bounded by ~10 ms/frame.
 DECODE_W: Final = 64
 DECODE_H: Final = 36
 DECODE_FILTER: Final = f"scale={DECODE_W}:{DECODE_H},format=gray"
-MAX_DECODE_FRAMES: Final = 900
 DECODE_TIMEOUT_SEC: Final = 120
+
+# MAX_DECODE_FRAMES is a decode-BUDGET guard, not a correctness limit
+# (PRD §2.5 measured blocker: 900 was sized for <=30 s fixtures; the
+# representative 282 s episode's mezzanine carries 8468 CFR30 frames and
+# the analyzer decodes EVERY frame — scene/black/blur/exposure checks are
+# consecutive-frame pairs, so sampling would change semantics). It is a
+# POLICY input: the default stays small for tests; a validated real run
+# raises it explicitly through the ``V44_MAX_DECODE_FRAMES`` env var
+# (e.g. 12000 for v44-real-01), and the effective value flows into
+# FROZEN_CONSTANTS_PAYLOAD so the artifact hash records which policy
+# produced it.
+DEFAULT_MAX_DECODE_FRAMES: Final = 900
+_MAX_DECODE_FRAMES_ENV: Final = "V44_MAX_DECODE_FRAMES"
+
+
+def _resolve_max_decode_frames() -> int:
+    raw = os.environ.get(_MAX_DECODE_FRAMES_ENV)
+    if raw is None:
+        return DEFAULT_MAX_DECODE_FRAMES
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError(
+            f"{_MAX_DECODE_FRAMES_ENV}={raw!r} must be an integer frame ceiling"
+        ) from error
+    if value < 1:
+        raise ValueError(f"{_MAX_DECODE_FRAMES_ENV}={raw!r} must be >= 1")
+    return value
+
+
+MAX_DECODE_FRAMES: Final = _resolve_max_decode_frames()
+
+# metadata-only ffprobe budget (no decode; the decode probe in
+# services/normalize/probe.py carries its own measured scaling)
 PROBE_TIMEOUT_SEC: Final = 120
 
 # scene change (frozen): mean-abs-luma-diff between consecutive decoded

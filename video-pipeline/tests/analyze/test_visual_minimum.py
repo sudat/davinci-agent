@@ -40,7 +40,9 @@ from pydantic import ValidationError
 import services.analyze.contact_sheet as sheet_module
 import services.analyze.visual_analysis as analysis_module
 import services.analyze.visual_checks as checks_module
+import services.analyze.visual_decode as visual_decode_module
 from services.analyze.analysis_models import AnalyzeRequestError
+from services.analyze.audio_probe import resolve_audio_tools
 from services.analyze.contact_sheet import encode_gray_png
 from services.analyze.visual_analysis import VisualAnalysisRequest, analyze_visual
 from services.analyze.visual_constants import (
@@ -51,20 +53,31 @@ from services.analyze.visual_constants import (
     BLUR_RULE_ID,
     DECODE_FILTER,
     DECODE_TIMEOUT_SEC,
+    DEFAULT_MAX_DECODE_FRAMES,
     EXPOSURE_RULE_ID,
+    FROZEN_CONSTANTS_PAYLOAD,
     MAX_DECODE_FRAMES,
     SCENE_MIN_MEAN_DIFF_M,
     SCENE_RULE_ID,
     SHEET_CADENCE_FRAMES,
     SHEET_COLS,
     SHEET_RULE_ID,
+    _resolve_max_decode_frames,
     frozen_constants_hash,
 )
-from services.analyze.visual_decode import ensure_decode_budget, probe_video_facts
+from services.analyze.visual_decode import (
+    _seek_start_seconds,
+    decode_budget_seconds,
+    decode_luma_frames,
+    decode_luma_window,
+    ensure_decode_budget,
+    probe_video_facts,
+)
 from services.analyze.visual_models import (
     FORBIDDEN_SELECTION_EXPORTS,
     VisualAnalysisArtifact,
     VisualDecodeError,
+    VisualStreamFacts,
     decode_binding_hash,
     visual_content_hash,
 )
@@ -368,6 +381,111 @@ def test_visual_content_hash_binds_every_field(designed_avi: Path, tmp_path: Pat
         artifact.sheets,
         fixture_only=artifact.fixture_only,
     )
+
+
+# ------------------------------------------------------------ measured budgets
+# (PRD §2.5 fix: constants sized for <=30 s fixtures blocked the 282 s 4K
+# real episode — .omo/evidence/v44-first-publish-delta/v44-0-runs/BLOCKED.md)
+
+
+def test_decode_budget_scales_per_frame_with_floor_and_ceiling() -> None:
+    """Given: measured per-frame cost 4.1 ms (10 ms budget); Then: the
+    120 s floor holds for the real 8468-frame mezzanine (~35 s expected),
+    longer inputs scale, and the 1200 s ceiling keeps the hung guard."""
+
+    assert decode_budget_seconds(GOLDEN_FRAME_COUNT) == DECODE_TIMEOUT_SEC == 120
+    assert decode_budget_seconds(8_468) == 120  # floor covers the real mezzanine
+    assert decode_budget_seconds(30_000) == 300  # 30_000 frames x 10 ms
+    assert decode_budget_seconds(600_000) == 1200  # hard ceiling
+
+
+def test_max_decode_frames_is_a_policy_input() -> None:
+    """Given: the V44_MAX_DECODE_FRAMES policy seam; Then: the default
+    stays 900 (tests), an explicit integer raises the ceiling for
+    validated real runs (v44-real-01 needs 8468 <= 12000), and garbage or
+    non-positive values are LOUD refusals — never silently ignored."""
+
+    assert MAX_DECODE_FRAMES == DEFAULT_MAX_DECODE_FRAMES == 900
+    assert FROZEN_CONSTANTS_PAYLOAD["max_decode_frames"] == MAX_DECODE_FRAMES
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("V44_MAX_DECODE_FRAMES", "12000")
+        assert _resolve_max_decode_frames() == 12_000
+        patch.setenv("V44_MAX_DECODE_FRAMES", "garbage")
+        with pytest.raises(ValueError, match="V44_MAX_DECODE_FRAMES"):
+            _resolve_max_decode_frames()
+        patch.setenv("V44_MAX_DECODE_FRAMES", "0")
+        with pytest.raises(ValueError, match=">= 1"):
+            _resolve_max_decode_frames()
+        patch.delenv("V44_MAX_DECODE_FRAMES")
+        assert _resolve_max_decode_frames() == 900
+
+
+def test_seek_timestamp_truncates_down_never_rounds() -> None:
+    """Given: ffmpeg accurate-seek drops frames with pts < target; Then:
+    the timestamp is decimal-truncated DOWN (target strictly below the
+    boundary frame's pts keeps that frame; rounding up would silently
+    shift the window one frame — measured: -ss 9.000001 opens at 271)."""
+
+    ntsc = VisualStreamFacts(
+        width=3840, height=2160, rate_num=30000, rate_den=1001,
+        time_base_num=1, time_base_den=30000, frame_count=8468,
+    )
+    # 1001/30000 s = 0.0333666... -> truncated, not rounded to ...67
+    assert _seek_start_seconds(ntsc, 1) == "0.033366"
+    assert _seek_start_seconds(ntsc, 0) == "0.000000"
+    cfr30 = VisualStreamFacts(
+        width=3840, height=2160, rate_num=30, rate_den=1,
+        time_base_num=1, time_base_den=30, frame_count=8468,
+    )
+    assert _seek_start_seconds(cfr30, 270) == "9.000000"
+
+
+def test_window_decode_matches_full_decode_slice(
+    designed_avi: Path, tmp_path: Path
+) -> None:
+    """Given: a real 80-frame FFV1 fixture; Then: the window-bounded
+    accurate-seek decode returns EXACTLY the full decode's frames for
+    [10, 30) — byte-identical luma, true frame indices, exact PTS — and
+    out-of-range windows are typed refusals."""
+
+    try:
+        tools = resolve_audio_tools()
+    except (OSError, ValueError) as error:
+        pytest.skip(f"pinned phase-1 ffmpeg not bootstrapped: {error}")
+    facts = probe_video_facts(tools.ffprobe, designed_avi)
+    full = decode_luma_frames(designed_avi, facts, tools=tools)
+    window = decode_luma_window(
+        designed_avi, facts, tools=tools, start_frame=10, end_frame=30
+    )
+
+    assert len(window) == 20
+    assert [frame.frame_index for frame in window] == list(range(10, 30))
+    for offset, frame in enumerate(window):
+        twin = full[10 + offset]
+        assert frame.luma == twin.luma
+        assert frame.pts == twin.pts
+
+    for start, end in ((-1, 10), (30, 30), (40, 20), (70, GOLDEN_FRAME_COUNT + 1)):
+        with pytest.raises(AnalyzeRequestError):
+            decode_luma_window(designed_avi, facts, tools=tools, start_frame=start, end_frame=end)
+
+
+def test_window_decode_budget_caps_the_window_span(
+    designed_avi: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given: a lowered decode ceiling; Then: the cap applies to the
+    WINDOW span (not the source length) — a 20-frame window under a
+    10-frame cap is refused before any decode."""
+
+    try:
+        tools = resolve_audio_tools()
+    except (OSError, ValueError) as error:
+        pytest.skip(f"pinned phase-1 ffmpeg not bootstrapped: {error}")
+    facts = probe_video_facts(tools.ffprobe, designed_avi)
+    monkeypatch.setattr(visual_decode_module, "MAX_DECODE_FRAMES", 10)
+    with pytest.raises(AnalyzeRequestError, match="decode budget exceeded"):
+        decode_luma_window(designed_avi, facts, tools=tools, start_frame=0, end_frame=20)
 
 
 def _scope_cli(*args: str) -> subprocess.CompletedProcess[str]:

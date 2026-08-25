@@ -178,3 +178,153 @@ def test_prepare_with_nonexistent_folder_typed_error(tmp_path: Path) -> None:
     assert result.returncode != 0
     combined = result.stdout + result.stderr
     assert "source-folder-not-found" in combined
+
+
+def test_prepare_samefile_inplace_mints_manifest(tmp_path: Path) -> None:
+    ffmpeg = _ffmpeg()
+    if ffmpeg is None:
+        pytest.skip("ffmpeg not available")
+
+    episode = tmp_path / "ep-samefile"
+    args = [sys.executable, "-m", "services.cli.v44_real01", "init", "--episode", str(episode)]
+    result = _run(args)
+    assert result.returncode == 0, result.stderr
+
+    # Simulate operator dropping footage directly into sources/
+    clip = episode / "sources" / "inplace.mp4"
+    proc = subprocess.run(
+        [
+            str(ffmpeg),
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=320x180:rate=24:duration=1",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+            str(clip),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert clip.is_file()
+    mtime_before = clip.stat().st_mtime
+
+    # Prepare with --source-folder pointing at the episode's own sources dir
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "services.cli.v44_real01",
+            "prepare",
+            "--episode",
+            str(episode),
+            "--source-folder",
+            str(episode / "sources"),
+        ]
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "SameFileError" not in (result.stdout + result.stderr)
+    assert clip.is_file()
+    assert clip.stat().st_mtime == mtime_before
+
+    manifest = json.loads((episode / "sources-manifest.json").read_text(encoding="utf-8"))
+    assert len(manifest["sources"]) == 1
+    assert manifest["sources"][0]["relative_path"] == "sources/inplace.mp4"
+
+
+def test_prepare_mixed_inplace_and_external(tmp_path: Path) -> None:
+    ffmpeg = _ffmpeg()
+    if ffmpeg is None:
+        pytest.skip("ffmpeg not available")
+
+    episode = tmp_path / "ep-mixed"
+    args = [sys.executable, "-m", "services.cli.v44_real01", "init", "--episode", str(episode)]
+    result = _run(args)
+    assert result.returncode == 0, result.stderr
+
+    # In-place file already in sources/
+    inplace = episode / "sources" / "inplace.mp4"
+    proc = subprocess.run(
+        [
+            str(ffmpeg),
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=320x180:rate=24:duration=1",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+            str(inplace),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+    # External file in a separate source folder
+    external_src = tmp_path / "external"
+    external_src.mkdir()
+    external_clip = external_src / "external.mp4"
+    proc = subprocess.run(
+        [
+            str(ffmpeg),
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=320x180:rate=24:duration=1",
+            "-pix_fmt",
+            "yuv420p",
+            "-y",
+            str(external_clip),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+    # Build a combined source folder containing one samefile entry and one external copy.
+    # Use a hard link for the samefile case so src.resolve() == dest.resolve() via inode.
+    combined = tmp_path / "combined"
+    combined.mkdir()
+    # hard link to the in-place file (same inode) — will be detected as samefile
+    hardlink = combined / "inplace.mp4"
+    hardlink.hardlink_to(inplace)
+    shutil.copy2(external_clip, combined / "external.mp4")
+
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "services.cli.v44_real01",
+            "prepare",
+            "--episode",
+            str(episode),
+            "--source-folder",
+            str(combined),
+        ]
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "SameFileError" not in (result.stdout + result.stderr)
+
+    # Both files should now be present in sources and listed in manifest
+    assert (episode / "sources" / "inplace.mp4").is_file()
+    assert (episode / "sources" / "external.mp4").is_file()
+    manifest = json.loads((episode / "sources-manifest.json").read_text(encoding="utf-8"))
+    paths = {entry["relative_path"] for entry in manifest["sources"]}
+    assert "sources/inplace.mp4" in paths
+    assert "sources/external.mp4" in paths
+    assert len(manifest["sources"]) == 2

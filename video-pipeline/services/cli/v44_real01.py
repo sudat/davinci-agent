@@ -300,7 +300,15 @@ def _copy_and_hash_entries(
             rel_inside = Path(src.name)
         dest = sources_dir / rel_inside
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
+        try:
+            is_same = dest.exists() and src.samefile(dest)
+        except OSError:
+            try:
+                is_same = dest.exists() and src.resolve() == dest.resolve()
+            except OSError:
+                is_same = False
+        if not is_same:
+            shutil.copy2(src, dest)
         sha = sha256_file(dest)
         size = dest.stat().st_size
         try:
