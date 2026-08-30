@@ -380,6 +380,38 @@ def test_scene_summary_counts_and_lineage(api: MediaQueryApiV2) -> None:
     assert summary.artifact_shas == (artifact_content_sha(ARTIFACT),)
 
 
+def test_scene_summary_covered_frames_is_coverage_duration_not_extent(
+    tmp_path: Path,
+) -> None:
+    """Task-2 characterization (unchanged semantics): ``covered_frames`` is
+    the SUM of shot lengths (coverage duration) even when sparse gaps make it
+    smaller than the last end frame. The authoritative source extent lives in
+    ``MediaSource.duration_frames`` — callers needing the true end must not
+    derive it from this field."""
+    sparse = MediaIntelligenceArtifact(
+        episode_id="ep-sparse",
+        sources=(MediaSource(source_id=SOURCE_ID, duration_frames=300),),
+        shots=(
+            _shot(
+                "shot-head", 0, 100,
+                description="head speech", role="talking_head", potential="medium",
+            ),
+            _shot(
+                "shot-tail", 200, 300,
+                description="tail speech after a silent gap", role="talking_head",
+                potential="medium",
+            ),
+        ),
+    )
+    path = build_index(sparse, tmp_path / "sparse-v2.duckdb")
+    with MediaQueryApiV2.open(path) as api:
+        response = api.scene_summary(vm.SceneSummaryRequest())
+    assert response.total == 1
+    summary = response.rows[0]
+    assert summary.shot_count == 2
+    assert summary.covered_frames == 200  # 100 + 100 — NOT the 300-frame extent
+
+
 # ---------------------------------------------------------------- budgets
 
 
