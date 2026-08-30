@@ -24,6 +24,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from services.contracts.primitives import Identifier, StrictModel
+from services.editorial_v2.director_gates import (
+    DirectorV2Error,
+    require_eligible_removals,
+    require_fused_keeps,
+    require_known_targets,
+    validated_selection,
+)
 from services.editorial_v2.episode_brief import require_approved
 from services.editorial_v2.evidence_v2 import assemble_evidence_v2
 from services.editorial_v2.heuristic_planner import (
@@ -50,21 +57,12 @@ from services.reference_learning.models import PreferenceDomain
 
 if TYPE_CHECKING:
     from services.editorial_v2.episode_brief import EpisodeBriefV1
-    from services.editorial_v2.evidence_v2 import EvidenceBundleV2
+    from services.editorial_v2.removal_policy import RemovalEligibilityV1
     from services.editorial_v2.taste_retrieval import TasteCitation
     from services.media_query.query_v2 import MediaQueryApiV2
     from services.reference_learning.models import DerivedTasteProfileV1
 
 type LlmCallV2 = Callable[[PassName, StrictModel], object]
-
-
-class DirectorV2Error(ValueError):
-    """Structured refusal from the director seam (never a silent partial)."""
-
-    def __init__(self, code: str, detail: str) -> None:
-        super().__init__(f"{code}: {detail}")
-        self.code = code
-        self.detail = detail
 
 
 class ThreePassResult(StrictModel):
@@ -80,7 +78,7 @@ class DirectorV2:
 
     __slots__ = ()
 
-    def run_three_pass(  # noqa: PLR0913 (pass surface: brief + api + the five keyword-only seams)
+    def run_three_pass(  # noqa: PLR0913 (pass surface: brief + api + the six keyword-only seams)
         self,
         brief: EpisodeBriefV1,
         api_v2: MediaQueryApiV2,
@@ -90,6 +88,7 @@ class DirectorV2:
         source_id: str | None = None,
         require_deep_review_keeps: bool = False,
         source_total_frames: int | None = None,
+        removal_eligibility: tuple[RemovalEligibilityV1, ...] = (),
     ) -> ThreePassResult:
         """Three propose-only passes; ``source_id`` enables transcript
         corroboration in the Pass B evidence bundle (T7: with no fused
@@ -107,7 +106,13 @@ class DirectorV2:
         ``[0, source_total_frames)`` instead of inferring a window from the
         coverage-duration ``scene_summary`` — sparse episodes whose summed
         coverage ends before the real source must not lose tail candidates.
-        Callers that omit it keep the historical inferred-window behavior."""
+        Callers that omit it keep the historical inferred-window behavior.
+        ``removal_eligibility`` (T4) is the runtime-only cut policy: when
+        supplied, it rides the Pass B request as typed input AND every
+        remove in the produced selection must match an entry's precomputed
+        allowed reasons with cited deterministic evidence — anything else is
+        refused as ``removal-not-eligible`` BEFORE any commit. Callers that
+        omit it keep the historical ungated behavior (non-Arm flows)."""
 
         require_approved(brief)
         shots = _discover_shots(api_v2, brief.episode_id, source_total_frames)
@@ -147,15 +152,18 @@ class DirectorV2:
             candidates=candidates,
             evidence=evidence,
             evidence_digest=digest,
+            removal_eligibility=removal_eligibility,
         )
         if llm_call is None:
             selection = plan_selection(request_b, b_roll_cites)
         else:
-            selection = _validated_selection(
+            selection = validated_selection(
                 llm_call("pass_b", request_b), known_candidates, evidence
             )
+        if removal_eligibility:
+            require_eligible_removals(selection, removal_eligibility)
         if require_deep_review_keeps:
-            _require_fused_keeps(selection, evidence)
+            require_fused_keeps(selection, evidence)
 
         request_c = PassCRequest(
             selection=selection, taste_citations=b_roll_cites + subtitle_cites
@@ -164,7 +172,7 @@ class DirectorV2:
             creative = plan_creative(request_c)
         else:
             creative = CreativeEditDraft.model_validate(llm_call("pass_c", request_c))
-            _require_known_targets(creative, known_candidates)
+            require_known_targets(creative, known_candidates)
         return ThreePassResult(
             story_plan=story.story_plan,
             moment_selection=selection,
@@ -214,65 +222,6 @@ def _taste_for_planning(
         cited_taste_entries(profile, PreferenceDomain.b_roll),
         cited_taste_entries(profile, PreferenceDomain.subtitle),
     )
-
-
-def _validated_selection(
-    payload: object,
-    known_candidates: frozenset[str],
-    evidence: EvidenceBundleV2,
-) -> MomentSelectionDraft:
-    draft = MomentSelectionDraft.model_validate(payload)
-    unknown = {c.candidate_id for c in draft.proposal.candidates} - known_candidates
-    if unknown:
-        raise DirectorV2Error(
-            "unknown-candidate",
-            f"selection cites candidates no api_v2 row produced: {sorted(unknown)}",
-        )
-    corroborated = {entry.candidate_id for entry in evidence.entries}
-    unbacked = {
-        c.candidate_id for c in draft.proposal.candidates
-        if c.intent != "remove" and c.candidate_id not in corroborated
-    }
-    if unbacked:
-        raise DirectorV2Error(
-            "uncorroborated-keep",
-            f"kept candidates lack evidence-bundle corroboration: {sorted(unbacked)}",
-        )
-    return draft
-
-
-def _require_fused_keeps(
-    selection: MomentSelectionDraft, evidence: EvidenceBundleV2
-) -> None:
-    """Refuse keeps without overlapping fused moment-review citations."""
-
-    cited = {entry.candidate_id: entry.moment_reviews for entry in evidence.entries}
-    unbacked = sorted(
-        candidate.candidate_id
-        for candidate in selection.proposal.candidates
-        if candidate.intent == "keep" and not cited.get(candidate.candidate_id)
-    )
-    if unbacked:
-        raise DirectorV2Error(
-            "uncorroborated-keep",
-            f"kept candidates lack fused moment-review evidence (no overlapping "
-            f"MomentDeepReviewV1 in the index): {unbacked}",
-        )
-
-
-def _require_known_targets(
-    creative: CreativeEditDraft, known_candidates: frozenset[str]
-) -> None:
-    targets = {
-        i.target_candidate_id
-        for i in creative.intents
-        if i.target_candidate_id is not None
-    }
-    unknown = targets - known_candidates
-    if unknown:
-        raise DirectorV2Error(
-            "unknown-candidate", f"intents target unknown candidates: {sorted(unknown)}"
-        )
 
 
 __all__ = ["DirectorV2", "DirectorV2Error", "LlmCallV2", "ThreePassResult"]
