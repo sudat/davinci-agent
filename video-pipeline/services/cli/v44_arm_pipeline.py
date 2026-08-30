@@ -11,6 +11,11 @@ existing ``validate_proposal``/``commit_selection`` authority (exactly one
 commit) → the existing explicit escalation semantics over keeps whose fused
 review confidence falls below the threshold.
 
+T4 cut policy: the deterministic removal eligibility (``false_start`` /
+``exact_duplicate`` from the effective transcript) rides Pass B and both
+validation boundaries; kept spans preserve every keep AND optional
+candidate (escalation stays keep-only).
+
 Honesty contract: kept spans come ONLY from the committed selection
 proposal; a video-understanding coverage/fusion failure, a synthetic fused
 lineage, a director refusal, or a validation failure IS the result (typed,
@@ -23,12 +28,17 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING
 
+from services.cli._v44_arm_cut_policy import compute_removal_eligibility
 from services.cli._v44_arm_integrity import (
     expected_candidate_ids,
     require_candidate_integrity,
     require_proposal_completeness,
+)
+from services.cli._v44_arm_results import (
+    ESCALATE_BELOW,
+    derive_kept_spans,
 )
 from services.cli._v44_arm_transcript import (
     TranscriptLaneInput,
@@ -41,7 +51,7 @@ from services.cli.v44_arm_stages import (
     run_arm_stages,
 )
 from services.editorial_v2.director_v2 import DirectorV2
-from services.editorial_v2.evidence_v2 import EvidenceBundleV2, assemble_evidence_v2
+from services.editorial_v2.evidence_v2 import assemble_evidence_v2
 from services.editorial_v2.proposal_validate import (
     MomentSelectionStore,
     commit_selection,
@@ -59,20 +69,13 @@ from services.media_query.index_v2 import build_index
 from services.media_query.query_v2 import MediaQueryApiV2
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable
 
     from services.editorial_v2.director_v2 import LlmCallV2, ThreePassResult
     from services.editorial_v2.episode_brief import EpisodeBriefV1
-    from services.editorial_v2.moment_models import MomentCandidateV2
     from services.editorial_v2.proposal_validate import CommitReceipt
     from services.media_intelligence.moment_review import MomentDeepReviewV1
     from services.metrics.v44_product_proof import EvidenceQualityMetrics
-
-#: Arm-B escalation policy: a kept candidate whose OVERLAPPING fused review
-#: confidence falls below this is DEMOTED from the kept spans and ESCALATED
-#: (recorded, never silently kept nor silently dropped). T7 moves the
-#: evidence BEFORE the Director; the policy application stays explicit.
-ESCALATE_BELOW: Final = 0.5
 
 #: Builds the video-understanding wiring once the chain stages produced the
 #: mezzanine and the speech index exists (tests inject a constant factory).
@@ -163,24 +166,6 @@ def _fused_reviews(
     return reviews
 
 
-def _unconfirmed_keeps(
-    bundle: EvidenceBundleV2, kept: Sequence[MomentCandidateV2]
-) -> tuple[str, ...]:
-    """Keeps whose overlapping fused review confidence is below the
-    threshold; every keep has a bundle entry (validation proved it)."""
-
-    by_id = {entry.candidate_id: entry for entry in bundle.entries}
-    escalated: list[str] = []
-    for candidate in kept:
-        confidences = tuple(
-            citation.overall_confidence
-            for citation in by_id[candidate.candidate_id].moment_reviews
-        )
-        if confidences and min(confidences) < ESCALATE_BELOW:
-            escalated.append(str(candidate.candidate_id))
-    return tuple(escalated)
-
-
 def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
     """Drive one real arm end-to-end; kept spans come from the COMMIT only."""
 
@@ -212,6 +197,10 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
     with MediaQueryApiV2.open(index_path) as integrity_api:
         require_candidate_integrity(integrity_api, data)
     expected_candidates = expected_candidate_ids(data)
+    # Task-4 cut policy: deterministic removal eligibility computed from the
+    # EFFECTIVE transcript (post-substitution speech + its sha) — runtime-only
+    # input to Pass B and the commit-boundary validation, never an artifact.
+    eligibility = compute_removal_eligibility(speech, alignment.effective_transcript_sha256)
     notes = [
         f"speech_shots={len(speech)}",
         f"proper_noun_substitutions={noun_edits}",
@@ -238,40 +227,36 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
             source_id=data.source_id,
             require_deep_review_keeps=inputs.video_understanding is not None,
             source_total_frames=data.total_frames,
+            removal_eligibility=eligibility,
         )
         proposal = three.moment_selection.proposal
         # Task-2 commit boundary: every discovered candidate must be proposed
         # — a missing proposal is a refusal, never an implicit drop.
         require_proposal_completeness(proposal, expected_candidates)
         bundle = assemble_evidence_v2(api, proposal.candidates, source_id=data.source_id)
-        validation = validate_proposal(proposal, api, bundle)
+        validation = validate_proposal(
+            proposal, api, bundle, removal_eligibility=eligibility
+        )
         store = MomentSelectionStore(plan_dir=inputs.workspace / "moment-selection")
         initialize_moment_store(store, episode_id=data.episode_id)
         receipt: CommitReceipt = commit_selection(proposal, validation, store=store)
-        kept = [c for c in proposal.candidates if c.intent == "keep"]
-        escalated = _unconfirmed_keeps(bundle, kept)
     _persist_drafts(inputs.workspace, three, canonical_model_bytes(artifact))
-    escalated_set = set(escalated)
-    kept_after = [c for c in kept if str(c.candidate_id) not in escalated_set]
-    kept_spans = tuple(
-        (int(c.source_span.start_frame), int(c.source_span.end_frame)) for c in kept_after
-    )
-    escalated_spans = tuple(
-        (int(c.source_span.start_frame), int(c.source_span.end_frame))
-        for c in kept
-        if str(c.candidate_id) in escalated_set
-    )
-    if escalated:
+    # Task-4 derivation: keep AND optional candidates are preserved in the
+    # kept spans; the low-confidence escalation still applies only to
+    # explicit keeps.
+    kept = derive_kept_spans(bundle, proposal.candidates)
+    if kept.escalated_candidate_ids:
         notes.append(
-            f"arm_b_escalation: {len(escalated)} keep(s) demoted+escalated at fused "
-            f"review confidence < {ESCALATE_BELOW} ({', '.join(escalated)})"
+            f"arm_b_escalation: {len(kept.escalated_candidate_ids)} keep(s) "
+            f"demoted+escalated at fused review confidence < {ESCALATE_BELOW} "
+            f"({', '.join(kept.escalated_candidate_ids)})"
         )
     notes.append(f"commit_version=v{receipt.version} proposal={proposal.proposal_id}")
     return ArmPipelineResult(
-        kept_spans_mezz=kept_spans,
-        kept_candidate_ids=tuple(str(c.candidate_id) for c in kept_after),
-        escalated_candidate_ids=escalated,
-        escalated_spans_mezz=escalated_spans,
+        kept_spans_mezz=kept.kept_spans_mezz,
+        kept_candidate_ids=kept.kept_candidate_ids,
+        escalated_candidate_ids=kept.escalated_candidate_ids,
+        escalated_spans_mezz=kept.escalated_spans_mezz,
         reviews=fused,
         commit_version=receipt.version,
         proposal_id=str(proposal.proposal_id),
