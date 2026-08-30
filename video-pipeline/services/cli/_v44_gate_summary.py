@@ -28,7 +28,11 @@ from services.cli._v44_finishing_record import (
     PUBLISHABILITY_RELATIVE,
     TIME_LOG_NAME,
 )
-from services.cli._v44_finishing_report import FinishingRunReportV1, TimeLogLineV1
+from services.cli._v44_finishing_report import (
+    FinishingRunReportV1,
+    TimeLogLineV1,
+    summarize_time_log,
+)
 from services.final_review.publishability import PublishabilityReviewV1
 from services.metrics.v44_gate_state import V44GateSummaryV1, write_v44_2_summary
 
@@ -75,21 +79,18 @@ def _sum_time_log(path: Path) -> tuple[float | None, float | None]:
 
     if not path.is_file():
         return None, None
-    total = 0.0
-    direct: float | None = None
+    lines: list[TimeLogLineV1] = []
     for raw in path.read_bytes().splitlines():
         if not raw.strip():
             continue
         try:
-            line = TimeLogLineV1.model_validate_json(raw)
+            lines.append(TimeLogLineV1.model_validate_json(raw))
         except ValidationError as error:
             raise FinishingMalformedError(
                 "time-log-invalid", f"{path} has a non-v44-time-log-v1 line: {error}"
             ) from error
-        total += line.minutes
-        if line.phase == "direct_resolve":
-            direct = line.minutes if direct is None else direct + line.minutes
-    return total, direct
+    totals = summarize_time_log(lines)
+    return totals.aht_minutes, totals.direct_resolve_minutes
 
 
 def build_v44_2_summary(

@@ -382,7 +382,10 @@ def test_synthetic_run_with_media_renders_editorial_preview(
         json.loads((workspace.run_dir / "report.json").read_bytes())
     )
     assert report.preview.skipped_reason is None
-    assert report.preview.total_record_frames == 297
+    # T7: the reviewless dev-harness index no longer corroborates non-speech
+    # keeps through shot descriptions masquerading as deep vision, so the
+    # borderline non-speech shot drops to optional — 2 kept spans, not 3.
+    assert report.preview.total_record_frames == 198
     assert report.preview.preview_path is not None
     assert Path(report.preview.preview_path).is_file()
     assert Path(report.preview.preview_path).with_suffix(".trace.json").is_file()

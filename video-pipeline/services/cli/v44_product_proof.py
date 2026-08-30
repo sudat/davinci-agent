@@ -1,5 +1,5 @@
-# allow: SIZE_OK — CLI 5 subcommands + gate + arms in one thin runner
-"""Thin CLI for the V44 product-proof harness (task 5).
+# allow: SIZE_OK — CLI 6 subcommands + gate + arms in one thin runner
+"""Thin CLI for the V44 product-proof harness (task 5 + T8 timing).
 
 Subcommands:
   init-ground-truth   --episode-id X --out <path>
@@ -8,6 +8,9 @@ Subcommands:
            --out <report.json> [--dry-run]
   record-operator-verdict --report <path> --continuation yes|no
            [--publishability ...] [--comments ...]
+  record-efficiency --report <path> --episode-root <dir>
+           [--observation <observation.json>]   (T8: finishing wall clock +
+           time-log AHT/direct-Resolve + observed TTFRP; nulls stay null)
   evaluate --report <path>
 """
 
@@ -452,7 +455,7 @@ def _arm_failure_code(exc: BaseException) -> str:
     return str(code) if isinstance(code, str) and code else type(exc).__name__
 
 
-def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
+def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0915 (arm wiring: transport + pins + report)
     arm: Literal["A", "B"],
     episode_root: Path,
     gt: EditorialGroundTruthV1,
@@ -499,9 +502,11 @@ def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
         MomentValidationError,
     )
     from services.media_intelligence.moment_review_real import (  # noqa: PLC0415
-        AssessmentPinSummary,
         MomentReviewRealError,
-        build_assessment_call_codex,
+    )
+    from services.media_intelligence.video_review_wire import VideoProviderError  # noqa: PLC0415
+    from services.media_intelligence.video_understanding import (  # noqa: PLC0415
+        VideoUnderstandingError,
     )
     from services.normalize.errors import NormalizeError  # noqa: PLC0415
 
@@ -532,27 +537,62 @@ def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
             runtime_path.parent.parent / runtime.director_pin_path
         )
         llm_call = build_llm_call_codex(pin, counting)
-        assessment = (
-            build_assessment_call_codex(
-                AssessmentPinSummary(provider="codex-exec", model_id=pin.model_id),
-                counting,
-            )
-            if arm == "B"
-            else None
-        )
     except EditorialRuntimeError as exc:
         print(f"run-arm failed: {exc.code}: {exc.detail}", file=sys.stderr)
         return 1
+    lead_model: str | None = None
+    specialist_model: str | None = None
+    if arm == "B":
+        try:
+            lead_model = load_editorial_pin(
+                runtime_path.parent.parent / runtime.moment_review_pin_path
+            ).model_id
+            if runtime.moment_review_specialist_pin_path is not None:
+                specialist_model = load_editorial_pin(
+                    runtime_path.parent.parent / runtime.moment_review_specialist_pin_path
+                ).model_id
+        except EditorialRuntimeError as exc:
+            print(f"run-arm failed: {exc.code}: {exc.detail}", file=sys.stderr)
+            return 1
     workspace_arg = getattr(args, "workspace", None)
     workspace = Path(workspace_arg) if workspace_arg else episode_root / "runs" / f"arm-{arm}"
+    factory = None
+    if arm == "B":
+        try:
+            import os as _os  # noqa: PLC0415
+
+            from services.cli._v44_arm_video_factory import (  # noqa: PLC0415
+                build_video_understanding_factory,
+            )
+
+            factory = build_video_understanding_factory(
+                episode_id=episode_id,
+                workspace=workspace,
+                env=dict(_os.environ),
+                runtime=runtime,
+                runtime_path=runtime_path,
+            )
+        except (
+            ArmPipelineError,
+            EditorialRuntimeError,
+            VideoProviderError,
+            VideoUnderstandingError,
+            ValidationError,
+            OSError,
+        ) as exc:
+            print(
+                f"run-arm failed: {_arm_failure_code(exc)}: {exc} — honest typed failure, "
+                f"no report written",
+                file=sys.stderr,
+            )
+            return 1
     inputs = ArmPipelineInputs(
         episode_root=episode_root,
         workspace=workspace,
         episode_id=episode_id,
         brief=compose_arm_brief(episode_root, episode_id, operator=str(gt.operator)),
         llm_call=llm_call,
-        assessment=assessment,
-        assessment_pin=("codex-exec", pin.model_id),
+        video_understanding=factory,
     )
     failure_types: tuple[type[BaseException], ...] = (
         ArmPipelineError,
@@ -564,6 +604,8 @@ def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
         MomentValidationError,
         MomentCommitError,
         NormalizeError,
+        VideoProviderError,
+        VideoUnderstandingError,
         ValidationError,
         OSError,
     )
@@ -582,13 +624,21 @@ def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
         mezz_span_to_anchor_space(s, e) for s, e in result.escalated_spans_mezz
     )
     escalated_ids = escalated_anchor_ids(gt.anchors, escalated_spans)
+    from services.metrics.v44_video_understanding_metrics import (  # noqa: PLC0415
+        compute_video_understanding_metrics,
+    )
+
+    video_metrics = (
+        compute_video_understanding_metrics(result.reviews) if arm == "B" else None
+    )
+    provider_cost = video_metrics.total_cost if video_metrics is not None else None
     ctx = EpisodeContext(
         episode_id=episode_id,
         ground_truth=gt,
         kept_spans=kept_spans,
         escalated_ids=escalated_ids,
         wall_clock_seconds=wall,
-        provider_cost=None,
+        provider_cost=provider_cost,
     )
     evidence_quality = None
     evidence_note = "evidence_quality: no corrected transcript sample"
@@ -609,29 +659,34 @@ def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             evidence_note = f"evidence_quality: unreadable sample ({exc})"
     escalation_policy = (
-        "reviews target <=3 lowest-confidence keeps; confidence<0.5 demotes+escalates; "
-        "escalated anchor ids = anchors overlapping demoted spans"
+        "fused video-understanding reviews precede the Director; keep with "
+        "overlapping fused confidence<0.5 demotes+escalates; escalated anchor "
+        "ids = anchors overlapping demoted spans"
         if arm == "B"
         else "none (arm A has no reviews)"
     )
-    notes = "; ".join(
-        [
-            (
-                "pipeline=real: DirectorV2 three-pass (codex-exec), kept_spans from "
-                "the committed selection"
-            ),
-            (
-                f"transport=codex-exec model={pin.model_id} codex_calls={counting.count} "
-                "(codex exec reports no token usage; provider_cost=null)"
-            ),
-            f"workspace={workspace}",
-            *result.notes,
-            FRAME_SPACE_NOTE,
-            f"escalation_policy: {escalation_policy}",
-            evidence_note,
-            f"wall_seconds={wall:.1f} (incl. analysis + gates)",
-        ]
-    )
+    note_rows = [
+        (
+            "pipeline=real: DirectorV2 three-pass (codex-exec), kept_spans from "
+            "the committed selection"
+        ),
+        (
+            f"transport=codex-exec model={pin.model_id} codex_calls={counting.count} "
+            "(codex exec reports no token usage; provider_cost=null)"
+        ),
+        f"workspace={workspace}",
+        *result.notes,
+        FRAME_SPACE_NOTE,
+        f"escalation_policy: {escalation_policy}",
+        evidence_note,
+        f"wall_seconds={wall:.1f} (incl. analysis + gates)",
+    ]
+    if arm == "B":
+        note_rows.append(
+            f"moment_review_pins: lead={lead_model} specialist={specialist_model} "
+            f"stage_costs_recorded={provider_cost is not None}"
+        )
+    notes = "; ".join(note_rows)
     commit_sha = _resolve_commit_sha()
     if arm == "A":
         report = run_arm_a(
@@ -651,6 +706,9 @@ def _run_real_arm(  # noqa: PLR0915 (arm wiring: transport + pins + report)
             analysis_provider_pin=analysis_pin,
             notes=notes,
             evidence_quality=evidence_quality,
+            moment_review_lead_pin=lead_model,
+            moment_review_specialist_pin=specialist_model,
+            video_understanding=video_metrics,
         ).report
     atomic_write(out_path, canonical_model_bytes(report))
     print(
@@ -709,10 +767,12 @@ def _cmd_record_operator_verdict(args: argparse.Namespace) -> int:
             editorial=report.editorial,
             progressive_lift=report.progressive_lift,
             evidence_quality=report.evidence_quality,
+            video_understanding=report.video_understanding,
             operator=new_operator,
             efficiency=report.efficiency,
             pass_policy=report.pass_policy,
             notes=report.notes,
+            summary=report.summary,
         )
     except ValidationError as exc:
         print(f"verdict revalidation failed: {exc}", file=sys.stderr)
@@ -720,6 +780,70 @@ def _cmd_record_operator_verdict(args: argparse.Namespace) -> int:
 
     atomic_write(report_path, canonical_model_bytes(updated))
     print(f"record-operator-verdict: {report_path} continuation={continuation_raw}")
+    return 0
+
+
+def _fmt_minutes(value: float | None) -> str:
+    return "not recorded" if value is None else f"{value:g} min"
+
+
+def _fmt_seconds(value: float | None) -> str:
+    return "not recorded" if value is None else f"{value:g} s"
+
+
+def _cmd_record_efficiency(args: argparse.Namespace) -> int:
+    from services.cli._v44_efficiency_record import (  # noqa: PLC0415
+        EfficiencyRecordError,
+        record_efficiency,
+    )
+    from services.cli._v44_finishing_build import (  # noqa: PLC0415
+        FinishingError,
+    )
+
+    report_path = Path(args.report)
+    episode_root = Path(args.episode_root)
+    observation_arg: str | None = getattr(args, "observation", None)
+    observation_path = Path(observation_arg) if observation_arg else None
+    try:
+        updated = record_efficiency(report_path, episode_root, observation_path)
+    except (EfficiencyRecordError, FinishingError) as exc:
+        code = getattr(exc, "code", type(exc).__name__)
+        print(f"record-efficiency failed: {code}: {exc}", file=sys.stderr)
+        return 2
+    atomic_write(report_path, canonical_model_bytes(updated))
+    eff = updated.efficiency
+    if eff is None:
+        print(
+            "record-efficiency failed: efficiency-block-missing — the updated "
+            "report carries no efficiency block",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"record-efficiency: active human time {_fmt_minutes(eff.aht_minutes)} "
+        f"(direct Resolve {_fmt_minutes(eff.direct_resolve_minutes)} is a "
+        f"subset, not added on top), wall clock {_fmt_seconds(eff.wall_clock_seconds)}, "
+        f"time to first rough preview {_fmt_seconds(eff.ttfrp_seconds)}"
+    )
+    missing = [
+        label
+        for label, value in (
+            ("time to first rough preview (run observe-v44-1)", eff.ttfrp_seconds),
+            ("active human time (record-time)", eff.aht_minutes),
+            (
+                "direct Resolve minutes (record-time --phase direct_resolve)",
+                eff.direct_resolve_minutes,
+            ),
+        )
+        if value is None
+    ]
+    if missing:
+        print(
+            "record-efficiency: still missing — Gate V44-2 stays blocked until "
+            f"recorded: {'; '.join(missing)}",
+            file=sys.stderr,
+        )
+    print(f"record-efficiency: {report_path} sha256={sha256_file(report_path)[:12]}")
     return 0
 
 
@@ -793,13 +917,34 @@ def _parser() -> argparse.ArgumentParser:
     )
     p_rec.add_argument("--comments", type=str, default=None, help="operator comments")
 
+    p_eff = sub.add_parser(
+        "record-efficiency",
+        help="carry finishing wall clock + time-log totals + observed TTFRP into the report",
+    )
+    p_eff.add_argument("--report", type=str, required=True, help="report path")
+    p_eff.add_argument(
+        "--episode-root",
+        type=str,
+        required=True,
+        help="episode dir (finishing report + time-log.jsonl)",
+    )
+    p_eff.add_argument(
+        "--observation",
+        type=str,
+        default=None,
+        help=(
+            "v44-1 observation.json path (TTFRP source; default "
+            "<episode-root>/observation.json; absent stays null)"
+        ),
+    )
+
     p_eval = sub.add_parser("evaluate", help="evaluate pass policy")
     p_eval.add_argument("--report", type=str, required=True, help="report path")
 
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: PLR0911 (subcommand dispatch)
     parser = _parser()
     args = parser.parse_args(argv)
     if args.command == "init-ground-truth":
@@ -810,6 +955,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_run_arm(args)
     if args.command == "record-operator-verdict":
         return _cmd_record_operator_verdict(args)
+    if args.command == "record-efficiency":
+        return _cmd_record_efficiency(args)
     if args.command == "evaluate":
         return _cmd_evaluate(args)
     parser.print_help()

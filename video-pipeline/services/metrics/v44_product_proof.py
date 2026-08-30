@@ -28,6 +28,10 @@ from pydantic_core import PydanticCustomError
 from services.contracts.primitives import Frame, Identifier, StrictModel
 from services.media_intelligence.moment_review import MomentDeepReviewV1  # noqa: TC001
 from services.media_intelligence.moment_review_real import require_real_lineage
+from services.metrics.v44_video_understanding_metrics import (
+    VideoUnderstandingMetrics,
+    compute_video_understanding_metrics,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -189,6 +193,12 @@ class RunIdentity(StrictModel):
     run_kind: RunKind
     model_pin: Annotated[str, Field(min_length=1, strict=True)]
     analysis_provider_pin: Annotated[str, Field(min_length=1, strict=True)]
+    # T8 additive: video-understanding lead (Gemini) and specialist (GLM)
+    # pin identifiers — model ids, null for runs without video understanding.
+    moment_review_lead_pin: str | None = Field(default=None, min_length=1, strict=True)
+    moment_review_specialist_pin: str | None = Field(
+        default=None, min_length=1, strict=True
+    )
 
 
 class EditorialMetrics(StrictModel):
@@ -242,10 +252,17 @@ class OperatorVerdict(StrictModel):
 
 
 class EfficiencyMetrics(StrictModel):
-    """Wall clock / AHT / provider cost (nullable)."""
+    """Wall clock / AHT / provider cost (nullable).
+
+    ``aht_minutes`` sums the five bootstrap active-human time-log
+    categories exactly once; ``direct_resolve_minutes`` reports the direct
+    Resolve subset and is never added into AHT a second time. Every field
+    stays null until truthfully recorded (PRD §19.4 / plan T8).
+    """
 
     wall_clock_seconds: Annotated[float, Field(ge=0, strict=True)] | None = None
     aht_minutes: Annotated[float, Field(ge=0, strict=True)] | None = None
+    direct_resolve_minutes: Annotated[float, Field(ge=0, strict=True)] | None = None
     ttfrp_seconds: Annotated[float, Field(ge=0, strict=True)] | None = None
     provider_cost: Annotated[float, Field(ge=0, strict=True)] | None = None
 
@@ -259,6 +276,9 @@ class PassPolicyBlock(StrictModel):
     require_operator_continuation_yes: bool = Field(default=True, strict=True)
     # B-lift OR operator verdict: at least one must be positive.
     require_b_lift_or_operator: bool = Field(default=True, strict=True)
+    # T8: the final Gate V44-2 report requires non-null wall clock, AHT,
+    # direct-Resolve, and TTFRP entries — null stays pending, never estimated.
+    require_efficiency_timing: bool = Field(default=False, strict=True)
 
 
 DEFAULT_PASS_POLICY: Final = PassPolicyBlock()
@@ -272,6 +292,7 @@ class ProductProofReportV1(StrictModel):
     editorial: EditorialMetrics | None = None
     progressive_lift: ProgressiveLift | None = None
     evidence_quality: EvidenceQualityMetrics | None = None
+    video_understanding: VideoUnderstandingMetrics | None = None
     operator: OperatorVerdict = Field(default_factory=OperatorVerdict)
     efficiency: EfficiencyMetrics | None = None
     pass_policy: PassPolicyBlock = Field(default_factory=PassPolicyBlock)
@@ -597,7 +618,7 @@ def compute_evidence_quality(
 _EPS: Final = 1e-9
 
 
-def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # noqa: C901
+def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # noqa: C901, PLR0912
     """Evaluate the frozen predeclared policy.
 
     Pending: any operator field is None -> pending_criteria lists those names,
@@ -622,6 +643,29 @@ def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # n
     if report.operator.publishability is None:
         pending.append("operator_publishability")
     # comments is optional — not pending
+    # The final consolidated report requires timing UNCONDITIONALLY (a
+    # payload cannot bypass T8 by leaving the policy flag false); non-final
+    # kinds keep the historical optional semantics unless their explicit
+    # policy requires timing.
+    timing_required = (
+        report.run.run_kind == "v44-consolidated"
+        or report.pass_policy.require_efficiency_timing
+    )
+    if timing_required:
+        eff = report.efficiency
+        timing_entries: tuple[tuple[str, object], ...] = (
+            (
+                "efficiency_wall_clock_seconds",
+                None if eff is None else eff.wall_clock_seconds,
+            ),
+            ("efficiency_aht_minutes", None if eff is None else eff.aht_minutes),
+            (
+                "efficiency_direct_resolve_minutes",
+                None if eff is None else eff.direct_resolve_minutes,
+            ),
+            ("efficiency_ttfrp_seconds", None if eff is None else eff.ttfrp_seconds),
+        )
+        pending.extend(name for name, value in timing_entries if value is None)
 
     failed: list[str] = []
 
@@ -726,6 +770,9 @@ def _build_report_from_context(  # noqa: PLR0913
     evidence_quality: EvidenceQualityMetrics | None = None,
     efficiency_wall_clock: float | None = None,
     notes: str | None = None,
+    moment_review_lead_pin: str | None = None,
+    moment_review_specialist_pin: str | None = None,
+    video_understanding: VideoUnderstandingMetrics | None = None,
 ) -> ProductProofReportV1:
     editorial = compute_editorial_metrics(
         ctx.ground_truth.anchors, ctx.kept_spans, ctx.escalated_ids
@@ -744,10 +791,13 @@ def _build_report_from_context(  # noqa: PLR0913
             run_kind=run_kind,
             model_pin=model_pin,
             analysis_provider_pin=analysis_provider_pin,
+            moment_review_lead_pin=moment_review_lead_pin,
+            moment_review_specialist_pin=moment_review_specialist_pin,
         ),
         editorial=editorial,
         progressive_lift=progressive_lift,
         evidence_quality=evidence_quality,
+        video_understanding=video_understanding,
         operator=OperatorVerdict(),
         efficiency=efficiency,
         pass_policy=PassPolicyBlock(),
@@ -800,6 +850,9 @@ def run_arm_b(  # noqa: PLR0913
     analysis_provider_pin: str = "test-analysis",
     notes: str | None = None,
     evidence_quality: EvidenceQualityMetrics | None = None,
+    moment_review_lead_pin: str | None = None,
+    moment_review_specialist_pin: str | None = None,
+    video_understanding: VideoUnderstandingMetrics | None = None,
 ) -> ArmResult:
     """Arm B: same as A plus progressive real deep reviews.
 
@@ -807,6 +860,8 @@ def run_arm_b(  # noqa: PLR0913
     """
     # Gate: real lineage only
     require_real_lineage(deep_reviews)
+    if video_understanding is None:
+        video_understanding = compute_video_understanding_metrics(deep_reviews)
     report = _build_report_from_context(
         ctx,
         commit_sha=commit_sha,
@@ -816,6 +871,9 @@ def run_arm_b(  # noqa: PLR0913
         evidence_quality=evidence_quality,
         efficiency_wall_clock=ctx.wall_clock_seconds,
         notes=notes,
+        moment_review_lead_pin=moment_review_lead_pin,
+        moment_review_specialist_pin=moment_review_specialist_pin,
+        video_understanding=video_understanding,
     )
     return ArmResult(report=report, deep_reviews=tuple(deep_reviews))
 
@@ -904,9 +962,12 @@ def build_progressive_report(
 ) -> ProductProofReportV1:
     """Merge A and B into a consolidated report with lift deltas.
 
-    The consolidated run_kind is v44-0; editorial is B's editorial (the
-    progressive result); progressive_lift holds the deltas. Operator and
-    efficiency are carried from B if present, else A.
+    The consolidated run_kind is v44-consolidated — the FINAL report kind
+    whose pass policy unconditionally requires wall clock, AHT,
+    direct-Resolve, and TTFRP (a payload cannot bypass T8 by leaving the
+    timing policy flag false). Editorial is B's editorial (the progressive
+    result); progressive_lift holds the deltas. Operator and efficiency
+    are carried from B if present, else A.
     """
     if report_a.editorial is None or report_b.editorial is None:
         raise ValueError("build_progressive_report requires editorial metrics")
@@ -934,13 +995,16 @@ def build_progressive_report(
         run=RunIdentity(
             episode_id=report_b.run.episode_id,
             commit_sha=report_b.run.commit_sha,
-            run_kind="v44-0",
+            run_kind="v44-consolidated",
             model_pin=report_b.run.model_pin,
             analysis_provider_pin=report_b.run.analysis_provider_pin,
+            moment_review_lead_pin=report_b.run.moment_review_lead_pin,
+            moment_review_specialist_pin=report_b.run.moment_review_specialist_pin,
         ),
         editorial=report_b.editorial,
         progressive_lift=lift,
         evidence_quality=evidence,
+        video_understanding=report_b.video_understanding,
         operator=operator,
         efficiency=efficiency,
         pass_policy=report_b.pass_policy,
@@ -974,6 +1038,7 @@ __all__ = [
     "RunKind",
     "TranscriptSampleV1",
     "TranscriptSegment",
+    "VideoUnderstandingMetrics",
     "build_progressive_report",
     "catastrophic_removal_count",
     "cer",

@@ -1,17 +1,21 @@
-"""The REAL V44-0 arm pipeline: chain stages → DirectorV2 → commit → reviews.
+"""The REAL V44-0 arm pipeline: chain stages → video understanding →
+DirectorV2 → the single commit → fused-evidence escalation.
 
-Task-14 execution enabler. Wraps (never forks) the existing chain machinery
-(chain stages via ``v44_arm_stages``), then drives the production editorial path: the
-speech-segment MI artifact → v2 index → ``DirectorV2().run_three_pass`` over
-an INJECTED ``llm_call`` (codex-exec in production, fakes in tests) → the
-existing ``validate_proposal``/``commit_selection`` authority → arm-B
-targeted real Moment Deep Reviews via T4's ``execute_real_review`` with an
-injected assessment provider.
+Task-14 execution enabler, reordered for T7: wraps (never forks) the existing
+chain machinery (``v44_arm_stages``), then drives the production editorial
+path in the corrected order — speech-segment MI artifact → v2 index →
+full-source video understanding (T6) → the SAME index rebuilt with the fused
+``MomentDeepReviewV1`` reviews → ``DirectorV2().run_three_pass`` over an
+INJECTED ``llm_call`` (codex-exec in production, fakes in tests) → the
+existing ``validate_proposal``/``commit_selection`` authority (exactly one
+commit) → the existing explicit escalation semantics over keeps whose fused
+review confidence falls below the threshold.
 
 Honesty contract: kept spans come ONLY from the committed selection
-proposal; a director refusal or validation failure IS the result (typed,
-never a fallback). Every model-facing artifact lands under the arm
-workspace for spot-checks.
+proposal; a video-understanding coverage/fusion failure, a synthetic fused
+lineage, a director refusal, or a validation failure IS the result (typed,
+never a fallback, and never a commit). Every model-facing artifact lands
+under the arm workspace for spot-checks.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ from services.cli.v44_arm_stages import (
     run_arm_stages,
 )
 from services.editorial_v2.director_v2 import DirectorV2
-from services.editorial_v2.evidence_v2 import assemble_evidence_v2
+from services.editorial_v2.evidence_v2 import EvidenceBundleV2, assemble_evidence_v2
 from services.editorial_v2.proposal_validate import (
     MomentSelectionStore,
     commit_selection,
@@ -37,59 +41,52 @@ from services.editorial_v2.proposal_validate import (
     validate_proposal,
 )
 from services.foundation_io import atomic_write, canonical_model_bytes
-from services.media_intelligence.moment_review import (
-    MomentDeepReviewV1,
-    NeighboringContext,
-    ReviewExecutionContext,
-    ReviewWindow,
-)
-from services.media_intelligence.moment_review_real import (
-    AssessmentPinSummary,
-    RealAudioContext,
-    RealFrameExtractor,
-    RealReviewProviders,
-    RealReviewSetup,
-    RealTranscriptLookup,
-    execute_real_review,
-    require_real_lineage,
+from services.media_intelligence.moment_review_real import require_real_lineage
+from services.media_intelligence.video_understanding import (
+    VideoUnderstandingDeps,
+    VideoUnderstandingRequest,
+    run_video_understanding,
 )
 from services.media_query.index_v2 import build_index
 from services.media_query.query_v2 import MediaQueryApiV2
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from services.editorial_v2.director_v2 import LlmCallV2, ThreePassResult
     from services.editorial_v2.episode_brief import EpisodeBriefV1
     from services.editorial_v2.moment_models import MomentCandidateV2
     from services.editorial_v2.proposal_validate import CommitReceipt
-    from services.media_intelligence.moment_review_real import AssessmentProvider
+    from services.media_intelligence.moment_review import MomentDeepReviewV1
 
-#: Arm-B escalation policy: a kept candidate whose deep-review confidence
-#: falls below this is DEMOTED from the kept spans and ESCALATED (recorded,
-#: never silently kept nor silently dropped).
+#: Arm-B escalation policy: a kept candidate whose OVERLAPPING fused review
+#: confidence falls below this is DEMOTED from the kept spans and ESCALATED
+#: (recorded, never silently kept nor silently dropped). T7 moves the
+#: evidence BEFORE the Director; the policy application stays explicit.
 ESCALATE_BELOW: Final = 0.5
-#: Reviews target the LOWEST-CONFIDENCE keeps (the borderline windows).
-MAX_REVIEWS: Final = 3
-_CANDIDATE_PREFIX: Final = "cand-"
 
-
-
-
+#: Builds the video-understanding wiring once the chain stages produced the
+#: mezzanine and the speech index exists (tests inject a constant factory).
+type VideoUnderstandingFactory = Callable[
+    [ArmPipelineData, MediaQueryApiV2], VideoUnderstandingDeps
+]
 
 
 @dataclass(frozen=True, slots=True)
 class ArmPipelineInputs:
-    """One arm run's wiring; everything model- or media-bound is injected."""
+    """One arm run's wiring; everything model- or media-bound is injected.
+
+    ``video_understanding=None`` is Arm A (baseline, no fused evidence); a
+    factory turns the run into the corrected Arm B — fused evidence is then
+    REQUIRED for every Director keep.
+    """
 
     episode_root: Path
     workspace: Path
     episode_id: str
     brief: EpisodeBriefV1
     llm_call: LlmCallV2
-    assessment: AssessmentProvider | None = None
-    assessment_pin: tuple[str, str] = ("codex-exec", "gpt-5.6-sol")
-    review_providers: RealReviewProviders | None = None
+    video_understanding: VideoUnderstandingFactory | None = None
     analysis: ArmPipelineData | None = None
 
 
@@ -110,8 +107,6 @@ class ArmPipelineResult:
     notes: tuple[str, ...] = ()
 
 
-
-
 def _persist_drafts(
     workspace: Path, result: ThreePassResult, artifact_bytes: bytes
 ) -> None:
@@ -126,86 +121,51 @@ def _persist_drafts(
     atomic_write(workspace / "media-intelligence.json", artifact_bytes)
 
 
-def _shot_id_of(candidate_id: str) -> str:
-    return candidate_id.removeprefix(_CANDIDATE_PREFIX)
+def _fused_reviews(
+    inputs: ArmPipelineInputs, data: ArmPipelineData, deps: VideoUnderstandingDeps
+) -> tuple[MomentDeepReviewV1, ...]:
+    """Full-source map → reduce → specialist → fusion; synthetic lineages
+    and coverage failures refuse here, BEFORE any Director proposal."""
 
-
-def _run_reviews(
-    inputs: ArmPipelineInputs,
-    data: ArmPipelineData,
-    api: MediaQueryApiV2,
-    kept_candidates: Sequence[MomentCandidateV2],
-) -> tuple[tuple[MomentDeepReviewV1, ...], tuple[str, ...]]:
-    """Targeted real deep reviews on the lowest-confidence keeps."""
-
-    by_time = sorted(
-        kept_candidates, key=lambda c: (c.source_span.start_frame, c.candidate_id)
-    )
-    targets = sorted(
-        kept_candidates,
-        key=lambda c: (c.confidence, c.source_span.start_frame),
-    )[:MAX_REVIEWS]
-    if inputs.assessment is None or not targets:
-        return (), ()
-    providers = inputs.review_providers
-    if providers is None:
-        if data.mezzanine is None or data.mezzanine_sha256 is None:
-            raise ArmPipelineError(
-                "review_media_missing", "arm B review providers need the mezzanine"
-            )
-        providers = RealReviewProviders(
-            frames=RealFrameExtractor(
-                media_path=data.mezzanine,
-                media_sha256=data.mezzanine_sha256,
-                analysis_dir=inputs.workspace / "moment-review",
-            ),
-            transcripts=RealTranscriptLookup(api=api, source_id=data.source_id),
-            audio=RealAudioContext(api=api),
+    boundaries = tuple(
+        sorted(
+            {
+                frame
+                for segment in data.speech
+                for frame in (int(segment.start_frame), int(segment.end_frame))
+            }
         )
-    provider, model_id = inputs.assessment_pin
-    setup = RealReviewSetup(
-        providers=providers,
-        assessment=inputs.assessment,
-        pin=AssessmentPinSummary(provider=provider, model_id=model_id),
-        brief_context=inputs.brief.viewer_promise,
     )
-    known = frozenset(_shot_id_of(str(c.candidate_id)) for c in kept_candidates)
-    position_of = {str(c.candidate_id): index for index, c in enumerate(by_time)}
-    reviews: list[MomentDeepReviewV1] = []
-    escalated: list[str] = []
+    request = VideoUnderstandingRequest(
+        episode_id=data.episode_id,
+        source_duration_frames=data.total_frames,
+        known_shot_ids=frozenset(segment.segment_id for segment in data.speech),
+        speech_boundaries=boundaries,
+    )
+    reviews = run_video_understanding(request, deps).reviews
+    require_real_lineage(reviews)
     review_dir = inputs.workspace / "moment-review"
-    for candidate in targets:
-        position = position_of[str(candidate.candidate_id)]
-        window = ReviewWindow(
-            start_frame=candidate.source_span.start_frame,
-            end_frame=min(candidate.source_span.end_frame, data.total_frames),
+    for review in reviews:
+        atomic_write(review_dir / f"{review.review_id}.json", canonical_model_bytes(review))
+    return reviews
+
+
+def _unconfirmed_keeps(
+    bundle: EvidenceBundleV2, kept: Sequence[MomentCandidateV2]
+) -> tuple[str, ...]:
+    """Keeps whose overlapping fused review confidence is below the
+    threshold; every keep has a bundle entry (validation proved it)."""
+
+    by_id = {entry.candidate_id: entry for entry in bundle.entries}
+    escalated: list[str] = []
+    for candidate in kept:
+        confidences = tuple(
+            citation.overall_confidence
+            for citation in by_id[candidate.candidate_id].moment_reviews
         )
-        neighbors = NeighboringContext(
-            prev_shot_id=_shot_id_of(str(by_time[position - 1].candidate_id))
-            if position > 0
-            else None,
-            next_shot_id=_shot_id_of(str(by_time[position + 1].candidate_id))
-            if position + 1 < len(by_time)
-            else None,
-        )
-        review = execute_real_review(
-            window,
-            setup,
-            context=ReviewExecutionContext(
-                episode_id=data.episode_id,  # type: ignore[arg-type]
-                source_duration_frames=data.total_frames,  # type: ignore[arg-type]
-                known_shot_ids=known,
-                neighbors=neighbors,
-            ),
-        )
-        reviews.append(review)
-        atomic_write(
-            review_dir / f"{review.review_id}.json", canonical_model_bytes(review)
-        )
-        if float(review.confidence.overall) < ESCALATE_BELOW:
+        if confidences and min(confidences) < ESCALATE_BELOW:
             escalated.append(str(candidate.candidate_id))
-    require_real_lineage(tuple(reviews))
-    return tuple(reviews), tuple(escalated)
+    return tuple(escalated)
 
 
 def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
@@ -226,9 +186,24 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
     index_path = inputs.workspace / "media-intelligence.duckdb"
     build_index(artifact, index_path)
     notes = [f"speech_shots={len(data.speech)}", f"proper_noun_substitutions={noun_edits}"]
+    fused: tuple[MomentDeepReviewV1, ...] = ()
+    if inputs.video_understanding is not None:
+        # The factory's RealTranscriptLookup/RealAudioContext hold THIS api;
+        # the fused reviews must run while the connection is still open
+        # (measured 2026-08-30: closing here killed the real Arm B run).
+        with MediaQueryApiV2.open(index_path) as speech_api:
+            deps = inputs.video_understanding(data, speech_api)
+            fused = _fused_reviews(inputs, data, deps)
+        build_index(artifact, index_path, reviews=fused)
+        notes.append(f"fused_reviews={len(fused)}")
     with MediaQueryApiV2.open(index_path) as api:
         three = DirectorV2().run_three_pass(
-            inputs.brief, api, taste_profile=None, llm_call=inputs.llm_call
+            inputs.brief,
+            api,
+            taste_profile=None,
+            llm_call=inputs.llm_call,
+            source_id=data.source_id,
+            require_deep_review_keeps=inputs.video_understanding is not None,
         )
         proposal = three.moment_selection.proposal
         bundle = assemble_evidence_v2(api, proposal.candidates, source_id=data.source_id)
@@ -237,10 +212,7 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
         initialize_moment_store(store, episode_id=data.episode_id)
         receipt: CommitReceipt = commit_selection(proposal, validation, store=store)
         kept = [c for c in proposal.candidates if c.intent == "keep"]
-        reviews: tuple[MomentDeepReviewV1, ...] = ()
-        escalated: tuple[str, ...] = ()
-        if inputs.assessment is not None:
-            reviews, escalated = _run_reviews(inputs, data, api, kept)
+        escalated = _unconfirmed_keeps(bundle, kept)
     _persist_drafts(inputs.workspace, three, canonical_model_bytes(artifact))
     escalated_set = set(escalated)
     kept_after = [c for c in kept if str(c.candidate_id) not in escalated_set]
@@ -254,8 +226,8 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
     )
     if escalated:
         notes.append(
-            f"arm_b_escalation: {len(escalated)} keep(s) demoted+escalated at review "
-            f"confidence < {ESCALATE_BELOW} ({', '.join(escalated)})"
+            f"arm_b_escalation: {len(escalated)} keep(s) demoted+escalated at fused "
+            f"review confidence < {ESCALATE_BELOW} ({', '.join(escalated)})"
         )
     notes.append(f"commit_version=v{receipt.version} proposal={proposal.proposal_id}")
     return ArmPipelineResult(
@@ -263,7 +235,7 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
         kept_candidate_ids=tuple(str(c.candidate_id) for c in kept_after),
         escalated_candidate_ids=escalated,
         escalated_spans_mezz=escalated_spans,
-        reviews=reviews,
+        reviews=fused,
         commit_version=receipt.version,
         proposal_id=str(proposal.proposal_id),
         candidate_count=len(proposal.candidates),
@@ -275,11 +247,11 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
 
 __all__ = [
     "ESCALATE_BELOW",
-    "MAX_REVIEWS",
     "ArmPipelineData",
     "ArmPipelineError",
     "ArmPipelineInputs",
     "ArmPipelineResult",
+    "VideoUnderstandingFactory",
     "run_arm_pipeline",
     "run_arm_stages",
 ]

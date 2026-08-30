@@ -543,11 +543,12 @@ def _input_ref(path: Path) -> ArtifactFileRef:
     return ArtifactFileRef(path=str(path), sha256=sha256_file(path))
 
 
-def _stage_director(
+def _stage_director(  # noqa: PLR0913 (director wiring: brief + api + the keyword-only seams)
     brief: EpisodeBriefV1,
     api: MediaQueryApiV2,
     taste: DerivedTasteProfileV1 | None,
     *,
+    source_id: str,
     runtime_path: Path = EDITORIAL_RUNTIME_PATH,
     env: Mapping[str, str] | None = None,
 ) -> ThreePassResult:
@@ -604,7 +605,9 @@ def _stage_director(
             "editorial runtime: heuristic_diagnostic mode — llm_call=None "
             "(deterministic diagnostic planner; NOT a production editorial result)"
         )
-    return DirectorV2().run_three_pass(brief, api, taste_profile=taste, llm_call=llm_call)
+    return DirectorV2().run_three_pass(
+        brief, api, taste_profile=taste, llm_call=llm_call, source_id=source_id
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -781,7 +784,9 @@ def _run_editorial_stages(inputs: _RunInputs) -> _EditorialOutcome:
             source_id=artifact.sources[0].source_id,
             store=MomentSelectionStore(plan_dir=inputs.run_dir / "moment-selection"),
         )
-        result = _stage_director(brief, api, taste, runtime_path=inputs.editorial_runtime)
+        result = _stage_director(
+            brief, api, taste, source_id=deps.source_id, runtime_path=inputs.editorial_runtime
+        )
         committed = _stage_commit(deps, result)
         corrected, correction_receipt, corrected_id = _stage_correct(deps, result, committed)
         compile_outcome = _stage_compile(deps, result, corrected)
@@ -1004,10 +1009,17 @@ def _probe_live_executor(pin_path: Path) -> McpTransportFn:
             f"{pin_path}), then rerun. The full-build run was NOT started.",
         ) from exc
 
-    def executor(tool_name: str, action: str, normalized_params: Mapping[str, object]) -> object:
+    def executor(
+        tool_name: str,
+        action: str,
+        normalized_params: Mapping[str, object],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> object:
         response = client.transport.request(
             "tools/call",
             {"name": tool_name, "arguments": {"action": action, "params": dict(normalized_params)}},
+            timeout_seconds=timeout_seconds,
         )
         result = response.get("result") if isinstance(response, dict) else None
         envelope = result if isinstance(result, dict) else {}
@@ -1041,6 +1053,8 @@ class _SyntheticPlanExecutor:
         tool_name: str,
         action: str,
         normalized_params: Mapping[str, object],  # noqa: ARG002 (protocol shape)
+        *,
+        timeout_seconds: float | None = None,  # noqa: ARG002 (protocol shape)
     ) -> object:
         queue = self._queues.get(action)
         if not queue:
