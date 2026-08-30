@@ -1,0 +1,1 @@
+{"api_surface":"openai-compatible-chat-completions-v4-coding-plan","endpoint":"https://api.z.ai/api/coding/paas/v4/chat/completions","external_credentials":["ZAI_API_KEY"],"model_id":"glm-5v-turbo","network_env":"ZAI_NETWORK_ENABLED","purpose":"moment-review-glm-visual","schema_version":"editorial-pin-v2","structured_output_schemas":null}
