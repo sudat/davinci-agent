@@ -1,0 +1,35 @@
+{
+  "episode_id": "v44-real-01",
+  "ground_truths": {
+    "v1": {
+      "file": "ground-truth-v1.json",
+      "label_counts": {
+        "good_optional": 0,
+        "must_keep": 75,
+        "must_remove": 2,
+        "uncertain": 0
+      },
+      "sha256": "c87a4f6298d0dacbc5762f5be440586084305110c60ba8fd2edbd00674aab7b6"
+    },
+    "v2": {
+      "file": "ground-truth-v2.json",
+      "label_counts": {
+        "good_optional": 0,
+        "must_keep": 77,
+        "must_remove": 0,
+        "uncertain": 0
+      },
+      "sha256": "9af2802d0d1393f431fba38ab093ab22fedf707e740cb17dbfa5563aa6cec4b5"
+    }
+  },
+  "operator_decision_date": "2026-08-30",
+  "reference_reports": {
+    "arm-A-r3": {
+      "sha256": "a35ccc17174aad6a8d91dfd1a79b06da3a2a25ebbfbe34e103b1cc1971391692"
+    },
+    "arm-B-r3": {
+      "sha256": "af1a8df8d9e8277bca85344310e0c405f7a7b29c1c0630b7bb8a21cdb1bfc859"
+    }
+  },
+  "schema_version": "v44-truth-freeze-v1"
+}
