@@ -19,57 +19,21 @@ import signal
 import subprocess
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import IO, TYPE_CHECKING, Final, Self
+from typing import IO, Final, Self
 
 from services.mcp_client.errors import McpJsonRpcError, McpTimeoutError, McpTransportError
-
-if TYPE_CHECKING:
-    from services.toolchain.mcp_pin import McpPin
+from services.mcp_client.transport_config import (
+    DEFAULT_KILL_GRACE_SECONDS,
+    DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    DEFAULT_SURFACE_COVERAGE_DIR,
+    PinSurfaceContext,
+    StdioTransportConfig,
+)
 
 JSONRPCMessage = dict[str, object]
 
-DEFAULT_REQUEST_TIMEOUT_SECONDS: Final = 10.0
-DEFAULT_KILL_GRACE_SECONDS: Final = 5.0
 _READ_CHUNK_BYTES: Final = 65536
 _INTERNAL_ERROR_CODE: Final = -32603
-
-
-@dataclass(frozen=True, slots=True)
-class StdioTransportConfig:
-    """Injectable launch spec for the server subprocess."""
-
-    command: tuple[str, ...]
-    cwd: Path | None = None
-    extra_env: Mapping[str, str] = field(default_factory=dict)
-    request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
-    kill_grace_seconds: float = DEFAULT_KILL_GRACE_SECONDS
-
-    @classmethod
-    def from_pin(
-        cls,
-        pin: McpPin,
-        *,
-        clone_dir: Path | None = None,
-        request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    ) -> StdioTransportConfig:
-        """Build the launch spec from the pin contract (task 2).
-
-        ``clone_dir`` defaults to the pinned venv's grandparent directory
-        (``<clone>/venv/bin/python`` -> ``<clone>``), the layout the pin
-        records; pass it explicitly for any other deployment.
-        """
-        venv_python = Path(pin.venv_python)
-        resolved_clone_dir = (
-            clone_dir if clone_dir is not None else venv_python.parent.parent.parent
-        )
-        return cls(
-            command=(pin.venv_python, pin.server_entry_point),
-            cwd=resolved_clone_dir,
-            extra_env={"DAVINCI_RESOLVE_MCP_UPDATE_CHECK": "0"},
-            request_timeout_seconds=request_timeout_seconds,
-        )
 
 
 class StdioJsonRpcTransport:
@@ -86,6 +50,11 @@ class StdioJsonRpcTransport:
         self._stdout: IO[bytes] | None = None
         self._next_request_id = 1
         self._closed = False
+
+    @property
+    def config(self) -> StdioTransportConfig:
+        """The launch spec (including any pin surface context) this transport owns."""
+        return self._config
 
     @property
     def process(self) -> subprocess.Popen[bytes] | None:
@@ -263,10 +232,14 @@ class StdioJsonRpcTransport:
 
 
 __all__ = [
+    "DEFAULT_KILL_GRACE_SECONDS",
+    "DEFAULT_REQUEST_TIMEOUT_SECONDS",
+    "DEFAULT_SURFACE_COVERAGE_DIR",
     "JSONRPCMessage",
     "McpJsonRpcError",
     "McpTimeoutError",
     "McpTransportError",
+    "PinSurfaceContext",
     "StdioJsonRpcTransport",
     "StdioTransportConfig",
 ]

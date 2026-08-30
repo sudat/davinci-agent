@@ -8,11 +8,13 @@ surface parses real wire shapes instead of trusting console claims.
 
 from __future__ import annotations
 
+import json
 import sys
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from services.mcp_client.client import McpClient
 from services.mcp_client.ops import McpOps
@@ -105,3 +107,307 @@ def test_resolve_version_uses_live_shape(ops: McpOps) -> None:
     report = ops.client.resolve_get_version()
     assert report.version_string == "21.0.4.5"
     assert report.mcp.update.update_mode == "never"
+
+
+# ---------------------------------------------------------------------------
+# Task 4: subtitle-construction ops (wire shapes recorded by the live probe
+# under capabilities/v4.4/probes/task4-native-subtitle, Resolve 21.0.4.5).
+# ---------------------------------------------------------------------------
+
+#: Responses captured from the probe ledger for one cue's creation flow.
+_TASK4_WIRE: dict[tuple[str, str], object] = {
+    ("timeline", "get_track_count"): {"count": 1, "success": True},
+    ("timeline", "add_track"): {"success": True},
+    (
+        "timeline",
+        "get_items_in_track",
+    ): {
+        "items": [
+            {
+                "name": "probe-t4sub-tl-cue-c1",
+                "id": "247eb5d3-4d15-47c9-90f9-229b78a13882",
+                "start": 108015,
+                "end": 108045,
+                "duration": 30,
+            }
+        ]
+    },
+    ("timeline", "insert_fusion_title"): {"success": True},
+    (
+        "fusion_comp",
+        "safe_set_inputs",
+    ): {
+        "success": True,
+        "tool_name": "Template",
+        "results": {
+            "StyledText": {
+                "success": True,
+                "value": "PROBE-CUE-1 今日はDaVinci Resolveの使い方を紹介します",
+            },
+            "Size": {"success": True, "value": 0.08},
+            "Center": {"success": True, "value": {"1": 0.5, "2": 0.9}},
+        },
+    },
+    (
+        "fusion_comp",
+        "get_text_plus",
+    ): {
+        "tool_name": "Template",
+        "input_name": "StyledText",
+        "text": "PROBE-CUE-1 今日はDaVinci Resolveの使い方を紹介します",
+    },
+    ("fusion_comp", "get_input"): {"value": "Hiragino Sans W3"},
+    ("timeline", "get_media_pool_item"): {
+        "name": "probe-t4sub-tl-cue-c1",
+        "id": "3d159a0f-55f5-4635-a7d8-facd7f5fba58",
+    },
+    (
+        "timeline",
+        "subtitle_generation_probe",
+    ): {"would_generate": True, "settings": {"language": "auto"}, "success": True},
+}
+
+
+class _ProbeWireTransport(StdioJsonRpcTransport):
+    """In-process transport answering from recorded probe wire shapes."""
+
+    def __init__(self, wire: Mapping[tuple[str, str], object]) -> None:
+        # Manual (non-pin) config: in-process wire transport, never spawned.
+        super().__init__(StdioTransportConfig(command=("in-process-wire",)))
+        self._wire = dict(wire)
+
+    def start(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def send_notification(
+        self, method: str, params: Mapping[str, object] | None = None
+    ) -> None:
+        pass
+
+    def request(
+        self,
+        method: str,
+        params: Mapping[str, object] | None = None,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> dict[str, object]:
+        if method != "tools/call" or params is None:
+            return {}
+        name = str(params.get("name"))
+        arguments = params.get("arguments")
+        action = str(arguments.get("action", "")) if isinstance(arguments, dict) else ""
+        canned = self._wire.get((name, action))
+        if canned is None:
+            canned = {
+                "error": {
+                    "message": f"unknown action: {action}",
+                    "code": "UNKNOWN_ACTION",
+                }
+            }
+        text = json.dumps(canned)
+        return {"result": {"content": [{"type": "text", "text": text}], "isError": False}}
+
+
+@pytest.fixture
+def task4_ops() -> Generator[McpOps, None, None]:
+    client = McpClient(_ProbeWireTransport(_TASK4_WIRE))
+    yield McpOps(client)
+    client.close()
+
+
+def test_subtitle_construction_ops_parse_probe_wire_shapes(task4_ops: McpOps) -> None:
+    count = task4_ops.get_track_count("video")
+    assert count.ok is True
+    assert count.count == 1
+
+    added = task4_ops.add_video_track()
+    assert added.ok is True
+
+    items = task4_ops.get_items_in_track("video", 2)
+    assert items.ok is True
+    assert len(items.items) == 1
+    assert items.items[0].start == 108015
+    assert items.items[0].end == 108045
+    assert items.items[0].duration == 30
+
+    title = task4_ops.insert_fusion_title("Text+")
+    assert title.ok is True
+
+    inputs = task4_ops.set_fusion_inputs(
+        "Template",
+        {"StyledText": "PROBE-CUE-1 今日はDaVinci Resolveの使い方を紹介します", "Size": 0.08},
+    )
+    assert inputs.ok is True
+    assert inputs.tool_name == "Template"
+    styled = inputs.results["StyledText"]
+    assert styled.success is True
+    assert styled.value == "PROBE-CUE-1 今日はDaVinci Resolveの使い方を紹介します"
+
+    text = task4_ops.get_text_plus("Template")
+    assert text.ok is True
+    assert text.tool_name == "Template"
+    assert text.text == "PROBE-CUE-1 今日はDaVinci Resolveの使い方を紹介します"
+
+    font = task4_ops.get_fusion_input("Template", "Font")
+    assert font.ok is True
+    assert font.value == "Hiragino Sans W3"
+
+    mpi = task4_ops.current_timeline_media_pool_item()
+    assert mpi.ok is True
+    assert mpi.id == "3d159a0f-55f5-4635-a7d8-facd7f5fba58"
+
+
+def test_probe_generation_echo_parses_and_unknown_action_stays_typed(
+    task4_ops: McpOps,
+) -> None:
+    probe = task4_ops.subtitle_generation_probe()
+    assert probe.ok is True
+    assert probe.would_generate is True
+    assert probe.settings == {"language": "auto"}
+
+    empty_wire = McpOps(McpClient(_ProbeWireTransport({})))
+    unknown = empty_wire.set_fusion_inputs("Template", {"StyledText": "x"})
+    assert unknown.ok is False
+    assert unknown.error is not None
+    assert unknown.error.code == "UNKNOWN_ACTION"
+
+
+# mcp-complete-parity Task 5 — Fairlight preset + probe-render wire shapes
+# (measured live on Resolve 21.0.4.5 / pinned 2.98.3: presets listing is a
+# JSON array, the EMPTY MAPPING when the host saved none, or — after the
+# operator saved presets — an INDEX-KEYED MAPPING {"0": "<name>", ...} in
+# list order; a missing preset apply answers {"success": false} with no
+# error envelope).
+
+_TASK5_WIRE: Mapping[tuple[str, str], object] = {
+    ("resolve_control", "get_fairlight_presets"): {
+        "presets": ["dialogue-chain", "music-bed"],
+        "success": True,
+    },
+    ("project_settings", "apply_fairlight_preset"): {
+        "success": True,
+        "preset_name": "dialogue-chain",
+    },
+    ("render", "prepare_render_job"): {"success": True, "job_id": "job-t5-9"},
+    ("render", "get_job_status"): {
+        "CompletionPercentage": 100.0,
+        "IsRenderingInProgress": False,
+        "JobStatus": "Complete",
+        "success": True,
+    },
+}
+
+
+@pytest.fixture
+def task5_ops() -> Generator[McpOps, None, None]:
+    client = McpClient(_ProbeWireTransport(_TASK5_WIRE))
+    yield McpOps(client)
+    client.close()
+
+
+def _wire_ops(wire: Mapping[tuple[str, str], object]) -> McpOps:
+    return McpOps(McpClient(_ProbeWireTransport(dict(wire))))
+
+
+def test_task5_audio_ops_parse_probe_wire_shapes(task5_ops: McpOps) -> None:
+    listed = task5_ops.fairlight_presets()
+    assert listed.ok is True
+    assert listed.presets == ("dialogue-chain", "music-bed")
+
+    applied = task5_ops.apply_fairlight_preset("dialogue-chain")
+    assert applied.ok is True
+    assert applied.preset_name == "dialogue-chain"
+
+    job = task5_ops.render_prepare_job(str(Path("/Users") / "t5-render"), "audio-probe")
+    assert job.ok is True
+    assert job.job_id == "job-t5-9"
+
+    status = task5_ops.render_job_status("job-t5-9")
+    assert status.completion_percentage == 100.0
+    assert status.is_rendering_in_progress is False
+
+
+def test_fairlight_listing_parses_the_measured_empty_mapping() -> None:
+    empty = _wire_ops(
+        {("resolve_control", "get_fairlight_presets"): {"presets": {}, "success": True}}
+    )
+    listed = empty.fairlight_presets()
+    assert listed.ok is True
+    assert listed.presets == ()
+
+
+def test_fairlight_apply_false_stays_not_ok_without_error_envelope() -> None:
+    refusing = _wire_ops(
+        {("project_settings", "apply_fairlight_preset"): {"success": False}}
+    )
+    refused = refusing.apply_fairlight_preset("no-such-preset")
+    assert refused.ok is False
+    assert refused.error is None
+
+
+def test_fairlight_unobserved_listing_shape_fails_loud() -> None:
+    drifted = _wire_ops(
+        {
+            ("resolve_control", "get_fairlight_presets"): {
+                "presets": {"dialogue": {"amount": 3}},
+                "success": True,
+            }
+        }
+    )
+    with pytest.raises(ValidationError):
+        drifted.fairlight_presets()
+
+
+def test_fairlight_listing_parses_the_live_saved_preset_indexed_mapping() -> None:
+    saved = _wire_ops(
+        {
+            ("resolve_control", "get_fairlight_presets"): {
+                "presets": {"0": "dialogue-chain"},
+                "success": True,
+            }
+        }
+    )
+    listed = saved.fairlight_presets()
+    assert listed.ok is True
+    assert listed.presets == ("dialogue-chain",)
+
+
+def test_fairlight_indexed_mapping_keeps_list_position_order() -> None:
+    saved = _wire_ops(
+        {
+            ("resolve_control", "get_fairlight_presets"): {
+                "presets": {"0": "dialogue-chain", "1": "music-bed"},
+                "success": True,
+            }
+        }
+    )
+    listed = saved.fairlight_presets()
+    assert listed.ok is True
+    assert listed.presets == ("dialogue-chain", "music-bed")
+
+
+@pytest.mark.parametrize(
+    "presets_wire",
+    [
+        pytest.param({"0": "a", "2": "b"}, id="index-gap"),
+        pytest.param({"1": "a"}, id="not-zero-based"),
+        pytest.param({"0": {"amount": 3}}, id="non-string-value"),
+        pytest.param({"dialogue": "chain"}, id="non-index-key"),
+    ],
+)
+def test_fairlight_ambiguous_indexed_mapping_shapes_fail_loud(
+    presets_wire: dict[str, object],
+) -> None:
+    drifted = _wire_ops(
+        {
+            ("resolve_control", "get_fairlight_presets"): {
+                "presets": presets_wire,
+                "success": True,
+            }
+        }
+    )
+    with pytest.raises(ValidationError):
+        drifted.fairlight_presets()

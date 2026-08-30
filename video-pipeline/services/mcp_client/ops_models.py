@@ -9,6 +9,9 @@ so unknown keys are ignored, but every field the probes assert on is REQUIRED
 and therefore fails loudly when the server stops reporting it.
 """
 
+# allow: SIZE_OK — pure flat readback-model table (one result class per
+# pinned MCP action); splitting would separate the models from the ops table.
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -224,11 +227,169 @@ class VoiceIsolationReport(McpActionOutcome):
     item: dict[str, object] | None = None
 
 
+def _preset_names(value: object) -> object:
+    """Measured shapes only: a JSON array of names, or an index-keyed mapping
+    of preset names (Resolve 21.0.4.5 answers ``{"presets": {}}`` when the
+    host has no saved Fairlight presets and ``{"presets": {"0": "<name>"}}``
+    — keys are the consecutive list positions, in order — once presets are
+    saved). Any other shape fails loudly instead of being guessed into
+    names."""
+    if isinstance(value, dict):
+        if not value:
+            return ()
+        names: list[str] = []
+        for position, entry in enumerate(value.items()):
+            key, name = entry
+            if (
+                not isinstance(key, str)
+                or key != str(position)
+                or not isinstance(name, str)
+            ):
+                raise ValueError(f"unobserved fairlight preset mapping shape: {value!r}")
+            names.append(name)
+        return tuple(names)
+    return value
+
+
+class FairlightPresetsReadback(McpActionOutcome):
+    """``resolve_control {get_fairlight_presets}`` preset-name listing."""
+
+    presets: Annotated[
+        tuple[str, ...], BeforeValidator(_preset_names), BeforeValidator(_to_tuple)
+    ] = ()
+
+
+class ApplyFairlightPresetResult(McpActionOutcome):
+    """``project_settings {apply_fairlight_preset}`` outcome.
+
+    Measured live: a missing preset answers ``{"success": false}`` with no
+    error envelope — ``ok`` stays the sole verdict signal.
+    """
+
+    preset_name: str | None = None
+
+
 class SubtitleProbeResult(McpActionOutcome):
     """``timeline {subtitle_generation_probe}`` readback."""
 
     would_generate: bool | None = None
     settings: dict[str, object] | None = None
+
+
+class DrxApplyResult(McpActionOutcome):
+    """``timeline_item_color {safe_apply_drx}`` readback.
+
+    Covers the three flow arms: dry-run (``would_apply`` echo), the
+    confirmation-required response (``McpActionOutcome.confirm_token`` +
+    error envelope ``CONFIRMATION_REQUIRED``), and the applied outcome
+    (``success``/``path``/``source``).
+    """
+
+    path: str | None = None
+    source: str | None = None
+    would_apply: bool | None = None
+
+
+class GradeVersionSnapshotResult(McpActionOutcome):
+    """``timeline_item_color {grade_version_snapshot}`` readback.
+
+    ``current`` is the item's serialized current version (string or small
+    object depending on the Resolve build — opaque identity, never parsed);
+    ``local``/``remote`` are the named-version lists (type 0/1).
+    """
+
+    current: object = None
+    local: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
+    remote: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
+    errors: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
+
+
+class NodeGraphRow(StrictModel):
+    """One node row of ``timeline_item_color {probe_node_graph}``.
+
+    Row keys (lut/cache_mode/label/tools) vary by graph state; the typed
+    envelope pins the row shape the handler compares as a signature.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
+
+    node_index: int | None = None
+    label: object = None
+    lut: object = None
+    tools: object = None
+
+
+class NodeGraphResult(McpActionOutcome):
+    """``timeline_item_color {probe_node_graph}`` readback."""
+
+    available: bool | None = None
+    num_nodes: int | None = None
+    nodes: Annotated[tuple[NodeGraphRow, ...], BeforeValidator(_to_tuple)] = ()
+    source: str | None = None
+
+
+class TrackCountResult(McpActionOutcome):
+    """``timeline {get_track_count}`` readback."""
+
+    count: int | None = None
+
+
+class TrackItemRow(StrictModel):
+    """One ``timeline {get_items_in_track}`` item row (absolute frames)."""
+
+    name: str | None = None
+    id: str | None = None
+    start: int | None = None
+    end: int | None = None
+    duration: int | None = None
+
+
+class TrackItemsResult(McpActionOutcome):
+    """``timeline {get_items_in_track}`` readback."""
+
+    items: Annotated[tuple[TrackItemRow, ...], BeforeValidator(_to_tuple)] = ()
+
+
+class SourceFrameResult(McpActionOutcome):
+    """``timeline_item {get_source_start_frame|get_source_end_frame}`` readback."""
+
+    frame: int | None = None
+
+
+class MediaPoolItemResult(McpActionOutcome):
+    """``timeline {get_media_pool_item}`` readback (current timeline)."""
+
+    name: str | None = None
+    id: str | None = None
+
+
+class FusionInputRow(StrictModel):
+    """One ``fusion_comp {safe_set_inputs}`` per-input result row."""
+
+    success: bool | None = None
+    value: object = None
+    error: str | None = None
+
+
+class FusionInputsResult(McpActionOutcome):
+    """``fusion_comp {safe_set_inputs}`` readback."""
+
+    tool_name: str | None = None
+    results: dict[str, FusionInputRow] = Field(default_factory=dict)
+
+
+class TextPlusReadback(McpActionOutcome):
+    """``fusion_comp {get_text_plus}`` readback."""
+
+    tool_name: str | None = None
+    input_name: str | None = None
+    text: str | None = None
+
+
+class FusionInputValueReadback(McpActionOutcome):
+    """``fusion_comp {get_input}`` readback (single input's current value)."""
+
+    value: object = None
 
 
 class FormatCodecResult(McpActionOutcome):
@@ -259,6 +420,7 @@ class SourceRangeOccurrence(StrictModel):
     source_range: Annotated[tuple[int, ...] | None, BeforeValidator(_to_tuple)] = None
     timeline_range: Annotated[tuple[int, ...] | None, BeforeValidator(_to_tuple)] = None
     timeline_item_id: str | None = None
+    track_type: str | None = None
 
 
 class RenderJobStatus(McpActionOutcome):
@@ -273,6 +435,29 @@ class RenderJobStatus(McpActionOutcome):
     completion_percentage: Annotated[float | None, BeforeValidator(_to_float)] = Field(
         default=None, alias="CompletionPercentage"
     )
+    is_rendering_in_progress: bool | None = Field(
+        default=None, alias="IsRenderingInProgress"
+    )
+    #: Vendor progress signal present while a real render runs (measured on
+    #: 21.0.4.5: {"JobStatus": "レンダリング", "CompletionPercentage": 88,
+    #: "EstimatedTimeRemainingInMs": 107000}); absent on terminal payloads.
+    estimated_time_remaining_ms: Annotated[float | None, BeforeValidator(_to_float)] = (
+        Field(default=None, alias="EstimatedTimeRemainingInMs")
+    )
+    #: The vendor's explicit failed-job payload carries a PascalCase ``Error``
+    #: message (measured: {"JobStatus": "失敗しました", "Error": "..."}).
+    error_message: str | None = Field(default=None, alias="Error")
+
+
+class RenderInProgressResult(McpActionOutcome):
+    """``render {is_rendering}`` readback (global render-queue state).
+
+    Measured pinned-MCP key shapes: the compound server answers
+    ``{"rendering": bool}``, the granular tool ``{"is_rendering": bool}``.
+    """
+
+    rendering: bool | None = None
+    is_rendering: bool | None = None
 
 
 class RenderJobList(McpActionOutcome):
@@ -282,9 +467,14 @@ class RenderJobList(McpActionOutcome):
 
 
 class AddJobResult(McpActionOutcome):
-    """``render {add_job}`` readback (job ids are UUID strings on 21.x)."""
+    """``render {add_job|prepare_render_job}`` readback.
+
+    ``prepare_render_job`` echoes the queued job's full settings dict; it
+    is the only independent readback of what the job will render with.
+    """
 
     job_id: str | None = None
+    settings: dict[str, object] | None = None
 
 
 class GapRecord(StrictModel):
@@ -412,6 +602,27 @@ class ValidatedSettings(McpActionOutcome):
     warnings: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
 
 
+class SafeSetRenderResult(McpActionOutcome):
+    """``render {safe_set_render_settings}`` readback (diff-validated set)."""
+
+    validation: dict[str, object] | None = None
+    before: dict[str, object] | None = None
+    after: dict[str, object] | None = None
+    diff: dict[str, object] | None = None
+
+
+class RenderFormatsResult(McpActionOutcome):
+    """``render {get_formats}`` readback."""
+
+    formats: dict[str, object] | None = None
+
+
+class RenderCodecsResult(McpActionOutcome):
+    """``render {get_codecs}`` readback."""
+
+    codecs: dict[str, object] | None = None
+
+
 __all__ = [
     "AddJobResult",
     "AnalysisPlanResult",
@@ -425,21 +636,29 @@ __all__ = [
     "CommitVisionResult",
     "CompCountResult",
     "DeepenResult",
+    "DrxApplyResult",
     "EditExecuteResult",
     "EditPlanResult",
     "FindSimilarResult",
     "FormatCodecResult",
     "GapRecord",
     "GapsOverlapsResult",
+    "GradeVersionSnapshotResult",
     "ImportResult",
     "McpActionOutcome",
     "McpErrorEnvelope",
     "MissingMediaResult",
+    "NodeGraphResult",
+    "NodeGraphRow",
     "ProjectResult",
     "RenderBoundaryReport",
+    "RenderCodecsResult",
+    "RenderFormatsResult",
+    "RenderInProgressResult",
     "RenderJobList",
     "RenderJobStatus",
     "RenderSettingsReadback",
+    "SafeSetRenderResult",
     "SourceRangeOccurrence",
     "SourceRangeResult",
     "StructureItem",

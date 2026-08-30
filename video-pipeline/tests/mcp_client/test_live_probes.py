@@ -687,7 +687,11 @@ def _backend_smoke(backends_path: Path, tmp_dir: Path) -> dict[str, object]:
     transport_calls: list[tuple[str, str, object]] = []
 
     def fake_transport(
-        tool_name: str, action: str, normalized_params: Mapping[str, object]
+        tool_name: str,
+        action: str,
+        normalized_params: Mapping[str, object],
+        *,
+        timeout_seconds: float | None = None,
     ) -> dict[str, object]:
         transport_calls.append((tool_name, action, normalized_params))
         return {"ok": True}

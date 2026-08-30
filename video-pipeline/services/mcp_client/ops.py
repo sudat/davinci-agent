@@ -9,6 +9,9 @@ takes an explicit ``timeout_seconds`` used for that one request so probes can
 bound slow Resolve operations individually.
 """
 
+# allow: SIZE_OK — pure flat typed-method table (one method per pinned MCP
+# action); splitting would separate the methods from the shared _action seam.
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -18,29 +21,43 @@ from services.mcp_client.ops_models import (
     AddJobResult,
     AnalysisPlanResult,
     AppendResult,
+    ApplyFairlightPresetResult,
     AudioPropertiesResult,
     CapabilityReport,
     CommitShotResult,
     CommitVisionResult,
     CompCountResult,
     DeepenResult,
+    DrxApplyResult,
     EditExecuteResult,
     EditPlanResult,
+    FairlightPresetsReadback,
     FindSimilarResult,
     FormatCodecResult,
+    FusionInputsResult,
+    FusionInputValueReadback,
     GapsOverlapsResult,
+    GradeVersionSnapshotResult,
     ImportResult,
     McpActionOutcome,
+    MediaPoolItemResult,
     MissingMediaResult,
+    NodeGraphResult,
     ProjectResult,
     RenderBoundaryReport,
+    RenderCodecsResult,
+    RenderFormatsResult,
     RenderJobList,
     RenderJobStatus,
     RenderSettingsReadback,
+    SafeSetRenderResult,
     SourceRangeResult,
     StructureSnapshot,
     SubtitleProbeResult,
+    TextPlusReadback,
     TimelineResult,
+    TrackCountResult,
+    TrackItemsResult,
     TransformReadback,
     ValidatedSettings,
     VoiceIsolationReport,
@@ -251,9 +268,90 @@ class McpOps:
             {"track_index": track_index},
         )
 
+    def fairlight_presets(self) -> FairlightPresetsReadback:
+        """``resolve_control {get_fairlight_presets}`` — the preset names the
+        Fairlight apply action accepts (measured: ``{}`` when none saved)."""
+        return self._action(
+            FairlightPresetsReadback, "resolve_control", "get_fairlight_presets", {}
+        )
+
+    def apply_fairlight_preset(self, preset_name: str) -> ApplyFairlightPresetResult:
+        """``project_settings {apply_fairlight_preset}`` onto the current
+        timeline; a missing name answers ``success=false`` (measured)."""
+        return self._action(
+            ApplyFairlightPresetResult,
+            "project_settings",
+            "apply_fairlight_preset",
+            {"preset_name": preset_name},
+        )
+
     def subtitle_generation_probe(self) -> SubtitleProbeResult:
         return self._action(
             SubtitleProbeResult, "timeline", "subtitle_generation_probe", {}
+        )
+
+    def get_track_count(self, track_type: str) -> TrackCountResult:
+        return self._action(
+            TrackCountResult, "timeline", "get_track_count", {"track_type": track_type}
+        )
+
+    def add_video_track(self) -> McpActionOutcome:
+        return self._action(McpActionOutcome, "timeline", "add_track", {"track_type": "video"})
+
+    def get_items_in_track(self, track_type: str, track_index: int) -> TrackItemsResult:
+        return self._action(
+            TrackItemsResult,
+            "timeline",
+            "get_items_in_track",
+            {"track_type": track_type, "track_index": track_index},
+        )
+
+    def current_timeline_media_pool_item(self) -> MediaPoolItemResult:
+        return self._action(MediaPoolItemResult, "timeline", "get_media_pool_item", {})
+
+    def set_fusion_inputs(
+        self, tool_name: str, inputs: Mapping[str, object]
+    ) -> FusionInputsResult:
+        """``fusion_comp {safe_set_inputs}`` on the current timeline's V1 item 0.
+
+        Scoped to the card-timeline contract (the sole title is V1 item 0),
+        which is the only shape the nested-cue construction produces.
+        """
+        return self._action(
+            FusionInputsResult,
+            "fusion_comp",
+            "safe_set_inputs",
+            {
+                "timeline_item": {"track_type": "video", "track_index": 1, "item_index": 0},
+                "tool_name": tool_name,
+                "inputs": dict(inputs),
+                "readback": True,
+            },
+        )
+
+    def get_text_plus(self, tool_name: str) -> TextPlusReadback:
+        """``fusion_comp {get_text_plus}`` on the current timeline's V1 item 0."""
+        return self._action(
+            TextPlusReadback,
+            "fusion_comp",
+            "get_text_plus",
+            {
+                "timeline_item": {"track_type": "video", "track_index": 1, "item_index": 0},
+                "tool_name": tool_name,
+            },
+        )
+
+    def get_fusion_input(self, tool_name: str, input_name: str) -> FusionInputValueReadback:
+        """``fusion_comp {get_input}`` on the current timeline's V1 item 0."""
+        return self._action(
+            FusionInputValueReadback,
+            "fusion_comp",
+            "get_input",
+            {
+                "timeline_item": {"track_type": "video", "track_index": 1, "item_index": 0},
+                "tool_name": tool_name,
+                "input_name": input_name,
+            },
         )
 
     def edit_kernel_capabilities(self) -> CapabilityReport:
@@ -273,6 +371,12 @@ class McpOps:
         )
 
     def insert_fusion_title(self, name: str) -> McpActionOutcome:
+        """Insert a Fusion title on the current timeline at the playhead.
+
+        Lands on the patch-panel target track (V1 in practice) — the
+        nested-timeline card construction relies on that, per the measured
+        api-limitations ledger.
+        """
         return self._action(McpActionOutcome, "timeline", "insert_fusion_title", {"name": name})
 
     def insert_fusion_composition(self) -> McpActionOutcome:
@@ -320,6 +424,32 @@ class McpOps:
     def render_add_job(self) -> AddJobResult:
         return self._action(AddJobResult, "render", "add_job", {})
 
+    def render_prepare_job(
+        self,
+        target_dir: str,
+        custom_name: str,
+        *,
+        settings: Mapping[str, object] | None = None,
+    ) -> AddJobResult:
+        """``render {prepare_render_job}`` — queue (not start) one job with an
+        explicit target dir and name (Task 4-measured probe render seam)."""
+        merged: dict[str, object] = {"ExportVideo": True, "DataBurnIn": "None"}
+        merged.update(dict(settings or {}))
+        return self._action(
+            AddJobResult,
+            "render",
+            "prepare_render_job",
+            {
+                "target_dir": target_dir,
+                "custom_name": custom_name,
+                "format": "mp4",
+                "codec": "h264",
+                "require_temp_target": False,
+                "settings": merged,
+            },
+            timeout_seconds=60.0,
+        )
+
     def render_start(self, job_ids: Sequence[str] | None = None) -> McpActionOutcome:
         params: dict[str, object] = (
             {} if job_ids is None else {"job_ids": list(job_ids)}
@@ -339,13 +469,43 @@ class McpOps:
         return self._action(RenderBoundaryReport, "render", "export_render_boundary_report", {})
 
     def validate_render_settings(
-        self, settings: Mapping[str, object]
+        self, settings: Mapping[str, object], *, require_temp_target: bool = False
     ) -> ValidatedSettings:
+        params: dict[str, object] = {"settings": dict(settings)}
+        if require_temp_target:
+            params["require_temp_target"] = True
         return self._action(
             ValidatedSettings,
             "render",
             "validate_render_settings",
-            {"settings": dict(settings)},
+            params,
+        )
+
+    def safe_set_render_settings(
+        self,
+        settings: Mapping[str, object],
+        *,
+        dry_run: bool = False,
+        require_temp_target: bool = False,
+    ) -> SafeSetRenderResult:
+        params: dict[str, object] = {"settings": dict(settings)}
+        if dry_run:
+            params["dry_run"] = True
+        if require_temp_target:
+            params["require_temp_target"] = True
+        return self._action(
+            SafeSetRenderResult,
+            "render",
+            "safe_set_render_settings",
+            params,
+        )
+
+    def get_render_formats(self) -> RenderFormatsResult:
+        return self._action(RenderFormatsResult, "render", "get_formats", {})
+
+    def get_render_codecs(self, format_name: str) -> RenderCodecsResult:
+        return self._action(
+            RenderCodecsResult, "render", "get_codecs", {"format": format_name}
         )
 
     # -- analysis -----------------------------------------------------------
@@ -457,26 +617,97 @@ class McpOps:
             timeout_seconds=120.0,
         )
 
-    def safe_apply_drx(
+    def safe_apply_drx(  # noqa: PLR0913 (vendor action contract: path + guard + explicit item coords)
         self,
         path: str,
         *,
         dry_run: bool = False,
         grade_mode: int = 0,
         confirm_token: str | None = None,
-    ) -> McpActionOutcome:
+        track_type: str = "video",
+        track_index: int = 1,
+        item_index: int = 0,
+    ) -> DrxApplyResult:
+        """Apply a DRX grade to ONE explicitly addressed timeline item.
+
+        The vendor resolves items by (track_type, track_index, item_index)
+        and silently defaults to V1/item0 — explicit coordinates are the
+        only way an apply never lands on an implicit current clip.
+        """
+
         params: dict[str, object] = {
             "path": path,
             "dry_run": dry_run,
             "grade_mode": grade_mode,
+            "track_type": track_type,
+            "track_index": track_index,
+            "item_index": item_index,
         }
         if confirm_token is not None:
             params["confirm_token"] = confirm_token
         return self._action(
-            McpActionOutcome,
+            DrxApplyResult,
             "timeline_item_color",
             "safe_apply_drx",
             params,
+            timeout_seconds=120.0,
+        )
+
+    def grade_version_snapshot(
+        self,
+        *,
+        track_type: str = "video",
+        track_index: int = 1,
+        item_index: int = 0,
+    ) -> GradeVersionSnapshotResult:
+        return self._action(
+            GradeVersionSnapshotResult,
+            "timeline_item_color",
+            "grade_version_snapshot",
+            {"track_type": track_type, "track_index": track_index, "item_index": item_index},
+        )
+
+    def probe_node_graph(
+        self,
+        *,
+        track_type: str = "video",
+        track_index: int = 1,
+        item_index: int = 0,
+        max_nodes: int = 8,
+    ) -> NodeGraphResult:
+        return self._action(
+            NodeGraphResult,
+            "timeline_item_color",
+            "probe_node_graph",
+            {
+                "source": "item",
+                "include_nodes": True,
+                "max_nodes": max_nodes,
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+            },
+        )
+
+    def add_grade_version(
+        self,
+        name: str,
+        *,
+        track_type: str = "video",
+        track_index: int = 1,
+        item_index: int = 0,
+    ) -> McpActionOutcome:
+        return self._action(
+            McpActionOutcome,
+            "timeline_item_color",
+            "add_version",
+            {
+                "name": name,
+                "type": 0,
+                "track_type": track_type,
+                "track_index": track_index,
+                "item_index": item_index,
+            },
         )
 
     # -- internals ----------------------------------------------------------

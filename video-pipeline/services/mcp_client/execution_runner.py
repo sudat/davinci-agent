@@ -76,10 +76,21 @@ class AssistedModeError(GuardRefusalError):
 
 
 class McpTransportFn(Protocol):
-    """Minimal transport seam; the task-7 client satisfies this shape."""
+    """Minimal transport seam; the task-7 client satisfies this shape.
+
+    ``timeout_seconds`` is an OPTIONAL per-operation request deadline
+    (``None`` = the transport-configured default). Only measured
+    long-running operations override it (e.g. the full placement scan);
+    implementors forward it to the underlying JSON-RPC request.
+    """
 
     def __call__(
-        self, tool_name: str, action: str, normalized_params: Mapping[str, object]
+        self,
+        tool_name: str,
+        action: str,
+        normalized_params: Mapping[str, object],
+        *,
+        timeout_seconds: float | None = None,
     ) -> object: ...
 
 
