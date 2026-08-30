@@ -201,6 +201,18 @@ class RunIdentity(StrictModel):
     )
 
 
+class EvaluationStatusV1(StrictModel):
+    """Per-dimension measured/unmeasured disclosure (Task 5, additive).
+
+    A ground truth with zero must_remove anchors keeps the frozen
+    ``must_remove_retention=0.0`` for mathematical compatibility; this
+    block states explicitly that the dimension was NOT measured, so 0.0 is
+    never readable as a measured success score.
+    """
+
+    must_remove_dimension_measured: bool
+
+
 class EditorialMetrics(StrictModel):
     """Editorial anchor metrics (pure, derived from ground truth + kept spans)."""
 
@@ -212,6 +224,24 @@ class EditorialMetrics(StrictModel):
     must_remove_retention: Annotated[float, Field(ge=0, le=1, strict=True)]
     redundancy_errors: Annotated[int, Field(ge=0, strict=True)]
     catastrophic_removal_count: Annotated[int, Field(ge=0, strict=True)] = Field(default=0)
+    evaluation_status: EvaluationStatusV1 | None = None
+
+    @model_validator(mode="after")
+    def _evaluation_status_matches_denominator(self) -> EditorialMetrics:
+        status = self.evaluation_status
+        if status is not None and status.must_remove_dimension_measured != (
+            self.must_remove_total > 0
+        ):
+            raise PydanticCustomError(
+                "evaluation_status_denominator_mismatch",
+                "evaluation_status.must_remove_dimension_measured must equal "
+                "(must_remove_total > 0): status={status}, total={total}",
+                {
+                    "status": status.must_remove_dimension_measured,
+                    "total": self.must_remove_total,
+                },
+            )
+        return self
 
 
 class LiftDeltas(StrictModel):
@@ -336,6 +366,9 @@ class PassPolicyResult(StrictModel):
     )
     pending_criteria: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
         default_factory=tuple
+    )
+    not_measured_criteria: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = (
+        Field(default_factory=tuple)
     )
 
 
@@ -463,6 +496,9 @@ def compute_editorial_metrics(
         must_remove_retention=retention,
         redundancy_errors=redund,
         catastrophic_removal_count=catast,
+        evaluation_status=EvaluationStatusV1(
+            must_remove_dimension_measured=must_remove_total > 0
+        ),
     )
 
 
@@ -644,6 +680,16 @@ def compute_evidence_quality(
 
 _EPS: Final = 1e-9
 
+#: Exact wording for a zero-denominator must-remove dimension — summaries
+#: say this, never "0% success" or any percentage (Task 5 truthfulness).
+MUST_REMOVE_NOT_MEASURED: Final = "must_remove_retention: not measured (0 anchors)"
+
+_DIAGNOSTIC_NON_PRODUCT_NOTE: Final = (
+    "evidence_lane=operator_corrected_diagnostic: diagnostic-only evaluation "
+    "(operator-corrected transcript); not product proof, and no gate or "
+    "release decision may be derived from this output"
+)
+
 
 def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # noqa: C901, PLR0912
     """Evaluate the frozen predeclared policy.
@@ -655,12 +701,16 @@ def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # n
     Failed (when not pending or regardless, but passed still False if pending):
     - must_keep_recall < 1.0
     - catastrophic_removal_count > 0
-    - must_remove_retention > 0.25
+    - must_remove_retention > 0.25 — evaluated ONLY when the ground truth
+      contains at least one must_remove anchor. A zero denominator keeps the
+      frozen 0.0 (mathematical compatibility) and is disclosed in
+      not_measured_criteria instead: neither a failure nor a measured pass.
     - deep-review lift: neither B-lift improved an editorial criterion nor operator
       continuation is YES (when progressive_lift is available, check lift;
       otherwise operator verdict is the only signal)
 
-    The string names in failed/pending are stable and asserted in tests.
+    The string names in failed/pending/not_measured are stable and asserted
+    in tests.
     """
     pending: list[str] = []
     if report.editorial is None:
@@ -695,6 +745,7 @@ def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # n
         pending.extend(name for name, value in timing_entries if value is None)
 
     failed: list[str] = []
+    not_measured: list[str] = []
 
     # must_keep recall 1.0 (skip when editorial is None — pending)
     if report.editorial is not None and report.editorial.must_keep_recall < 1.0 - _EPS:
@@ -702,9 +753,14 @@ def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # n
     # catastrophic 0
     if report.editorial is not None and report.editorial.catastrophic_removal_count > 0:
         failed.append("catastrophic_removal")
-    # must_remove retention <= 0.25
-    if report.editorial is not None and report.editorial.must_remove_retention > 0.25 + _EPS:
-        failed.append("must_remove_retention")
+    # must_remove retention <= 0.25, evaluated ONLY when the dimension was
+    # measured (denominator > 0); a zero denominator is disclosed, not scored.
+    if report.editorial is not None:
+        if report.editorial.must_remove_total > 0:
+            if report.editorial.must_remove_retention > 0.25 + _EPS:
+                failed.append("must_remove_retention")
+        else:
+            not_measured.append(MUST_REMOVE_NOT_MEASURED)
 
     # B-lift OR operator verdict (when lift exists, require at least one positive;
     # when no lift yet, operator YES is the signal)
@@ -751,7 +807,27 @@ def evaluate_pass_policy(report: ProductProofReportV1) -> PassPolicyResult:  # n
         passed=passed,
         failed_criteria=tuple(failed),
         pending_criteria=tuple(pending),
+        not_measured_criteria=tuple(not_measured),
     )
+
+
+def render_policy_summary(
+    report: ProductProofReportV1, result: PassPolicyResult
+) -> tuple[str, ...]:
+    """Human summary lines for the evaluate CLI, from structured fields only.
+
+    Unmeasured dimensions print the exact ``not measured (0 anchors)``
+    wording — never a percentage — and every diagnostic-lane report carries
+    its non-product disclaimer so a passing editorial policy on
+    operator-corrected evidence cannot be overread as product proof.
+    Report prose (notes/summary) is never interpreted or echoed.
+    """
+
+    lines: list[str] = [f"evaluate: {entry}" for entry in result.not_measured_criteria]
+    binding = report.evaluation_binding
+    if binding is not None and binding.evidence_lane == "operator_corrected_diagnostic":
+        lines.append(f"evaluate: {_DIAGNOSTIC_NON_PRODUCT_NOTE}")
+    return tuple(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -1089,6 +1165,7 @@ __all__ = [
     "CONTINUATION_QUESTION",
     "DEFAULT_PASS_POLICY",
     "GROUND_TRUTH_SCHEMA",
+    "MUST_REMOVE_NOT_MEASURED",
     "PRODUCT_PROOF_SCHEMA",
     "TRANSCRIPT_SAMPLE_SCHEMA",
     "AnchorLabel",
@@ -1100,6 +1177,7 @@ __all__ = [
     "EpisodeContext",
     "EvaluationBindingError",
     "EvaluationBindingV1",
+    "EvaluationStatusV1",
     "EvidenceLane",
     "EvidenceQualityMetrics",
     "GroundTruthAnchor",
@@ -1129,6 +1207,7 @@ __all__ = [
     "omitted_utterance_count",
     "proper_noun_recall",
     "redundancy_errors",
+    "render_policy_summary",
     "run_arm_a",
     "run_arm_b",
     "run_arm_c",

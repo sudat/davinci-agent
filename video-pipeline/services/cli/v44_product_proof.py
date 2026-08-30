@@ -42,6 +42,7 @@ from services.metrics.v44_product_proof import (
     TranscriptSampleV1,
     compute_editorial_metrics,
     evaluate_pass_policy,
+    render_policy_summary,
     run_arm_a,
     run_arm_b,
     run_arm_c,
@@ -928,6 +929,8 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
     result = evaluate_pass_policy(report)
     output = result.model_dump(mode="json")
     print(json.dumps(output, indent=2, ensure_ascii=False, sort_keys=True))
+    for line in render_policy_summary(report, result):
+        print(line)
     # Persist sidecar
     sidecar = report_path.with_suffix(report_path.suffix + ".policy.json")
     try:
