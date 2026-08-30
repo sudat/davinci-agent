@@ -33,6 +33,7 @@ from services.editorial_v2.episode_brief import (
 from services.editorial_v2.prompt_v2 import (
     CreativeEditDraft,
     MomentSelectionDraft,
+    PassARequest,
     StoryPlanDraft,
 )
 from tests.editorial_v2.fixtures.three_pass_fixture import (
@@ -41,6 +42,7 @@ from tests.editorial_v2.fixtures.three_pass_fixture import (
     make_brief,
     make_episode_artifact,
     make_moment_review,
+    make_sparse_episode_artifact,
     make_taste_profile,
     open_api,
 )
@@ -508,3 +510,83 @@ def test_legacy_non_fused_review_refused_under_fused_gate(tmp_path: Path) -> Non
         )
     assert error.value.code == "uncorroborated-keep"
     assert "fused" in error.value.detail
+
+
+# ------------------------------------------------------------ T2: source extent
+
+
+def test_sparse_tail_lost_without_source_total_frames(tmp_path: Path) -> None:
+    """Compatibility contract (task 2): callers that do NOT supply
+    ``source_total_frames`` keep the historical covered_frames-inferred
+    discovery window — on sparse episodes the tail candidate stays out.
+    This locks the preserved non-Arm behavior; the authoritative extent is
+    strictly opt-in."""
+    with open_api(make_sparse_episode_artifact(), tmp_path) as api:
+        result = _run(api)
+    ids = {c.candidate_id for c in result.moment_selection.proposal.candidates}
+    assert ids == {"cand-shot-h1"}  # summed coverage is 200; shot-tail starts at 200
+
+
+def test_source_total_frames_delivers_sparse_tail_candidates(tmp_path: Path) -> None:
+    """The authoritative extent discovers exactly [0, source_total_frames):
+    both sparse shots — including the tail beyond summed coverage — reach the
+    selection as candidates."""
+    with open_api(make_sparse_episode_artifact(), tmp_path) as api:
+        result = DirectorV2().run_three_pass(
+            make_brief(), api, source_total_frames=400
+        )
+    ids = {c.candidate_id for c in result.moment_selection.proposal.candidates}
+    assert ids == {"cand-shot-h1", "cand-shot-tail"}
+
+
+def test_source_total_frames_reaches_pass_a_digest(tmp_path: Path) -> None:
+    """Pass A sees the authoritative extent (its own digest field), while
+    ``covered_frames`` keeps its max-discovered-end semantics."""
+    from services.editorial_v2.heuristic_planner import (  # noqa: PLC0415 (test-local)
+        plan_creative,
+        plan_selection,
+        plan_story,
+    )
+
+    captured: dict[str, object] = {}
+
+    def replaying_planner(stage: str, request: object) -> object:
+        captured[stage] = request
+        if stage == "pass_a":
+            return plan_story(request).model_dump(mode="json")  # type: ignore[arg-type]
+        if stage == "pass_b":
+            return plan_selection(request, ()).model_dump(mode="json")  # type: ignore[arg-type]
+        return plan_creative(request).model_dump(mode="json")  # type: ignore[arg-type]
+
+    with open_api(make_sparse_episode_artifact(), tmp_path) as api:
+        DirectorV2().run_three_pass(
+            make_brief(), api, llm_call=replaying_planner, source_total_frames=400
+        )
+    request = captured["pass_a"]
+    assert isinstance(request, PassARequest)
+    assert request.evidence_digest.source_total_frames == 400
+    assert request.evidence_digest.covered_frames == 300  # max discovered end, unchanged
+    assert request.evidence_digest.shot_count == 2
+
+
+def test_digest_without_source_total_frames_stays_none(tmp_path: Path) -> None:
+    """Non-Arm callers: the digest's new field serializes as None and the
+    plan stays byte-identical across runs (no hidden extent invention)."""
+    first: str
+    second: str
+    with open_api(make_sparse_episode_artifact(), tmp_path, name="a.duckdb") as one:
+        first = DirectorV2().run_three_pass(make_brief(), one).model_dump_json()
+    with open_api(make_sparse_episode_artifact(), tmp_path, name="b.duckdb") as two:
+        second = DirectorV2().run_three_pass(make_brief(), two).model_dump_json()
+    assert first == second
+
+
+def test_nonpositive_source_total_frames_is_typed_refusal(
+    api: MediaQueryApiV2,
+) -> None:
+    """A zero/negative extent would make [0, extent) empty or inverted — a
+    typed refusal at the boundary, never an empty silent discovery."""
+    for bad in (0, -5):
+        with pytest.raises(DirectorV2Error) as error:
+            DirectorV2().run_three_pass(make_brief(), api, source_total_frames=bad)
+        assert error.value.code == "invalid-source-extent"

@@ -139,6 +139,7 @@ class EvidenceDigestV2(StrictModel):
     episode_id: Identifier
     shot_count: int = Field(ge=0, strict=True)
     covered_frames: int = Field(ge=0, strict=True)
+    source_total_frames: int | None = Field(default=None, ge=1, strict=True)
     shots: Annotated[tuple[ShotDigestV2, ...], BeforeValidator(_to_tuple)] = Field(
         min_length=1
     )

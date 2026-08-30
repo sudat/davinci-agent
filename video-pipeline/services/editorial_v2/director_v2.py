@@ -80,7 +80,7 @@ class DirectorV2:
 
     __slots__ = ()
 
-    def run_three_pass(  # noqa: PLR0913 (pass surface: brief + api + the four keyword-only seams)
+    def run_three_pass(  # noqa: PLR0913 (pass surface: brief + api + the five keyword-only seams)
         self,
         brief: EpisodeBriefV1,
         api_v2: MediaQueryApiV2,
@@ -89,6 +89,7 @@ class DirectorV2:
         llm_call: LlmCallV2 | None = None,
         source_id: str | None = None,
         require_deep_review_keeps: bool = False,
+        source_total_frames: int | None = None,
     ) -> ThreePassResult:
         """Three propose-only passes; ``source_id`` enables transcript
         corroboration in the Pass B evidence bundle (T7: with no fused
@@ -100,14 +101,21 @@ class DirectorV2:
         missing, synthetic-filtered, or non-overlapping is refused as
         uncorroborated BEFORE any commit. The gate never mutates the
         selection — GPT-5.6 Sol (or the heuristic in diagnostics) stays the
-        only chooser of intent."""
+        only chooser of intent.
+        ``source_total_frames`` (T2) is the AUTHORITATIVE source extent: when
+        supplied, shot discovery queries exactly the half-open
+        ``[0, source_total_frames)`` instead of inferring a window from the
+        coverage-duration ``scene_summary`` — sparse episodes whose summed
+        coverage ends before the real source must not lose tail candidates.
+        Callers that omit it keep the historical inferred-window behavior."""
 
         require_approved(brief)
-        shots = _discover_shots(api_v2, brief.episode_id)
+        shots = _discover_shots(api_v2, brief.episode_id, source_total_frames)
         digest = EvidenceDigestV2(
             episode_id=brief.episode_id,
             shot_count=len(shots),
             covered_frames=max((s.span.end_frame for s in shots), default=0),
+            source_total_frames=source_total_frames,
             shots=tuple(
                 ShotDigestV2(
                     shot_id=s.shot_id,
@@ -164,14 +172,26 @@ class DirectorV2:
         )
 
 
-def _discover_shots(api: MediaQueryApiV2, episode_id: Identifier) -> tuple[vm.ShotRow, ...]:
-    summary = api.scene_summary(vm.SceneSummaryRequest())
-    row = next((r for r in summary.rows if r.episode_id == episode_id), None)
-    if row is None:
-        raise DirectorV2Error(
-            "episode-not-indexed", f"no api_v2 scene_summary row for {episode_id}"
-        )
-    span = vm.FrameSpan(start_frame=0, end_frame=max(row.covered_frames, 1))
+def _discover_shots(
+    api: MediaQueryApiV2, episode_id: Identifier, source_total_frames: int | None
+) -> tuple[vm.ShotRow, ...]:
+    if source_total_frames is None:
+        summary = api.scene_summary(vm.SceneSummaryRequest())
+        row = next((r for r in summary.rows if r.episode_id == episode_id), None)
+        if row is None:
+            raise DirectorV2Error(
+                "episode-not-indexed", f"no api_v2 scene_summary row for {episode_id}"
+            )
+        end_frame = max(row.covered_frames, 1)
+    else:
+        if source_total_frames < 1:
+            raise DirectorV2Error(
+                "invalid-source-extent",
+                f"source_total_frames must be >= 1; [0, {source_total_frames}) "
+                "is empty or inverted",
+            )
+        end_frame = source_total_frames
+    span = vm.FrameSpan(start_frame=0, end_frame=end_frame)
     pagination = vm.V2Pagination(limit=vm.V2_MAX_PAGE_SIZE, offset=0)
     rows: list[vm.ShotRow] = []
     while True:

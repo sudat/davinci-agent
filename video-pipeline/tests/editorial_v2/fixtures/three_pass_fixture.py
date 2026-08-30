@@ -150,6 +150,33 @@ def make_episode_artifact(
     )
 
 
+def make_sparse_episode_artifact() -> MediaIntelligenceArtifact:
+    """Task-2 sparse-episode fixture: two speech shots with a silent gap
+    (100..200) and a tail beyond the summed coverage, source extent 400.
+
+    Mirrors the measured v44-real-01 shape where sum(segment lengths) < the
+    authoritative last end frame: covered_frames-style discovery windows
+    (sum = 200) cannot see shot-tail (start 200)."""
+    return MediaIntelligenceArtifact(
+        episode_id=EPISODE_ID,
+        sources=(MediaSource(source_id=SOURCE_ID, duration_frames=400),),
+        shots=(
+            _shot(
+                "shot-h1", 0, 100,
+                description="opening speech about the lightweight camera plan",
+                role="talking_head", potential="high",
+                transcripts=(("tr-h1", "today we look for the camera case", 10, 90),),
+            ),
+            _shot(
+                "shot-tail", 200, 300,
+                description="closing speech after a silent gap in the room",
+                role="talking_head", potential="medium",
+                transcripts=(("tr-t1", "we will search again tomorrow", 210, 290),),
+            ),
+        ),
+    )
+
+
 def make_brief() -> EpisodeBriefV1:
     brief = EpisodeBriefV1(
         episode_id=EPISODE_ID,
