@@ -514,6 +514,190 @@ def test_mezz_to_anchor_space_conversion() -> None:
     assert mezz_span_to_anchor_space(8469, 8469) == (8461, 8461)
 
 
+def _sparse_analysis() -> ArmPipelineData:
+    """Sparse episode: silent gaps make sum(segment lengths)=270 smaller than
+    the authoritative total_frames=400; s3's tail starts beyond the sum."""
+    speech = (
+        SpeechSegment(
+            segment_id="s1", text="DJI Pocket 4 のケースが無くなった", start_frame=0,
+            end_frame=90,
+        ),
+        SpeechSegment(
+            segment_id="s2", text="部屋中探したけど見つからない", start_frame=180,
+            end_frame=270,
+        ),
+        SpeechSegment(
+            segment_id="s3", text="また明日探してみる", start_frame=270, end_frame=360
+        ),
+    )
+    return ArmPipelineData(
+        episode_id="v44-arm-sparse",
+        source_id="v44-arm-sparse-edit-source",
+        total_frames=400,
+        speech=speech,
+        transcript_segments_ms=(
+            (0, 3000, "DJI Pocket 4 のケースが無くなった"),
+            (6000, 9000, "部屋中探したけど見つからない"),
+            (9000, 12000, "また明日探してみる"),
+        ),
+        mezzanine=None,
+        mezzanine_sha256=None,
+    )
+
+
+def _sparse_inputs(tmp_path: Path) -> ArmPipelineInputs:
+    analysis = _sparse_analysis()
+    return ArmPipelineInputs(
+        episode_root=tmp_path / "episode",
+        workspace=tmp_path / "workspace",
+        episode_id=analysis.episode_id,
+        brief=compose_arm_brief(tmp_path / "episode", analysis.episode_id, "suda"),
+        llm_call=_planner_fake,
+        analysis=analysis,
+    )
+
+
+def test_sparse_tail_candidates_reach_director_and_commit(tmp_path: Path) -> None:
+    """Task-2 sparse-extent contract: production Arm discovery uses the
+    authoritative ``ArmPipelineData.total_frames``, so a tail speech segment
+    beyond the summed coverage still becomes a candidate, reaches the
+    committed selection, and the Pass A digest carries the extent."""
+    captured: dict[str, object] = {}
+
+    def capturing_llm(stage: PassName, request: object) -> object:
+        captured[stage] = request
+        return _planner_fake(stage, request)
+
+    inputs = replace(_sparse_inputs(tmp_path), llm_call=capturing_llm)
+    result = run_arm_pipeline(inputs)
+
+    assert result.candidate_count == 3
+    committed = _load_json(inputs.workspace / "moment-selection.json")
+    assert isinstance(committed, dict)
+    ids = {c["candidate_id"] for c in committed["proposal"]["candidates"]}
+    assert ids == {"cand-s1", "cand-s2", "cand-s3"}
+    pass_a = captured["pass_a"]
+    assert isinstance(pass_a, PassARequest)
+    assert pass_a.evidence_digest.source_total_frames == 400
+    assert pass_a.evidence_digest.covered_frames == 360  # max discovered end
+    assert pass_a.evidence_digest.shot_count == 3
+
+
+def test_equal_count_id_substitution_refuses_before_paid_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One indexed shot ID substituted (count preserved) is a typed
+    ``candidate-integrity-failed`` refusal naming BOTH the missing and the
+    extra ID — raised before video understanding (Gemini/GLM), before the
+    Director llm seam (codex), and before any selection output."""
+    import services.cli.v44_arm_pipeline as arm_module  # noqa: PLC0415
+
+    real_build = arm_module.build_index
+
+    def substituting_build(artifacts, db_path, *, reviews=()):
+        tampered = artifacts.model_copy(
+            update={
+                "shots": tuple(
+                    shot.model_copy(update={"shot_id": "sX"})
+                    if shot.shot_id == "s2"
+                    else shot
+                    for shot in artifacts.shots
+                )
+            }
+        )
+        return real_build(tampered, db_path, reviews=reviews)
+
+    monkeypatch.setattr(arm_module, "build_index", substituting_build)
+    llm_calls: list[PassName] = []
+
+    def counting_llm(stage: PassName, request: object) -> object:
+        llm_calls.append(stage)
+        return _planner_fake(stage, request)
+
+    gemini = _VuGemini(fusion_overall=0.9)
+    _deps, factory = _vu_deps(gemini)
+    inputs = replace(_inputs(tmp_path), llm_call=counting_llm, video_understanding=factory)
+
+    with pytest.raises(ArmPipelineError) as error:
+        run_arm_pipeline(inputs)
+    assert error.value.code == "candidate-integrity-failed"
+    assert "cand-s2" in error.value.detail  # missing
+    assert "cand-sX" in error.value.detail  # extra
+    assert llm_calls == []
+    assert gemini.events == []
+    assert not (inputs.workspace / "moment-selection.json").is_file()
+    assert not (inputs.workspace / "moment-selection").exists()
+    assert not list((inputs.workspace / "moment-review").glob("*.json"))
+
+
+def test_missing_proposal_candidate_is_refusal_before_commit(tmp_path: Path) -> None:
+    """A Pass B selection that drops a discovered candidate is a typed
+    ``candidate-integrity-failed`` refusal before validation and commit —
+    never an implicit drop that quietly commits the rest."""
+
+    def dropping_llm(stage: PassName, request: object) -> object:
+        payload = _planner_fake(stage, request)
+        if isinstance(payload, dict) and stage == "pass_b":
+            payload["proposal"]["candidates"] = [
+                c
+                for c in payload["proposal"]["candidates"]
+                if c["candidate_id"] != "cand-s3"
+            ]
+            payload["dimension_notes"] = [
+                n
+                for n in payload["dimension_notes"]
+                if n["candidate_id"] != "cand-s3"
+            ]
+        return payload
+
+    inputs = replace(_inputs(tmp_path), llm_call=dropping_llm)
+    with pytest.raises(ArmPipelineError) as error:
+        run_arm_pipeline(inputs)
+    assert error.value.code == "candidate-integrity-failed"
+    assert "cand-s3" in error.value.detail
+    assert not (inputs.workspace / "moment-selection.json").is_file()
+    assert not (inputs.workspace / "moment-selection").exists()
+
+
+def test_integrity_check_reads_current_index_rows_not_cached_counts(
+    tmp_path: Path,
+) -> None:
+    """Stale-state control: after rebuilding the index at the same path with
+    an equal-count substituted fixture, the check refuses on the CURRENT
+    rows (missing+extra named) — proving it evaluates exact current sets,
+    not cached counts."""
+    from services.cli._v44_arm_integrity import require_candidate_integrity  # noqa: PLC0415
+
+    data = _analysis()
+    artifact = build_speech_mi_artifact(
+        data.episode_id, data.source_id, data.total_frames, data.speech
+    )
+    index_path = tmp_path / "stale-integrity.duckdb"
+    build_index(artifact, index_path)
+    with MediaQueryApiV2.open(index_path) as api:
+        require_candidate_integrity(api, data)  # current rows match: passes
+
+    tampered = artifact.model_copy(
+        update={
+            "shots": tuple(
+                shot.model_copy(update={"shot_id": "sX"})
+                if shot.shot_id == "s2"
+                else shot
+                for shot in artifact.shots
+            )
+        }
+    )
+    build_index(tampered, index_path)
+    with (
+        MediaQueryApiV2.open(index_path) as api,
+        pytest.raises(ArmPipelineError) as error,
+    ):
+        require_candidate_integrity(api, data)
+    assert error.value.code == "candidate-integrity-failed"
+    assert "cand-s2" in error.value.detail
+    assert "cand-sX" in error.value.detail
+
+
 def test_compose_arm_brief_uses_operator_draft_when_present(tmp_path: Path) -> None:
     episode_root = tmp_path / "episode"
     episode_root.mkdir()

@@ -25,6 +25,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from services.cli._v44_arm_integrity import (
+    expected_candidate_ids,
+    require_candidate_integrity,
+    require_proposal_completeness,
+)
 from services.cli._v44_arm_proper_nouns import substituted_arm_transcript
 from services.cli.v44_arm_evidence import build_speech_mi_artifact
 from services.cli.v44_arm_stages import (
@@ -185,6 +190,12 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
     )
     index_path = inputs.workspace / "media-intelligence.duckdb"
     build_index(artifact, index_path)
+    # Task-2 paid-call boundary: the index must deliver EXACTLY the expected
+    # speech candidates over [0, total_frames) before any Gemini/GLM/codex
+    # call and before any Director proposal — equal counts never suffice.
+    with MediaQueryApiV2.open(index_path) as integrity_api:
+        require_candidate_integrity(integrity_api, data)
+    expected_candidates = expected_candidate_ids(data)
     notes = [f"speech_shots={len(data.speech)}", f"proper_noun_substitutions={noun_edits}"]
     fused: tuple[MomentDeepReviewV1, ...] = ()
     if inputs.video_understanding is not None:
@@ -204,8 +215,12 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
             llm_call=inputs.llm_call,
             source_id=data.source_id,
             require_deep_review_keeps=inputs.video_understanding is not None,
+            source_total_frames=data.total_frames,
         )
         proposal = three.moment_selection.proposal
+        # Task-2 commit boundary: every discovered candidate must be proposed
+        # — a missing proposal is a refusal, never an implicit drop.
+        require_proposal_completeness(proposal, expected_candidates)
         bundle = assemble_evidence_v2(api, proposal.candidates, source_id=data.source_id)
         validation = validate_proposal(proposal, api, bundle)
         store = MomentSelectionStore(plan_dir=inputs.workspace / "moment-selection")
