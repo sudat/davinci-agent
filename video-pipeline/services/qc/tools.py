@@ -143,6 +143,47 @@ class QcTools:
         if result.returncode != 0:
             raise QcToolError(f"mono wav decode failed: {result.stderr.strip()[-300:]}")
 
+    def frame_gray(self, media: Path, at_seconds: float, size: tuple[int, int]) -> bytes:
+        """One bounded grayscale frame as raw WxH bytes for orientation NCC."""
+        self.verify_current()
+        width, height = size
+        argv = (
+            str(self.ffmpeg),
+            "-nostdin",
+            "-v",
+            "error",
+            "-ss",
+            f"{at_seconds:.3f}",
+            "-i",
+            str(media),
+            "-frames:v",
+            "1",
+            "-vf",
+            f"scale={width}:{height}",
+            "-pix_fmt",
+            "gray",
+            "-f",
+            "rawvideo",
+            "-",
+        )
+        try:
+            result = subprocess.run(
+                [str(part) for part in argv],
+                check=False,
+                capture_output=True,
+                timeout=PROBE_TIMEOUT_SEC,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise QcToolError(
+                f"frame extraction exceeded the bounded timeout of {PROBE_TIMEOUT_SEC}s"
+            ) from error
+        if result.returncode != 0 or len(result.stdout) < width * height:
+            raise QcToolError(
+                f"frame extraction failed on {media}: exit={result.returncode} "
+                f"{result.stderr.decode('utf-8', 'replace').strip()[-200:]}"
+            )
+        return result.stdout[: width * height]
+
 
 def parse_probe_report(raw: str) -> tuple[FfprobeReport, list[dict[str, object]]]:
     try:

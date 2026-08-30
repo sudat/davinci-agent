@@ -18,6 +18,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from services.contracts.timeline_ir import TimelineIrProduction
 from services.foundation_io import sha256_file
+from services.ingest.models import SourceManifest
 from services.preview.models import PreviewTraceManifest
 from services.qc.issue_factory import IssueFactory
 from services.qc.models import (
@@ -40,6 +41,8 @@ class OptionalBindings:
     preview: Path | None = None
     analysis: Path | None = None
     privacy: Path | None = None
+    source_manifest: Path | None = None
+    edit_source: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +51,8 @@ class LoadedInputs:
     ir: TimelineIrProduction | None = None
     preview: PreviewTraceManifest | None = None
     declarations: PrivacyDeclarations = field(default_factory=PrivacyDeclarations.empty)
+    source_manifest: SourceManifest | None = None
+    edit_source: Path | None = None
     bindings: tuple[QcInputBinding, ...] = ()
 
 
@@ -68,6 +73,35 @@ def _parse_or_raise[ParsedModel](
         return TypeAdapter(model).validate_json(raw, strict=False)
     except ValidationError as error:
         raise QcInputError(f"{what} binding malformed ({path}): {error}") from error
+
+
+def _orientation_bindings(
+    extra: OptionalBindings, bindings: list[QcInputBinding]
+) -> tuple[SourceManifest | None, Path | None]:
+    """Parse + hash-bind the T9 orientation inputs (Source Manifest + edit
+    source); each is optional and absent means no orientation claim."""
+    manifest: SourceManifest | None = None
+    if extra.source_manifest is not None:
+        manifest = _parse_or_raise(
+            _read(extra.source_manifest),
+            "source-manifest",
+            extra.source_manifest,
+            SourceManifest,
+        )
+        bindings.append(
+            QcInputBinding(
+                kind="source_manifest", sha256=sha256_file(extra.source_manifest)
+            )
+        )
+    edit_source: Path | None = None
+    if extra.edit_source is not None:
+        if not extra.edit_source.is_file():
+            raise QcInputError(f"edit-source binding missing: {extra.edit_source}")
+        edit_source = extra.edit_source
+        bindings.append(
+            QcInputBinding(kind="edit_source", sha256=sha256_file(extra.edit_source))
+        )
+    return manifest, edit_source
 
 
 def load_inputs(render: Path, policy_path: Path, extra: OptionalBindings) -> LoadedInputs:
@@ -110,11 +144,14 @@ def load_inputs(render: Path, policy_path: Path, extra: OptionalBindings) -> Loa
         bindings.append(
             QcInputBinding(kind="privacy", sha256=sha256_file(extra.privacy))
         )
+    source_manifest, edit_source = _orientation_bindings(extra, bindings)
     return LoadedInputs(
         policy=policy,
         ir=ir,
         preview=preview,
         declarations=declarations,
+        source_manifest=source_manifest,
+        edit_source=edit_source,
         bindings=tuple(bindings),
     )
 

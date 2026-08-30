@@ -27,6 +27,12 @@ from services.qc.checks import (
     committed_cues_from_ir,
 )
 from services.qc.checks.audio_checks import AudioMeasure, measure_audio
+from services.qc.checks.orientation_checks import (
+    OrientationCheckRequest,
+    check_orientation,
+    expected_orientation,
+    tools_frame_source,
+)
 from services.qc.checks.video_checks import VideoCheckRequest
 from services.qc.inputs import (
     LoadedInputs,
@@ -93,7 +99,7 @@ def run_qc(
     issues.extend(check_ir(loaded.ir, policy, inputs))
     issues.extend(check_preview(loaded.preview, policy, inputs))
     try:
-        report, _raw = parse_probe_report(tools.probe_raw(render))
+        report, raw = parse_probe_report(tools.probe_raw(render))
     except QcToolError as error:
         issues.append(
             factory.build(
@@ -123,6 +129,21 @@ def run_qc(
             )
         )
     )
+    if loaded.source_manifest is not None:
+        issues.extend(
+            check_orientation(
+                OrientationCheckRequest(
+                    render=render,
+                    report=report,
+                    render_streams_raw=tuple(raw),
+                    expectation=expected_orientation(loaded.source_manifest),
+                    ir=loaded.ir,
+                    edit_source=loaded.edit_source,
+                    frame_source=tools_frame_source(tools),
+                    factory=IssueFactory.for_policy(policy, inputs),
+                )
+            )
+        )
     issues.extend(_audio_issues(tools, render, audio.channels or 0, policy, inputs))
     has_subtitle_stream = any(
         stream.codec_type == "subtitle" for stream in report.streams
@@ -212,6 +233,8 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--preview", type=Path)
     run_parser.add_argument("--analysis", type=Path)
     run_parser.add_argument("--privacy", type=Path)
+    run_parser.add_argument("--source-manifest", type=Path)
+    run_parser.add_argument("--edit-source", type=Path)
     build_parser = sub.add_parser("build-policy")
     build_parser.add_argument("--render", type=Path, required=True)
     build_parser.add_argument("--out", type=Path, required=True)
@@ -231,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
                 preview=arguments.preview,
                 analysis=arguments.analysis,
                 privacy=arguments.privacy,
+                source_manifest=arguments.source_manifest,
+                edit_source=arguments.edit_source,
             ),
         )
     except (QcInputError, QcToolError, ValidationError, OSError) as error:

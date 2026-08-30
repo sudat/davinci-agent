@@ -31,7 +31,8 @@ QC_ENGINE_VERSION: Final = "todo52-v1"
 
 QcVerdict = Literal["passed", "blocked"]
 QcSeverity = Literal["blocker", "major", "minor"]
-QcInputKind = Literal["render", "policy", "ir", "preview", "analysis", "privacy"]
+QcInputKind = Literal["render", "policy", "ir", "preview", "analysis", "privacy",
+                      "source_manifest", "edit_source"]
 
 QcRuleId = Literal[
     # IR conformance (Todo-44 ids reused where they overlap)
@@ -53,6 +54,8 @@ QcRuleId = Literal[
     "video_black_span",
     "video_freeze_span",
     "video_metadata_mismatch",
+    "video_orientation_mismatch",
+    "video_orientation_unverified",
     "qc_capability_unsupported",
     # Final-render audio (mB / mLU integer encodings)
     "audio_channels_mismatch",
