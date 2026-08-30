@@ -37,8 +37,10 @@ from services.editorial_v2.prompt_v2 import (
 )
 from tests.editorial_v2.fixtures.three_pass_fixture import (
     EPISODE_ID,
+    SOURCE_ID,
     make_brief,
     make_episode_artifact,
+    make_moment_review,
     make_taste_profile,
     open_api,
 )
@@ -377,3 +379,132 @@ def test_unindexed_episode_is_refused(tmp_path: Path) -> None:
     ):
         DirectorV2().run_three_pass(make_brief(), foreign_api)
     assert error.value.code == "episode-not-indexed"
+
+
+# ------------------------------------------------------------ T7: fused keeps
+
+
+def test_required_fused_evidence_refuses_keeps_without_reviews(tmp_path: Path) -> None:
+    """A keep is rejected as uncorroborated when the required fused evidence
+    is missing: with zero indexed reviews, shot descriptions alone can never
+    corroborate a keep under ``require_deep_review_keeps`` — speech still
+    corroborates via transcript, so the refusal is the fused-evidence gate."""
+
+    with (
+        open_api(make_episode_artifact(), tmp_path, reviews=()) as plain_api,
+        pytest.raises(DirectorV2Error) as error,
+    ):
+        DirectorV2().run_three_pass(
+            make_brief(),
+            plain_api,
+            source_id=SOURCE_ID,
+            require_deep_review_keeps=True,
+        )
+    assert error.value.code == "uncorroborated-keep"
+    assert "fused" in error.value.detail
+    assert "cand-shot-a" in error.value.detail  # a real heuristic keep, named
+
+
+def test_required_fused_evidence_refuses_keeps_outside_review_span(tmp_path: Path) -> None:
+    """A fused review covering only [0, 100) cannot corroborate keeps later
+    in the episode — overlap is exact, never assumed by proximity."""
+
+    review = make_moment_review(EPISODE_ID, 0, 100, overall=0.9, source_duration=610)
+    with (
+        open_api(make_episode_artifact(), tmp_path, reviews=(review,)) as fused_api,
+        pytest.raises(DirectorV2Error) as error,
+    ):
+        DirectorV2().run_three_pass(
+            make_brief(),
+            fused_api,
+            source_id=SOURCE_ID,
+            require_deep_review_keeps=True,
+        )
+    assert error.value.code == "uncorroborated-keep"
+    assert "cand-shot-c" in error.value.detail  # kept shot outside the review span
+
+
+def test_required_fused_evidence_gates_the_model_path_too(tmp_path: Path) -> None:
+    """The gate runs after selection validation on the injected-llm path —
+    a syntactically valid model keep without fused citations is refused."""
+
+    with open_api(make_episode_artifact(), tmp_path) as seeded_api:
+        baseline = DirectorV2().run_three_pass(make_brief(), seeded_api)
+
+    def replaying_fake(stage: str, request: StrictModel) -> object:
+        if stage == "pass_a":
+            return {"story_plan": baseline.story_plan.model_dump(mode="json")}
+        if stage == "pass_b":
+            return baseline.moment_selection.model_dump(mode="json")
+        return baseline.creative_edit.model_dump(mode="json")
+
+    with (
+        open_api(make_episode_artifact(), tmp_path, name="gated.duckdb", reviews=()) as plain,
+        pytest.raises(DirectorV2Error) as error,
+    ):
+        DirectorV2().run_three_pass(
+            make_brief(),
+            plain,
+            llm_call=replaying_fake,
+            source_id=SOURCE_ID,
+            require_deep_review_keeps=True,
+        )
+    assert error.value.code == "uncorroborated-keep"
+
+
+def test_full_coverage_fused_review_keeps_selection_unchanged(tmp_path: Path) -> None:
+    """With one fused review spanning the whole source, the gate passes and
+    the plan is byte-identical to the ungated run — the gate adds refusal
+    only; GPT-5.6 Sol (or the heuristic in diagnostics) stays the only
+    chooser of keep/remove/order/edit intent."""
+
+    review = make_moment_review(EPISODE_ID, 0, 610, overall=0.9, source_duration=610)
+    with open_api(make_episode_artifact(), tmp_path, reviews=(review,)) as fused_api:
+        gated = DirectorV2().run_three_pass(
+            make_brief(), fused_api, require_deep_review_keeps=True
+        )
+        ungated = DirectorV2().run_three_pass(make_brief(), fused_api)
+    assert gated.model_dump_json() == ungated.model_dump_json()
+
+
+def test_synthetic_overlapping_review_refused_under_fused_gate(tmp_path: Path) -> None:
+    """An overlapping synthetic row must not satisfy the fused gate —
+    provider synthetic namespace is never deep vision."""
+
+    review = make_moment_review(
+        EPISODE_ID, 0, 610, overall=0.9, source_duration=610, provider="synthetic-local"
+    )
+    with (
+        open_api(make_episode_artifact(), tmp_path, reviews=(review,)) as api,
+        pytest.raises(DirectorV2Error) as error,
+    ):
+        DirectorV2().run_three_pass(
+            make_brief(), api, source_id=SOURCE_ID, require_deep_review_keeps=True
+        )
+    assert error.value.code == "uncorroborated-keep"
+    assert "fused" in error.value.detail
+
+
+def test_legacy_non_fused_review_refused_under_fused_gate(tmp_path: Path) -> None:
+    """A real legacy row with a non-T6 tool must not satisfy the fused gate
+    merely because it overlaps and is non-synthetic."""
+
+    review = make_moment_review(
+        EPISODE_ID,
+        0,
+        610,
+        overall=0.9,
+        source_duration=610,
+        provider="openai",
+        tool="multimodal-v1",
+        provider_version="gpt-5.6-sol",
+    )
+    with (
+        open_api(make_episode_artifact(), tmp_path, reviews=(review,)) as api,
+        pytest.raises(DirectorV2Error) as error,
+    ):
+        DirectorV2().run_three_pass(
+            make_brief(), api, source_id=SOURCE_ID, require_deep_review_keeps=True
+        )
+    assert error.value.code == "uncorroborated-keep"
+    assert "fused" in error.value.detail

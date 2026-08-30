@@ -36,6 +36,18 @@ from services.media_intelligence.models import (
     ShotVisual,
     TranscriptSegment,
 )
+from services.media_intelligence.moment_review import (
+    AudioContext,
+    BestSubSpan,
+    MomentAssessment,
+    MomentDeepReviewV1,
+    ReviewConfidence,
+    ReviewEvidence,
+    ReviewLineage,
+    ReviewRecordRequest,
+    ReviewWindow,
+    record_review,
+)
 from services.media_query.index_v2 import build_index
 from services.media_query.query_v2 import MediaQueryApiV2
 from services.reference_learning.models import (
@@ -188,8 +200,64 @@ def make_taste_profile(
 
 @contextmanager
 def open_api(
-    artifact: MediaIntelligenceArtifact, tmp_path: Path, *, name: str = "mi-w3.duckdb"
+    artifact: MediaIntelligenceArtifact,
+    tmp_path: Path,
+    *,
+    name: str = "mi-w3.duckdb",
+    reviews: tuple[MomentDeepReviewV1, ...] | None = None,
 ) -> Iterator[MediaQueryApiV2]:
-    index = build_index(artifact, tmp_path / name)
+    """``reviews=None`` (default) indexes one full-coverage fused deep review
+    (T7: speech keeps corroborate through real fused evidence, not shot
+    descriptions); pass ``reviews=()`` for the reviewless index."""
+
+    if reviews is None:
+        reviews = (make_moment_review(EPISODE_ID, 0, 610, overall=0.9, source_duration=610),)
+    index = build_index(artifact, tmp_path / name, reviews=reviews)
     with MediaQueryApiV2.open(index) as api:
         yield api
+
+
+def make_moment_review(  # noqa: PLR0913 (synthetic fixture builder: one kwarg per review field)
+    episode_id: str,
+    start: int,
+    end: int,
+    *,
+    overall: float,
+    source_duration: int,
+    provider: str = "google-gemini-developer-api-generate-content-rest-v1beta",
+    tool: str = "video-understanding-v1",
+    provider_version: str = "gemini-3.7-flash",
+) -> MomentDeepReviewV1:
+    """A fused-shaped MomentDeepReviewV1 for indexing in T7 evidence tests."""
+    return record_review(
+        ReviewRecordRequest(
+            episode_id=episode_id,  # type: ignore[arg-type] (fixture ids are Identifier-valid)
+            source_duration_frames=source_duration,
+            window=ReviewWindow(start_frame=start, end_frame=end),
+            evidence=ReviewEvidence(
+                frame_bundle=(), transcript_refs=(), audio_context=AudioContext(note="fused")
+            ),
+            assessment=MomentAssessment(
+                subject_action_evolution="fused subject/action evolution",
+                reaction_notes="fused reaction notes",
+                timing_notes="fused timing notes",
+                best_sub_span=BestSubSpan(start_frame=start, end_frame=end),
+                keep_rationale_candidates=("fused keep rationale",),
+                remove_rationale_candidates=(),
+                cut_in_handle="fused in",
+                cut_out_handle="fused out",
+            ),
+            confidence=ReviewConfidence(
+                overall=overall,
+                subject_action_evolution=overall,
+                reaction_notes=overall,
+                timing_notes=overall,
+                best_sub_span=overall,
+            ),
+            lineage=ReviewLineage(
+                provider=provider,
+                provider_version=provider_version,
+                tool=tool,
+            ),
+        )
+    )

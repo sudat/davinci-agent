@@ -45,9 +45,11 @@ from services.media_intelligence.models import (
     SimilarityRef,
     TranscriptSegment,
 )
+from services.media_intelligence.moment_review import review_content_sha
 from services.media_query import v2_models as vm
-from services.media_query.index_v2 import artifact_content_sha, build_index
+from services.media_query.index_v2 import build_index
 from services.media_query.query_v2 import MediaQueryApiV2
+from tests.editorial_v2.fixtures.three_pass_fixture import make_moment_review
 
 SOURCE_ID = "src-cam-a"
 EPISODE_ID = "ep-001"
@@ -140,6 +142,18 @@ def api(tmp_path: Path) -> Iterator[MediaQueryApiV2]:
         yield opened
 
 
+FUSED_REVIEW = make_moment_review("ep-001", 0, 150, overall=0.9, source_duration=300)
+FUSED_SHA = review_content_sha(FUSED_REVIEW)
+
+
+@pytest.fixture
+def api_fused(tmp_path: Path) -> Iterator[MediaQueryApiV2]:
+    """The same index rebuilt with one fused deep review over [0, 150)."""
+    path = build_index(ARTIFACT, tmp_path / "mi-v2-fused.duckdb", reviews=(FUSED_REVIEW,))
+    with MediaQueryApiV2.open(path) as opened:
+        yield opened
+
+
 def _cand(
     candidate_id: str,
     candidate_type: MomentCandidateType,
@@ -165,11 +179,11 @@ def _cand(
 @pytest.mark.parametrize(
     ("candidate_type", "start", "end", "refs", "expected_methods"),
     [
-        ("speech", 10, 90, ("shot-a", "tr-a1"), ("transcript", "deep_shot_vision")),
-        ("b_roll", 0, 100, ("shot-a",), ("deep_shot_vision", "exact_frames")),
+        ("speech", 10, 90, ("shot-a", "tr-a1"), ("transcript",)),
+        ("b_roll", 0, 100, ("shot-a",), ("exact_frames",)),
         ("pause", 0, 100, ("shot-a",), ("audio_measurement",)),
-        ("alternate_take", 0, 100, ("shot-a",), ("similarity", "deep_shot_vision")),
-        ("establishing", 200, 300, ("shot-c",), ("scene_metadata", "deep_shot_vision")),
+        ("alternate_take", 0, 100, ("shot-a",), ("similarity",)),
+        ("establishing", 200, 300, ("shot-c",), ("scene_metadata",)),
         ("ambient", 100, 200, ("shot-b",), ("audio_measurement", "scene_metadata")),
         ("graphic", 200, 300, ("shot-c",), ("exact_frames", "source_quality")),
     ],
@@ -182,27 +196,99 @@ def test_each_method_corroborates_happy_path(  # noqa: PLR0913, PLR0917 (paramet
     refs: tuple[str, ...],
     expected_methods: tuple[str, ...],
 ) -> None:
+    """Without indexed fused reviews, deep_shot_vision NEVER hits — shot
+    descriptions are no longer relabeled as deep vision (T7)."""
+
     bundle = assemble_evidence_v2(
         api, [_cand("cand-x", candidate_type, start, end, refs)], source_id=SOURCE_ID
     )
     assert len(bundle.entries) == 1
     assert bundle.entries[0].methods == expected_methods
+    assert bundle.entries[0].moment_reviews == ()
     assert bundle.partial is False
 
 
-def test_vision_evidence_corroborates_b_roll_candidate(api: MediaQueryApiV2) -> None:
-    bundle = assemble_evidence_v2(api, [_cand("cand-broll", "b_roll", 0, 100, ("shot-a",))])
+def test_deep_shot_vision_cites_overlapping_fused_review(api_fused: MediaQueryApiV2) -> None:
+    """deep_shot_vision corroborates ONLY through overlapping fused
+    moment-review rows and cites their hash, exact span, and confidence."""
+
+    bundle = assemble_evidence_v2(
+        api_fused, [_cand("cand-broll", "b_roll", 0, 100, ("shot-a",))]
+    )
     entry = bundle.entries[0]
-    assert "deep_shot_vision" in entry.methods
-    assert "exact_frames" in entry.methods
-    assert "shot-a" in entry.evidence_refs
-    assert entry.lineage == (artifact_content_sha(ARTIFACT),)
+    assert entry.methods == ("deep_shot_vision", "exact_frames")
+    assert len(entry.moment_reviews) == 1
+    citation = entry.moment_reviews[0]
+    assert citation.review_id == FUSED_REVIEW.review_id
+    assert citation.artifact_sha == FUSED_SHA
+    assert (citation.span.start_frame, citation.span.end_frame) == (0, 150)
+    assert citation.overall_confidence == pytest.approx(0.9)
+    assert citation.review_id in entry.evidence_refs
+    assert FUSED_SHA in entry.lineage
+    assert FUSED_SHA in bundle.lineage
 
 
-def test_shared_shots_page_costs_one_api_call(api: MediaQueryApiV2) -> None:
-    bundle = assemble_evidence_v2(api, [_cand("cand-broll", "b_roll", 0, 100, ("shot-a",))])
-    assert bundle.budget.api_calls == 1
-    assert bundle.budget.rows_returned == 1
+def test_non_overlapping_fused_review_is_never_cited(api_fused: MediaQueryApiV2) -> None:
+    """A fused review that does not overlap the candidate span cannot
+    corroborate it — exact half-open overlap, no proximity assumptions."""
+
+    bundle = assemble_evidence_v2(
+        api_fused, [_cand("cand-late", "b_roll", 200, 300, ("shot-c",))]
+    )
+    entry = bundle.entries[0]
+    assert "deep_shot_vision" not in entry.methods
+    assert entry.moment_reviews == ()
+    assert FUSED_SHA not in entry.lineage
+
+
+def test_synthetic_overlapping_review_does_not_corroborate(tmp_path: Path) -> None:
+    """A synthetic overlapping review must not satisfy deep_shot_vision —
+    the T7 contract requires genuine fused evidence, not placeholders."""
+
+    synthetic = make_moment_review(
+        "ep-001", 0, 150, overall=0.9, source_duration=300, provider="synthetic"
+    )
+    path = build_index(ARTIFACT, tmp_path / "synthetic.duckdb", reviews=(synthetic,))
+    with MediaQueryApiV2.open(path) as api:
+        bundle = assemble_evidence_v2(api, [_cand("cand-broll", "b_roll", 0, 100, ("shot-a",))])
+        entry = bundle.entries[0]
+        assert "deep_shot_vision" not in entry.methods
+        assert entry.moment_reviews == ()
+        assert review_content_sha(synthetic) not in entry.lineage
+
+
+def test_legacy_non_fused_review_does_not_corroborate(tmp_path: Path) -> None:
+    """A real legacy row whose tool is not the T6 fusion identity must not
+    satisfy deep_shot_vision merely because it overlaps."""
+
+    legacy = make_moment_review(
+        "ep-001",
+        0,
+        150,
+        overall=0.9,
+        source_duration=300,
+        provider="openai",
+        tool="multimodal-v1",
+        provider_version="gpt-5.6-sol",
+    )
+    path = build_index(ARTIFACT, tmp_path / "legacy.duckdb", reviews=(legacy,))
+    with MediaQueryApiV2.open(path) as api:
+        bundle = assemble_evidence_v2(api, [_cand("cand-broll", "b_roll", 0, 100, ("shot-a",))])
+        entry = bundle.entries[0]
+        assert "deep_shot_vision" not in entry.methods
+        assert entry.moment_reviews == ()
+        assert review_content_sha(legacy) not in entry.lineage
+
+
+def test_fused_review_page_is_cached_per_span(api_fused: MediaQueryApiV2) -> None:
+    """The moment-review query rides the same per-span caching discipline as
+    the shots page: shared spans cost one review call, not one per method."""
+
+    bundle = assemble_evidence_v2(
+        api_fused, [_cand("cand-broll", "b_roll", 0, 100, ("shot-a",))]
+    )
+    assert bundle.budget.api_calls == 2  # moment_reviews + shots (cached across methods)
+    assert bundle.budget.rows_returned == 2  # one review row + one shot row
 
 
 def test_legacy_method_aliases_map_to_legal_v2_methods() -> None:
@@ -301,9 +387,9 @@ def test_every_bundle_ref_requeries_to_a_real_index_id(api: MediaQueryApiV2) -> 
             assert ref in real
 
 
-def test_bundle_round_trip_json_and_budget_fields(api: MediaQueryApiV2) -> None:
+def test_bundle_round_trip_json_and_budget_fields(api_fused: MediaQueryApiV2) -> None:
     bundle = assemble_evidence_v2(
-        api,
+        api_fused,
         [
             _cand("cand-speech", "speech", 10, 90, ("shot-a", "tr-a1")),
             _cand("cand-est", "establishing", 200, 300, ("shot-c",)),
@@ -317,3 +403,5 @@ def test_bundle_round_trip_json_and_budget_fields(api: MediaQueryApiV2) -> None:
     assert bundle.budget.row_budget == vm.V2_ROW_BUDGET
     assert bundle.budget.api_calls >= 2
     assert bundle.budget.rows_returned >= 2
+    fused_entry = restored.entries[0]
+    assert fused_entry.moment_reviews == bundle.entries[0].moment_reviews

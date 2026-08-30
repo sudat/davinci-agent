@@ -80,14 +80,28 @@ class DirectorV2:
 
     __slots__ = ()
 
-    def run_three_pass(
+    def run_three_pass(  # noqa: PLR0913 (pass surface: brief + api + the four keyword-only seams)
         self,
         brief: EpisodeBriefV1,
         api_v2: MediaQueryApiV2,
         *,
         taste_profile: DerivedTasteProfileV1 | None = None,
         llm_call: LlmCallV2 | None = None,
+        source_id: str | None = None,
+        require_deep_review_keeps: bool = False,
     ) -> ThreePassResult:
+        """Three propose-only passes; ``source_id`` enables transcript
+        corroboration in the Pass B evidence bundle (T7: with no fused
+        reviews indexed, speech corroborates via transcript — never via
+        descriptions relabeled as deep vision).
+        ``require_deep_review_keeps`` (T7) adds one gate on top: every keep
+        must cite overlapping fused ``MomentDeepReviewV1`` evidence (bundle
+        ``moment_reviews``), so a keep whose required fused evidence is
+        missing, synthetic-filtered, or non-overlapping is refused as
+        uncorroborated BEFORE any commit. The gate never mutates the
+        selection — GPT-5.6 Sol (or the heuristic in diagnostics) stays the
+        only chooser of intent."""
+
         require_approved(brief)
         shots = _discover_shots(api_v2, brief.episode_id)
         digest = EvidenceDigestV2(
@@ -116,7 +130,7 @@ class DirectorV2:
             validate_story_plan(story.story_plan, set(known_shots))
 
         candidates = tuple(candidate_from_shot(shot) for shot in shots)
-        evidence = assemble_evidence_v2(api_v2, candidates)
+        evidence = assemble_evidence_v2(api_v2, candidates, source_id=source_id)
         known_candidates = frozenset(c.candidate_id for c in candidates)
         b_roll_cites, subtitle_cites = _taste_for_planning(taste_profile)
         request_b = PassBRequest(
@@ -132,6 +146,8 @@ class DirectorV2:
             selection = _validated_selection(
                 llm_call("pass_b", request_b), known_candidates, evidence
             )
+        if require_deep_review_keeps:
+            _require_fused_keeps(selection, evidence)
 
         request_c = PassCRequest(
             selection=selection, taste_citations=b_roll_cites + subtitle_cites
@@ -203,6 +219,25 @@ def _validated_selection(
             f"kept candidates lack evidence-bundle corroboration: {sorted(unbacked)}",
         )
     return draft
+
+
+def _require_fused_keeps(
+    selection: MomentSelectionDraft, evidence: EvidenceBundleV2
+) -> None:
+    """Refuse keeps without overlapping fused moment-review citations."""
+
+    cited = {entry.candidate_id: entry.moment_reviews for entry in evidence.entries}
+    unbacked = sorted(
+        candidate.candidate_id
+        for candidate in selection.proposal.candidates
+        if candidate.intent == "keep" and not cited.get(candidate.candidate_id)
+    )
+    if unbacked:
+        raise DirectorV2Error(
+            "uncorroborated-keep",
+            f"kept candidates lack fused moment-review evidence (no overlapping "
+            f"MomentDeepReviewV1 in the index): {unbacked}",
+        )
 
 
 def _require_known_targets(

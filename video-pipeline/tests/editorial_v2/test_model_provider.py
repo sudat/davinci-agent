@@ -59,6 +59,7 @@ from services.editorial_v2.model_provider import (
 from services.editorial_v2.prompt_v2 import PROMPT_A, StoryPlanDraft
 from services.foundation_io import atomic_write, canonical_model_bytes
 from tests.editorial_v2.fixtures.three_pass_fixture import (
+    SOURCE_ID,
     make_brief,
     make_episode_artifact,
     open_api,
@@ -77,7 +78,7 @@ def api(tmp_path: Path) -> Iterator[MediaQueryApiV2]:
 
 
 def _run(api: MediaQueryApiV2) -> ThreePassResult:
-    return DirectorV2().run_three_pass(make_brief(), api)
+    return DirectorV2().run_three_pass(make_brief(), api, source_id=SOURCE_ID)
 
 
 def _director_pin() -> EditorialPinV2:
@@ -355,7 +356,9 @@ def test_stage_director_production_without_credentials_blocks_zero_socket(
 
     monkeypatch.setattr("urllib.request.build_opener", no_socket)
     with pytest.raises(Episode0BlockedError) as error:
-        _stage_director(make_brief(), api, None, runtime_path=runtime, env={})
+        _stage_director(
+            make_brief(), api, None, source_id=SOURCE_ID, runtime_path=runtime, env={}
+        )
     assert error.value.code == "production-model-unavailable"
     assert CREDENTIALS_ENV in error.value.detail
     assert NETWORK_ENV in error.value.detail
@@ -376,6 +379,7 @@ def test_stage_director_production_mode_wires_injected_transport(
         make_brief(),
         api,
         None,
+        source_id=SOURCE_ID,
         runtime_path=runtime,
         env={CREDENTIALS_ENV: "test-key", NETWORK_ENV: "1"},
     )
@@ -391,7 +395,7 @@ def test_stage_director_heuristic_mode_runs_deterministic_planner(
     byte-identical to the default, behind an explicit diagnostic banner."""
 
     runtime = _write_runtime(tmp_path, "heuristic_diagnostic")
-    result = _stage_director(make_brief(), api, None, runtime_path=runtime)
+    result = _stage_director(make_brief(), api, None, source_id=SOURCE_ID, runtime_path=runtime)
     assert result.model_dump_json() == _run(api).model_dump_json()
     out = capsys.readouterr().out
     assert "heuristic_diagnostic" in out
@@ -408,11 +412,13 @@ def test_default_runtime_and_pins_validate_and_resolve() -> None:
     paths = {
         runtime.director_pin_path,
         runtime.moment_review_pin_path,
+        runtime.moment_review_specialist_pin_path,
         runtime.review_interpreter_pin_path,
     }
-    assert len(paths) == 3  # three INDEPENDENT logical pins (user decision)
+    assert None not in paths
+    assert len(paths) == 4  # four INDEPENDENT logical pins (T3 added the GLM specialist)
     for relative in paths:
-        assert Path(relative).is_file(), relative
+        assert Path(str(relative)).is_file(), relative
 
     director = load_editorial_pin(Path(runtime.director_pin_path))
     assert director.purpose == "editorial-director-v2"
@@ -695,7 +701,7 @@ def test_stage_director_codex_gate_blocked_zero_subprocess(
 
     monkeypatch.setattr("services.cli.episode0.make_codex_runner", gated)
     with pytest.raises(Episode0BlockedError) as error:
-        _stage_director(make_brief(), api, None, runtime_path=runtime)
+        _stage_director(make_brief(), api, None, source_id=SOURCE_ID, runtime_path=runtime)
     assert error.value.code == "production-model-unavailable"
     assert "codex login" in error.value.detail
     assert "openai-api" in error.value.detail  # the switch-back path is named
@@ -715,7 +721,7 @@ def test_stage_director_codex_transport_wires_injected_runner(
     runner = _ScriptedCodexRunner(_canned_messages(baseline))
     monkeypatch.setattr("services.cli.episode0.make_codex_runner", lambda: runner)
 
-    result = _stage_director(make_brief(), api, None, runtime_path=runtime)
+    result = _stage_director(make_brief(), api, None, source_id=SOURCE_ID, runtime_path=runtime)
 
     assert result.moment_selection.proposal == baseline.moment_selection.proposal
     assert len(runner.calls) == 3
