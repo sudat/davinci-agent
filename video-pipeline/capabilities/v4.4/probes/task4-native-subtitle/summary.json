@@ -1,0 +1,84 @@
+{
+ "schema_version": "task4-subtitle-probe-v3",
+ "run": "style-completeness repair (full Font/Size/Center readback compare + fresh-evidence render/ledger reset)",
+ "resolve_version": "21.0.4.5",
+ "bound_font": "Hiragino Sans W3",
+ "cues": [
+  {
+   "cue_id": "cue-s1",
+   "text": "今日はDaVinci Resolveの使い方を紹介します",
+   "start_frame": 15,
+   "end_frame": 45
+  },
+  {
+   "cue_id": "cue-s2",
+   "text": "再生と編集の違いに注意してください",
+   "start_frame": 65,
+   "end_frame": 86
+  },
+  {
+   "cue_id": "cue-s3-long",
+   "text": "これは長い字幕の確認用キューで、複数行の日本語テキストが\nフレームの右端で切れずに読みやすく表示されることを確認します",
+   "start_frame": 100,
+   "end_frame": 150
+  }
+ ],
+ "probes": [
+  {
+   "capability": "p1-session",
+   "status": "ok",
+   "readback": "ts=108000 clip=4d5b71a4-e5b9-4ca9-9277-6b243f8f4c13",
+   "wall_seconds": 1.839
+  },
+  {
+   "capability": "p2-prepare-product-adapter",
+   "status": "ok",
+   "readback": "adapter prepared; media V1 [0,150) placed with post-load id",
+   "wall_seconds": 1.375
+  },
+  {
+   "capability": "a-autocaption-expressibility",
+   "status": "ok",
+   "readback": "settings keys=[]; no cue text/timing parameter exists; generated cues (speech-to-text, tone audio)=[]; committed text cannot be expressed through this path",
+   "wall_seconds": 2.013
+  },
+  {
+   "capability": "b-one-cue-native",
+   "status": "ok",
+   "readback": "{\"cues\": [{\"cue_id\": \"cue-s1\", \"text\": \"今日はDaVinci Resolveの使い方を紹介します\", \"record_span\": {\"start_frame\": 15, \"end_frame\": 45}, \"style\": {\"font\": \"Hiragino Sans W3\", \"size\": 0.04, \"center\": [0.5, 0.14]}}]}",
+   "wall_seconds": 1.297
+  },
+  {
+   "capability": "b2-rerun-identity",
+   "status": "ok",
+   "readback": "rerun duplicate_created=0 overlay_items=1",
+   "wall_seconds": 0.488
+  },
+  {
+   "capability": "c-all-cues",
+   "status": "ok",
+   "readback": "3 cues exact: spans=[(15, 45), (65, 86), (100, 150)] newline_preserved=True style_font=Hiragino Sans W3",
+   "wall_seconds": 2.62
+  },
+  {
+   "capability": "d-render-evidence",
+   "status": "ok",
+   "readback": "inside=[0.952287, 0.728868, 2.17876] outside=[0.0, 0.151549, 0.142708] (PNGs render/cue-n*.png kept for visual glyph audit)",
+   "wall_seconds": 11.837
+  },
+  {
+   "capability": "prod-independent-readback",
+   "status": "ok",
+   "readback": "{\"overlay_item_count\": 3, \"overlay_spans\": [[15, 45], [65, 86], [100, 150]], \"expected_spans\": [[15, 45], [65, 86], [100, 150]], \"card_texts\": [\"今日はDaVinci Resolveの使い方を紹介します\", \"再生と編集の違いに注意してください\", \"これは長い字幕の確認用キューで、複数行の日本語テキストが\\nフレームの右端で切れずに読みやすく表示されることを確認します\"], \"card_fonts\": [\"Hiragino Sans W3\", \"Hiragino Sans W3\", \"Hiragino Sans W3\"], \"bound_font\": \"Hiragino Sans W3\"}",
+   "wall_seconds": 0.806
+  }
+ ],
+ "evidence_files": [
+  "font-diagnosis.json",
+  "font-render-arms.json",
+  "rendered-span-proof.json",
+  "product-run.json",
+  "ledger/",
+  "render/"
+ ]
+}

@@ -1,0 +1,45 @@
+{
+ "schema_version": "task4-rendered-span-proof-v2",
+ "cues": [
+  {
+   "cue_id": "cue-s1",
+   "text": "今日はDaVinci Resolveの使い方を紹介します",
+   "start_frame": 15,
+   "end_frame": 45
+  },
+  {
+   "cue_id": "cue-s2",
+   "text": "再生と編集の違いに注意してください",
+   "start_frame": 65,
+   "end_frame": 86
+  },
+  {
+   "cue_id": "cue-s3-long",
+   "text": "これは長い字幕の確認用キューで、複数行の日本語テキストが\nフレームの右端で切れずに読みやすく表示されることを確認します",
+   "start_frame": 100,
+   "end_frame": 150
+  }
+ ],
+ "frame_diffs_yavg": {
+  "5": 0.0,
+  "55": 0.151549,
+  "90": 0.142708,
+  "30": 0.952287,
+  "75": 0.728868,
+  "125": 2.17876
+ },
+ "control_frames": [
+  5,
+  55,
+  90
+ ],
+ "cue_frames": {
+  "cue-s1": 30,
+  "cue-s2": 75,
+  "cue-s3-long": 125
+ },
+ "renders": {
+  "control": "render/t4r-control.mp4",
+  "cue": "render/t4r-cue.mp4"
+ }
+}

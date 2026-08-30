@@ -1,0 +1,129 @@
+{
+  "blocker": null,
+  "drx_binding": {
+    "drx": "technical-normalize-v1.drx",
+    "kit_recipe_id": "color/technical-normalize",
+    "ref": "drx-technical-normalize-v1",
+    "sha256": "509e70f94fe33667a5f0ee92dfb36cf6106bf8f086e962b41ca93cd2c1c30269"
+  },
+  "first_result": {
+    "applied_targets": [
+      {
+        "already_applied": false,
+        "confirmation": {
+          "required": true,
+          "token_issued": true
+        },
+        "frame": {
+          "a_sha256": "e8860ba032664325e240881b877a084d6aaa3f7aba53a9addb1878ab27b16b6a",
+          "b_sha256": "91004e58cf84e5d0a0aac2a95d26977cdf20a734ca5f565e2cd3dd830b853892",
+          "mean_abs_diff": 110.60982060185185
+        },
+        "grade_version": "drx-drx-technical-normalize-v1-509e70f9",
+        "graph": {
+          "after_num_nodes": 2,
+          "before_num_nodes": 1
+        },
+        "item_id": "t6-1",
+        "target_frame": 30,
+        "timeline_item_id": "261440e8-3f18-4de0-8e75-78a797dc570e"
+      }
+    ],
+    "drx_sha256": "509e70f94fe33667a5f0ee92dfb36cf6106bf8f086e962b41ca93cd2c1c30269",
+    "kit_recipe_id": "color/technical-normalize",
+    "preset_ref": "drx-technical-normalize-v1",
+    "target": "technical_correction.exposure",
+    "untargeted_frames": [
+      {
+        "a_sha256": "f708f32e4472860b21d5549276fc596560168429b24768e0125e56cca702a1bd",
+        "b_sha256": "ac1f70a84b9dc6cd45c91f05b0f8d7878f9aa6dfaddd2a03a078400f954bbdfe",
+        "frame": 90,
+        "mean_abs_diff": 0.18245756172839506,
+        "timeline_item_id": "6de23ebf-7bad-458c-ac33-8d3433b0be81"
+      }
+    ]
+  },
+  "provider_version": "2.98.3",
+  "renders_before_cleanup": [
+    "color-technical_correction.exposure-after-23a05945.mp4",
+    "color-technical_correction.exposure-after-61499083.mp4",
+    "color-technical_correction.exposure-before-23a05945.mp4",
+    "color-technical_correction.exposure-before-61499083.mp4"
+  ],
+  "rerun_result": {
+    "applied_targets": [
+      {
+        "already_applied": true,
+        "confirmation": {
+          "required": false
+        },
+        "frame": {
+          "a_sha256": "91004e58cf84e5d0a0aac2a95d26977cdf20a734ca5f565e2cd3dd830b853892",
+          "b_sha256": "91004e58cf84e5d0a0aac2a95d26977cdf20a734ca5f565e2cd3dd830b853892",
+          "mean_abs_diff": 0.0
+        },
+        "grade_version": "drx-drx-technical-normalize-v1-509e70f9",
+        "graph": {
+          "after_num_nodes": 2,
+          "before_num_nodes": 2
+        },
+        "item_id": "t6-1",
+        "target_frame": 30,
+        "timeline_item_id": "261440e8-3f18-4de0-8e75-78a797dc570e"
+      }
+    ],
+    "drx_sha256": "509e70f94fe33667a5f0ee92dfb36cf6106bf8f086e962b41ca93cd2c1c30269",
+    "kit_recipe_id": "color/technical-normalize",
+    "preset_ref": "drx-technical-normalize-v1",
+    "target": "technical_correction.exposure",
+    "untargeted_frames": [
+      {
+        "a_sha256": "ac1f70a84b9dc6cd45c91f05b0f8d7878f9aa6dfaddd2a03a078400f954bbdfe",
+        "b_sha256": "ac1f70a84b9dc6cd45c91f05b0f8d7878f9aa6dfaddd2a03a078400f954bbdfe",
+        "frame": 90,
+        "mean_abs_diff": 0.0,
+        "timeline_item_id": "6de23ebf-7bad-458c-ac33-8d3433b0be81"
+      }
+    ]
+  },
+  "resolve_version": "21.0.4.5",
+  "retained_bytes": 24444,
+  "retained_ledger_files": [
+    "mcp-call-ledger.jsonl"
+  ],
+  "schema_version": "task6-color-probe-v1",
+  "section": "technical_correction.exposure",
+  "steps": [
+    {
+      "detail": "project/timeline probe-t6color-c463fa-timeline",
+      "status": "ok",
+      "step": "prepare_project"
+    },
+    {
+      "detail": "calibrated synthetic clip imported",
+      "status": "ok",
+      "step": "safe_import_media"
+    },
+    {
+      "detail": "target 60-frame clip [0,60) on primary",
+      "status": "ok",
+      "step": "append_to_timeline(t6-1)"
+    },
+    {
+      "detail": "untargeted 60-frame clip [60,120) (stability control)",
+      "status": "ok",
+      "step": "append_to_timeline(t6-2)"
+    },
+    {
+      "detail": "drx=509e70f94fe33667a5f0ee92dfb36cf6106bf8f086e962b41ca93cd2c1c30269 targets=1 untargeted_rows=1",
+      "status": "ok",
+      "step": "safe_apply_drx(targeted)"
+    },
+    {
+      "detail": "already_applied=True grade_version=drx-drx-technical-normalize-v1-509e70f9",
+      "status": "ok",
+      "step": "safe_apply_drx(rerun)"
+    }
+  ],
+  "wall_seconds": 23.6
+}

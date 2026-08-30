@@ -1,0 +1,87 @@
+{
+  "execution_report_first_outcome": "completed",
+  "execution_report_rerun_outcome": "completed",
+  "first": {
+    "job_id": "80e6c3dc-4b6b-451f-b84f-b567849f14b1",
+    "media": {
+      "audio_channels": 2,
+      "audio_codec": "aac",
+      "audio_sample_rate": 48000,
+      "avg_frame_rate": "30/1",
+      "duration_seconds": 1.066667,
+      "has_subtitle_stream": false,
+      "height": 1080,
+      "video_codec": "h264",
+      "width": 1920
+    },
+    "output_path": "capabilities/v4.4/probes/task7-native-render/render/finishing-native-t7probe.mp4",
+    "output_sha256": "594b4202ad99a86689ab68dd059c8948bfc3cb7aca7e9d52267361d00c2ed9a7",
+    "reused": false
+  },
+  "ledger_rows_final": 8,
+  "plan_id": "7826d011d7775c8ad206b9ec3f5770d56d5e07c00357e37e468910d9d9930ba9",
+  "render_step_status": [
+    "completed",
+    "completed"
+  ],
+  "rerun": {
+    "job_id": "80e6c3dc-4b6b-451f-b84f-b567849f14b1",
+    "media": {
+      "audio_channels": 2,
+      "audio_codec": "aac",
+      "audio_sample_rate": 48000,
+      "avg_frame_rate": "30/1",
+      "duration_seconds": 1.066667,
+      "has_subtitle_stream": false,
+      "height": 1080,
+      "video_codec": "h264",
+      "width": 1920
+    },
+    "output_path": "capabilities/v4.4/probes/task7-native-render/render/finishing-native-t7probe.mp4",
+    "output_sha256": "594b4202ad99a86689ab68dd059c8948bfc3cb7aca7e9d52267361d00c2ed9a7",
+    "real_job_id": true,
+    "rerun_vendor_call_delta": {
+      "delete_job": 0,
+      "get_codecs": 0,
+      "get_format_and_codec": 0,
+      "get_formats": 0,
+      "get_job_status": 0,
+      "is_rendering": 1,
+      "list_jobs": 1,
+      "prepare_render_job": 0,
+      "safe_set_render_settings": 0,
+      "set_format_and_codec": 0,
+      "start": 0,
+      "validate_render_settings": 0
+    },
+    "reused": true,
+    "same_job_id_as_first": true,
+    "same_output_as_first": true,
+    "same_sha256_as_first": true,
+    "step_action_counts_final": {
+      "import_media": 2,
+      "place_clip": 2,
+      "prepare_project": 2,
+      "render_native": 2
+    },
+    "zero_new_prepare": true,
+    "zero_new_start": true
+  },
+  "route": "production emitters -> McpExecutionPlanV1 -> McpExecutionRunnerV2 -> LiveMcpAdapter -> pinned MCP",
+  "schema": "task7-native-render-v5",
+  "verdict": {
+    "first_not_reused": true,
+    "first_single_prepare": true,
+    "first_single_start": true,
+    "passed": true,
+    "rerun_reused": true,
+    "rerun_zero_prepare": true,
+    "rerun_zero_start": true,
+    "same_job_id": true,
+    "same_media_facts": true,
+    "same_output_path": true,
+    "same_sha256": true,
+    "steps_completed": true
+  },
+  "wall_seconds": 7.852
+}

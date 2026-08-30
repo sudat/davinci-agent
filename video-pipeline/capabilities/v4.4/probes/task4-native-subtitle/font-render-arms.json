@@ -1,0 +1,79 @@
+{
+ "schema_version": "task4-font-render-arms-v1",
+ "text": "日本語字幕テスト PROBE",
+ "arm_B_hiragino_first": {
+  "font_requested": "Hiragino Sans",
+  "font_readback": "Hiragino Sans",
+  "settings_before": {
+   "settings": {
+    "error": "GetRenderSettings unavailable"
+   },
+   "is_rendering": false
+  },
+  "render_file": "t4m3-B.mp4",
+  "streams": [
+   [
+    "audio",
+    "3"
+   ],
+   [
+    "data",
+    "1"
+   ]
+  ],
+  "frame": "NO_VIDEO_STREAM"
+ },
+ "arm_A_default_second": {
+  "font_requested": null,
+  "font_readback": "Open Sans",
+  "settings_before": {
+   "settings": {
+    "error": "GetRenderSettings unavailable"
+   },
+   "is_rendering": false
+  },
+  "render_file": "t4m3-A.mp4",
+  "streams": [
+   [
+    "video",
+    "150"
+   ],
+   [
+    "audio",
+    "238"
+   ],
+   [
+    "data",
+    "1"
+   ]
+  ],
+  "frame": "t4m3-A.png"
+ },
+ "arm_C_hiragino_w3": {
+  "font_requested": "Hiragino Sans W3",
+  "font_readback": "Hiragino Sans W3",
+  "settings_before": {
+   "settings": {
+    "error": "GetRenderSettings unavailable"
+   },
+   "is_rendering": false
+  },
+  "render_file": "t4m3-C.mp4",
+  "streams": [
+   [
+    "video",
+    "150"
+   ],
+   [
+    "audio",
+    "238"
+   ],
+   [
+    "data",
+    "1"
+   ]
+  ],
+  "frame": "t4m3-C.png"
+ },
+ "verdict": "ARMS_CAPTURED"
+}

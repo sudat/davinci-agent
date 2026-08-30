@@ -1,0 +1,86 @@
+{
+  "cleanup_blocker": {
+    "code": "preset-missing",
+    "detail": "Fairlight preset 'dialogue-chain' (kit audio/dialogue-chain) is absent from the 0 presets Resolve lists; save it in the Fairlight UI once — success is never guessed",
+    "operator_instruction": "Fairlight ページでミックスを 'dialogue-chain' という名前で一度保存する(プリセット保存 API は存在しない - UI 操作のみ)。保存後に再実行。"
+  },
+  "loudness_measurements": {
+    "channels": 2,
+    "integrated_loudness_lufs": -14.8,
+    "max_silence_ms": 0,
+    "measured_from": "resolve_render",
+    "media_name": "audio-loudness_peak_qc-59a23bea.mp4",
+    "media_sha256": "c71d1ce07490d6e934c4a18165cee804c398720b2a7e052ec054965e5221c589",
+    "peak_mb": -13842,
+    "true_peak_dbtp": -13.8
+  },
+  "preset_binding": {
+    "kit_recipe_id": "audio/dialogue-chain",
+    "name": "dialogue-chain",
+    "ref": "fairlight-dialogue-chain-v1"
+  },
+  "provider_version": "2.98.3",
+  "renders_before_cleanup": [
+    "audio-loudness_peak_qc-286aaaaa.mp4",
+    "audio-loudness_peak_qc-59a23bea.mp4"
+  ],
+  "resolve_version": "21.0.4.5",
+  "retained_bytes": 16726,
+  "retained_ledger_files": [
+    "mcp-call-ledger.jsonl"
+  ],
+  "schema_version": "task5-audio-probe-v1",
+  "steps": [
+    {
+      "detail": "project/timeline probe-t5audio-3dc210-timeline",
+      "status": "ok",
+      "step": "prepare_project"
+    },
+    {
+      "detail": "calibrated synthetic clip imported",
+      "status": "ok",
+      "step": "safe_import_media"
+    },
+    {
+      "detail": "180-frame clip placed on the primary track",
+      "status": "ok",
+      "step": "append_to_timeline"
+    },
+    {
+      "detail": "dialogue audio placed (media_type 2)",
+      "status": "ok",
+      "step": "append_to_timeline(place_audio)"
+    },
+    {
+      "detail": "value=-14.8",
+      "status": "ok",
+      "step": "loudness_peak_qc"
+    },
+    {
+      "detail": "{\"amount\": 60, \"is_enabled\": true, \"item_ref\": \"timeline\", \"state_property\": \"voice_isolation\"}",
+      "status": "ok",
+      "step": "voice_isolation"
+    },
+    {
+      "detail": "listing=[]",
+      "status": "ok",
+      "step": "get_fairlight_presets"
+    },
+    {
+      "detail": "success=False error=None",
+      "status": "refused",
+      "step": "apply_fairlight_preset"
+    },
+    {
+      "detail": "preset-missing: Fairlight preset 'dialogue-chain' (kit audio/dialogue-chain) is absent from the 0 presets Resolve lists; save it in the Fairlight UI once — success is never guessed",
+      "status": "blocked",
+      "step": "dialogue_cleanup"
+    },
+    {
+      "detail": "audio-stage-out-of-range: loudness_peak_qc measured integrated_loudness -34.3 lufs outside [-17.0, -13.0]",
+      "status": "blocked",
+      "step": "loudness_peak_qc_after_voice_isolation"
+    }
+  ],
+  "wall_seconds": 13.5
+}

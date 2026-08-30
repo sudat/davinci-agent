@@ -1,0 +1,50 @@
+{
+ "schema_version": "task4-product-run-v2",
+ "prepare": {
+  "timeline_start": 108000,
+  "timeline_name": "probe-t4r-134520-tl"
+ },
+ "independent_readback": {
+  "overlay_item_count": 3,
+  "overlay_spans": [
+   [
+    15,
+    45
+   ],
+   [
+    65,
+    86
+   ],
+   [
+    100,
+    150
+   ]
+  ],
+  "expected_spans": [
+   [
+    15,
+    45
+   ],
+   [
+    65,
+    86
+   ],
+   [
+    100,
+    150
+   ]
+  ],
+  "card_texts": [
+   "今日はDaVinci Resolveの使い方を紹介します",
+   "再生と編集の違いに注意してください",
+   "これは長い字幕の確認用キューで、複数行の日本語テキストが\nフレームの右端で切れずに読みやすく表示されることを確認します"
+  ],
+  "card_fonts": [
+   "Hiragino Sans W3",
+   "Hiragino Sans W3",
+   "Hiragino Sans W3"
+  ],
+  "bound_font": "Hiragino Sans W3"
+ },
+ "verdict": "PASS"
+}
