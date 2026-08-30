@@ -31,6 +31,7 @@ from pydantic_core import PydanticCustomError
 
 from services.contracts.primitives import Identifier, Sha256, StrictModel
 from services.editorial_v2.moment_models import MomentIntent  # noqa: TC001 (pydantic field)
+from services.editorial_v2.removal_policy import ineligible_removal_detail
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.media_query import v2_models as vm
 from services.review_command.events import (
@@ -45,6 +46,7 @@ from services.review_command.store import append_events, load_events, seal_path
 if TYPE_CHECKING:
     from services.editorial_v2.evidence_v2 import EvidenceBundleV2
     from services.editorial_v2.moment_models import MomentSelectionProposalV2
+    from services.editorial_v2.removal_policy import RemovalEligibilityV1
     from services.media_query.query_v2 import MediaQueryApiV2
 
 INDEX_NAME = "versions.json"
@@ -70,6 +72,10 @@ class HallucinatedReferenceError(MomentValidationError):
 
 class EvidenceCoverageError(MomentValidationError):
     """The evidence bundle does not cover the proposal as claimed."""
+
+
+class RemovalEligibilityError(MomentValidationError):
+    """A remove lacks precomputed deterministic eligibility (T4 fail-closed)."""
 
 
 class LockConflictError(MomentValidationError):
@@ -304,16 +310,20 @@ def validate_proposal(
     evidence_bundle: EvidenceBundleV2,
     *,
     locks: tuple[MomentLockRecord, ...] = (),
+    removal_eligibility: tuple[RemovalEligibilityV1, ...] | None = None,
 ) -> ValidationResult:
     """Validate a moment-selection proposal against re-queried ground truth.
 
-    Order: bundle coverage (semantic) → hallucinated id/span re-query →
+    Order: bundle coverage (semantic) → removal policy (T4, when the caller
+    supplies the runtime-only eligibility) → hallucinated id/span re-query →
     lock conflict. Any refusal raises a typed error; the returned receipt
     binds the validation to the exact proposal bytes via its sha256.
     """
 
     digest = hashlib.sha256(canonical_model_bytes(proposal)).hexdigest()
     _check_bundle_coverage(proposal, evidence_bundle)
+    if removal_eligibility is not None:
+        _check_removal_policy(proposal, removal_eligibility)
     known_refs = frozenset(ref for entry in evidence_bundle.entries for ref in entry.evidence_refs)
     refs = _check_against_index(api_v2, proposal, known_refs)
     _check_locks(proposal, locks)
@@ -324,6 +334,16 @@ def validate_proposal(
         refs_verified=len(refs),
         locks_checked=len(locks),
     )
+
+
+def _check_removal_policy(
+    proposal: MomentSelectionProposalV2, eligibility: tuple[RemovalEligibilityV1, ...]
+) -> None:
+    detail = ineligible_removal_detail(
+        proposal.candidates, {entry.candidate_id: entry for entry in eligibility}
+    )
+    if detail is not None:
+        raise RemovalEligibilityError("removal-not-eligible", detail)
 
 
 def _build_commit_event(
@@ -426,6 +446,7 @@ __all__ = [
     "MomentSelectionVersionEntry",
     "MomentSelectionVersionsIndex",
     "MomentValidationError",
+    "RemovalEligibilityError",
     "ValidationMismatchError",
     "ValidationResult",
     "commit_selection",

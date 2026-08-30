@@ -24,6 +24,7 @@ from services.editorial_v2.moment_models import (
     MomentProvenance,
     MomentSelectionProposalV2,
     MomentSourceSpan,
+    RemovalReason,
 )
 from services.editorial_v2.proposal_validate import (
     CommitReceipt,
@@ -34,6 +35,7 @@ from services.editorial_v2.proposal_validate import (
     LockConflictError,
     MomentLockRecord,
     MomentSelectionStore,
+    RemovalEligibilityError,
     ValidationMismatchError,
     ValidationResult,
     commit_selection,
@@ -41,6 +43,7 @@ from services.editorial_v2.proposal_validate import (
     load_moment_index,
     validate_proposal,
 )
+from services.editorial_v2.removal_policy import RemovalEligibilityV1
 from services.review_command.events import (
     GENESIS_EVENT_HASH,
     MOMENT_SELECTION_V2_COMMITTED,
@@ -71,6 +74,7 @@ def _candidate(  # noqa: PLR0913 (fixture DSL: one kwarg per decision field)
     *,
     intent: MomentIntent,
     refs: tuple[str, ...],
+    removal_reason: RemovalReason | None = None,
 ) -> MomentCandidateV2:
     return MomentCandidateV2(
         candidate_id=cid,
@@ -81,6 +85,7 @@ def _candidate(  # noqa: PLR0913 (fixture DSL: one kwarg per decision field)
         evidence_refs=refs,
         confidence=0.9,
         provenance=MomentProvenance(producer="test-suite", version="v1"),
+        removal_reason=removal_reason,
     )
 
 
@@ -373,3 +378,153 @@ def test_commit_refuses_proposal_from_a_foreign_episode(tmp_path: Path) -> None:
 
         with pytest.raises(EpisodeMismatchError):
             commit_selection(stranger, result, store=_store(tmp_path))
+
+
+# --------------------------------------------- Task 4: removal policy at commit
+
+
+def _eligibility(
+    cid: str, reasons: frozenset[RemovalReason], refs: tuple[str, ...]
+) -> RemovalEligibilityV1:
+    return RemovalEligibilityV1(candidate_id=cid, allowed_reasons=reasons, evidence_refs=refs)
+
+
+def _cut_candidates(reason: RemovalReason | None) -> tuple[MomentCandidateV2, ...]:
+    return (
+        _candidate("cand-a", "speech", 0, 100, intent="keep", refs=("shot-a",)),
+        _candidate("cand-b", "reaction", 100, 200, intent="keep", refs=("shot-b",)),
+        _candidate(
+            "cand-e",
+            "speech",
+            500,
+            600,
+            intent="remove",
+            refs=("shot-e",),
+            removal_reason=reason,
+        ),
+    )
+
+
+_KEEP_ONLY_ELIGIBILITY = (
+    _eligibility("cand-a", frozenset(), ()),
+    _eligibility("cand-b", frozenset(), ()),
+)
+
+
+def test_remove_without_eligibility_entry_refused_before_commit(
+    tmp_path: Path,
+) -> None:
+    """Absent entry, absent reason: both are typed refusals and nothing is
+    committed (no version, no event)."""
+    with open_api(make_episode_artifact(), tmp_path) as api:
+        for reason in (None, "false_start"):
+            candidates = _cut_candidates(reason)
+            bundle = assemble_evidence_v2(api, candidates, source_id=SOURCE_ID)
+            with pytest.raises(RemovalEligibilityError) as excinfo:
+                validate_proposal(
+                    _proposal(candidates),
+                    api,
+                    bundle,
+                    removal_eligibility=_KEEP_ONLY_ELIGIBILITY,
+                )
+            assert excinfo.value.code == "removal-not-eligible"
+            assert "cand-e" in str(excinfo.value)
+
+    store = _store(tmp_path)
+    assert load_events(store.log_path) == ()
+    assert set(load_moment_index(store).versions) == {"1"}
+
+
+def test_remove_with_reason_outside_allowed_set_refused_before_commit(
+    tmp_path: Path,
+) -> None:
+    with open_api(make_episode_artifact(), tmp_path) as api:
+        candidates = _cut_candidates("exact_duplicate")
+        bundle = assemble_evidence_v2(api, candidates, source_id=SOURCE_ID)
+        eligibility = (
+            *_KEEP_ONLY_ELIGIBILITY,
+            _eligibility("cand-e", frozenset({"false_start"}), ("shot-e",)),
+        )
+        with pytest.raises(RemovalEligibilityError) as excinfo:
+            validate_proposal(
+                _proposal(candidates), api, bundle, removal_eligibility=eligibility
+            )
+        assert excinfo.value.code == "removal-not-eligible"
+        assert "allowed reasons" in str(excinfo.value)
+
+
+def test_remove_not_citing_deterministic_evidence_refused(
+    tmp_path: Path,
+) -> None:
+    with open_api(make_episode_artifact(), tmp_path) as api:
+        candidates = (
+            _candidate("cand-a", "speech", 0, 100, intent="keep", refs=("shot-a",)),
+            _candidate("cand-b", "reaction", 100, 200, intent="keep", refs=("shot-b",)),
+            _candidate(
+                "cand-e",
+                "speech",
+                500,
+                600,
+                intent="remove",
+                refs=("shot-e",),
+                removal_reason="exact_duplicate",
+            ),
+        )
+        bundle = assemble_evidence_v2(api, candidates, source_id=SOURCE_ID)
+        eligibility = (
+            *_KEEP_ONLY_ELIGIBILITY,
+            _eligibility(
+                "cand-e", frozenset({"exact_duplicate"}), ("shot-e", "shot-c")
+            ),
+        )
+        with pytest.raises(RemovalEligibilityError) as excinfo:
+            validate_proposal(
+                _proposal(candidates), api, bundle, removal_eligibility=eligibility
+            )
+        assert "does not cite" in str(excinfo.value)
+
+
+def test_eligible_remove_with_cited_evidence_validates_and_commits(
+    tmp_path: Path,
+) -> None:
+    with open_api(make_episode_artifact(), tmp_path) as api:
+        candidates = (
+            _candidate("cand-a", "speech", 0, 100, intent="keep", refs=("shot-a",)),
+            _candidate("cand-b", "reaction", 100, 200, intent="keep", refs=("shot-b",)),
+            _candidate(
+                "cand-e",
+                "speech",
+                500,
+                600,
+                intent="remove",
+                refs=("shot-e", "shot-c"),
+                removal_reason="exact_duplicate",
+            ),
+        )
+        bundle = assemble_evidence_v2(api, candidates, source_id=SOURCE_ID)
+        eligibility = (
+            *_KEEP_ONLY_ELIGIBILITY,
+            _eligibility(
+                "cand-e", frozenset({"exact_duplicate"}), ("shot-e", "shot-c")
+            ),
+        )
+        result = validate_proposal(
+            _proposal(candidates), api, bundle, removal_eligibility=eligibility
+        )
+        assert result.ok is True
+        store = _store(tmp_path)
+        receipt = commit_selection(_proposal(candidates), result, store=store)
+        assert receipt.version == 2
+        assert len(load_events(store.log_path)) == 1
+
+
+def test_without_eligibility_input_historical_removes_still_validate(
+    tmp_path: Path,
+) -> None:
+    """Compatibility lock: callers that pass no eligibility keep the
+    historical contract — a remove without a reason still validates."""
+    with open_api(make_episode_artifact(), tmp_path) as api:
+        candidates = _valid_candidates()
+        bundle = assemble_evidence_v2(api, candidates, source_id=SOURCE_ID)
+        result = validate_proposal(_proposal(candidates), api, bundle)
+        assert result.ok is True
