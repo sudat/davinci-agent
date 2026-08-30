@@ -8,6 +8,12 @@ duration; exceeding the limit without at least one explicit
 ``expansion_reasons`` entry raises ``BudgetExpansionUnjustifiedError``.
 Exceeding ``hard_coverage_cap`` is rejected even with reasons.
 
+v44 T5 splits accounting by ``budget_kind``: ``targeted_deep_review``
+(the historical GLM-targeted behavior above) and ``lead_map`` (the
+full-source universal map), whose merged unique union must cover
+``[0, source_duration)`` exactly and therefore caps at 1.0 without any
+expansion reason.
+
 Deterministic: identical inputs produce byte-identical canonical output
 (no clocks, randomness, or UUIDs; all ordering is sorted).  Wall clock is
 an input recorded from execution — at plan time it is 0.0.
@@ -16,12 +22,14 @@ an input recorded from execution — at plan time it is 0.0.
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import Annotated, Final, Literal
+from typing import Annotated, Final, Literal, assert_never
 
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from services.contracts.primitives import Frame, Identifier, RationalFrameRate, StrictModel
+
+BudgetKind = Literal["targeted_deep_review", "lead_map"]
 
 TriggerReason = Literal[
     "high_value",
@@ -32,6 +40,8 @@ TriggerReason = Literal[
     "editorial_qc_flag",
     "human_request",
     "recall_audit_sample",
+    "lead_map_window",
+    "specialist_target",
 ]
 
 TRIGGER_REASONS: Final[frozenset[str]] = frozenset(
@@ -44,6 +54,8 @@ TRIGGER_REASONS: Final[frozenset[str]] = frozenset(
         "editorial_qc_flag",
         "human_request",
         "recall_audit_sample",
+        "lead_map_window",
+        "specialist_target",
     )
 )
 
@@ -69,6 +81,12 @@ class BudgetExpansionUnjustifiedError(BudgetError):
     """Deep-review coverage exceeded the policy limit without a reason."""
 
     LABEL = "budget_expansion_unjustified"
+
+
+class BudgetLeadMapCoverageError(BudgetError):
+    """Lead-map windows do not cover the full source exactly."""
+
+    LABEL = "budget_lead_map_coverage"
 
 
 # ---------------------------------------------------------------------------
@@ -139,6 +157,7 @@ class AnalysisBudgetV1(StrictModel):
     expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
         default_factory=tuple
     )
+    budget_kind: BudgetKind = "targeted_deep_review"
 
 
 class BudgetRequest(StrictModel):
@@ -156,6 +175,7 @@ class BudgetRequest(StrictModel):
     expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
         default_factory=tuple
     )
+    budget_kind: BudgetKind = "targeted_deep_review"
 
 
 # ---------------------------------------------------------------------------
@@ -196,12 +216,15 @@ def _sorted_windows(
 
 
 def build_analysis_budget(request: BudgetRequest) -> AnalysisBudgetV1:
-    """Build an ``AnalysisBudgetV1`` enforcing the coverage policy.
+    """Build an ``AnalysisBudgetV1`` enforcing the kind-specific policy.
 
-    Raises ``BudgetError`` for non-positive source duration or windows
-    beyond the source, and ``BudgetExpansionUnjustifiedError`` when
-    coverage exceeds ``deep_review_coverage_max`` without an explicit
-    ``expansion_reasons`` entry.
+    ``targeted_deep_review``: raises ``BudgetError`` for non-positive
+    source duration or windows beyond the source, and
+    ``BudgetExpansionUnjustifiedError`` when coverage exceeds
+    ``deep_review_coverage_max`` without an explicit ``expansion_reasons``
+    entry.  ``lead_map``: the merged unique union must cover
+    ``[0, source_duration)`` exactly (``BudgetLeadMapCoverageError``
+    otherwise); full coverage is the cap and needs no expansion reason.
     """
 
     duration = int(request.source_duration_frames)
@@ -223,16 +246,28 @@ def build_analysis_budget(request: BudgetRequest) -> AnalysisBudgetV1:
     coverage = Fraction(union_frames, duration)
 
     limits = request.policy_limits
-    if coverage > Fraction(str(limits.hard_coverage_cap)):
-        raise BudgetError(
-            f"deep-review coverage {float(coverage):.4f} exceeds the hard cap "
-            f"{limits.hard_coverage_cap} even with expansion reasons"
-        )
-    if coverage > Fraction(str(limits.deep_review_coverage_max)) and not request.expansion_reasons:
-        raise BudgetExpansionUnjustifiedError(
-            f"deep-review coverage {float(coverage):.4f} exceeds limit "
-            f"{limits.deep_review_coverage_max} without an expansion reason"
-        )
+    match request.budget_kind:
+        case "targeted_deep_review":
+            if coverage > Fraction(str(limits.hard_coverage_cap)):
+                raise BudgetError(
+                    f"deep-review coverage {float(coverage):.4f} exceeds the hard cap "
+                    f"{limits.hard_coverage_cap} even with expansion reasons"
+                )
+            if coverage > Fraction(str(limits.deep_review_coverage_max)) and not (
+                request.expansion_reasons
+            ):
+                raise BudgetExpansionUnjustifiedError(
+                    f"deep-review coverage {float(coverage):.4f} exceeds limit "
+                    f"{limits.deep_review_coverage_max} without an expansion reason"
+                )
+        case "lead_map":
+            if merged != ((0, duration),):
+                raise BudgetLeadMapCoverageError(
+                    "lead-map windows must cover the full source exactly: merged "
+                    f"union {merged} != [0, {duration}) — a missing region blocks the run"
+                )
+        case unreachable:
+            assert_never(unreachable)
 
     counters = request.counters or AnalysisCounters(frames=union_frames)
     return AnalysisBudgetV1(
@@ -244,4 +279,5 @@ def build_analysis_budget(request: BudgetRequest) -> AnalysisBudgetV1:
         cache_hits=request.cache_hits,
         policy_limits=limits,
         expansion_reasons=request.expansion_reasons,
+        budget_kind=request.budget_kind,
     )

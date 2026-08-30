@@ -170,13 +170,73 @@ class ReviewConfidence(StrictModel):
     best_sub_span: float = Field(ge=0.0, le=1.0)
 
 
+class ReviewStageLineage(StrictModel):
+    """One staged provider call behind a fused review (v44 T6, additive).
+
+    Recorded per stage — local map, episode reduce, specialist observation,
+    fusion — with the pin identity (surface, model, canonical pin hash), the
+    requested half-open frame interval, and the ANALYZED interval the provider
+    reported. A span may be labeled analyzed only when it equals the requested
+    interval exactly (provider spans are observations, never authority), and a
+    failed stage carries no analyzed span and no output hash — it never lies
+    about coverage. ``attempts``/``cost`` are measured values; everything else
+    is deterministic, so stage identity never depends on measurements.
+    """
+
+    purpose: Literal["local_map", "global_reduce", "specialist", "fusion"]
+    provider: Annotated[str, Field(min_length=1, strict=True)]
+    model_id: Annotated[str, Field(min_length=1, strict=True)]
+    pin_sha256: Annotated[str, Field(min_length=1, strict=True)]
+    tool: Annotated[str, Field(min_length=1, strict=True)]
+    requested_start_frame: Frame
+    requested_end_frame: Frame
+    analyzed_start_frame: Frame | None = None
+    analyzed_end_frame: Frame | None = None
+    input_sha256: Annotated[str, Field(min_length=1, strict=True)]
+    output_sha256: str | None = None
+    attempts: int = Field(default=1, ge=1, strict=True)
+    cost: float | None = Field(default=None, ge=0.0)
+    outcome: Literal["analyzed", "failed"] = "analyzed"
+
+    @model_validator(mode="after")
+    def stage_fields_are_consistent(self) -> ReviewStageLineage:
+        analyzed = (self.analyzed_start_frame, self.analyzed_end_frame)
+        if self.outcome == "analyzed":
+            if None in analyzed or self.output_sha256 is None:
+                raise PydanticCustomError(
+                    "analyzed_stage_incomplete",
+                    "an analyzed stage needs both analyzed frames and an output hash",
+                )
+            if analyzed != (self.requested_start_frame, self.requested_end_frame):
+                raise PydanticCustomError(
+                    "analyzed_range_mismatch",
+                    "analyzed [{start}, {end}) must equal the requested interval — never "
+                    "label a requested span analyzed from a different span",
+                    {"start": analyzed[0], "end": analyzed[1]},
+                )
+        elif None not in analyzed or self.output_sha256 is not None:
+            raise PydanticCustomError(
+                "failed_stage_overclaims",
+                "a failed stage carries no analyzed span and no output hash",
+            )
+        return self
+
+
 class ReviewLineage(StrictModel):
-    """Provider/version/tool/cost lineage (PRD 7.5 records analysis cost)."""
+    """Provider/version/tool/cost lineage (PRD 7.5 records analysis cost).
+
+    ``stage_lineage`` (v44 T6, additive) carries the per-stage ledger behind
+    a fused review; payloads without it keep parsing with the empty default,
+    and the primary provider columns stay the fusion provider.
+    """
 
     provider: Annotated[str, Field(min_length=1, strict=True)]
     provider_version: Annotated[str, Field(min_length=1, strict=True)]
     tool: Annotated[str, Field(min_length=1, strict=True)]
     cost: float | None = Field(default=None, ge=0.0)
+    stage_lineage: Annotated[tuple[ReviewStageLineage, ...], BeforeValidator(_to_tuple)] = (
+        Field(default_factory=tuple)
+    )
 
 
 class MomentDeepReviewV1(StrictModel):
@@ -515,6 +575,7 @@ __all__ = [
     "ReviewLineage",
     "ReviewProviders",
     "ReviewRecordRequest",
+    "ReviewStageLineage",
     "ReviewWindow",
     "SyntheticAudioContext",
     "SyntheticFrameExtractor",

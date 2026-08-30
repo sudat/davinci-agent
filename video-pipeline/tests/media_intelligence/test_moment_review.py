@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from services.foundation_io import canonical_model_bytes
 from services.media_intelligence import moment_review as moment_review_module
@@ -50,6 +51,7 @@ from services.media_intelligence.moment_review import (
     execute_review,
     record_review,
     review_content_sha,
+    review_rows,
 )
 from services.media_query import v2_models as vm
 from services.media_query.index_v2 import build_index
@@ -221,6 +223,77 @@ def test_synthetic_provider_round_produces_full_review_with_lineage() -> None:
     assert review.lineage.provider == "synthetic-local"
     assert review.lineage.provider_version
     assert review.lineage.tool
+    assert review.lineage.stage_lineage == ()  # additive T6 field, empty by default
+
+
+def test_legacy_lineage_payload_without_stage_lineage_parses_with_default() -> None:
+    """Pre-T6 lineage payloads (no ``stage_lineage`` key) stay loadable with
+    the explicit empty-stage default; a stage-bearing payload round-trips."""
+
+    legacy = {"provider": "synthetic-local", "provider_version": "1",
+              "tool": "moment-review-synthetic"}
+    lineage = ReviewLineage.model_validate(legacy)
+    assert lineage.stage_lineage == ()
+    assert lineage.cost is None
+
+    staged = ReviewLineage.model_validate(
+        {
+            **legacy,
+            "stage_lineage": [
+                {
+                    "purpose": "local_map",
+                    "provider": "google-gemini-developer-api-generate-content-rest-v1beta",
+                    "model_id": "gemini-3.7-flash",
+                    "pin_sha256": "a" * 64,
+                    "tool": "video-understanding-v1",
+                    "requested_start_frame": 0,
+                    "requested_end_frame": 40,
+                    "analyzed_start_frame": 0,
+                    "analyzed_end_frame": 40,
+                    "input_sha256": "b" * 64,
+                    "output_sha256": "c" * 64,
+                    "attempts": 1,
+                    "outcome": "analyzed",
+                }
+            ],
+        }
+    )
+    assert staged.stage_lineage[0].purpose == "local_map"
+    assert staged.stage_lineage[0].cost is None
+
+    with pytest.raises(ValidationError):
+        ReviewLineage.model_validate(
+            {
+                **legacy,
+                "stage_lineage": [
+                    {
+                        "purpose": "local_map",
+                        "provider": "p",
+                        "model_id": "m",
+                        "pin_sha256": "a" * 64,
+                        "tool": "t",
+                        "requested_start_frame": 0,
+                        "requested_end_frame": 40,
+                        "analyzed_start_frame": 0,
+                        "analyzed_end_frame": 41,
+                        "input_sha256": "b" * 64,
+                        "output_sha256": "c" * 64,
+                    }
+                ],
+            }
+        )
+
+
+def test_review_rows_keep_the_primary_provider_columns() -> None:
+    """The v2 row shape is unchanged by T6: eleven primary columns, stage
+    detail lives only in the artifact hash."""
+
+    review = execute_review(
+        ReviewWindow(start_frame=100, end_frame=200), _providers(), context=_context()
+    )
+    (row,) = review_rows((review,))
+    assert len(row) == 11
+    assert row[8:11] == ("synthetic-local", "1", "moment-review-synthetic")
 
 
 def test_known_neighbors_are_attached_verbatim() -> None:

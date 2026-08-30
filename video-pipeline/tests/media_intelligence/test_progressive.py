@@ -1,15 +1,20 @@
-"""Progressive analysis scheduler + AnalysisBudgetV1 (task 16).
+# allow: SIZE_OK — task 16 pinned budget/progressive coverage to this module and
+# the v44 T5 plan extends the SAME module (budget-kind accounting split + lead-map
+# windows); repo test modules run 500-700 LOC (T3/T4 precedent).
+"""Progressive analysis scheduler + AnalysisBudgetV1 (task 16 + v44 T5).
 
 Covers: full three-stage routing, per-window trigger attribution, the 25%
 deep-review coverage SLO with typed unjustified-expansion rejection,
 determinism (identical canonical bytes on double run), the router-only
-contract (no keep/remove intent fields), and deterministic low-stratum
-recall-audit sampling.
+contract (no keep/remove intent fields), deterministic low-stratum
+recall-audit sampling, the T5 budget-kind split (targeted deep review vs
+full-source lead map), and deterministic lead-map window generation.
 """
 
 from __future__ import annotations
 
 import re
+from itertools import pairwise
 
 import pytest
 from pydantic import ValidationError
@@ -17,12 +22,20 @@ from pydantic import ValidationError
 from services.contracts.primitives import RationalFrameRate
 from services.foundation_io import canonical_model_bytes
 from services.media_intelligence.budget import (
+    TRIGGER_REASONS,
     BudgetError,
     BudgetExpansionUnjustifiedError,
+    BudgetKind,
+    BudgetLeadMapCoverageError,
     BudgetRequest,
     DeepReviewWindow,
     UniversalPassRecord,
     build_analysis_budget,
+)
+from services.media_intelligence.lead_map import (
+    LeadMapWindowError,
+    LeadMapWindowPolicy,
+    generate_lead_map_windows,
 )
 from services.media_intelligence.models import MediaIntelligenceArtifact
 from services.media_intelligence.progressive import (
@@ -339,3 +352,231 @@ def test_inverted_window_span_rejected_by_model() -> None:
             trigger_reason="high_value",
             trigger_source="shot-a",
         )
+
+
+# ---------------------------------------------------------------------------
+# v44 T5: lead-map vs targeted deep-review budget accounting + lead-map windows
+# ---------------------------------------------------------------------------
+# Frozen v44-real-01 source truth (private/reference-episodes/v44-real-01/runs/
+# arm-B-r2/media-intelligence.json): sources[0].duration_frames == 8467.
+# 25% of 8467 = 2116.75, so 2116 unique targeted frames pass and 2117 fail.
+
+_FROZEN_TOTAL_FRAMES = 8467
+_V44_REAL_01_RATE = RationalFrameRate(num=30000, den=1001)
+_LEAD_MAP_SOURCE = "policy:lead_map"
+_BASELINE_LEAD_MAP_BOUNDS = ((0, 3600), (3300, 6900), (6600, 8467))
+
+
+def _lead_map_window(start: int, end: int) -> DeepReviewWindow:
+    return DeepReviewWindow(
+        start_frame=start,
+        end_frame=end,
+        trigger_reason="lead_map_window",
+        trigger_source=_LEAD_MAP_SOURCE,
+    )
+
+
+def _baseline_lead_map_windows() -> tuple[DeepReviewWindow, ...]:
+    return tuple(_lead_map_window(start, end) for start, end in _BASELINE_LEAD_MAP_BOUNDS)
+
+
+def _budget_request(
+    windows: tuple[DeepReviewWindow, ...],
+    *,
+    budget_kind: BudgetKind = "targeted_deep_review",
+    expansion_reasons: tuple[str, ...] = (),
+    total_frames: int = _FROZEN_TOTAL_FRAMES,
+) -> BudgetRequest:
+    return BudgetRequest(
+        source_duration_frames=total_frames,
+        frame_rate=_V44_REAL_01_RATE,
+        universal_pass=UniversalPassRecord(wall_clock_seconds=0.0, shots_count=1),
+        windows=windows,
+        budget_kind=budget_kind,
+        expansion_reasons=expansion_reasons,
+    )
+
+
+def test_budget_kind_defaults_to_targeted_and_old_payloads_stay_loadable() -> None:
+    budget = build_analysis_budget(_budget_request(()))
+
+    assert budget.budget_kind == "targeted_deep_review"
+    legacy_payload = budget.model_dump(mode="json")
+    del legacy_payload["budget_kind"]
+    reparsed = type(budget).model_validate(legacy_payload)
+    assert reparsed.budget_kind == "targeted_deep_review"
+
+
+def test_lead_map_full_union_budget_covers_source_without_expansion() -> None:
+    budget = build_analysis_budget(
+        _budget_request(_baseline_lead_map_windows(), budget_kind="lead_map")
+    )
+
+    assert budget.budget_kind == "lead_map"
+    assert budget.frame_or_token_counters.frames == _FROZEN_TOTAL_FRAMES
+    assert budget.reviewed_seconds == pytest.approx(8467 * 1001 / 30000)
+    assert budget.expansion_reasons == ()
+
+
+def test_lead_map_missing_region_blocks_the_run() -> None:
+    gapped = (
+        _lead_map_window(0, 3600),
+        _lead_map_window(3900, 6900),
+        _lead_map_window(6600, 8467),
+    )
+
+    with pytest.raises(BudgetLeadMapCoverageError, match="cover the full source"):
+        build_analysis_budget(_budget_request(gapped, budget_kind="lead_map"))
+
+
+def test_lead_map_duplicates_and_overlap_cannot_hide_a_gap() -> None:
+    padded_gap = (
+        _lead_map_window(0, 3600),
+        _lead_map_window(0, 3600),
+        _lead_map_window(3300, 3600),
+        _lead_map_window(6600, 8467),
+    )
+
+    with pytest.raises(BudgetLeadMapCoverageError, match="cover the full source"):
+        build_analysis_budget(_budget_request(padded_gap, budget_kind="lead_map"))
+
+
+def test_targeted_boundary_2116_passes_and_2117_fails_without_expansion() -> None:
+    at_limit = build_analysis_budget(_budget_request((_lead_map_window(0, 2116),)))
+
+    assert at_limit.frame_or_token_counters.frames == 2116
+    assert at_limit.budget_kind == "targeted_deep_review"
+
+    with pytest.raises(BudgetExpansionUnjustifiedError, match="expansion"):
+        build_analysis_budget(_budget_request((_lead_map_window(0, 2117),)))
+    expanded = build_analysis_budget(
+        _budget_request(
+            (_lead_map_window(0, 2117),),
+            expansion_reasons=("targeted: specialist clip over default cap",),
+        )
+    )
+    assert expanded.frame_or_token_counters.frames == 2117
+
+
+def test_new_trigger_literals_are_registered_vocabulary() -> None:
+    windows = (
+        DeepReviewWindow(
+            start_frame=0, end_frame=10,
+            trigger_reason="lead_map_window", trigger_source=_LEAD_MAP_SOURCE,
+        ),
+        DeepReviewWindow(
+            start_frame=0, end_frame=10,
+            trigger_reason="specialist_target", trigger_source="gemini:reduce",
+        ),
+    )
+
+    assert all(window.trigger_reason in TRIGGER_REASONS for window in windows)
+
+
+def test_lead_map_baseline_windows_match_frozen_8467_frame_evidence() -> None:
+    windows = generate_lead_map_windows(_FROZEN_TOTAL_FRAMES)
+
+    assert [(w.start_frame, w.end_frame) for w in windows] == [
+        (0, 3600),
+        (3300, 6900),
+        (6600, 8467),
+    ]
+    assert all(w.trigger_reason == "lead_map_window" for w in windows)
+    assert all(w.trigger_source == _LEAD_MAP_SOURCE for w in windows)
+    assert generate_lead_map_windows(_FROZEN_TOTAL_FRAMES) == windows
+    budget = build_analysis_budget(_budget_request(windows, budget_kind="lead_map"))
+    assert budget.frame_or_token_counters.frames == _FROZEN_TOTAL_FRAMES
+
+
+def test_lead_map_speech_boundary_within_150_snaps_internal_cut() -> None:
+    windows = generate_lead_map_windows(_FROZEN_TOTAL_FRAMES, speech_boundaries=(3350,))
+
+    assert [(w.start_frame, w.end_frame) for w in windows] == [
+        (0, 3600),
+        (3350, 6950),
+        (6650, 8467),
+    ]
+    budget = build_analysis_budget(_budget_request(windows, budget_kind="lead_map"))
+    assert budget.frame_or_token_counters.frames == _FROZEN_TOTAL_FRAMES
+
+
+def test_lead_map_boundary_beyond_150_keeps_fixed_cut() -> None:
+    windows = generate_lead_map_windows(
+        _FROZEN_TOTAL_FRAMES, speech_boundaries=(0, 3500, 8467)
+    )
+
+    assert [(w.start_frame, w.end_frame) for w in windows] == [
+        (0, 3600),
+        (3300, 6900),
+        (6600, 8467),
+    ]
+
+
+def test_lead_map_snap_tie_resolves_to_earlier_boundary() -> None:
+    windows = generate_lead_map_windows(_FROZEN_TOTAL_FRAMES, speech_boundaries=(3200, 3400))
+
+    assert [(w.start_frame, w.end_frame) for w in windows] == [
+        (0, 3600),
+        (3200, 6800),
+        (6500, 8467),
+    ]
+
+
+def test_lead_map_final_window_never_exceeds_max_window_frames() -> None:
+    total = 10200
+
+    plain = generate_lead_map_windows(total)
+    assert [(w.start_frame, w.end_frame) for w in plain] == [
+        (0, 3600),
+        (3300, 6900),
+        (6600, 10200),
+    ]
+
+    backward_snap = generate_lead_map_windows(total, speech_boundaries=(6451,))
+    assert [(w.start_frame, w.end_frame) for w in backward_snap] == [
+        (0, 3600),
+        (3300, 6900),
+        (6451, 10051),
+        (9751, 10200),
+    ]
+    for windows in (plain, backward_snap):
+        assert all(w.end_frame - w.start_frame <= 3600 for w in windows)
+
+
+def test_lead_map_zero_total_frames_is_typed_rejection() -> None:
+    with pytest.raises(LeadMapWindowError, match="> 0"):
+        generate_lead_map_windows(0)
+
+
+def test_lead_map_policy_invariants_are_model_rejections() -> None:
+    with pytest.raises(ValidationError):
+        LeadMapWindowPolicy(max_window_frames=300, overlap_frames=300)
+    with pytest.raises(ValidationError):
+        LeadMapWindowPolicy(snap_radius_frames=301)
+
+
+def test_lead_map_policy_rejects_non_progressing_snap_combinations() -> None:
+    # Smallest possible snapped next start = start + (max - overlap - snap);
+    # it must be > start or a nearby boundary can pin/rewind the start and
+    # loop forever. 10-6-6 = -2 (the verified defect), 10-7-3 = 0 (repeat),
+    # 10-9-8 = -7 (backward).
+    with pytest.raises(ValidationError):
+        LeadMapWindowPolicy(max_window_frames=10, overlap_frames=6, snap_radius_frames=6)
+    with pytest.raises(ValidationError):
+        LeadMapWindowPolicy(max_window_frames=10, overlap_frames=7, snap_radius_frames=3)
+    with pytest.raises(ValidationError):
+        LeadMapWindowPolicy(max_window_frames=10, overlap_frames=9, snap_radius_frames=8)
+
+
+def test_lead_map_sound_small_policy_always_makes_strict_forward_progress() -> None:
+    policy = LeadMapWindowPolicy(max_window_frames=10, overlap_frames=5, snap_radius_frames=4)
+
+    windows = generate_lead_map_windows(40, speech_boundaries=(6,), policy=policy)
+    starts = [w.start_frame for w in windows]
+
+    assert all(later > earlier for earlier, later in pairwise(starts))
+    assert windows[-1].end_frame == 40
+    budget = build_analysis_budget(
+        _budget_request(windows, budget_kind="lead_map", total_frames=40)
+    )
+    assert budget.frame_or_token_counters.frames == 40

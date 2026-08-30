@@ -61,6 +61,9 @@ from services.media_intelligence.moment_review import (
     ReviewWindow,
     record_review,
 )
+from services.media_intelligence.video_clip_evidence import (
+    VideoClipEvidence,  # noqa: TC001 (pydantic field)
+)
 from services.media_query import v2_models as vm
 
 if TYPE_CHECKING:
@@ -132,7 +135,10 @@ class AssessmentEvidenceBundle(StrictModel):
 
     ``frame_refs`` must be ``file://`` paths of REAL extracted frames — a
     ``synthetic://`` ref cannot be represented here, so placeholder evidence
-    cannot reach the assessment provider.
+    cannot reach the assessment provider. The OPTIONAL ``video`` clip
+    (T4 short-clip evidence: hashed local ``file://`` mp4 over the exact
+    window, audio-present flag) defaults to None so every existing
+    frame-refs-only bundle stays valid.
     """
 
     episode_id: Identifier
@@ -141,6 +147,7 @@ class AssessmentEvidenceBundle(StrictModel):
     transcript_segments: tuple[TranscriptSegmentText, ...] = Field(default_factory=tuple)
     audio_note: str | None = None
     brief_context: str = ""
+    video: VideoClipEvidence | None = None
 
     @model_validator(mode="after")
     def require_real_frame_refs(self) -> Self:
@@ -478,7 +485,6 @@ def build_assessment_call(
 # ---------------------------------------------------------------------------
 # Codex-exec assessment call (Codex subscription; owner decision, v4.4 delta)
 # ---------------------------------------------------------------------------
-
 #: Same structural shape as the CLI ``CodexRunner`` (editorial_pins) — kept
 #: LOCAL per this module's decoupling decision: no editorial_v2 import, the
 #: real subprocess transport is wired in by the CLI layer.
