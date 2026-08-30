@@ -20,7 +20,7 @@ import pytest
 
 from services.foundation_io import sha256_file
 from services.preview.models import PreviewError
-from services.preview.tools import PinnedTools, load_pinned_tools
+from services.preview.tools import PinnedTools, decoded_video_sha256, load_pinned_tools, probe_file
 from services.production_kit.preview import (
     DEFAULT_DOMAINS,
     MANIFEST_NAME,
@@ -322,3 +322,67 @@ def test_corrupt_selection_record_fails_strict_revalidation(tmp_path: Path) -> N
     with pytest.raises(KitPreviewError) as raised:
         load_selection_record(path)
     assert raised.value.code == "record-invalid"
+
+
+# ---------------------------------------------------------------------------
+# (e) subtitle domain burn-in: visible style difference over pinned ffmpeg
+# ---------------------------------------------------------------------------
+
+
+def test_subtitle_domain_burns_and_styles_differ_visually(
+    kit, episode_root: Path, fixture_clip: Path, tools: PinnedTools
+) -> None:
+    """Kit-preview subtitle candidates are BURNT-IN, not soft mov_text.
+
+    The operator reported "字幕もないし" because the previous soft track was
+    invisible in the cockpit <video> element and carried no style difference
+    (font_size vs emphasis_scale). The fix overlays a Pillow-rendered plate
+    (640x360) via the pinned ffmpeg ``overlay`` filter — one extra pass after
+    the soft render — and drops the mov_text track. That makes the two
+    subtitle recipes produce visually distinct pixels:
+
+    * decoded_video_sha256 must DIFFER between default vs emphasis (different
+      FontSize derived from font_size / 24*emphasis_scale)
+    * the burned mp4 must NOT rely on a subtitle stream for visibility
+      (probe shows 2 streams, not 3)
+    * audio domain candidates stay non-burned (keep whatever soft-track policy
+      they had — here, no subtitle stream)
+    Cheap and deterministic: no frame extraction, just hash + probe.
+    """
+
+    manifest = plan_previews(kit, episode_root, ("subtitle",), [_spec(fixture_clip)], tools=tools)
+    domain = manifest.domains[0]
+    assert len(domain.candidates) == 2
+    paths = {
+        candidate.recipe_id: episode_root / "kit-previews" / candidate.file
+        for candidate in domain.candidates
+    }
+    default_mp4 = paths["subtitle/default"]
+    emphasis_mp4 = paths["subtitle/emphasis"]
+
+    # burned: no mov_text stream (two streams total: video + audio)
+    for path in (default_mp4, emphasis_mp4):
+        report = probe_file(tools, path)
+        subtitle_stream = next(
+            (s for s in report.streams if s.codec_type == "subtitle"), None
+        )
+        assert subtitle_stream is None, f"{path.name} must not carry soft subs after burn"
+        assert len(report.streams) == 2
+
+    # different style params must produce different baked pixels (cheap hash)
+    default_hash = decoded_video_sha256(tools, default_mp4)
+    emphasis_hash = decoded_video_sha256(tools, emphasis_mp4)
+    assert default_hash != emphasis_hash, "subtitle styles must burn different pixels (font size)"
+
+
+def test_audio_domain_still_has_no_subtitle_burn(
+    kit, episode_root: Path, fixture_clip: Path, tools: PinnedTools
+) -> None:
+    """Audio domain keeps the non-burned path (about audio look, not subtitles)."""
+
+    manifest = plan_previews(kit, episode_root, ("audio",), [_spec(fixture_clip)], tools=tools)
+    candidate = manifest.domains[0].candidates[0]
+    path = episode_root / "kit-previews" / candidate.file
+    report = probe_file(tools, path)
+    assert not any(s.codec_type == "subtitle" for s in report.streams)
+    assert len(report.streams) == 2

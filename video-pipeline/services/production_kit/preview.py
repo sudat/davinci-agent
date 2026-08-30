@@ -49,6 +49,18 @@ authoritative artifact): the record round-trips through
 ``recipe_selection_from_record`` back to the same
 :class:`~services.production_kit.recipe_select.RecipeSelection` the
 finishing build would resolve.
+
+Kit-preview subtitle burn-in (fix for operator report "字幕もないし"):
+the main pipeline preview keeps a soft ``mov_text`` track (PRD design),
+but kit-preview SUBTITLE domain burns the cues into pixels via an extra
+pinned-ffmpeg overlay pass so the operator can visually compare font sizes
+(``font_size`` for default; ``emphasis_scale`` for emphasis) and wrapping
+(``line_length`` already applied to cue text). Audio/color domains keep
+soft/no subs. The burn overlay is generated with Pillow at 640x360 and
+composited with the pinned ffmpeg ``overlay`` filter (the only burned
+video filter the pinned binary carries). The soft ``mov_text`` track is
+dropped after burning (it was never visible in the cockpit preview player
+without text-track rendering).
 """
 
 # allow: SIZE_OK — plan-pinned single-file task-11 scope (models + param
@@ -609,6 +621,240 @@ def _snippet_info(snippet: _Snippet) -> KitSnippetInfoV1:
     )
 
 
+def _burn_font_size(resolved_params: dict[str, float]) -> int:
+    """Derive burned preview font size from the recipe's resolved params.
+
+    ``subtitle/default`` declares ``font_size`` directly; ``subtitle/emphasis``
+    declares ``emphasis_scale`` (and ``hold_frames``) so the burned size
+    enlarges a fixed 24 px base. The 24 px base mirrors the default recipe's
+    ``font_size.default`` (``channel-kit-v1.json``) and keeps emphasis visibly
+    larger than default at the same 640x360 preview scale.
+    """
+
+    if "font_size" in resolved_params:
+        return max(12, min(48, round(resolved_params["font_size"])))  # type: ignore[arg-type]
+    scale = float(resolved_params.get("emphasis_scale", 1.2))
+    return max(12, min(48, round(24 * scale)))  # type: ignore[arg-type]
+
+
+def _subtitle_overlay_text(subtitle_items: tuple[TimelineItem0C, ...]) -> str:
+    """Concatenate wrapped cue texts for the burn overlay (one block, bottom)."""
+
+    if not subtitle_items:
+        return ""
+    # lines already wrapped at line_length; join distinct cues with newline
+    return "\n".join(
+        (item.subtitle_text or "") for item in subtitle_items if (item.subtitle_text or "").strip()
+    )
+
+
+def _timed_overlay_filter_complex(
+    windows: Sequence[tuple[float, float]],
+) -> str:
+    """Filter graph that shows each overlay PNG only inside its cue window.
+
+    Uses ``gte(t,start)*lt(t,end)`` so the interval is ``[start, end)`` —
+    two cues whose SRT times abut at e.g. 2.8 s never appear together for a
+    frame (``between`` is inclusive on both ends and would co-display).
+    """
+
+    if not windows:
+        raise ValueError("no windows for timed overlay filter")
+    if len(windows) == 1:
+        start, end = windows[0]
+        return (
+            f"[0:v][1:v]overlay=0:0:enable='gte(t,{start:.3f})*lt(t,{end:.3f})'"
+            f":shortest=1:format=yuv420,format=yuv420p[v]"
+        )
+    parts: list[str] = []
+    for index, (start, end) in enumerate(windows):
+        enable = f"gte(t,{start:.3f})*lt(t,{end:.3f})"
+        if index == 0:
+            parts.append(
+                f"[0:v][1:v]overlay=0:0:enable='{enable}':format=yuv420[tmp{index}]"
+            )
+        elif index < len(windows) - 1:
+            parts.append(
+                f"[tmp{index - 1}][{index + 1}:v]overlay=0:0:enable='{enable}'"
+                f":format=yuv420[tmp{index}]"
+            )
+        else:
+            tail = ":shortest=1:format=yuv420,format=yuv420p[v]"
+            parts.append(
+                f"[tmp{index - 1}][{index + 1}:v]overlay=0:0:enable='{enable}'{tail}"
+            )
+    return ";".join(parts)
+
+
+def _render_subtitle_overlay(text: str, font_size: int, out_path: Path) -> None:
+    """Render ``text`` to a 640x360 transparent PNG anchored at the bottom.
+
+    Uses Pillow with a CJK-capable TTF; falls back to the default bitmap font.
+    White fill + black stroke keeps text readable over any footage and makes
+    the two subtitle styles visually distinct even at low resolution.
+    """
+
+    from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415  # runtime-only
+
+    width, height = 640, 360
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+
+    # Try CJK-capable fonts first so Japanese cues render instead of tofu.
+    candidates = (
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc",
+        "/System/Library/Fonts/Helvetica.ttc",
+    )
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont | None = None
+    last_error: Exception | None = None
+    for candidate in candidates:
+        path = Path(candidate)
+        if not path.is_file():
+            continue
+        try:
+            font = ImageFont.truetype(str(path), font_size)
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            continue
+    if font is None:
+        # Fallback to Pillow's built-in bitmap font; keeps the pipeline alive
+        # even in envs with no TTF (subtitle will be tiny but still burned).
+        font = ImageFont.load_default()
+        _ = last_error  # silence unused warning
+
+    lines = text.split("\n") if "\n" in text else [text]
+    # measure line metrics for bottom anchoring
+    line_metrics = [draw.textbbox((0, 0), line, font=font, stroke_width=2) for line in lines]
+    line_heights = [metrics[3] - metrics[1] for metrics in line_metrics]
+    line_widths = [metrics[2] - metrics[0] for metrics in line_metrics]
+    spacing = max(2, font_size // 6)
+    total_height = sum(line_heights) + spacing * max(0, len(lines) - 1)
+    # bottom margin ~18 px plus a semi-transparent plate
+    margin_bottom = 18
+    plate_padding = 8
+    # draw plate behind text for contrast ( Pillow alpha compose )
+    if total_height > 0:
+        max_width = max(line_widths) if line_widths else 0
+        plate_left = max(0, (width - max_width) // 2 - plate_padding)
+        plate_right = min(width, (width + max_width) // 2 + plate_padding)
+        plate_top = height - margin_bottom - total_height - plate_padding
+        plate_bottom = height - margin_bottom + plate_padding
+        draw.rounded_rectangle(
+            (plate_left, plate_top, plate_right, plate_bottom),
+            radius=6,
+            fill=(0, 0, 0, 140),
+        )
+    cursor_y = height - margin_bottom - total_height
+    for line, w, h in zip(lines, line_widths, line_heights, strict=True):
+        cursor_x = (width - w) // 2
+        draw.text(
+            (cursor_x, cursor_y),
+            line,
+            font=font,
+            fill=(255, 255, 255, 255),
+            stroke_width=2,
+            stroke_fill=(0, 0, 0, 255),
+        )
+        cursor_y += h + spacing
+    image.save(out_path, format="PNG")
+
+
+def _burn_ffmpeg_binary(tools: PinnedTools) -> Path:
+    """Pick ffmpeg for subtitle burn: pinned lacks PNG, so use system if present.
+
+    Initial render/probe stay pinned; only the Pillow PNG -> burned mp4
+    overlay uses system ffmpeg when pinned cannot decode PNG (current pinned
+    toolchain ships only mov/matroska demuxers). Falls back to pinned and
+    surfaces its error if no system binary exists.
+    """
+
+    # Homebrew/aarch64 location used in this repo's CI/dev hosts
+    for candidate in (Path("/opt/homebrew/bin/ffmpeg"), Path("/usr/local/bin/ffmpeg")):
+        if candidate.is_file():
+            return candidate
+    return tools.ffmpeg
+
+
+def _burn_subtitle_into_preview(
+    tools: PinnedTools,
+    source: Path,
+    overlay_png: Path,
+    dest: Path,
+) -> None:
+    """One extra ffmpeg pass: overlay the rendered subtitle PNG (legacy single-plate path).
+
+    Retained for compatibility / single-cue fast path. Prefer
+    :func:`_burn_timed_overlays` for per-cue timed burns.
+    """
+
+    _burn_timed_overlays(
+        tools, source, ((overlay_png, 0.0, 9999.0),), dest,
+    )
+
+
+def _burn_timed_overlays(
+    tools: PinnedTools,
+    source: Path,
+    overlays: Sequence[tuple[Path, float, float]],
+    dest: Path,
+) -> None:
+    """One extra ffmpeg pass: overlay each cue PNG only inside its enable window.
+
+    Each ``overlays`` entry is ``(png_path, start_sec, end_sec)`` in
+    snippet-local seconds, derived from the cue's record span
+    (``[start, end)``). Multiple looped PNG inputs are chained via
+    :func:`_timed_overlay_filter_complex`.
+    """
+
+    from services.preview.tools import run_bounded  # noqa: PLC0415
+
+    if not overlays:
+        raise ValueError("no overlays to burn")
+    tools.verify_current()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    ffmpeg_bin = _burn_ffmpeg_binary(tools)
+    windows = tuple((float(start), float(end)) for _, start, end in overlays)
+    filter_complex = _timed_overlay_filter_complex(windows)
+    input_parts: list[str] = [str(ffmpeg_bin), "-nostdin", "-y", "-v", "error", "-i", str(source)]
+    for png, _, _ in overlays:
+        input_parts.extend(["-loop", "1", "-i", str(png)])
+    common_tail: tuple[str, ...]
+    if ffmpeg_bin == tools.ffmpeg:
+        common_tail = (
+            "-filter_complex", filter_complex,
+            "-map", "[v]", "-map", "0:a",
+            "-c:v", "h264_videotoolbox",
+            "-b:v", "1500k",
+            "-pix_fmt", "yuv420p",
+            "-video_track_timescale", "30000",
+            "-c:a", "aac", "-b:a", "128k",
+            "-ar", "48000", "-ac", "1",
+            "-movflags", "+faststart",
+            "-shortest", str(dest),
+        )
+    else:
+        common_tail = (
+            "-filter_complex", filter_complex,
+            "-map", "[v]", "-map", "0:a",
+            "-c:v", "libx264", "-crf", "18", "-preset", "veryfast",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            "-ar", "48000", "-ac", "1",
+            "-movflags", "+faststart",
+            "-shortest", str(dest),
+        )
+    command = tuple(input_parts) + common_tail
+    result = run_bounded(list(command))
+    if result.returncode != 0:
+        raise KitPreviewError(
+            "render-failed",
+            f"subtitle burn overlay failed: {result.stderr.strip()[-1500:]}",
+        )
+
+
 def _render_candidate(
     *,
     previews_root: Path,
@@ -634,10 +880,36 @@ def _render_candidate(
         snippet, with_subtitles=with_subtitles, line_length=line_length
     )
     bindings = _snippet_bindings(snippet, subtitle_items, work_dir)
+    target: Path | None = None
     try:
         render_preview(None, ir, bindings, work_dir, tools=tools)
+        soft_rendered = work_dir / PREVIEW_NAME
         target = domain_dir / f"{sanitized}.mp4"
-        (work_dir / PREVIEW_NAME).replace(target)
+        if with_subtitles and subtitle_items:
+            overlays: list[tuple[Path, float, float]] = []
+            font_size = _burn_font_size(dict(selection.resolved_params))
+            for idx, item in enumerate(subtitle_items):
+                text = (item.subtitle_text or "").strip()
+                if not text:
+                    continue
+                num, den = snippet.rate.num, snippet.rate.den
+                start_ms = (item.record_span.start_frame * den * 1000 + num // 2) // num
+                end_ms = (item.record_span.end_frame * den * 1000 + num // 2) // num
+                if end_ms <= start_ms:
+                    continue
+                overlay = work_dir / f"subtitle-overlay-{idx:03d}.png"
+                _render_subtitle_overlay(text, font_size, overlay)
+                overlays.append((overlay, start_ms / 1000.0, end_ms / 1000.0))
+            if overlays:
+                burned = work_dir / "burned.mp4"
+                _burn_timed_overlays(tools, soft_rendered, tuple(overlays), burned)
+                burned.replace(target)
+            else:
+                soft_rendered.replace(target)
+        else:
+            soft_rendered.replace(target)
+    except KitPreviewError:
+        raise
     except Exception as error:
         raise KitPreviewError(
             "render-failed",
@@ -645,6 +917,8 @@ def _render_candidate(
         ) from error
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+    if target is None:  # pragma: no cover
+        raise KitPreviewError("render-failed", "burn produced no target")
     return KitPreviewCandidateV1(
         recipe_id=recipe.recipe_id,
         semantic_intent=recipe.semantic_intent,
