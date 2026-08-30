@@ -555,6 +555,47 @@ Under the §6.7 allowance of one targeted design correction and one re-run, v4.4
 
 Arm C (§6.5) is executed only if this corrected Arm B still fails the §6.6 criteria.
 
+### 6.7.2 `[FIRST-PUBLISH]` Measured correction-cycle record: r3 diagnosis and bounded r4 outcome on `v44-real-01` (2026-08-31)
+
+This subsection appends the next measured cycle after §6.7.1; it does not
+modify the r2 statement above. Committed sanitized evidence:
+`video-pipeline/capabilities/v4.4/product-proof/v44-0/r3-failure-classification.md`
+and `video-pipeline/capabilities/v4.4/product-proof/v44-0/r4-diagnostic-summary.json`.
+
+Round 3 (reports cited there by sha256) failed harder than r2: must-keep
+recall 68/75, catastrophic removals 7, and the two GT-v1 must-remove anchors
+were kept (retention 2/2). The measured diagnosis classified all 9 errors
+exactly once by anchor ID/span: 5 perception/input-path (3 anchors whose tail
+utterances were never discovered because shot discovery used summed segment
+length instead of the authoritative extent; 2 anchors dropped because the
+kept-span derivation treated `optional` as removed), 2 reasoning/ineligible
+cut (must-keep anchors demoted to optional on free-text rationale in arm B
+only), and 2 ground-truth/specification decisions (the operator re-labeled
+a001/a002 must_keep in GT v2 on 2026-08-30; 77/0).
+
+Under the §6.7 single-correction allowance, one bounded correction wave fixed
+the input-integrity and cut-policy seams (authoritative extent with exact
+candidate-ID set checks, fail-closed pre-model transcript alignment, and
+deterministic removal eligibility), without rebuilding the pipeline or
+changing providers/models.
+
+Corrected diagnostic re-runs A-r4/B-r4 (GT v2, operator-corrected transcript,
+identical bindings across arms) delivered and kept 93/93 candidates, recalled
+77/77 must-keep anchors with 0 catastrophic removals, 0 removals, and 0
+escalations; the must-remove dimension is disclosed as not measured (0
+anchors). The consolidated comparison shows zero editorial deltas between
+arms. No r3 critical failure class repeated, so the §6.7 NO-GO branch was not
+triggered. Arm C was therefore not required and was not run.
+
+These r4 runs are diagnostic evidence in the `operator_corrected_diagnostic`
+lane, not product proof. A system-ASR readiness probe in the product lane was
+refused before any paid call with typed `asr-alignment-failed`
+(CER 0.10372340425531915 > 0.10; timestamp p95 5740.0 ms > 500.0; 31 omitted
+> 5; 37 duplicated > 5, against thresholds frozen before the run). ASR
+alignment is recorded as the next measured blocker. Gate V44-2 remains
+unsatisfied (`gate_v44_2_passed=false`); no Resolve build, publication work,
+or learning activation was started.
+
 ---
 
 # 7. MCP Evidence Quality Fit

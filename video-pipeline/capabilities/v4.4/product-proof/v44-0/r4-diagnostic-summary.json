@@ -1,0 +1,179 @@
+{
+  "schema_version": "v44-0-r4-diagnostic-summary-v1",
+  "episode_id": "v44-real-01",
+  "recorded_at": "2026-08-31",
+  "evidence_lane": "operator_corrected_diagnostic",
+  "product_status": "non-product-diagnostic-evidence",
+  "status": {
+    "prd_6_7_no_go_triggered": false,
+    "gate_v44_2_passed": false,
+    "resolve_started": false,
+    "publication_started": false,
+    "learning_started": false,
+    "next_measured_blocker": "asr-alignment-failed",
+    "blocker_scope": "product lane (system_asr) pre-model alignment; ASR alignment is the next measured blocker"
+  },
+  "inputs": {
+    "ground_truth": {
+      "label": "v2",
+      "sha256": "9af2802d0d1393f431fba38ab093ab22fedf707e740cb17dbfa5563aa6cec4b5",
+      "must_keep": 77,
+      "must_remove": 0
+    },
+    "superseded_ground_truth_v1": {
+      "sha256": "c87a4f6298d0dacbc5762f5be440586084305110c60ba8fd2edbd00674aab7b6",
+      "must_keep": 75,
+      "must_remove": 2
+    },
+    "diagnostic_transcript_sha256": "53d64618214db24ceb42fecf4987a0bfbb0d8b86fbf2d26cefc438abb01b32bf",
+    "diagnostic_transcript_source": "operator corrected sample re-quantized on the shared 30fps half-open lattice (1 deterministic proper-noun substitution)",
+    "commit_sha": "0ab66a0d14f2e8f87950b7217de85c1e71aa6e4e",
+    "model_pin": "gpt-5.6-sol",
+    "analysis_provider_pin": "whisper-cpp-cli:c92f4728b0c4",
+    "r3_reference_reports": {
+      "arm_A_r3_sha256": "a35ccc17174aad6a8d91dfd1a79b06da3a2a25ebbfbe34e103b1cc1971391692",
+      "arm_B_r3_sha256": "af1a8df8d9e8277bca85344310e0c405f7a7b29c1c0630b7bb8a21cdb1bfc859"
+    }
+  },
+  "diagnostic_runs": {
+    "shared_binding": {
+      "evidence_lane": "operator_corrected_diagnostic",
+      "ground_truth_label": "v2",
+      "ground_truth_sha256": "9af2802d0d1393f431fba38ab093ab22fedf707e740cb17dbfa5563aa6cec4b5",
+      "transcript_sha256": "53d64618214db24ceb42fecf4987a0bfbb0d8b86fbf2d26cefc438abb01b32bf",
+      "identical_across_arms": ["ground_truth_sha256", "ground_truth_label", "evidence_lane", "transcript_sha256", "commit_sha", "model_pin", "analysis_provider_pin", "source_manifest", "brief", "mi_input_artifact"]
+    },
+    "arm_A_r4": {
+      "report_sha256": "6e43f645c8dcca70a8f6d53567c4d35bb4be0a23cd8731252a879fd9beac6a99",
+      "committed_selection_version": 2,
+      "proposal_sha256": "a4492ccac04bac57c41f8d84c03ea7e6e143323b80f439a60aec664a04bebe95",
+      "candidates_delivered": 93,
+      "candidates_kept": 93,
+      "removals": 0,
+      "escalations": 0,
+      "editorial": {
+        "must_keep_recalled": 77,
+        "must_keep_total": 77,
+        "must_keep_recall": 1.0,
+        "catastrophic_removal_count": 0,
+        "redundancy_errors": 0,
+        "must_remove_total": 0,
+        "must_remove_kept": 0,
+        "must_remove_dimension_measured": false
+      },
+      "pre_model_alignment_recorded_not_gated": {
+        "transcript_cer": 0.0013297872340425532,
+        "timestamp_error_p95_ms": 0.0,
+        "omitted_utterances": 1,
+        "duplicated_utterances": 1,
+        "proper_noun_recall": 1.0
+      },
+      "codex_calls": 3,
+      "provider_cost": null,
+      "video_understanding": null,
+      "wall_clock_seconds": 1810.9287318749994
+    },
+    "arm_B_r4": {
+      "report_sha256": "990ff57a6f98ed3e26c4b1462e9b7f576b1aea1a91f8e715a11fbe64fee2dd19",
+      "committed_selection_version": 2,
+      "proposal_sha256": "01f1b5b9b7a6aecaa625beefb445422573cb036c719b17de0be8426adc134972",
+      "candidates_delivered": 93,
+      "candidates_kept": 93,
+      "removals": 0,
+      "escalations": 0,
+      "editorial": {
+        "must_keep_recalled": 77,
+        "must_keep_total": 77,
+        "must_keep_recall": 1.0,
+        "catastrophic_removal_count": 0,
+        "redundancy_errors": 0,
+        "must_remove_total": 0,
+        "must_remove_kept": 0,
+        "must_remove_dimension_measured": false
+      },
+      "pre_model_alignment_recorded_not_gated": {
+        "transcript_cer": 0.0013297872340425532,
+        "timestamp_error_p95_ms": 0.0,
+        "omitted_utterances": 1,
+        "duplicated_utterances": 1,
+        "proper_noun_recall": 1.0
+      },
+      "codex_calls": 3,
+      "provider_cost": null,
+      "video_understanding": {
+        "moment_review_lead_pin": "gemini-3.7-flash",
+        "moment_review_specialist_pin": "glm-5v-turbo",
+        "local_window_count": 3,
+        "specialist_target_count": 0,
+        "specialist_success_count": 0,
+        "specialist_failure_count": 0,
+        "retry_count": 0,
+        "unresolved_count": 0,
+        "source_coverage": 1.0,
+        "targeted_unique_coverage": 0.0,
+        "lead_cost": null,
+        "specialist_cost": 0.0,
+        "fusion_cost": null
+      },
+      "wall_clock_seconds": 1640.6898842500086
+    },
+    "transport_retry": {
+      "arm": "A",
+      "attempt": 1,
+      "failure_code": "model-timeout",
+      "detail": "pinned editorial model call exceeded its 600s per-call budget before completion; typed failure, no report and no committed selection written",
+      "retry_policy": "single fresh retry with identical typed identity (source, brief, hashes, pins, commit sha) succeeded",
+      "editorial_meaning": "none (transport-class evidence, not an editorial miss; excluded from the successful run's counters)"
+    }
+  },
+  "consolidated_diagnostic": {
+    "sha256": "80f759e07608fb8800bff3a7ae34fd7e99efffa26cd8704cf6edb06e254b3fa3",
+    "run_kind": "v44-consolidated",
+    "binding_equality_verified_before_comparison": true,
+    "deltas": {
+      "must_keep_recall_delta": 0.0,
+      "must_remove_retention_delta": 0.0,
+      "redundancy_errors_delta": 0,
+      "catastrophic_delta": 0,
+      "wall_clock_seconds_delta": -170.23884762499074,
+      "provider_cost_delta": null
+    }
+  },
+  "system_asr_readiness_probe": {
+    "run_label": "probe-system-asr-r1",
+    "evidence_lane": "system_asr",
+    "result": "BLOCKED",
+    "blocked_reason": "asr-alignment-failed",
+    "measured": {
+      "transcript_cer": 0.10372340425531915,
+      "timestamp_error_p95_ms": 5740.0,
+      "omitted_utterances": 31,
+      "duplicated_utterances": 37
+    },
+    "thresholds": {
+      "transcript_cer_max": 0.1,
+      "timestamp_error_p95_ms_max": 500.0,
+      "omitted_utterances_max": 5,
+      "duplicated_utterances_max": 5
+    },
+    "thresholds_relaxed_after_observation": false,
+    "model_calls": 0,
+    "report_written": false,
+    "selection_committed": false,
+    "refusal_point": "pre-model transcript preparation, before media-intelligence build, index build, editorial director, and the commit boundary"
+  },
+  "evaluated_pass_policy": {
+    "passed": false,
+    "failed_criteria": [],
+    "pending_criteria": ["operator_continuation_yes_no", "operator_publishability"],
+    "not_measured_criteria": ["must_remove_retention: not measured (0 anchors)"]
+  },
+  "operator_verdicts": {
+    "continuation_yes_no": null,
+    "publishability": null
+  },
+  "disclosure": {
+    "must_remove_dimension": "not measured (0 anchors)",
+    "diagnostic_vs_product": "both r4 arms are operator-corrected diagnostic evidence; no gate, release, or product decision may be derived from this summary"
+  }
+}

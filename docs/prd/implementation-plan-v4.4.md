@@ -654,6 +654,34 @@ PRD §6.7の「1回の的を絞った設計修正と1回の再実行」の枠内
 
 Arm C（§5.8）は、この修正後のArm Bが依然として不合格の場合のみ実行する。Gate V44-0 → V44-1 → V44-2の順序は変更しない。
 
+## 5.11 実測修正サイクル記録: r3分類とr4診断結果（v44-real-01、2026-08-31）
+
+本節は§5.10の追記記録であり、§5.10のr2記述を書き換えない。サニタイズ済みの正本は
+`video-pipeline/capabilities/v4.4/product-proof/v44-0/r3-failure-classification.md` と
+`video-pipeline/capabilities/v4.4/product-proof/v44-0/r4-diagnostic-summary.json` に置く
+（私有レポートはhash引用のみ、本文にトランスクリプト・素材パスは含めない）。
+
+r3実測（A/B-r3レポートhash同上ファイルに引用）: must-keep recall 68/75、catastrophic 7件、
+GT v1のmust-remove 2件が残留（2/2）。9件のエラーをアンカーID/区間でちょうど1回ずつ分類した結果は
+5件が知覚・入力経路（末尾発話s96〜s99が候補発見されなかった3アンカーと、`optional`を削除扱いする
+kept-span導入に起因する2アンカー）、2件が推論・不適格カット（Bのみで自由記述理由によりkeepから降格、
+決定論的証拠なし）、2件が正解表の決定変更（a001/a002、2026-08-30のオペレーター決定でGT v2は77/0）。
+
+§6.7の「1回の的を絞った修正」の枠内で、入力整合性とカット方針の境界のみを修正した
+（権威ある全フレーム数に基づく候補完全性の完全一致検査、モデル呼び出し前のfail-closedな
+トランスクリプト整列、決定論的な削除適格性）。pipeline再構築・provider/model変更は行っていない。
+
+修正後の診断再実行A-r4/B-r4（GT v2、`operator_corrected_diagnostic`レーン、両アーム同一バインディング）は
+93/93候補を提案かつ維持、must-keep 77/77（recall 1.0）、catastrophic 0、削除0、エスカレーション0。
+must-remove次元は「測定不能（0アンカー）」と開示する。統合比較の編集差分は全て0。
+r3の重要失敗クラスの再発はないため、§6.7 NO-GOは発動せず、Arm Cも不要のため未実行。
+
+r4は診断証拠であり製品証明ではない。製品レーンのsystem-ASR readiness probeは
+有料呼び出し前に型付き`asr-alignment-failed`で拒否された
+（CER 0.10372340425531915 > 0.10、p95 5740.0ms > 500.0、欠落31 > 5、重複37 > 5。
+閾値は実行前に凍結済み）。ASR整列を次の測定済みblockerとして記録する。
+Gate V44-2は未達成（`gate_v44_2_passed=false`）のままであり、Resolve構築・公開・学習は開始していない。
+
 ## Gate V44-0
 
 Pass only when:
