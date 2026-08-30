@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ from services.fixtures.materialize_validation import (
     MaterializationReport,
 )
 from services.foundation_io import sha256_file
+from tests.work_init_support import seed_work_init
 
 MANIFEST = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixed.json")
 POLICY = Path("config/gates/phase-0a-v2.json")
@@ -35,7 +37,15 @@ STATIC_OUTPUTS = (
 type JsonValue = bool | int | str | list[JsonValue] | dict[str, JsonValue] | None
 
 
-def _run_materializer(output: Path) -> subprocess.CompletedProcess[str]:
+@pytest.fixture(scope="session")
+def seeded_work_init(tmp_path_factory: pytest.TempPathFactory) -> dict[str, str]:
+    ledger, plan = seed_work_init(tmp_path_factory.mktemp("work-init-seed"))
+    return {"START_WORK_LEDGER": str(ledger), "START_WORK_PLAN": str(plan)}
+
+
+def _run_materializer(
+    output: Path, seeded_work_init: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             sys.executable,
@@ -50,6 +60,7 @@ def _run_materializer(output: Path) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
+        env=dict(os.environ) | seeded_work_init,
     )
 
 
@@ -57,11 +68,13 @@ def _manifest_payload() -> dict[str, JsonValue]:
     return json.loads(MANIFEST.read_bytes())
 
 
-def test_materializes_registered_fixture_from_frozen_policy(tmp_path: Path) -> None:
+def test_materializes_registered_fixture_from_frozen_policy(
+    tmp_path: Path, seeded_work_init: dict[str, str]
+) -> None:
     first = tmp_path / "first"
     second = tmp_path / "second"
-    result = _run_materializer(first)
-    repeated = _run_materializer(second)
+    result = _run_materializer(first, seeded_work_init)
+    repeated = _run_materializer(second, seeded_work_init)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert repeated.returncode == 0, repeated.stdout + repeated.stderr
@@ -150,9 +163,11 @@ def test_changed_expected_values_cannot_reuse_frozen_hash(tmp_path: Path) -> Non
         load_frozen_manifest(changed, sha256_file(MANIFEST))
 
 
-def test_failed_drift_run_cannot_claim_stale_output_as_success(tmp_path: Path) -> None:
+def test_failed_drift_run_cannot_claim_stale_output_as_success(
+    tmp_path: Path, seeded_work_init: dict[str, str]
+) -> None:
     output = tmp_path / "fixture"
-    initial = _run_materializer(output)
+    initial = _run_materializer(output, seeded_work_init)
     assert initial.returncode == 0
     report_path = output / "materialization-report.json"
     initial_report_hash = sha256_file(report_path)
@@ -177,6 +192,7 @@ def test_failed_drift_run_cannot_claim_stale_output_as_success(tmp_path: Path) -
         check=False,
         capture_output=True,
         text=True,
+        env=dict(os.environ) | seeded_work_init,
     )
 
     assert failed.returncode == 2

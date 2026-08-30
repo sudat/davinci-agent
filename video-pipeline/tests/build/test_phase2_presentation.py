@@ -82,6 +82,8 @@ from tests.build.support import (
     registry_for,
     write_offline_media,
 )
+from tests.resolve_locale import native_bridge_locale
+from tests.work_init_support import FROZEN_ATTEMPT_DIR
 
 if TYPE_CHECKING:
     from services.resolve_adapter.models import ResolvePackage
@@ -468,23 +470,32 @@ class LiveEnv:
     media: dict[str, Path]
 
 
-def _report_path(config: pytest.Config) -> Path:
+def _report_path(config: pytest.Config) -> Path | None:
     override = os.environ.get("RESOLVE_HOST_REPORT")
     if override:
         return Path(override)
     evidence = config.getoption("--resolve-evidence")
-    assert evidence is not None, "live requires --resolve-evidence"
-    return Path(str(evidence)).resolve().parent / "resolve-host.json"
+    if evidence:
+        candidate = Path(str(evidence)).resolve().parent / "resolve-host.json"
+        if candidate.is_file():
+            return candidate
+    frozen = FROZEN_ATTEMPT_DIR / "resolve-host.json"
+    if frozen.is_file():
+        return frozen
+    return None
 
 
 @pytest.fixture(scope="module")
 def live_env(request: pytest.FixtureRequest) -> Iterator[LiveEnv]:
     report_path = _report_path(request.config)
-    if not report_path.is_file():
-        pytest.fail(f"live requires a resolve host report: {report_path}")
+    if report_path is None or not report_path.is_file():
+        pytest.skip(
+            "live requires RESOLVE_HOST_REPORT or a resolve-host.json beside the attempt"
+        )
     report = load_host_report(report_path)
     try:
-        connection = launch_and_connect(report)
+        with native_bridge_locale():
+            connection = launch_and_connect(report)
     except BridgeConnectionError as error:
         pytest.fail(f"live Resolve bridge unavailable and not launchable: {error}")
     media_dir = Path(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -165,16 +166,28 @@ def _materialize_stage(
     atomic_write(stage / "materialization-report.json", canonical_model_bytes(report))
 
 
+def _work_init_paths(pipeline_root: Path) -> tuple[Path, Path]:
+    """Ledger + plan paths, with explicit env overrides for hermetic tests.
+
+    The overrides only redirect DISCOVERY; every restore verification
+    (plan-input hash, binary hashes, work-id derivation, freeze receipts)
+    still runs unchanged against the redirected state.
+    """
+    workspace_root = pipeline_root.parent
+    ledger = os.environ.get("START_WORK_LEDGER")
+    plan = os.environ.get("START_WORK_PLAN")
+    return (
+        Path(ledger) if ledger else workspace_root / ".omo/start-work/ledger.jsonl",
+        Path(plan) if plan else workspace_root / ".omo/plans/foundation-video-pipeline.md",
+    )
+
+
 def materialize(fixture_id: str, policy: Path, output_dir: Path | None) -> Path:
     if fixture_id != FIXTURE_ID:
         raise MaterializationError(f"unknown fixture: {fixture_id}")
     pipeline_root = Path(__file__).resolve().parents[2]
-    workspace_root = pipeline_root.parent
-    record = restore_for_plan(
-        workspace_root / ".omo/start-work/ledger.jsonl",
-        workspace_root / ".omo/plans/foundation-video-pipeline.md",
-        "",
-    )
+    ledger_path, plan_path = _work_init_paths(pipeline_root)
+    record = restore_for_plan(ledger_path, plan_path, "")
     receipt_path = _receipt_for_policy(record.attempt_dir, policy)
     receipt = _load_receipt(receipt_path)
     verify_policy(policy, receipt_path, None, Path(receipt.execution_contract_path))

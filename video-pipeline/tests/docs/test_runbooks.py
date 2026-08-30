@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from services.execution.work_init import restore_for_plan
+from tests.work_init_support import seed_work_init
 
 RUNBOOKS = Path("docs/runbooks")
 EXPECTED_RUNBOOKS = (
@@ -37,13 +38,9 @@ def fenced_bash_blocks(document: str) -> list[str]:
 
 
 @pytest.fixture(scope="session")
-def uv_bin() -> Path:
-    workspace = Path.cwd().resolve().parent
-    record = restore_for_plan(
-        workspace / ".omo/start-work/ledger.jsonl",
-        workspace / ".omo/plans/foundation-video-pipeline.md",
-        "",
-    )
+def uv_bin(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    ledger, plan = seed_work_init(tmp_path_factory.mktemp("work-init-seed"))
+    record = restore_for_plan(ledger, plan, "")
     return Path(record.uv_bin)
 
 

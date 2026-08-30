@@ -69,6 +69,8 @@ from services.resolve_bridge.launch import launch_and_connect
 from services.resolve_bridge.lifecycle import project_names
 from services.resolve_bridge.readiness import load_host_report
 from tests.build.support import compile_build_package, manifest_0a
+from tests.resolve_locale import native_bridge_locale
+from tests.work_init_support import FROZEN_ATTEMPT_DIR
 
 if TYPE_CHECKING:
     from services.fixtures.manifest import Phase0AFixtureManifest
@@ -568,6 +570,9 @@ def _report_path(config: pytest.Config) -> Path | None:
         candidate = Path(str(evidence)).resolve().parent / "resolve-host.json"
         if candidate.is_file():
             return candidate
+    frozen = FROZEN_ATTEMPT_DIR / "resolve-host.json"
+    if frozen.is_file():
+        return frozen
     return None
 
 
@@ -580,12 +585,13 @@ def _media_bin(report_path: Path, name: str, env_key: str) -> Path:
 def live_render_env(request: pytest.FixtureRequest) -> Iterator[LiveRenderEnv]:
     report_path = _report_path(request.config)
     if report_path is None or not report_path.is_file():
-        pytest.fail(
-            "live requires RESOLVE_HOST_REPORT or --resolve-evidence with resolve-host.json"
+        pytest.skip(
+            "live requires RESOLVE_HOST_REPORT or a resolve-host.json beside the attempt"
         )
     report = load_host_report(report_path)
     try:
-        connection = launch_and_connect(report)
+        with native_bridge_locale():
+            connection = launch_and_connect(report)
     except BridgeConnectionError as error:
         pytest.fail(f"live Resolve bridge unavailable and not launchable: {error}")
     media_dir = Path(

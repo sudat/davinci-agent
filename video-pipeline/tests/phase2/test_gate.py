@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import locale
 import os
 import shutil
 from pathlib import Path
@@ -32,6 +33,12 @@ from services.resolve_bridge.readiness import load_host_report
 
 pytestmark = pytest.mark.resolve_live
 
+#: Process locale captured at import (before any live Resolve native code
+#: loads). The Resolve bridge's native module flips the process C locale to
+#: ``C``/US-ASCII; the gate fixture must restore this exact state.
+IMPORTED_LOCALE = locale.setlocale(locale.LC_ALL)
+IMPORTED_PREFERRED_ENCODING = locale.getpreferredencoding(do_setlocale=False)
+
 ATTEMPT = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
@@ -50,32 +57,42 @@ def _host_report() -> Path:
 
 @pytest.fixture(scope="session")
 def gate(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    if not _host_report().is_file():
-        pytest.skip("live requires RESOLVE_HOST_REPORT or a resolve-host.json beside the attempt")
-    report = load_host_report(_host_report())
+    # The Resolve native bridge module sets the process C locale to "C"
+    # (preferred encoding US-ASCII) when it loads — leaking that state
+    # poisons every later text decode in the suite (pathlib.read_text,
+    # subprocess text mode). Snapshot here, restore on EVERY exit path.
+    saved_locale = locale.setlocale(locale.LC_ALL)
     try:
-        connection = launch_and_connect(report)
-    except BridgeConnectionError as error:
-        pytest.skip(f"live Resolve bridge unavailable and not launchable: {error}")
-    root = tmp_path_factory.mktemp("phase2-gate")
-    for relative in PARENTS:
-        target = root / relative
-        target.mkdir()
-        shutil.copyfile(ATTEMPT / relative / "gate-result.json", target / "gate-result.json")
-    evidence = root / "phase-2"
-    policy, policy_sha256 = load_policy(POLICY)
-    outcome = evaluate(
-        policy,
-        policy_sha256,
-        evidence,
-        freeze_receipt=load_receipt(FREEZE_RECEIPT, policy_sha256),
-        connection=connection,
-    )
-    assert outcome.result.passed, [str(m) for m in outcome.mismatches]
-    manager = connection.project_manager()
-    owned = [name for name in project_names(manager) if name.startswith("__fvp_test__")]
-    assert owned == [], f"gate must sweep every owned staging project: {owned}"
-    return evidence
+        if not _host_report().is_file():
+            pytest.skip(
+                "live requires RESOLVE_HOST_REPORT or a resolve-host.json beside the attempt"
+            )
+        report = load_host_report(_host_report())
+        try:
+            connection = launch_and_connect(report)
+        except BridgeConnectionError as error:
+            pytest.skip(f"live Resolve bridge unavailable and not launchable: {error}")
+        root = tmp_path_factory.mktemp("phase2-gate")
+        for relative in PARENTS:
+            target = root / relative
+            target.mkdir()
+            shutil.copyfile(ATTEMPT / relative / "gate-result.json", target / "gate-result.json")
+        evidence = root / "phase-2"
+        policy, policy_sha256 = load_policy(POLICY)
+        outcome = evaluate(
+            policy,
+            policy_sha256,
+            evidence,
+            freeze_receipt=load_receipt(FREEZE_RECEIPT, policy_sha256),
+            connection=connection,
+        )
+        assert outcome.result.passed, [str(m) for m in outcome.mismatches]
+        manager = connection.project_manager()
+        owned = [name for name in project_names(manager) if name.startswith("__fvp_test__")]
+        assert owned == [], f"gate must sweep every owned staging project: {owned}"
+        return evidence
+    finally:
+        locale.setlocale(locale.LC_ALL, saved_locale)
 
 
 def test_00_all_five_criteria_pass(gate: Path) -> None:
@@ -148,3 +165,8 @@ def test_60_gate_result_binds_the_evidence_tree(gate: Path) -> None:
     }
     payload = json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode()
     assert result.evidence_bundles[0].bundle_sha256 == hashlib.sha256(payload).hexdigest()
+
+
+def test_70_live_gate_leaves_process_locale_unchanged(gate: Path) -> None:
+    assert locale.setlocale(locale.LC_ALL) == IMPORTED_LOCALE
+    assert locale.getpreferredencoding(do_setlocale=False) == IMPORTED_PREFERRED_ENCODING
