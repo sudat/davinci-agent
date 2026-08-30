@@ -142,6 +142,7 @@ def record_efficiency(
     )
     return ProductProofReportV1(
         run=report.run,
+        evaluation_binding=report.evaluation_binding,
         editorial=report.editorial,
         progressive_lift=report.progressive_lift,
         evidence_quality=report.evidence_quality,

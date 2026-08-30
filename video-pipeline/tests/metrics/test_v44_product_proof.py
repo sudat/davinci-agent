@@ -46,6 +46,8 @@ from services.metrics.v44_product_proof import (
     EditorialGroundTruthV1,
     EfficiencyMetrics,
     EpisodeContext,
+    EvaluationBindingError,
+    EvaluationBindingV1,
     GroundTruthAnchor,
     OperatorVerdict,
     PassPolicyBlock,
@@ -81,6 +83,20 @@ def _anchor(
 ) -> GroundTruthAnchor:
     return GroundTruthAnchor(
         anchor_id=anchor_id, start_frame=s, end_frame=e, label=label, note=note
+    )
+
+
+def _eval_binding(
+    gt_sha: str = "c" * 64,
+    label: str = "v2",
+    lane: str = "operator_corrected_diagnostic",
+    transcript_sha: str = "d" * 64,
+) -> EvaluationBindingV1:
+    return EvaluationBindingV1(
+        ground_truth_sha256=gt_sha,  # type: ignore[arg-type]
+        ground_truth_label=label,
+        evidence_lane=lane,  # type: ignore[arg-type]
+        transcript_sha256=transcript_sha,  # type: ignore[arg-type]
     )
 
 
@@ -843,6 +859,9 @@ def test_old_report_payload_parses_with_t8_optional_defaults() -> None:
     del payload["video_understanding"]
     del payload["efficiency"]["direct_resolve_minutes"]
     del payload["pass_policy"]["require_efficiency_timing"]
+    # Strip the evaluation binding too: pre-binding (r1-r3) payloads parse
+    # with evaluation_binding=None (Task 1 backward compatibility).
+    del payload["evaluation_binding"]
     loaded = ProductProofReportV1.model_validate(payload)
     assert loaded.run.moment_review_lead_pin is None
     assert loaded.run.moment_review_specialist_pin is None
@@ -850,6 +869,7 @@ def test_old_report_payload_parses_with_t8_optional_defaults() -> None:
     assert loaded.efficiency is not None
     assert loaded.efficiency.direct_resolve_minutes is None
     assert loaded.pass_policy.require_efficiency_timing is False
+    assert loaded.evaluation_binding is None
 
 
 def test_efficiency_timing_nulls_block_pass_policy() -> None:
@@ -1486,7 +1506,8 @@ def test_build_progressive_report_emits_final_run_kind_and_gates_timing(
         ground_truth=gt,
         kept_spans=((0, 100), (200, 300)),
     )
-    report_a = run_arm_a(ctx).report
+    binding = _eval_binding()
+    report_a = run_arm_a(ctx, evaluation_binding=binding).report
     review = _fused_review(
         "test-ep-t8-consolidated",
         0,
@@ -1499,7 +1520,7 @@ def test_build_progressive_report_emits_final_run_kind_and_gates_timing(
         primary_cost=0.5,
         duration=300,
     )
-    report_b = run_arm_b(ctx, (review,)).report
+    report_b = run_arm_b(ctx, (review,), evaluation_binding=binding).report
     assert report_b.pass_policy.require_efficiency_timing is False
 
     b_path = tmp_path / "report-b.json"
@@ -1538,6 +1559,7 @@ def test_build_progressive_report_emits_final_run_kind_and_gates_timing(
     # The same consolidated report passes once truthful timing is recorded.
     timing_recorded = ProductProofReportV1(
         run=consolidated.run,
+        evaluation_binding=consolidated.evaluation_binding,
         editorial=consolidated.editorial,
         progressive_lift=consolidated.progressive_lift,
         evidence_quality=consolidated.evidence_quality,
@@ -1579,3 +1601,81 @@ def test_video_understanding_metrics_failed_reduce_cannot_set_denominator() -> N
     assert metrics.source_coverage is None
     assert metrics.targeted_unique_coverage is None
     assert metrics.local_window_count == 1
+
+
+def test_evaluation_binding_rejects_malformed_fields() -> None:
+    # Given/When/Then: each malformed field (unknown lane, non-hex GT hash,
+    # uppercase transcript hash, empty label) must be a typed parse refusal.
+    with pytest.raises(ValidationError, match="evidence_lane"):
+        _eval_binding(lane="operator_corrected")
+    with pytest.raises(ValidationError, match="ground_truth_sha256"):
+        _eval_binding(gt_sha="not-hex")
+    with pytest.raises(ValidationError, match="transcript_sha256"):
+        _eval_binding(transcript_sha="D" * 64)
+    with pytest.raises(ValidationError, match="ground_truth_label"):
+        _eval_binding(label="")
+
+
+def _bound_ctx() -> EpisodeContext:
+    gt = EditorialGroundTruthV1(
+        episode_id="test-ep-binding",
+        anchors=(_anchor("a-001", 0, 100, "must_keep"),),
+        created_at="2026-08-30T00:00:00+00:00",
+        operator="op",
+    )
+    return EpisodeContext(
+        episode_id="test-ep-binding",
+        ground_truth=gt,
+        kept_spans=((0, 100),),
+    )
+
+
+def test_build_progressive_report_refuses_missing_evaluation_bindings() -> None:
+    ctx = _bound_ctx()
+    report_a = run_arm_a(ctx).report
+    report_b = run_arm_a(ctx).report
+
+    with pytest.raises(EvaluationBindingError) as both_missing:
+        build_progressive_report(report_a, report_b)
+    assert both_missing.value.code == "evaluation-binding-mismatch"
+    assert "A" in both_missing.value.detail
+    assert "B" in both_missing.value.detail
+
+    bound_a = run_arm_a(ctx, evaluation_binding=_eval_binding()).report
+    with pytest.raises(EvaluationBindingError) as b_missing:
+        build_progressive_report(bound_a, report_b)
+    assert b_missing.value.code == "evaluation-binding-mismatch"
+    assert "B" in b_missing.value.detail
+
+
+@pytest.mark.parametrize(
+    ("field", "kwargs"),
+    [
+        ("ground_truth_sha256", {"gt_sha": "e" * 64}),
+        ("ground_truth_label", {"label": "v1"}),
+        ("evidence_lane", {"lane": "system_asr"}),
+        ("transcript_sha256", {"transcript_sha": "f" * 64}),
+    ],
+)
+def test_build_progressive_report_refuses_unequal_evaluation_bindings(
+    field: str, kwargs: dict[str, str]
+) -> None:
+    ctx = _bound_ctx()
+    report_a = run_arm_a(ctx, evaluation_binding=_eval_binding()).report
+    report_b = run_arm_a(ctx, evaluation_binding=_eval_binding(**kwargs)).report
+
+    with pytest.raises(EvaluationBindingError) as mismatch:
+        build_progressive_report(report_a, report_b)
+    assert mismatch.value.code == "evaluation-binding-mismatch"
+    assert field in mismatch.value.detail
+
+
+def test_build_progressive_report_carries_equal_binding() -> None:
+    ctx = _bound_ctx()
+    binding = _eval_binding()
+    report_a = run_arm_a(ctx, evaluation_binding=binding).report
+    report_b = run_arm_a(ctx, evaluation_binding=binding).report
+
+    consolidated = build_progressive_report(report_a, report_b)
+    assert consolidated.run.run_kind == "v44-consolidated"
+    assert consolidated.evaluation_binding == binding

@@ -25,7 +25,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Frame, Identifier, StrictModel
+from services.contracts.primitives import Frame, Identifier, Sha256, StrictModel
 from services.media_intelligence.moment_review import MomentDeepReviewV1  # noqa: TC001
 from services.media_intelligence.moment_review_real import require_real_lineage
 from services.metrics.v44_video_understanding_metrics import (
@@ -283,12 +283,39 @@ class PassPolicyBlock(StrictModel):
 
 DEFAULT_PASS_POLICY: Final = PassPolicyBlock()
 
+EvidenceLane = Literal["system_asr", "operator_corrected_diagnostic"]
+
+
+class EvaluationBindingV1(StrictModel):
+    """Exact evaluation inputs a report was scored against.
+
+    Ground-truth hash + version label, evidence lane, and the effective
+    transcript hash. Historical (pre-binding) reports parse with
+    ``evaluation_binding=None``; every new r4 report requires one, and
+    progressive lift is only computed between equal bindings.
+    """
+
+    ground_truth_sha256: Sha256
+    ground_truth_label: Annotated[str, Field(min_length=1, strict=True)]
+    evidence_lane: EvidenceLane
+    transcript_sha256: Sha256
+
+
+class EvaluationBindingError(Exception):
+    """Typed refusal for missing or unequal evaluation bindings (stable code)."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
+
 
 class ProductProofReportV1(StrictModel):
     """Combined experiment + operator report (authoritative artifact)."""
 
     schema_version: Literal["product-proof-report-v1"] = "product-proof-report-v1"
     run: RunIdentity
+    evaluation_binding: EvaluationBindingV1 | None = None
     editorial: EditorialMetrics | None = None
     progressive_lift: ProgressiveLift | None = None
     evidence_quality: EvidenceQualityMetrics | None = None
@@ -773,6 +800,7 @@ def _build_report_from_context(  # noqa: PLR0913
     moment_review_lead_pin: str | None = None,
     moment_review_specialist_pin: str | None = None,
     video_understanding: VideoUnderstandingMetrics | None = None,
+    evaluation_binding: EvaluationBindingV1 | None = None,
 ) -> ProductProofReportV1:
     editorial = compute_editorial_metrics(
         ctx.ground_truth.anchors, ctx.kept_spans, ctx.escalated_ids
@@ -794,6 +822,7 @@ def _build_report_from_context(  # noqa: PLR0913
             moment_review_lead_pin=moment_review_lead_pin,
             moment_review_specialist_pin=moment_review_specialist_pin,
         ),
+        evaluation_binding=evaluation_binding,
         editorial=editorial,
         progressive_lift=progressive_lift,
         evidence_quality=evidence_quality,
@@ -814,6 +843,7 @@ def run_arm_a(  # noqa: PLR0913 (arm kwargs mirror the harness pinning surface)
     analysis_provider_pin: str = "test-analysis",
     notes: str | None = None,
     evidence_quality: EvidenceQualityMetrics | None = None,
+    evaluation_binding: EvaluationBindingV1 | None = None,
 ) -> ArmResult:
     """Arm A: coarse evidence only (no deep review).
 
@@ -836,6 +866,7 @@ def run_arm_a(  # noqa: PLR0913 (arm kwargs mirror the harness pinning surface)
         evidence_quality=evidence_quality,
         efficiency_wall_clock=ctx.wall_clock_seconds,
         notes=notes,
+        evaluation_binding=evaluation_binding,
     )
     return ArmResult(report=report)
 
@@ -853,6 +884,7 @@ def run_arm_b(  # noqa: PLR0913
     moment_review_lead_pin: str | None = None,
     moment_review_specialist_pin: str | None = None,
     video_understanding: VideoUnderstandingMetrics | None = None,
+    evaluation_binding: EvaluationBindingV1 | None = None,
 ) -> ArmResult:
     """Arm B: same as A plus progressive real deep reviews.
 
@@ -874,6 +906,7 @@ def run_arm_b(  # noqa: PLR0913
         moment_review_lead_pin=moment_review_lead_pin,
         moment_review_specialist_pin=moment_review_specialist_pin,
         video_understanding=video_understanding,
+        evaluation_binding=evaluation_binding,
     )
     return ArmResult(report=report, deep_reviews=tuple(deep_reviews))
 
@@ -956,6 +989,40 @@ def run_arm_c(  # noqa: PLR0913
     return ArmResult(report=report)
 
 
+def _require_equal_bindings(
+    report_a: ProductProofReportV1,
+    report_b: ProductProofReportV1,
+) -> EvaluationBindingV1:
+    """Refuse unbound or differently-bound reports before any lift output."""
+    a = report_a.evaluation_binding
+    b = report_b.evaluation_binding
+    if a is None or b is None:
+        unbound = [arm for arm, binding in (("A", a), ("B", b)) if binding is None]
+        raise EvaluationBindingError(
+            "evaluation-binding-mismatch",
+            "report(s) "
+            + " and ".join(unbound)
+            + " lack an evaluation binding; progressive lift requires both "
+            "reports bound to identical evaluation inputs",
+        )
+    differing: list[str] = []
+    if a.ground_truth_sha256 != b.ground_truth_sha256:
+        differing.append("ground_truth_sha256")
+    if a.ground_truth_label != b.ground_truth_label:
+        differing.append("ground_truth_label")
+    if a.evidence_lane != b.evidence_lane:
+        differing.append("evidence_lane")
+    if a.transcript_sha256 != b.transcript_sha256:
+        differing.append("transcript_sha256")
+    if differing:
+        raise EvaluationBindingError(
+            "evaluation-binding-mismatch",
+            "A/B evaluation bindings differ in " + ", ".join(differing) + "; "
+            "lift across different ground truths or transcripts is refused",
+        )
+    return a
+
+
 def build_progressive_report(
     report_a: ProductProofReportV1,
     report_b: ProductProofReportV1,
@@ -968,9 +1035,14 @@ def build_progressive_report(
     timing policy flag false). Editorial is B's editorial (the progressive
     result); progressive_lift holds the deltas. Operator and efficiency
     are carried from B if present, else A.
+
+    Both reports must carry EQUAL evaluation bindings (ground truth
+    hash/label, evidence lane, transcript hash); anything else is a typed
+    ``evaluation-binding-mismatch`` refusal BEFORE lift calculation.
     """
     if report_a.editorial is None or report_b.editorial is None:
         raise ValueError("build_progressive_report requires editorial metrics")
+    binding = _require_equal_bindings(report_a, report_b)
     deltas = deep_review_lift(
         report_a.editorial,
         report_b.editorial,
@@ -1001,6 +1073,7 @@ def build_progressive_report(
             moment_review_lead_pin=report_b.run.moment_review_lead_pin,
             moment_review_specialist_pin=report_b.run.moment_review_specialist_pin,
         ),
+        evaluation_binding=binding,
         editorial=report_b.editorial,
         progressive_lift=lift,
         evidence_quality=evidence,
@@ -1025,6 +1098,9 @@ __all__ = [
     "EditorialMetrics",
     "EfficiencyMetrics",
     "EpisodeContext",
+    "EvaluationBindingError",
+    "EvaluationBindingV1",
+    "EvidenceLane",
     "EvidenceQualityMetrics",
     "GroundTruthAnchor",
     "LiftDeltas",

@@ -93,6 +93,7 @@ from services.media_query.index_v2 import build_index
 from services.media_query.query_v2 import MediaQueryApiV2
 from services.metrics.v44_product_proof import (
     EditorialGroundTruthV1,
+    EvaluationBindingV1,
     GroundTruthAnchor,
     TranscriptSampleV1,
 )
@@ -159,6 +160,15 @@ def _inputs(tmp_path: Path) -> ArmPipelineInputs:
         brief=compose_arm_brief(tmp_path / "episode", analysis.episode_id, "suda"),
         llm_call=_planner_fake,
         analysis=analysis,
+    )
+
+
+def _eval_binding() -> EvaluationBindingV1:
+    return EvaluationBindingV1(
+        ground_truth_sha256="a" * 64,
+        ground_truth_label="v2",
+        evidence_lane="operator_corrected_diagnostic",
+        transcript_sha256="b" * 64,
     )
 
 
@@ -805,6 +815,154 @@ def test_arm_c_on_real_episode_still_gates(
     assert calls == ["codex-exec"]
 
 
+def _binding_episode(tmp_path: Path) -> tuple[Path, Path, Path]:
+    gt = EditorialGroundTruthV1(
+        episode_id="v44-real-bind",
+        anchors=(
+            GroundTruthAnchor(anchor_id="a-1", start_frame=0, end_frame=90, label="must_keep"),
+        ),
+        created_at="2026-08-30T00:00:00+00:00",
+        operator="suda",
+    )
+    gt_path = tmp_path / "gt.json"
+    gt_path.write_text(gt.model_dump_json(), encoding="utf-8")
+    episode_root = tmp_path / "episode"
+    episode_root.mkdir()
+    return gt_path, episode_root, tmp_path / "report.json"
+
+
+def test_run_arm_real_refuses_absent_evaluation_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(proof, "_editorial_mode", lambda: "production_model")
+    gt_path, episode_root, out = _binding_episode(tmp_path)
+
+    rc = cli_main(
+        [
+            "run-arm",
+            "--arm",
+            "A",
+            "--episode-root",
+            str(episode_root),
+            "--ground-truth",
+            str(gt_path),
+            "--out",
+            str(out),
+        ]
+    )
+    assert rc == 2
+    assert not out.is_file()
+    assert "evaluation-binding-missing" in capsys.readouterr().err
+
+
+def test_run_arm_real_refuses_partial_evaluation_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(proof, "_editorial_mode", lambda: "production_model")
+    gt_path, episode_root, out = _binding_episode(tmp_path)
+
+    rc = cli_main(
+        [
+            "run-arm",
+            "--arm",
+            "B",
+            "--episode-root",
+            str(episode_root),
+            "--ground-truth",
+            str(gt_path),
+            "--out",
+            str(out),
+            "--ground-truth-label",
+            "v2",
+        ]
+    )
+    assert rc == 2
+    assert not out.is_file()
+    err = capsys.readouterr().err
+    assert "evaluation-binding-missing" in err
+    assert "--evidence-lane" in err
+    assert "--transcript-sha256" in err
+
+
+def test_run_arm_real_refuses_malformed_binding_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(proof, "_editorial_mode", lambda: "production_model")
+    gt_path, episode_root, out = _binding_episode(tmp_path)
+
+    rc = cli_main(
+        [
+            "run-arm",
+            "--arm",
+            "A",
+            "--episode-root",
+            str(episode_root),
+            "--ground-truth",
+            str(gt_path),
+            "--out",
+            str(out),
+            "--ground-truth-label",
+            "v2",
+            "--evidence-lane",
+            "operator_corrected_diagnostic",
+            "--transcript-sha256",
+            "not-a-sha",
+        ]
+    )
+    assert rc == 2
+    assert not out.is_file()
+    assert "evaluation-binding-missing" in capsys.readouterr().err
+
+
+def test_run_arm_real_resolves_complete_binding_for_real_arm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_real_arm(  # noqa: PLR0913 (mirrors the production seam signature)
+        arm: str,
+        episode_root: Path,
+        gt: EditorialGroundTruthV1,
+        out_path: Path,
+        args: argparse.Namespace,
+        *,
+        evaluation_binding: EvaluationBindingV1,
+    ) -> int:
+        captured["binding"] = evaluation_binding
+        return 0
+
+    monkeypatch.setattr(proof, "_run_real_arm", fake_real_arm)
+    monkeypatch.setattr(proof, "_editorial_mode", lambda: "production_model")
+    gt_path, episode_root, out = _binding_episode(tmp_path)
+
+    rc = cli_main(
+        [
+            "run-arm",
+            "--arm",
+            "A",
+            "--episode-root",
+            str(episode_root),
+            "--ground-truth",
+            str(gt_path),
+            "--out",
+            str(out),
+            "--ground-truth-label",
+            "v2",
+            "--evidence-lane",
+            "operator_corrected_diagnostic",
+            "--transcript-sha256",
+            "e" * 64,
+        ]
+    )
+    assert rc == 0
+    binding = captured["binding"]
+    assert isinstance(binding, EvaluationBindingV1)
+    assert binding.ground_truth_sha256 == hashlib.sha256(gt_path.read_bytes()).hexdigest()
+    assert binding.ground_truth_label == "v2"
+    assert binding.evidence_lane == "operator_corrected_diagnostic"
+    assert binding.transcript_sha256 == "e" * 64
+
+
 def test_whisper_provider_pin_reads_sha12(tmp_path: Path) -> None:
     pins = tmp_path / "config" / "toolchains" / "pins"
     pins.mkdir(parents=True)
@@ -1061,7 +1219,12 @@ def test_cli_arm_a_never_builds_video_factory(
     monkeypatch.setenv("EDITORIAL_DIRECTOR_NETWORK_ENABLED", "1")
     out = tmp_path / "out.json"
     rc = proof._run_real_arm(
-        "A", episode_root, gt, out, argparse.Namespace(workspace=str(tmp_path / "ws-a"))
+        "A",
+        episode_root,
+        gt,
+        out,
+        argparse.Namespace(workspace=str(tmp_path / "ws-a")),
+        evaluation_binding=_eval_binding(),
     )
     assert called == []
     assert rc == 0
@@ -1133,7 +1296,12 @@ def test_cli_arm_b_passes_concrete_factory_to_pipeline(
 
     out = tmp_path / "out.json"
     rc = proof._run_real_arm(
-        "B", episode_root, gt, out, argparse.Namespace(workspace=str(tmp_path / "ws"))
+        "B",
+        episode_root,
+        gt,
+        out,
+        argparse.Namespace(workspace=str(tmp_path / "ws")),
+        evaluation_binding=_eval_binding(),
     )
     assert rc == 0
     assert captured["factory"] is not None
@@ -1171,7 +1339,12 @@ def test_cli_arm_b_missing_credentials_is_typed_refusal(
 
     out = tmp_path / "out.json"
     rc = proof._run_real_arm(
-        "B", episode_root, gt, out, argparse.Namespace(workspace=str(tmp_path / "ws"))
+        "B",
+        episode_root,
+        gt,
+        out,
+        argparse.Namespace(workspace=str(tmp_path / "ws")),
+        evaluation_binding=_eval_binding(),
     )
     assert rc == 1
     assert not out.is_file()

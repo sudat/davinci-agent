@@ -33,6 +33,8 @@ from services.foundation_io import atomic_write, canonical_model_bytes, sha256_f
 from services.metrics.v44_product_proof import (
     EditorialGroundTruthV1,
     EpisodeContext,
+    EvaluationBindingError,
+    EvaluationBindingV1,
     GroundTruthAnchor,
     ProductProofReportV1,
     TranscriptSampleV1,
@@ -168,6 +170,50 @@ def _load_ground_truth(path: Path) -> EditorialGroundTruthV1:
     return EditorialGroundTruthV1.model_validate(payload)
 
 
+def _resolve_evaluation_binding(
+    args: argparse.Namespace, gt_path: Path
+) -> EvaluationBindingV1:
+    """Build the evaluation binding every new r4 report requires.
+
+    The ground-truth hash is computed from the exact ``--ground-truth``
+    file bytes the run is scored against; lane/label/transcript hash come
+    from explicit CLI inputs. Missing or malformed pieces are a typed
+    ``evaluation-binding-missing`` refusal BEFORE any pipeline work.
+    """
+    label: str | None = getattr(args, "ground_truth_label", None)
+    lane: str | None = getattr(args, "evidence_lane", None)
+    transcript_sha: str | None = getattr(args, "transcript_sha256", None)
+    if label is None or lane is None or transcript_sha is None:
+        missing = [
+            flag
+            for flag, value in (
+                ("--ground-truth-label", label),
+                ("--evidence-lane", lane),
+                ("--transcript-sha256", transcript_sha),
+            )
+            if not value
+        ]
+        raise EvaluationBindingError(
+            "evaluation-binding-missing",
+            "new r4 run-arm reports require a complete evaluation binding: "
+            + ", ".join(missing),
+        )
+    try:
+        return EvaluationBindingV1(
+            ground_truth_sha256=sha256_file(gt_path),
+            ground_truth_label=label,
+            evidence_lane=lane,  # type: ignore[arg-type]
+            transcript_sha256=transcript_sha,
+        )
+    except ValidationError as exc:
+        raise EvaluationBindingError(
+            "evaluation-binding-missing",
+            f"evaluation binding fields are invalid ({exc.error_count()} "
+            "field errors); lane must be system_asr or "
+            "operator_corrected_diagnostic and hashes lowercase sha256",
+        ) from exc
+
+
 _COMMIT_SHA_LEN: int = 40
 
 
@@ -265,7 +311,14 @@ def _cmd_run_arm(args: argparse.Namespace) -> int:  # noqa: C901, PLR0911, PLR09
                 file=sys.stderr,
             )
             return 1
-        return _run_real_arm(arm, episode_root, gt, out_path, args)
+        try:
+            evaluation_binding = _resolve_evaluation_binding(args, gt_path)
+        except EvaluationBindingError as exc:
+            print(f"run-arm failed: {exc.code}: {exc.detail}", file=sys.stderr)
+            return 2
+        return _run_real_arm(
+            arm, episode_root, gt, out_path, args, evaluation_binding=evaluation_binding
+        )
 
     # Arm C on a real episode (diagnostic) keeps the transport gate (no dry-run).
     if mode == "production_model" and not dry_run and not is_toy:
@@ -455,12 +508,14 @@ def _arm_failure_code(exc: BaseException) -> str:
     return str(code) if isinstance(code, str) and code else type(exc).__name__
 
 
-def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0915 (arm wiring: transport + pins + report)
+def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915 (arm wiring: transport + pins + report)
     arm: Literal["A", "B"],
     episode_root: Path,
     gt: EditorialGroundTruthV1,
     out_path: Path,
     args: argparse.Namespace,
+    *,
+    evaluation_binding: EvaluationBindingV1,
 ) -> int:
     """Drive the REAL pipeline (chain stages → DirectorV2 codex → commit).
 
@@ -696,6 +751,7 @@ def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0915 (arm wiring: transpo
             analysis_provider_pin=analysis_pin,
             notes=notes,
             evidence_quality=evidence_quality,
+            evaluation_binding=evaluation_binding,
         ).report
     else:
         report = run_arm_b(
@@ -709,6 +765,7 @@ def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0915 (arm wiring: transpo
             moment_review_lead_pin=lead_model,
             moment_review_specialist_pin=specialist_model,
             video_understanding=video_metrics,
+            evaluation_binding=evaluation_binding,
         ).report
     atomic_write(out_path, canonical_model_bytes(report))
     print(
@@ -764,6 +821,7 @@ def _cmd_record_operator_verdict(args: argparse.Namespace) -> int:
     try:
         updated = ProductProofReportV1(
             run=report.run,
+            evaluation_binding=report.evaluation_binding,
             editorial=report.editorial,
             progressive_lift=report.progressive_lift,
             evidence_quality=report.evidence_quality,
@@ -901,6 +959,25 @@ def _parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="arm workspace dir (real arms; default <episode-root>/runs/arm-<ARM>)",
+    )
+    p_run.add_argument(
+        "--ground-truth-label",
+        type=str,
+        default=None,
+        help="evaluation binding: ground-truth version label (e.g. v1, v2)",
+    )
+    p_run.add_argument(
+        "--evidence-lane",
+        type=str,
+        default=None,
+        choices=["system_asr", "operator_corrected_diagnostic"],
+        help="evaluation binding: transcript evidence lane",
+    )
+    p_run.add_argument(
+        "--transcript-sha256",
+        type=str,
+        default=None,
+        help="evaluation binding: effective transcript sha256 (lowercase hex)",
     )
 
     p_rec = sub.add_parser("record-operator-verdict", help="record operator verdict into report")
