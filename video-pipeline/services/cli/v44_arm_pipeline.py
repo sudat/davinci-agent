@@ -21,7 +21,7 @@ under the arm workspace for spot-checks.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -30,7 +30,10 @@ from services.cli._v44_arm_integrity import (
     require_candidate_integrity,
     require_proposal_completeness,
 )
-from services.cli._v44_arm_proper_nouns import substituted_arm_transcript
+from services.cli._v44_arm_transcript import (
+    TranscriptLaneInput,
+    prepare_arm_transcript,
+)
 from services.cli.v44_arm_evidence import build_speech_mi_artifact
 from services.cli.v44_arm_stages import (
     ArmPipelineData,
@@ -63,6 +66,7 @@ if TYPE_CHECKING:
     from services.editorial_v2.moment_models import MomentCandidateV2
     from services.editorial_v2.proposal_validate import CommitReceipt
     from services.media_intelligence.moment_review import MomentDeepReviewV1
+    from services.metrics.v44_product_proof import EvidenceQualityMetrics
 
 #: Arm-B escalation policy: a kept candidate whose OVERLAPPING fused review
 #: confidence falls below this is DEMOTED from the kept spans and ESCALATED
@@ -91,6 +95,7 @@ class ArmPipelineInputs:
     episode_id: str
     brief: EpisodeBriefV1
     llm_call: LlmCallV2
+    transcript_lane: TranscriptLaneInput
     video_understanding: VideoUnderstandingFactory | None = None
     analysis: ArmPipelineData | None = None
 
@@ -110,6 +115,9 @@ class ArmPipelineResult:
     wall_seconds: float = 0.0
     hypothesis_segments_ms: tuple[tuple[int, int, str], ...] = ()
     notes: tuple[str, ...] = ()
+    transcript_lane: str = ""
+    effective_transcript_sha256: str = ""
+    evidence_quality: EvidenceQualityMetrics | None = None
 
 
 def _persist_drafts(
@@ -182,9 +190,17 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
         if inputs.analysis is not None
         else run_arm_stages(inputs.episode_root, inputs.workspace, inputs.episode_id)
     )
-    speech, hypothesis_ms, noun_edits = substituted_arm_transcript(
-        data.speech, data.transcript_segments_ms, inputs.episode_root
+    # Task-3 pre-model boundary: the lane resolves the EFFECTIVE transcript
+    # and enforces the frozen system_asr alignment thresholds HERE — before
+    # build_speech_mi_artifact and every paid call. Task-2's extent/exact-set
+    # checks still run immediately after the index build; neither boundary
+    # weakens the other.
+    speech, hypothesis_ms, noun_edits, alignment = prepare_arm_transcript(
+        data, inputs.episode_root, inputs.transcript_lane
     )
+    # Downstream consumers (integrity, fused reviews, Director) must see the
+    # effective transcript, never lane-discarded ASR bytes.
+    data = replace(data, speech=speech, transcript_segments_ms=hypothesis_ms)
     artifact = build_speech_mi_artifact(
         data.episode_id, data.source_id, data.total_frames, speech
     )
@@ -196,7 +212,13 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
     with MediaQueryApiV2.open(index_path) as integrity_api:
         require_candidate_integrity(integrity_api, data)
     expected_candidates = expected_candidate_ids(data)
-    notes = [f"speech_shots={len(data.speech)}", f"proper_noun_substitutions={noun_edits}"]
+    notes = [
+        f"speech_shots={len(speech)}",
+        f"proper_noun_substitutions={noun_edits}",
+        f"transcript_lane={alignment.lane}",
+        f"effective_transcript_sha256={alignment.effective_transcript_sha256[:12]}",
+        *alignment.provenance,
+    ]
     fused: tuple[MomentDeepReviewV1, ...] = ()
     if inputs.video_understanding is not None:
         # The factory's RealTranscriptLookup/RealAudioContext hold THIS api;
@@ -257,6 +279,9 @@ def run_arm_pipeline(inputs: ArmPipelineInputs) -> ArmPipelineResult:
         wall_seconds=time.monotonic() - started,
         hypothesis_segments_ms=hypothesis_ms,
         notes=tuple(notes),
+        transcript_lane=alignment.lane,
+        effective_transcript_sha256=alignment.effective_transcript_sha256,
+        evidence_quality=alignment.evidence_quality,
     )
 
 

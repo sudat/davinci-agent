@@ -6,6 +6,8 @@ Subcommands:
   validate-ground-truth --path <path>
   run-arm  --arm A|B|C --episode-root <dir> --ground-truth <path>
            --out <report.json> [--dry-run]
+           --ground-truth-label L --evidence-lane system_asr|operator_corrected_diagnostic
+           --transcript-sha256 H [--corrected-transcript <path>]
   record-operator-verdict --report <path> --continuation yes|no
            [--publishability ...] [--comments ...]
   record-efficiency --report <path> --episode-root <dir>
@@ -524,6 +526,9 @@ def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915 (arm wiring
     """
     import time  # noqa: PLC0415
 
+    from services.cli._v44_arm_transcript import (  # noqa: PLC0415
+        TranscriptLaneInput,
+    )
     from services.cli.live_editorial_codex import (  # noqa: PLC0415
         CodexTransportGatedError,
         make_codex_runner,
@@ -532,7 +537,6 @@ def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915 (arm wiring
         FRAME_SPACE_NOTE,
         ArmEvidenceError,
         compose_arm_brief,
-        compute_arm_evidence_quality,
         escalated_anchor_ids,
         mezz_span_to_anchor_space,
     )
@@ -641,12 +645,19 @@ def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915 (arm wiring
                 file=sys.stderr,
             )
             return 1
+    corrected_arg: str | None = getattr(args, "corrected_transcript", None)
+    corrected_path = Path(corrected_arg) if corrected_arg else None
     inputs = ArmPipelineInputs(
         episode_root=episode_root,
         workspace=workspace,
         episode_id=episode_id,
         brief=compose_arm_brief(episode_root, episode_id, operator=str(gt.operator)),
         llm_call=llm_call,
+        transcript_lane=TranscriptLaneInput(
+            lane=evaluation_binding.evidence_lane,
+            corrected_sample=corrected_path,
+            expected_sha256=evaluation_binding.transcript_sha256,
+        ),
         video_understanding=factory,
     )
     failure_types: tuple[type[BaseException], ...] = (
@@ -695,24 +706,20 @@ def _run_real_arm(  # noqa: C901, PLR0911, PLR0912, PLR0913, PLR0915 (arm wiring
         wall_clock_seconds=wall,
         provider_cost=provider_cost,
     )
-    evidence_quality = None
-    evidence_note = "evidence_quality: no corrected transcript sample"
-    sample_path = episode_root / "transcript-sample-corrected.json"
-    if sample_path.is_file():
-        try:
-            sample = TranscriptSampleV1.model_validate(
-                json.loads(sample_path.read_text(encoding="utf-8"))
-            )
-            evidence_quality = compute_arm_evidence_quality(
-                sample, result.hypothesis_segments_ms
-            )
-            evidence_note = (
-                "evidence_quality: JP metrics vs transcript-sample-corrected "
-                "(hypothesis is post-proper-noun-substitution, matching the "
-                "director-visible transcript)"
-            )
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            evidence_note = f"evidence_quality: unreadable sample ({exc})"
+    evidence_quality = result.evidence_quality
+    if evidence_quality is None:
+        evidence_note = "evidence_quality: none recorded for this run"
+    else:
+        evidence_note = (
+            f"evidence_quality: {result.transcript_lane} lane PRE-MODEL alignment "
+            f"(cer={evidence_quality.transcript_cer!r}, "
+            f"p95_ms={evidence_quality.timestamp_error_p95_ms!r}, "
+            f"omitted={evidence_quality.omitted_utterances!r}, "
+            f"duplicated={evidence_quality.duplicated_utterances!r}; hypothesis is "
+            "post-proper-noun-substitution, matching the director-visible "
+            "transcript; effective transcript sha256="
+            f"{result.effective_transcript_sha256[:12]})"
+        )
     escalation_policy = (
         "fused video-understanding reviews precede the Director; keep with "
         "overlapping fused confidence<0.5 demotes+escalates; escalated anchor "
@@ -978,6 +985,17 @@ def _parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="evaluation binding: effective transcript sha256 (lowercase hex)",
+    )
+    p_run.add_argument(
+        "--corrected-transcript",
+        type=str,
+        default=None,
+        help=(
+            "operator corrected sample path — REQUIRED for the "
+            "operator_corrected_diagnostic lane; a typed refusal in system_asr "
+            "(the system lane reads its metrics reference from "
+            "<episode-root>/transcript-sample-corrected.json)"
+        ),
     )
 
     p_rec = sub.add_parser("record-operator-verdict", help="record operator verdict into report")

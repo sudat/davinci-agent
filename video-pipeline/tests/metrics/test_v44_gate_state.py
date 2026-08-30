@@ -75,6 +75,22 @@ def test_only_operator_needed_reason_accepted() -> None:
         V44GateBlockedV1.model_validate(payload)
 
 
+def test_asr_alignment_failed_reason_accepted_and_old_payloads_parse() -> None:
+    """Task 3 additive extension: blocked records may carry
+    ``asr-alignment-failed``; historical ``operator-needed`` files and their
+    on-disk bytes parse unchanged."""
+    blocked = V44GateBlockedV1.model_validate(
+        {**VALID, "reason": "asr-alignment-failed"}
+    )
+    assert blocked.reason == "asr-alignment-failed"
+    historical = V44GateBlockedV1.model_validate_json(
+        json.dumps({**VALID, "reason": "operator-needed"})
+    )
+    assert historical.reason == "operator-needed"
+    with pytest.raises(pydantic.ValidationError):
+        V44GateBlockedV1.model_validate({**VALID, "reason": "cer-threshold-changed"})
+
+
 def test_bad_commit_sha_rejected() -> None:
     payload = {**VALID, "commit_sha": "short"}
     with pytest.raises(pydantic.ValidationError):

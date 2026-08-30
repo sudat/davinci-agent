@@ -35,12 +35,16 @@ class V44GateBlockedV1(StrictModel):
     """A blocked operator-gated run (``v44-gate-blocked-v1``).
 
     ``missing`` must itemize at least one absent operator input — a blocked
-    record with nothing missing is unrepresentable.
+    record with nothing missing is unrepresentable. ``reason`` is additive:
+    ``operator-needed`` (operator inputs unavailable) and, since Task 3,
+    ``asr-alignment-failed`` (the system_asr transcript failed the four
+    predeclared alignment thresholds before any paid call). Historical
+    blocked files carrying only ``operator-needed`` parse unchanged.
     """
 
     schema_version: Literal["v44-gate-blocked-v1"] = "v44-gate-blocked-v1"
     gate: Literal["V44-0", "V44-1", "V44-2"]
-    reason: Literal["operator-needed"]
+    reason: Literal["operator-needed", "asr-alignment-failed"]
     missing: Annotated[tuple[str, ...], BeforeValidator(_to_tuple), Field(min_length=1)]
     operator_instructions: Annotated[str, Field(min_length=1, strict=True)]
     checked_at: Annotated[str, Field(min_length=1, strict=True)]
