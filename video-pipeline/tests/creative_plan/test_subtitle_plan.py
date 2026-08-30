@@ -35,6 +35,7 @@ prompt_injection (ASR text carried as data, geometry unaffected).
 from __future__ import annotations
 
 from fractions import Fraction
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -344,6 +345,80 @@ def test_under_minimum_speed_noted_explicitly() -> None:
     assert len(plan.cues) == 1
     kinds = [v.kind for v in plan.violations]
     assert "reading_speed_under" in kinds
+
+
+def test_fast_segment_fragments_meet_the_qc_minimum_duration() -> None:
+    # v44-real evidence: one fast Japanese segment split into one-character
+    # fragments of ~5 frames each (record spans like 1009-1014, 1014-1019,
+    # 1019-1024 inside one transcript_ref) while the QC minimum is 15 frames
+    # at 30 fps. Fragments of one segment must redistribute their own time so
+    # every emitted cue meets the minimum; text, order, and the limits stay.
+    text = "それでね、私はその話を聞いて本当に驚いたんですよ"
+    segments = [
+        _seg("seg-fast", text, 0.0, 1.2),  # 24 chars in 36 frames: 20 cps > 7
+        _seg("seg-next", "つぎの話をします。", 4.0, 6.0),  # airtime until frame 120
+    ]
+    plan = build_subtitle_plan(segments, source_facts=_facts(), ir_v2=_ir(((0, 300, 0, 300),)))
+    fast = [c for c in plan.cues if c.transcript_ref == "seg-fast"]
+    assert len(fast) >= 2  # the over-limit speech still splits
+    for cue in plan.cues:
+        span = cue.record_span
+        assert span.end_frame - span.start_frame >= 15
+    assert "".join("".join(cue.lines) for cue in fast) == text
+    assert fast[0].record_span.start_frame == 0  # segment extent start kept
+    assert fast[-1].record_span.end_frame <= 120  # never borrows seg-next's time
+    for cue in plan.cues:
+        assert len(cue.lines) <= 2
+        assert all(len(line) <= 13 for line in cue.lines)
+
+
+def test_fragments_never_borrow_a_following_segments_time() -> None:
+    # Fragments share only their own segment's time and airtime: a cue from a
+    # different transcript_ref is a hard wall (never merged into, never
+    # extended past), even when that leaves fragments below the QC minimum.
+    segments = [
+        _seg("seg-fast", "ねかよねか", 0.0, 0.5),  # 4 chars in 15 frames: 8 cps > 7
+        _seg("seg-next", "つぎの話をします。", 0.5, 2.5),  # starts at frame 15
+    ]
+    plan = build_subtitle_plan(segments, source_facts=_facts(), ir_v2=_ir(((0, 300, 0, 300),)))
+    fast = [c for c in plan.cues if c.transcript_ref == "seg-fast"]
+    following = [c for c in plan.cues if c.transcript_ref == "seg-next"]
+    assert fast
+    assert following
+    assert fast[-1].record_span.end_frame <= following[0].record_span.start_frame
+    assert following[0].record_span.start_frame >= 15
+    assert "".join("".join(cue.lines) for cue in following) == "つぎの話をします。"
+
+
+def test_starved_run_merges_adjacent_pieces_to_meet_minimum_duration() -> None:
+    # 6 chars in 24 frames (7.5 cps > 7) split into 3 two-char pieces, but the
+    # wall at frame 30 can host only 2 x 15 frames: adjacent same-ref pieces
+    # must merge so every emitted cue clears the QC minimum.
+    text = "私は彼を見た"
+    segments = [
+        _seg("seg-fast", text, 0.0, 0.8),
+        _seg("seg-next", "つぎの話をします。", 1.0, 3.0),  # hard wall at frame 30
+    ]
+    plan = build_subtitle_plan(segments, source_facts=_facts(), ir_v2=_ir(((0, 300, 0, 300),)))
+    fast = [c for c in plan.cues if c.transcript_ref == "seg-fast"]
+    assert 1 <= len(fast) <= 2  # merged down from the 3 speed fragments
+    for cue in fast:
+        span = cue.record_span
+        assert span.end_frame - span.start_frame >= 15
+        assert len(cue.lines) <= 2
+        assert all(len(line) <= 13 for line in cue.lines)
+    assert "".join("".join(cue.lines) for cue in fast) == text
+    assert fast[0].record_span.start_frame == 0
+    assert fast[-1].record_span.end_frame <= 30  # never crosses seg-next
+    assert fast[0].source_span.start_frame == 0
+    assert fast[-1].source_span.end_frame == 24
+    for earlier, later in pairwise(fast):
+        assert earlier.source_span.end_frame == later.source_span.start_frame
+    # merged cues carry more text in capped time: flagged, never silent
+    assert any(
+        v.transcript_ref == "seg-fast" and v.kind == "reading_speed_violation"
+        for v in plan.violations
+    )
 
 
 # ------------------------------------------------------ (f) reconciliation

@@ -23,6 +23,10 @@ state the model must not fetch):
   facts, an ENABLED cleanup/normalization stage or processing op requires an
   explicit justification (improving good audio is forbidden unless a
   semantic reason is supplied);
+- dialogue-only satisfiability guard — with ``no BGM AND no ambience``
+  facts, an enabled normalization + QC pair must carry INTERSECTING LUFS
+  ranges (both gates measure the same full-render integrated loudness, so
+  disjoint ranges are an impossible contract);
 - capability gate — an enabled accepted-only op bound to a non-accepted
   mcp-fit capability row requires an explicit justification.
 
@@ -398,6 +402,13 @@ def build_audio_plan(
 ) -> AudioFinishingPlanV1:
     """Build the ladder plan from facts + policy; every disable is justified.
 
+    Range semantics are facts-aware: on a dialogue-only episode (no BGM,
+    no ambience) the normalization stage carries the policy's DELIVERY
+    target under the ``dialogue_loudness`` metric — dialogue loudness and
+    whole-program loudness are the same measured quantity there, so the
+    dialogue-domain policy range would create two disjoint gates over one
+    render. Episodes with BGM/ambience keep the dialogue-domain range.
+
     Raises :class:`AudioFinishingError` subclasses for duplicate op requests,
     unnecessary processing on already-good audio, and enabled ops bound to
     non-accepted capability rows without an explicit justification.
@@ -428,7 +439,7 @@ def build_audio_plan(
             stage_model = AudioFinishingStageV1(
                 stage=stage,
                 goal=_STAGE_GOALS[stage],
-                target_ranges=_stage_ranges(stage, policy),
+                target_ranges=_stage_ranges(stage, policy, audio_facts),
                 enabled=enabled,
                 justification=justification,
                 ops=ops,
@@ -438,7 +449,7 @@ def build_audio_plan(
             stage_model = AudioFinishingStageV1(
                 stage=stage,
                 goal=_STAGE_GOALS[stage],
-                target_ranges=_stage_ranges(stage, policy),
+                target_ranges=_stage_ranges(stage, policy, audio_facts),
                 enabled=auto is None,
                 justification=auto,
             )
@@ -458,10 +469,60 @@ def build_audio_plan(
     )
 
 
+def _require_satisfiable_dialogue_only_loudness(
+    stages: Mapping[str, AudioFinishingStageV1], facts: AudioFactsV1
+) -> None:
+    """Dialogue-only satisfiability guard: with no BGM and no ambience the
+    normalization gate and the delivery gate measure the SAME full-render
+    integrated loudness — an enabled pair with disjoint LUFS ranges is an
+    impossible contract and must never reach execution."""
+    if facts.has_bgm or facts.has_ambience:
+        return
+    normalization = stages["dialogue_level_normalization"]
+    qc = stages["loudness_peak_qc"]
+    if not (normalization.enabled and qc.enabled):
+        return
+    qc_loudness = next(
+        target for target in qc.target_ranges if target.metric == "integrated_loudness"
+    )
+    target = normalization.target_ranges[0]
+    if not _ranges_intersect(target, qc_loudness):
+        raise AudioFinishingError(
+            "dialogue-only-loudness-conflict",
+            f"a dialogue-only program measures one integrated loudness, but "
+            f"dialogue_level_normalization [{target.minimum}, {target.maximum}] and "
+            f"loudness_peak_qc [{qc_loudness.minimum}, {qc_loudness.maximum}] are "
+            "disjoint — no render can satisfy both",
+        )
+
+
 def _stage_ranges(
-    stage: AudioStageName, policy: AudioFinishingPolicyV1
+    stage: AudioStageName, policy: AudioFinishingPolicyV1, facts: AudioFactsV1
 ) -> tuple[TargetRangeV1, ...]:
+    if (
+        stage == "dialogue_level_normalization"
+        and not facts.has_bgm
+        and not facts.has_ambience
+    ):
+        # Dialogue-only program: the dialogue IS the whole program, so the
+        # dialogue-loudness gate and the delivery gate measure the same
+        # render — carrying two disjoint ranges there would be physically
+        # unsatisfiable. The dialogue gate therefore equals the delivery
+        # target; both remain independently measured from fresh renders.
+        delivery = policy.integrated_loudness_lufs
+        return (
+            TargetRangeV1(
+                metric="dialogue_loudness",
+                minimum=delivery.minimum,
+                maximum=delivery.maximum,
+                unit="lufs",
+            ),
+        )
     return tuple(getattr(policy, field) for field in _STAGE_POLICY_FIELDS[stage])
+
+
+def _ranges_intersect(a: TargetRangeV1, b: TargetRangeV1) -> bool:
+    return max(a.minimum, b.minimum) <= min(a.maximum, b.maximum)
 
 
 def validate_audio_finishing(
@@ -477,6 +538,7 @@ def validate_audio_finishing(
             f"plan episode {plan.episode_id} != facts episode {audio_facts.episode_id}",
         )
     stages = {stage.stage: stage for stage in plan.stages}
+    _require_satisfiable_dialogue_only_loudness(stages, audio_facts)
     audio_already_good = audio_facts.dialogue_clean and audio_facts.measured_loudness_ok
     if audio_already_good:
         for name in ("dialogue_cleanup", "dialogue_level_normalization"):

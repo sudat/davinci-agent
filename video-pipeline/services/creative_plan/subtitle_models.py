@@ -109,13 +109,19 @@ class SubtitleReconciledCueV1(StrictModel):
 
 
 class SubtitleStyleProfileV1(StrictModel):
-    """Channel subtitle style knobs (PRD §9.2: configurable limits)."""
+    """Channel subtitle style knobs (PRD §9.2: configurable limits).
+
+    ``min_duration_frames`` is the QC display minimum (the ``subtitle_min_duration``
+    rule's frame floor): the planner never emits a cue shorter than this when
+    the segment's own time can host its fragments at that length.
+    """
 
     profile_id: Identifier
     chars_per_line: Annotated[int, Field(gt=0, strict=True)] = 13
     lines_per_cue: Annotated[int, Field(gt=0, strict=True)] = 2
     reading_speed_min_cps: Annotated[float, Field(gt=0, strict=True)] = 5.0
     reading_speed_max_cps: Annotated[float, Field(gt=0, strict=True)] = 7.0
+    min_duration_frames: Annotated[int, Field(gt=0, strict=True)] = 15
 
     @model_validator(mode="after")
     def require_speed_band(self) -> SubtitleStyleProfileV1:

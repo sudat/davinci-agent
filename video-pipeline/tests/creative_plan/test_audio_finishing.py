@@ -41,6 +41,7 @@ from services.creative_plan.audio_finishing import (
     AUDIO_LADDER,
     DEFAULT_AUDIO_POLICY,
     AudioFactsV1,
+    AudioFinishingError,
     AudioFinishingPlanV1,
     AudioFinishingStageV1,
     AudioOpRequestV1,
@@ -173,6 +174,61 @@ def test_noisy_dialogue_enables_cleanup_and_normalization() -> None:
     normalization = _stage(plan, "dialogue_level_normalization")
     assert cleanup.enabled is True
     assert normalization.enabled is True
+
+
+# ---- (c2) dialogue-only measurement-domain coherence (Task 5 repair 2):
+# with no BGM and no ambience the program audio IS the dialogue, so both
+# LUFS gates measure the same full-render integrated loudness — the plan
+# must not demand one quantity inside two disjoint ranges.
+
+
+def test_dialogue_only_normalization_carries_the_delivery_target() -> None:
+    """A dialogue-only plan's normalization gate must equal the delivery
+    target: dialogue loudness and whole-program loudness are the same
+    measured quantity, so [-18,-16] against the QC's [-14.5,-13.5] would
+    be a physically unsatisfiable contract."""
+    plan = _build(_noisy_fixture())
+    normalization = _stage(plan, "dialogue_level_normalization")
+    qc = _stage(plan, "loudness_peak_qc")
+    delivery = DEFAULT_AUDIO_POLICY.integrated_loudness_lufs
+    assert normalization.enabled is True
+    assert qc.enabled is True
+    target = normalization.target_ranges[0]
+    assert (target.metric, target.unit) == ("dialogue_loudness", "lufs")
+    assert (target.minimum, target.maximum) == (delivery.minimum, delivery.maximum)
+    qc_loudness = next(t for t in qc.target_ranges if t.metric == "integrated_loudness")
+    assert (target.minimum, target.maximum) == (
+        qc_loudness.minimum,
+        qc_loudness.maximum,
+    )
+
+
+def test_dialogue_only_contradictory_dual_range_plan_is_rejected() -> None:
+    """A hand-built dialogue-only plan whose normalization range is disjoint
+    from the QC delivery range is an impossible dual-range contract over one
+    measured quantity — the facts-aware guard must refuse it typed."""
+    payload = _payload(_build(_noisy_fixture()))
+    normalization = _stage_of(payload, "dialogue_level_normalization")
+    normalization["target_ranges"][0]["minimum"] = -18.0
+    normalization["target_ranges"][0]["maximum"] = -16.0
+    plan = AudioFinishingPlanV1.model_validate(payload)
+    with pytest.raises(AudioFinishingError, match="dialogue-only-loudness-conflict"):
+        validate_audio_finishing(
+            plan,
+            audio_facts=_noisy_fixture(),
+            capability_statuses=_FAILED_STATUSES,
+        )
+
+
+def test_bgm_episode_keeps_the_dialogue_domain_target() -> None:
+    """With BGM present the dialogue target is a different measurement
+    domain from the whole-program delivery target — the default policy's
+    dialogue range must be preserved unchanged."""
+    plan = _build(_bgm_fixture())
+    normalization = _stage(plan, "dialogue_level_normalization")
+    target = normalization.target_ranges[0]
+    assert (target.metric, target.unit) == ("dialogue_loudness", "lufs")
+    assert (target.minimum, target.maximum) == (-18.0, -16.0)
 
 
 # ---- (d) fixture 3: dialogue + BGM -> placement and ducking with ranges

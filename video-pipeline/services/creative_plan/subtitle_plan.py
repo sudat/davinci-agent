@@ -36,7 +36,7 @@ from services.creative_plan.subtitle_capability import (
     load_matrix_subtitle_status,
     select_subtitle_path,
 )
-from services.creative_plan.subtitle_lines import WorkingCue, chunk_cue, enforce_reading_speed
+from services.creative_plan.subtitle_lines import WorkingCue, chunk_cue
 from services.creative_plan.subtitle_models import (
     DEFAULT_STYLE_PROFILE,
     AsrSegmentV1,
@@ -48,6 +48,7 @@ from services.creative_plan.subtitle_models import (
     TextProvenanceNoteV1,
 )
 from services.creative_plan.subtitle_reconcile import reconcile_after_edit
+from services.creative_plan.subtitle_speed import enforce_reading_speed
 from services.creative_plan.subtitle_text import (
     FillerPolicy,
     ProperNounDictionaryV1,
