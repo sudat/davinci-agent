@@ -13,6 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, cast, get_args
 
+from pydantic import ValidationError
+
 from services.cli._v44_finishing_build import (
     MATRIX_PATH,
     PROPER_NOUNS_NAME,
@@ -54,12 +56,27 @@ if TYPE_CHECKING:
     from services.production_kit.recipe_select import RecipeSelection
 
 
+def load_audio_facts(path: Path | None) -> AudioFactsV1 | None:
+    """Load an operator-authored, episode-scoped AudioFactsV1 JSON (or None)."""
+
+    if path is None:
+        return None
+    try:
+        return AudioFactsV1.model_validate_json(path.read_bytes())
+    except (OSError, ValidationError) as error:
+        raise FinishingMalformedError(
+            "audio-facts-invalid",
+            f"{path} is not a strict AudioFactsV1 record: {error}",
+        ) from error
+
+
 def build_finishing_plans(
     ir_v2: TimelineIrV2,
     *,
     kit: ChannelProductionKitV1,
     record: KitSelectionRecordV1,
     episode_root: Path,
+    audio_facts: AudioFactsV1 | None = None,
 ) -> FinishingPlans:
     if not ir_v2.subtitle_cues:
         raise FinishingError(
@@ -108,7 +125,7 @@ def build_finishing_plans(
         elif domain == "color":
             color_selection = resolved
 
-    audio_plan = _audio_plan(ir_v2, audio_selection, notes)
+    audio_plan = _audio_plan(ir_v2, audio_selection, notes, audio_facts)
     color_plan = _color_plan(ir_v2, color_selection, source_id, notes)
     return FinishingPlans(
         subtitle_plan=subtitle_plan,
@@ -137,6 +154,7 @@ def _audio_plan(
     ir_v2: TimelineIrV2,
     selection: RecipeSelection | None,
     notes: list[str],
+    audio_facts: AudioFactsV1 | None = None,
 ) -> AudioFinishingPlanV1 | None:
     if selection is None:
         return None
@@ -156,14 +174,34 @@ def _audio_plan(
             "bgm-ducking selection recorded; the committed edit carries a dialogue "
             "mirror only — ducking ladder stages stay driven by BGM presence"
         )
-    return build_audio_plan(
-        AudioFactsV1(
+    has_bgm = any(track.role == "music" for track in ir_v2.audio_tracks)
+    has_ambience = any(track.role == "ambience" for track in ir_v2.audio_tracks)
+    if audio_facts is None:
+        facts = AudioFactsV1(
             episode_id=ir_v2.episode_id,
             dialogue_clean=False,
-            has_bgm=any(track.role == "music" for track in ir_v2.audio_tracks),
-            has_ambience=any(track.role == "ambience" for track in ir_v2.audio_tracks),
+            has_bgm=has_bgm,
+            has_ambience=has_ambience,
             measured_loudness_ok=False,
-        ),
+        )
+    else:
+        if audio_facts.episode_id != ir_v2.episode_id:
+            raise FinishingError(
+                "audio-facts-episode-mismatch",
+                f"injected audio_facts episode {audio_facts.episode_id!r} != IR episode {ir_v2.episode_id!r}",  # noqa: E501
+            )
+        # Keep BGM/ambience consistent with committed IR; only dialogue_clean and
+        # measured_loudness_ok are injectable (already-good guard). This prevents
+        # an injected fact from silently claiming BGM exists when the IR has none.
+        facts = AudioFactsV1(
+            episode_id=ir_v2.episode_id,
+            dialogue_clean=audio_facts.dialogue_clean,
+            has_bgm=has_bgm,
+            has_ambience=has_ambience,
+            measured_loudness_ok=audio_facts.measured_loudness_ok,
+        )
+    return build_audio_plan(
+        facts,
         policy=DEFAULT_AUDIO_POLICY,
         op_requests=requests,
     )
@@ -219,4 +257,4 @@ def _color_plan(
     )
 
 
-__all__ = ["build_finishing_plans"]
+__all__ = ["build_finishing_plans", "load_audio_facts"]

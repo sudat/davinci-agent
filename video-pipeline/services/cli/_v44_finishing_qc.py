@@ -20,6 +20,7 @@ from services.cli._v44_finishing_report import (
     FinishingKitSelectionV1,
     FinishingQcBlockV1,
     FinishingRunReportV1,
+    NativeRenderBlockV1,
 )
 from services.creative_plan.quality_domains import (
     QualityDomainReportV1,
@@ -56,6 +57,7 @@ def technical_qc(
     render_path: Path | None,
     default_render: Path,
     out_path: Path,
+    bindings: OptionalBindings | None = None,
 ) -> FinishingQcBlockV1:
     """Real QC when it runs; null-with-reason otherwise (never fabricated)."""
 
@@ -70,7 +72,9 @@ def technical_qc(
     if not target.is_file():
         return FinishingQcBlockV1(reason=f"render target missing: {target}")
     try:
-        report: QcReport = run_qc(target, policy_path, out_path, OptionalBindings())
+        report: QcReport = run_qc(
+            target, policy_path, out_path, bindings or OptionalBindings()
+        )
     except (OSError, ValueError, ValidationError, QcToolError) as error:
         return FinishingQcBlockV1(reason=f"qc run failed: {error}")
     return FinishingQcBlockV1(
@@ -162,6 +166,7 @@ class ReportInputs:
     cue_count: int
     execution_report: ExecutionFactsV1
     notes: tuple[str, ...]
+    native_render: NativeRenderBlockV1 | None = None
 
 
 def domain_report(inputs: ReportInputs) -> tuple[QualityDomainReportV1, QualityGateResult]:
@@ -230,6 +235,7 @@ def assemble_report(
         editorial_qc=inputs.editorial_block,
         final_preview_path=str(inputs.preview_path),
         final_preview_sha256=inputs.preview_sha256,
+        native_render=inputs.native_render,
         wall_clock_seconds=inputs.wall_clock_seconds,
         notes=inputs.notes,
     )

@@ -15,7 +15,9 @@ publish episode is bootstrap by definition).
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Annotated, Final, Literal
 
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
@@ -112,6 +114,26 @@ class FinishingEditorialQcBlockV1(StrictModel):
     report_path: str = Field(min_length=1, strict=True)
 
 
+class NativeRenderBlockV1(StrictModel):
+    """DaVinci-native render lifecycle proof (Task 7).
+
+    The finishing CLI binds ``final_preview_path`` to this output only after
+    the Resolve job reported 100%/not-rendering and the file passed media QC.
+    Fake/external remux files never produce this block.
+    """
+
+    job_id: str = Field(min_length=1, strict=True)
+    output_path: str = Field(min_length=1, strict=True)
+    output_sha256: str = Field(min_length=64, max_length=64, strict=True)
+    output_size_bytes: int = Field(ge=1, strict=True)
+    duration_seconds: float = Field(gt=0, strict=True)
+    video_codec: str = Field(min_length=1, strict=True)
+    width: int = Field(ge=1, strict=True)
+    height: int = Field(ge=1, strict=True)
+    audio_codec: str = Field(min_length=1, strict=True)
+    audio_channels: int = Field(ge=1, strict=True)
+
+
 class FinishingRunReportV1(StrictModel):
     """The V44-2 finishing run report (runtime; NOT authoritative)."""
 
@@ -142,6 +164,7 @@ class FinishingRunReportV1(StrictModel):
     editorial_qc: FinishingEditorialQcBlockV1
     final_preview_path: str = Field(min_length=1, strict=True)
     final_preview_sha256: str = Field(min_length=1, strict=True)
+    native_render: NativeRenderBlockV1 | None = None
     wall_clock_seconds: float = Field(ge=0.0, strict=True)
     notes: _StrTuple = ()
 
@@ -202,13 +225,59 @@ class TimeLogLineV1(StrictModel):
     at: str = Field(min_length=1, strict=True)
 
 
+#: The five PRD §19.4 bootstrap active-human categories, canonical order.
+TIME_LOG_PHASES: Final[tuple[TimeLogPhase, ...]] = (
+    "ordinary_review",
+    "kit_bootstrap",
+    "taste_calibration",
+    "troubleshooting",
+    "direct_resolve",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TimeLogTotals:
+    """The five-category bootstrap AHT summary (plan T8).
+
+    ``aht_minutes`` is non-null ONLY when every one of the five canonical
+    phases (``TIME_LOG_PHASES``) has at least one recorded entry — a
+    missing phase is missing time, never an estimated zero, so a partial
+    log keeps AHT null and fails Gate V44-2. ``direct_resolve_minutes``
+    reports the recorded direct-Resolve subset independently (still never
+    added into AHT a second time). A log with zero lines stays ``None``
+    for both.
+    """
+
+    phase_minutes: Mapping[TimeLogPhase, float]
+    aht_minutes: float | None
+    direct_resolve_minutes: float | None
+
+
+def summarize_time_log(lines: Sequence[TimeLogLineV1]) -> TimeLogTotals:
+    """AHT only from a complete five-phase log; direct Resolve as subset."""
+
+    per_phase: dict[TimeLogPhase, float] = {}
+    for line in lines:
+        per_phase[line.phase] = per_phase.get(line.phase, 0.0) + float(line.minutes)
+    complete = all(phase in per_phase for phase in TIME_LOG_PHASES)
+    return TimeLogTotals(
+        phase_minutes=per_phase,
+        aht_minutes=float(sum(per_phase.values())) if complete else None,
+        direct_resolve_minutes=per_phase.get("direct_resolve"),
+    )
+
+
 __all__ = [
     "QUALITY_DOMAIN_NAMES",
     "REPORT_NAME",
+    "TIME_LOG_PHASES",
     "FinishingEditorialQcBlockV1",
     "FinishingKitSelectionV1",
     "FinishingQcBlockV1",
     "FinishingRunReportV1",
+    "NativeRenderBlockV1",
     "TimeLogLineV1",
     "TimeLogPhase",
+    "TimeLogTotals",
+    "summarize_time_log",
 ]

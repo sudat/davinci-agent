@@ -1,38 +1,29 @@
-"""Run orchestration for the T13 finishing harness.
+"""Run orchestration for the T13 finishing harness (split for LOC ceiling).
 
-``cmd_run`` drives the full finishing flow: pins/lineage → committed
-episode context → kit selections → plans → MCP compile + executor (fake
-replay, or the pinned live server probed first — typed blocked, no hang) →
-final preview render → QC blocks → domain gate → runtime report. Exit
-codes follow the CLI contract: 0 pass / 1 blocked (names on stderr) / the
-CLI maps malformed to 2.
+``cmd_run`` drives pins/lineage → plans → MCP compile/executor → native
+Resolve render (live) or local preview (fake) → QC → gate → report.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Literal, cast
-from uuid import uuid4
+from typing import Final, Literal, cast
 
 from pydantic import ValidationError
 
 from services.cli._v44_finishing_build import (
-    FakePlanExecutor,
     FinishingError,
-    FinishingMalformedError,
-    FinishingPlans,
     execution_facts,
     load_episode_context,
     load_kit_selections,
     mcp_lineage,
 )
+from services.cli._v44_finishing_exec import compile_and_execute
 from services.cli._v44_finishing_ir import ir0c_to_v2
-from services.cli._v44_finishing_plans import build_finishing_plans
+from services.cli._v44_finishing_plans import build_finishing_plans, load_audio_facts
 from services.cli._v44_finishing_qc import (
     ReportInputs,
     assemble_report,
@@ -40,166 +31,124 @@ from services.cli._v44_finishing_qc import (
     editorial_qc,
     technical_qc,
 )
-from services.cli._v44_finishing_report import REPORT_NAME
-from services.cli.episode0 import Episode0BlockedError, _probe_live_executor
+from services.cli._v44_finishing_report import REPORT_NAME, NativeRenderBlockV1
+from services.cli._v44_orientation_bindings import orientation_bindings
 from services.cli.preview_render import render_review_preview
 from services.cli.review_common import load_tools
-from services.config.backends import load_backends, set_backend
 from services.creative_plan.quality_domains import ExecutionFactsV1
-from services.editorial_v2.model_provider import load_editorial_pin, load_editorial_runtime
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
-from services.job_runner.stage_runner import stage_resource
-from services.job_runner.stage_runner_models import SequenceClock
-from services.job_runner.state_store import StateStore
-from services.mcp_client.call_models import McpCallRecorder
-from services.mcp_execution.compiler import CompileExecutionPlanError, compile_execution_plan
-from services.mcp_execution.runner import McpExecutionRunnerV2
+from services.mcp_execution.native_render_media import (
+    load_ffprobe,
+    parse_frame_rate,
+    validate_native_media,
+)
+from services.mcp_execution.native_render_meta import NativeRenderMeta
 from services.preview.render import PREVIEW_NAME
 from services.production_kit.registry import load_kit
-from services.toolchain.mcp_pin import McpPinError
-
-if TYPE_CHECKING:
-    from services.creative_plan.ir_models_v2 import TimelineIrV2
-    from services.mcp_client.execution_runner import McpTransportFn
-    from services.mcp_execution.plan_models import McpExecutionPlanV1
-    from services.mcp_execution.runner import McpExecutionRunReportV1
 
 EXIT_PASSED: Final = 0
 EXIT_BLOCKED: Final = 1
-WHISPER_PIN: Final = Path("config/toolchains/pins/whisper-ja.json")
 FINISHING_DIR_NAME: Final = "finishing"
-JOB_ID: Final = "job-v44-finishing"
-STAGE_NAME: Final = "stage-finish"
-HOLDER: Final = "v44-finishing"
+
+# Re-export for tests that patched _v44_finishing_run internals.
+from services.cli._v44_finishing_exec import (  # noqa: F401,E402
+    HOLDER,
+    JOB_ID,
+    STAGE_NAME,
+    WHISPER_PIN,
+    FakePlanExecutor,
+    execute_plan,
+    load_pins,
+    resolve_executor,
+)
+from services.cli.episode0 import _probe_live_executor  # noqa: F401,E402
 
 
-def load_pins(runtime_path: Path) -> tuple[str, str]:
-    """Director pin model id + analysis-provider lineage (strict, no guesses)."""
+def _load_native_render(  # noqa: PLR0911 (each reconciliation gate is its own refusal)
+    finishing_dir: Path, episode_id: str
+) -> tuple[Path, str, NativeRenderBlockV1] | None:
+    """Reconcile the runner's persisted native-render record.
 
+    The record must name the exact deterministic custom name and output
+    path; EVERY measured fact is then independently re-measured with the
+    pinned ffprobe and must equal the record exactly (editable metadata
+    cannot inject report values). The report block is built from the
+    RE-MEASURED facts. Any absence/malformation/drift yields None.
+    """
+
+    render_dir = finishing_dir / "final-resolve-render"
+    expected_name = f"finishing-native-{episode_id}"
+    meta_path = render_dir / f"{expected_name}.meta.json"
+    expected_out = render_dir / f"{expected_name}.mp4"
+    if not meta_path.is_file():
+        return None
     try:
-        runtime = load_editorial_runtime(runtime_path)
-        pin = load_editorial_pin(Path(runtime.director_pin_path))
-        whisper = json.loads(WHISPER_PIN.read_bytes())
-        provider = f"{whisper['adapter']}:{str(whisper['model']['sha256'])[:12]}"
-    except (OSError, ValueError, ValidationError, KeyError, TypeError) as error:
-        raise FinishingMalformedError(
-            "pins-unreadable",
-            f"cannot load model/toolchain pins for lineage ({runtime_path}, "
-            f"{WHISPER_PIN}): {error}",
-        ) from error
-    return pin.model_id, provider
-
-
-def resolve_executor(
-    args: argparse.Namespace, exec_plan: McpExecutionPlanV1
-) -> tuple[McpTransportFn, str]:
-    if args.executor == "fake":
-        return FakePlanExecutor(exec_plan), (
-            "fake replay executor (expected readbacks per step; no MCP server, "
-            "no Resolve — proof of plan/compile/report wiring only"
-        )
+        meta = NativeRenderMeta.model_validate_json(meta_path.read_bytes())
+    except (OSError, ValidationError):
+        return None
+    if meta.custom_name != expected_name:
+        return None
+    if Path(meta.output_path) != expected_out:
+        return None
+    if not expected_out.is_file() or expected_out.stat().st_size == 0:
+        return None
+    if sha256_file(expected_out) != meta.output_sha256:
+        return None
     try:
-        return _probe_live_executor(args.pin), f"live pinned MCP server (pin={args.pin})"
-    except Episode0BlockedError as exc:
-        raise FinishingError("mcp-server-unreachable", exc.detail) from exc
-    except McpPinError as exc:
-        # An unreadable pin is the same operator action as an unreachable
-        # server: start/fix the pinned MCP server, then rerun.
-        raise FinishingError("mcp-server-unreachable", str(exc)) from exc
-
-
-def execute_plan(  # noqa: PLR0913 (episode0 _execute_plan wiring, verbatim shape)
-    exec_plan: McpExecutionPlanV1,
-    *,
-    finishing_dir: Path,
-    backends_path: Path,
-    executor: McpTransportFn,
-    executor_name: str,
-    run_token: str,
-) -> McpExecutionRunReportV1:
-    lineage = mcp_lineage()
-    store = StateStore.open(finishing_dir / "job-state.sqlite3")
-    # Per-run lease keys (T7 D3 uuid discipline): reruns never conflict with
-    # a prior invocation's lease in the same finishing dir.
-    job_id = f"{JOB_ID}-{run_token}"
-    try:
-        store.acquire_lease(
-            resource=stage_resource(job_id, STAGE_NAME),
-            holder=HOLDER,
-            now=1000,
-            ttl_seconds=600,
+        probe = validate_native_media(
+            expected_out,
+            load_ffprobe(),
+            expected_width=meta.width,
+            expected_height=meta.height,
+            expected_fps=parse_frame_rate(meta.avg_frame_rate),
+            expected_video_codec=meta.video_codec,
+            expected_audio_codec=meta.audio_codec,
+            expected_channels=meta.audio_channels,
+            expected_sample_rate=meta.audio_sample_rate,
         )
-        runner = McpExecutionRunnerV2(
-            store=store,
-            job_id=job_id,
-            stage_name=STAGE_NAME,
-            holder_token=HOLDER,
-            ledger_dir=finishing_dir / "mcp-call-ledger",
-            backends_path=backends_path,
-            clock=SequenceClock(1000),
-        )
-        recorder = McpCallRecorder(
-            provider_version=lineage["provider_version"],
-            resolve_version=lineage["resolve_build"],
-            server_mode=executor_name,
-            clock=lambda: 0,
-        )
-        return runner.execute(exec_plan, executor=executor, recorder=recorder)
-    finally:
-        store.close()
+    except Exception:  # noqa: BLE001 — any drift/corruption is honest None
+        return None
+    if (
+        probe.video_codec.lower() != meta.video_codec.lower()
+        or probe.audio_codec.lower() != meta.audio_codec.lower()
+        or probe.width != meta.width
+        or probe.height != meta.height
+        or probe.avg_frame_rate != meta.avg_frame_rate
+        or probe.audio_channels != meta.audio_channels
+        or probe.audio_sample_rate != meta.audio_sample_rate
+        or probe.duration_seconds != meta.duration_seconds
+        or probe.has_subtitle_stream != meta.has_subtitle_stream
+    ):
+        return None
+    block = NativeRenderBlockV1(
+        job_id=meta.job_id,
+        output_path=str(expected_out),
+        output_sha256=meta.output_sha256,
+        output_size_bytes=expected_out.stat().st_size,
+        duration_seconds=probe.duration_seconds,
+        video_codec=probe.video_codec,
+        width=probe.width,
+        height=probe.height,
+        audio_codec=probe.audio_codec,
+        audio_channels=probe.audio_channels,
+    )
+    return expected_out, meta.output_sha256, block
 
 
-def compile_and_execute(
-    args: argparse.Namespace,
-    plans: FinishingPlans,
-    ir_v2: TimelineIrV2,
-    finishing_dir: Path,
-) -> tuple[McpExecutionPlanV1, McpExecutionRunReportV1, str]:
-    """Compile the MCP plan and execute it; failed capabilities ride their
-    fallback matrix rungs automatically (compile loads the real matrix)."""
-
-    audio_plan = plans.audio_plan
-    color_plan = plans.color_plan
-    if audio_plan is None or color_plan is None:  # pragma: no cover - cmd_run guards
-        raise FinishingError("plan-missing", "compile needs both finishing plans")
-    try:
-        exec_plan = compile_execution_plan(
-            ir_v2,
-            subtitle_plan=plans.subtitle_plan,
-            audio_plan=audio_plan,
-            color_plan=color_plan,
-            presentation_intents=(),
-            kit_selections=dict(plans.recipe_selections),
-        )
-    except CompileExecutionPlanError as error:
-        raise FinishingError(f"compile-{error.code}", error.detail) from error
-    atomic_write(finishing_dir / "mcp-execution-plan.json", canonical_model_bytes(exec_plan))
-    executor, executor_note = resolve_executor(args, exec_plan)
-    previous_backend = load_backends(args.backends).execution_backend
-    set_backend("execution_backend", "mcp", path=args.backends)
-    try:
-        run_report = execute_plan(
-            exec_plan,
-            finishing_dir=finishing_dir,
-            backends_path=args.backends,
-            executor=executor,
-            executor_name=str(args.executor),
-            run_token=uuid4().hex[:8],
-        )
-    finally:
-        set_backend("execution_backend", previous_backend, path=args.backends)
-    atomic_write(finishing_dir / "mcp-run-report.json", canonical_model_bytes(run_report))
-    return exec_plan, run_report, executor_note
-
-
-def cmd_run(args: argparse.Namespace) -> int:
+def cmd_run(args) -> int:  # type: ignore[no-untyped-def]  # noqa: ANN001, C901, PLR0912, PLR0915
     started = time.monotonic()
-    director_model_id, analysis_provider = load_pins(args.editorial_runtime)
+    from services.cli._v44_finishing_exec import load_pins as _load_pins  # noqa: PLC0415
+
+    director_model_id, analysis_provider = _load_pins(args.editorial_runtime)
     ctx = load_episode_context(args.episode_root)
     record = load_kit_selections(args.episode_root)
     ir_v2 = ir0c_to_v2(ctx.ir, ctx.episode_id)
     plans = build_finishing_plans(
-        ir_v2, kit=load_kit(), record=record, episode_root=args.episode_root
+        ir_v2,
+        kit=load_kit(),
+        record=record,
+        episode_root=args.episode_root,
+        audio_facts=load_audio_facts(args.audio_facts),
     )
     finishing_dir = args.episode_root / FINISHING_DIR_NAME
     finishing_dir.mkdir(parents=True, exist_ok=True)
@@ -211,23 +160,73 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     plan_compiled = plans.audio_plan is not None and plans.color_plan is not None
     if plan_compiled:
+        _source_ids: set[str] = set()
+        for _track in (*ir_v2.video_tracks, *ir_v2.audio_tracks):
+            for _item in _track.items:
+                _sid = _item.source.source_id
+                if not _sid.startswith("still-") and not _sid.startswith("graphic-"):
+                    _source_ids.add(_sid)
+        _media_paths: dict[str, str] = {sid: str(ctx.mezzanine) for sid in _source_ids}
         exec_plan, run_report, executor_note = compile_and_execute(
-            args, plans, ir_v2, finishing_dir
+            args, plans, ir_v2, finishing_dir, _media_paths
         )
     else:
         exec_plan = None
         run_report = None
         executor_note = "plan not compiled — a finishing domain lacks its plan"
 
-    render_review_preview(
-        ctx.plan, ctx.ir, ctx.mezzanine, finishing_dir / "final-preview", tools=load_tools()
+    if run_report is not None and run_report.outcome == "failed":
+        failed = [s for s in run_report.steps if s.status == "failed"]
+        first = failed[0] if failed else None
+        first_id = first.step_id if first is not None else "unknown"
+        first_action = first.action if first is not None else "unknown"
+        first_code = (
+            first.failure_code
+            if first is not None and first.failure_code is not None
+            else "unknown"
+        )
+        raise FinishingError(
+            "mcp-execution-failed",
+            f"mcp execution failed: {len(failed)} step(s) failed; "
+            f"first {first_id}/{first_action} code={first_code} — BLOCKED",
+        )
+
+    preview_path: Path
+    preview_sha: str
+    native_block: NativeRenderBlockV1 | None = None
+    loaded = _load_native_render(finishing_dir, ctx.episode_id)
+    is_live_ok = (
+        str(args.executor) == "live"
+        and run_report is not None
+        and run_report.outcome == "completed"
     )
-    preview_path = finishing_dir / "final-preview" / PREVIEW_NAME
+    if loaded is not None and is_live_ok:
+        preview_path, preview_sha, native_block = loaded
+    elif is_live_ok and loaded is None:
+        raise FinishingError(
+            "render-native-missing",
+            "native render step completed but no valid output was reconciled",
+        )
+    else:
+        render_review_preview(
+            ctx.plan, ctx.ir, ctx.mezzanine, finishing_dir / "final-preview", tools=load_tools()
+        )
+        preview_path = finishing_dir / "final-preview" / PREVIEW_NAME
+        preview_sha = sha256_file(preview_path)
+
+    # Technical QC on the same file the report points at.
     qc_block = technical_qc(
-        args.qc_policy, args.render, preview_path, finishing_dir / "qc-report.json"
+        args.qc_policy,
+        args.render,
+        preview_path,
+        finishing_dir / "qc-report.json",
+        bindings=orientation_bindings(finishing_dir, args.episode_root, ctx),
     )
     editorial_block, _editorial_report = editorial_qc(
-        ir_v2, plans.subtitle_plan, plans.audio_plan, finishing_dir / "editorial-qc-report.json"
+        ir_v2,
+        plans.subtitle_plan,
+        plans.audio_plan,
+        finishing_dir / "editorial-qc-report.json",
     )
     inputs = ReportInputs(
         episode_id=ctx.episode_id,
@@ -244,7 +243,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         qc_block=qc_block,
         editorial_block=editorial_block,
         preview_path=preview_path,
-        preview_sha256=sha256_file(preview_path),
+        preview_sha256=preview_sha,
+        native_render=native_block,
         wall_clock_seconds=round(time.monotonic() - started, 3),
         cue_count=len(ir_v2.subtitle_cues),
         execution_report=(
@@ -265,6 +265,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     atomic_write(report_path, canonical_model_bytes(report))
     print(f"finishing report: {report_path}")
     print(f"final preview: {preview_path}")
+    if native_block is not None:
+        print(f"native render: {native_block.output_path} job={native_block.job_id}")
     print(f"gate: {gate.decision}")
     if gate.decision == "reject":
         print(f"blocked domains: {', '.join(gate.blocked_domains)}", file=sys.stderr)

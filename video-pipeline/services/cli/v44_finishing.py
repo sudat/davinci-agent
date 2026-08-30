@@ -100,6 +100,10 @@ def _parser() -> argparse.ArgumentParser:
         "--render", type=Path, default=None,
         help="QC target override (the live Resolve render); default: final preview",
     )
+    run_parser.add_argument(
+        "--audio-facts", type=Path, default=None,
+        help="episode-scoped AudioFactsV1 JSON (already-good guard for the audio plan)",
+    )
     pub_parser = sub.add_parser(
         "record-publishability", help="RECORD the operator verdict (never decides)"
     )

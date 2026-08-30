@@ -93,24 +93,35 @@ def ir0c_to_v2(ir: TimelineIr0C, episode_id: str) -> TimelineIrV2:
 def asr_segments_from_cues(
     ir_v2: TimelineIrV2, source_id: str
 ) -> tuple[tuple[AsrSegmentV1, ...], int]:
-    """Identity mapping of the committed cues onto ASR segments (frames→s)."""
+    """Restore committed record-timed cues to source timing for reconciliation."""
 
     seconds = _seconds_per_frame(ir_v2.rate)
-    total = max(
-        (clip.record_span.end_frame for track in ir_v2.video_tracks for clip in track.items),
-        default=0,
-    )
-    segments = tuple(
-        AsrSegmentV1(
-            segment_id=f"asr-{cue.cue_id}",
-            source_id=source_id,
-            text=cue.text,
-            start_seconds=cue.record_span.start_frame * seconds,
-            end_seconds=cue.record_span.end_frame * seconds,
+    primary = next(track for track in ir_v2.video_tracks if track.role == "primary")
+    segments: list[AsrSegmentV1] = []
+    for cue in ir_v2.subtitle_cues:
+        clip = next(
+            clip
+            for clip in primary.items
+            if clip.record_span.start_frame <= cue.record_span.start_frame
+            and cue.record_span.end_frame <= clip.record_span.end_frame
         )
-        for cue in ir_v2.subtitle_cues
-    )
-    return segments, total
+        source_start = (
+            clip.source.span.start_frame
+            + cue.record_span.start_frame
+            - clip.record_span.start_frame
+        )
+        source_end = source_start + cue.record_span.length
+        segments.append(
+            AsrSegmentV1(
+                segment_id=f"asr-{cue.cue_id}",
+                source_id=source_id,
+                text=cue.text,
+                start_seconds=source_start * seconds,
+                end_seconds=source_end * seconds,
+            )
+        )
+    total = max((clip.source.span.end_frame for clip in primary.items), default=0)
+    return tuple(segments), total
 
 
 def _seconds_per_frame(rate: RationalFrameRate) -> float:

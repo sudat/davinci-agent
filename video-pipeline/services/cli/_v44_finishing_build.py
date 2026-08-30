@@ -216,6 +216,8 @@ class FakePlanExecutor:
         tool_name: str,
         action: str,
         normalized_params: Mapping[str, object],  # noqa: ARG002 (protocol shape)
+        *,
+        timeout_seconds: float | None = None,  # noqa: ARG002 (protocol shape)
     ) -> object:
         queue = self._queues.get(action)
         if not queue:

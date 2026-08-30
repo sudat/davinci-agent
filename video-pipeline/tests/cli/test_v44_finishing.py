@@ -9,6 +9,7 @@ a misleading success. The live-executor refusal is proven at the seam
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import subprocess
@@ -18,8 +19,9 @@ from typing import TYPE_CHECKING, Literal, cast
 
 import pytest
 
-from services.cli import _v44_finishing_run, v44_finishing
-from services.cli._v44_finishing_build import resolve_review_store
+from services.cli import _v44_finishing_exec as exec_mod
+from services.cli import _v44_finishing_run, episode0, v44_finishing
+from services.cli._v44_finishing_build import FinishingError, resolve_review_store
 from services.cli._v44_finishing_report import TimeLogLineV1
 from services.cli.bundle import ReviewTarget, assemble_real_bundle, save_bundle
 from services.cli.episode0 import Episode0BlockedError
@@ -31,8 +33,17 @@ from services.contracts.edit_plan_0c import (
     EditSourceRef0C,
 )
 from services.contracts.primitives import Producer, RationalFrameRate, SourceFrameSpan
+from services.creative_plan.audio_finishing import AudioFactsV1
 from services.final_review.publishability import PublishabilityReviewV1
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
+from services.mcp_client.call_models import McpExecutionReportV1
+from services.mcp_execution.live_adapter import LiveMcpAdapter
+from services.mcp_execution.live_errors import LiveAdapterError
+from services.mcp_execution.live_handlers.placement import (
+    PLACEMENT_TRACK_SCAN_TIMEOUT_SECONDS,
+)
+from services.mcp_execution.plan_models import McpExecutionPlanV1
+from services.mcp_execution.runner import McpExecutionRunReportV1, StepAttemptV1, StepResultV1
 from services.metrics.v44_gate_state import V44GateSummaryV1
 from services.preview.errors import PreviewError
 from services.preview.tools import PinnedTools, load_pinned_tools
@@ -40,7 +51,9 @@ from services.production_kit.preview import KitDomainSelectionV1, KitSelectionRe
 from services.qc.policy_build import build_policy
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
+
+    from services.mcp_client.execution_runner import McpTransportFn
 
 REPO = Path(__file__).resolve().parents[2]
 RATE = RationalFrameRate(num=30, den=1)
@@ -278,8 +291,10 @@ def test_run_fake_with_policy_happy_path_all_domains(episode_root: Path) -> None
     assert report["plan_compiled"] is True
     assert report["execution_outcome"] == "completed"
     assert report["failed_step_count"] == 0
-    # Failed MCP capabilities routed to fallback rungs automatically.
-    assert report["fallback_rung_count"] >= 1
+    # Task 5 moved the dialogue-chain audio stages onto the granular MCP
+    # rung (no fallback record); this fixture enables no matrix-failed
+    # capability, so the plan carries zero fallback rungs.
+    assert report["fallback_rung_count"] == 0
     # Executor identity + pins/lineage recorded (no misleading success).
     assert report["executor"] == "fake"
     assert "fake" in report["executor_note"]
@@ -309,6 +324,39 @@ def test_run_fake_with_policy_happy_path_all_domains(episode_root: Path) -> None
         "editorial-qc-report.json",
     ):
         assert (episode_root / "finishing" / name).is_file(), name
+
+
+def test_run_fake_consumes_episode_audio_facts(episode_root: Path) -> None:
+    """The production run route honors an episode-scoped AudioFactsV1 file.
+
+    Defect lock (focused rerun8 evidence on v44-real-01): without injection
+    the conservative default forces dialogue_cleanup on clean dialogue media.
+    """
+
+    episode_root.joinpath("finishing").mkdir(parents=True, exist_ok=True)
+    facts_path = episode_root / "finishing" / "audio-facts.json"
+    facts_path.write_bytes(
+        AudioFactsV1(
+            episode_id=EPISODE_ID,
+            dialogue_clean=True,
+            has_bgm=False,
+            has_ambience=False,
+            measured_loudness_ok=True,
+        ).model_dump_json().encode()
+    )
+
+    result = _run_cli(
+        ["run", "--episode-root", str(episode_root), "--executor", "fake",
+         "--audio-facts", str(facts_path)]
+    )
+    assert result.returncode == 1, result.stderr  # still no QC policy — honest blocked
+
+    plan = json.loads((episode_root / "finishing" / "audio-plan.json").read_bytes())
+    stages = {row["stage"]: row for row in plan["stages"]}
+    assert stages["dialogue_cleanup"]["enabled"] is False
+    assert "already-good" in (stages["dialogue_cleanup"]["justification"] or "")
+    assert stages["dialogue_level_normalization"]["enabled"] is False
+    assert "already-good" in (stages["dialogue_level_normalization"]["justification"] or "")
 
 
 def test_missing_audio_selection_blocks_audio_domain(
@@ -362,6 +410,101 @@ def test_live_executor_without_server_blocks_at_the_seam(
     assert "mcp-server-unreachable" in stderr
     # No report: the run was refused before any execution.
     assert not (episode_root / "finishing" / "finishing-run.json").is_file()
+
+
+def test_resolve_executor_live_wraps_with_media_mapping_and_fake_unaffected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fake_probe(pin_path: Path) -> McpTransportFn:
+        def raw(
+            tool_name: str,
+            action: str,
+            normalized_params: Mapping[str, object],
+            *,
+            timeout_seconds: float | None = None,
+        ) -> object:
+            return {"success": True}
+
+        return raw
+
+    monkeypatch.setattr(_v44_finishing_run, "_probe_live_executor", fake_probe)
+
+    monkeypatch.setattr(exec_mod, "_media_frame_counts", lambda paths: {})
+
+    args_live = argparse.Namespace(executor="live", pin=Path("pin.json"))
+    dummy_plan = McpExecutionPlanV1.model_construct()
+    media_paths = {
+        "ep-457dfac97989568e-edit-source": str(tmp_path / "edit-source.mov")
+    }
+    executor, _note = _v44_finishing_run.resolve_executor(
+        args_live, dummy_plan, media_paths
+    )
+    assert isinstance(executor, LiveMcpAdapter)
+    # fake must stay unwrapped even when mapping is supplied
+    sentinel = object()
+    monkeypatch.setattr(_v44_finishing_run, "FakePlanExecutor", lambda plan: sentinel)
+    args_fake = argparse.Namespace(executor="fake", pin=Path("pin.json"))
+    executor2, note2 = _v44_finishing_run.resolve_executor(
+        args_fake, dummy_plan, media_paths
+    )
+    assert executor2 is sentinel
+    assert "fake" in note2
+
+
+def test_probe_live_executor_forwards_operation_deadline_to_the_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The product live executor (the finishing route's raw transport) must
+    forward an operation-specific ``timeout_seconds`` into the JSON-RPC
+    request — the measured placement scan needs 324.41s and the 30s config
+    default killed it (repair-5 verification failure)."""
+    requests: list[tuple[str, float | None]] = []
+
+    class _StubTransport:
+        def request(
+            self,
+            method: str,
+            params: object,
+            *,
+            timeout_seconds: float | None = None,
+        ) -> dict[str, object]:
+            requests.append((method, timeout_seconds))
+            return {
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '{"success": true, "occurrences": []}',
+                        }
+                    ],
+                    "isError": False,
+                }
+            }
+
+    class _StubClient:
+        transport = _StubTransport()
+
+        def connect(self) -> object:
+            return None
+
+        def resolve_get_version(self) -> object:
+            return None
+
+    monkeypatch.setattr(episode0, "_live_client_from_pin", lambda _pin: _StubClient())
+
+    executor = episode0._probe_live_executor(Path("pin.json"))
+
+    executor(
+        "timeline",
+        "source_range_report",
+        {},
+        timeout_seconds=PLACEMENT_TRACK_SCAN_TIMEOUT_SECONDS,
+    )
+    executor("timeline", "get_current", {})
+
+    assert requests[0] == ("tools/call", PLACEMENT_TRACK_SCAN_TIMEOUT_SECONDS)
+    assert requests[1] == ("tools/call", None)
 
 
 def test_record_publishability_refuses_unfinished_state(tmp_path: Path) -> None:
@@ -526,7 +669,15 @@ def test_gate_summary_honest_fail_then_pass_after_full_evidence(
     assert "delivery_qc" in early_summary["blocked_domains"]
     assert "not passed:" in early.stderr
 
-    for phase, minutes in (("ordinary_review", "12.5"), ("direct_resolve", "40")):
+    # T8: AHT exists only when ALL five canonical bootstrap phases are
+    # recorded — a partial log keeps bootstrap_aht_minutes null (blocked).
+    for phase, minutes in (
+        ("ordinary_review", "12.5"),
+        ("kit_bootstrap", "3.5"),
+        ("taste_calibration", "1.5"),
+        ("troubleshooting", "2.5"),
+        ("direct_resolve", "40"),
+    ):
         timed = _run_cli(
             ["record-time", "--episode-root", str(episode_root),
              "--phase", phase, "--minutes", minutes]
@@ -553,7 +704,7 @@ def test_gate_summary_honest_fail_then_pass_after_full_evidence(
     assert summary.blocked_domains == ()
     assert summary.technical_qc == "passed"
     assert summary.editorial_qc_blocked_items == 0
-    assert summary.bootstrap_aht_minutes == 52.5
+    assert summary.bootstrap_aht_minutes == 60.0
     assert summary.direct_resolve_minutes == 40.0
     assert summary.director_pin_model == "gpt-5.6-sol"
     assert summary.evidence_pins["analysis_provider"].startswith("whisper-cpp-cli:")
@@ -587,3 +738,398 @@ def test_gate_summary_not_publishable_verdict_never_passes(
     )
     assert summary.passed is False
     assert summary.operator_verdict == "not_publishable"
+    # Partial log (two of five phases): AHT stays null, never a partial sum.
+    assert summary.bootstrap_aht_minutes is None
+
+
+def test_mcp_failed_outcome_blocks_before_preview(
+    fixture_clip: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Failed MCP execution must not render a misleading local preview (D4).
+
+    Given: a finishing run whose MCP execution report outcome is failed
+    (e.g. prepare_project Unknown tool)
+    When: cmd_run is invoked
+    Then: it writes mcp-run-report.json, exits 1 with BLOCKED and the
+          failed-step summary, and never calls render_review_preview.
+    """
+
+    episode_root = _workspace(tmp_path, fixture_clip, _kit_record(*FULL_SELECTIONS))
+
+    failed_step = StepResultV1(
+        step_id="step-prepare_project-001",
+        action="prepare_project",
+        rung="mcp_verified_workflow",
+        status="failed",
+        attempts=(StepAttemptV1(attempt=1, status="error", detail="Unknown tool"),),
+        failure_code="executor-error",
+        detail="Unknown tool: prepare_project",
+    )
+
+    def fake_execute_plan(*args: object, **kwargs: object) -> McpExecutionRunReportV1:
+        return McpExecutionRunReportV1(
+            schema_version="mcp-execution-run-report-v1",
+            plan_id="a" * 64,
+            episode_id=EPISODE_ID,
+            outcome="failed",
+            steps=(failed_step,),
+            rung_entries=(),
+            calls=McpExecutionReportV1(
+                total_calls=1,
+                by_status={"error": 1},
+                by_tool={"prepare_project": 1},
+                window_started_at=1000,
+                window_finished_at=1001,
+            ),
+            started_at=1000,
+            finished_at=1001,
+        )
+
+    monkeypatch.setattr(_v44_finishing_run, "execute_plan", fake_execute_plan)
+
+    calls: list[int] = []
+
+    def fake_render(*args: object, **kwargs: object) -> Path:
+        calls.append(1)
+        return episode_root / "finishing" / "final-preview" / "preview.mp4"
+
+    monkeypatch.setattr(_v44_finishing_run, "render_review_preview", fake_render)
+
+    code = v44_finishing.main(
+        ["run", "--episode-root", str(episode_root), "--executor", "fake"]
+    )
+    captured = capsys.readouterr()
+
+    assert code == v44_finishing.EXIT_BLOCKED
+    assert "mcp-execution-failed" in captured.err
+    assert "1" in captured.err  # failed step count
+    assert "prepare_project" in captured.err  # first step
+    assert "executor-error" in captured.err  # failure code
+    assert "BLOCKED" in captured.err
+    assert not calls, "render_review_preview was called despite failed MCP outcome"
+    assert (episode_root / "finishing" / "mcp-run-report.json").is_file()
+    report = json.loads((episode_root / "finishing" / "mcp-run-report.json").read_bytes())
+    assert report["outcome"] == "failed"
+    assert not (episode_root / "finishing" / "final-preview" / "preview.mp4").is_file()
+    assert not (episode_root / "finishing" / "finishing-run.json").is_file()
+
+
+# ---------------------------------------------------------------------------
+# mcp-complete-parity Task 1 — native-finishing gate regressions.
+# ---------------------------------------------------------------------------
+
+
+def _run_to_passing_fake_report(episode_root: Path) -> dict[str, object]:
+    """Two-step honest flow: the first run renders the preview (blocked on
+    missing QC policy), then a policy-backed rerun passes the gate."""
+
+    first = _run_cli(["run", "--episode-root", str(episode_root), "--executor", "fake"])
+    assert first.returncode == 1, first.stderr
+    policy = build_policy(episode_root / "finishing" / "final-preview" / "preview.mp4")
+    policy_path = episode_root / "finishing" / "qc-policy.json"
+    atomic_write(policy_path, canonical_model_bytes(policy))
+    passing = _run_cli(
+        ["run", "--episode-root", str(episode_root), "--executor", "fake",
+         "--qc-policy", str(policy_path)]
+    )
+    assert passing.returncode == 0, passing.stderr
+    report = json.loads((episode_root / "finishing" / "finishing-run.json").read_bytes())
+    assert report["gate_decision"] == "pass"
+    return report
+
+
+def test_fake_executor_success_never_counts_as_native_finishing(
+    episode_root: Path,
+) -> None:
+    """Gate regression (fake executor): a completed fake run self-identifies —
+    executor=fake with a note disclaiming the MCP server and Resolve — and
+    fabricates no native render proof, so it can never satisfy native
+    finishing success (misleading-success guard)."""
+
+    report = _run_to_passing_fake_report(episode_root)
+
+    assert report["executor"] == "fake"
+    note = report["executor_note"]
+    assert isinstance(note, str)
+    assert "no MCP server" in note
+    assert "no Resolve" in note
+    assert report.get("native_render") is None
+    # The fake run's final preview is the local pinned-tool render, not a
+    # DaVinci render output — that is exactly why it is not native proof.
+    preview_path = report["final_preview_path"]
+    assert isinstance(preview_path, str)
+    assert preview_path.endswith("preview.mp4")
+
+
+def _write_native_meta(
+    target: Path, *, job_id: str, **overrides: object
+) -> Path:
+    base: dict[str, object] = {
+        "schema_version": "native-render-meta-v1",
+        "custom_name": "finishing-native-ep-test",
+        "job_id": job_id,
+        "output_path": str(target),
+        "output_sha256": sha256_file(target),
+        "duration_seconds": 1.0,
+        "video_codec": "h264",
+        "width": 1920,
+        "height": 1080,
+        "avg_frame_rate": "30/1",
+        "audio_codec": "aac",
+        "audio_channels": 2,
+        "audio_sample_rate": 48000,
+        "has_subtitle_stream": False,
+    }
+    base.update(overrides)
+    meta_path = target.parent / "finishing-native-ep-test.meta.json"
+    meta_path.write_text(json.dumps(base))
+    return meta_path
+
+
+def test_load_native_render_builds_block_from_measured_fields(
+    tmp_path: Path,
+) -> None:
+    from services.cli._v44_finishing_run import (  # noqa: PLC0415
+        _load_native_render,
+    )
+
+    out = tmp_path / "final-resolve-render" / "finishing-native-ep-test.mp4"
+    out.parent.mkdir(parents=True)
+    subprocess.run(
+        (
+            "ffmpeg",
+            "-nostdin", "-y", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30:duration=1",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-ar", "48000", "-ac", "2",
+            "-shortest", str(out),
+        ),
+        check=False, capture_output=True, timeout=30,
+    )
+    assert out.is_file()
+    _write_native_meta(out, job_id="job-measured-1")
+    loaded = _load_native_render(tmp_path, "ep-test")
+    assert loaded is not None
+    _preview_path, sha, block = loaded
+    assert block.job_id == "job-measured-1"
+    assert block.output_sha256 == sha
+    assert sha == sha256_file(out)
+    assert block.duration_seconds > 0
+    assert block.video_codec == "h264"
+    assert block.width == 1920
+    assert block.height == 1080
+    assert block.audio_codec == "aac"
+    assert block.audio_channels == 2
+
+
+def test_load_native_render_refuses_missing_measured_fields(
+    tmp_path: Path,
+) -> None:
+    from services.cli._v44_finishing_run import (  # noqa: PLC0415
+        _load_native_render,
+    )
+
+    out = tmp_path / "final-resolve-render" / "finishing-native-ep-test.mp4"
+    out.parent.mkdir(parents=True)
+    out.write_bytes(b"\x00" * 64)
+    meta = _write_native_meta(out, job_id="job-x")
+    raw = json.loads(meta.read_text())
+    del raw["duration_seconds"]
+    meta.write_text(json.dumps(raw))
+    assert _load_native_render(tmp_path, "ep-test") is None
+
+
+def test_load_native_render_refuses_sentinel_job_id(tmp_path: Path) -> None:
+    from services.cli._v44_finishing_run import (  # noqa: PLC0415
+        _load_native_render,
+    )
+
+    out = tmp_path / "final-resolve-render" / "finishing-native-ep-test.mp4"
+    out.parent.mkdir(parents=True)
+    out.write_bytes(b"\x00" * 64)
+    _write_native_meta(out, job_id="reused-existing")
+    assert _load_native_render(tmp_path, "ep-test") is None
+
+
+def test_load_native_render_refuses_wrong_custom_name(tmp_path: Path) -> None:
+    from services.cli._v44_finishing_run import (  # noqa: PLC0415
+        _load_native_render,
+    )
+
+    out = tmp_path / "final-resolve-render" / "finishing-native-ep-test.mp4"
+    out.parent.mkdir(parents=True)
+    out.write_bytes(b"\x00" * 64)
+    _write_native_meta(out, job_id="job-x", custom_name="someone-elses-name")
+    assert _load_native_render(tmp_path, "ep-test") is None
+
+
+def test_load_native_render_refuses_wrong_output_path(tmp_path: Path) -> None:
+    from services.cli._v44_finishing_run import (  # noqa: PLC0415
+        _load_native_render,
+    )
+
+    out = tmp_path / "final-resolve-render" / "finishing-native-ep-test.mp4"
+    out.parent.mkdir(parents=True)
+    out.write_bytes(b"\x00" * 64)
+    _write_native_meta(out, job_id="job-x", output_path="/elsewhere/renamed.mp4")
+    assert _load_native_render(tmp_path, "ep-test") is None
+
+
+def test_load_native_render_refuses_tampered_media_facts(
+    tmp_path: Path,
+) -> None:
+    """Editable metadata cannot inject report values: every recorded fact
+    must equal an independent ffprobe re-measurement."""
+
+    from services.cli._v44_finishing_run import (  # noqa: PLC0415
+        _load_native_render,
+    )
+
+    out = tmp_path / "final-resolve-render" / "finishing-native-ep-test.mp4"
+    out.parent.mkdir(parents=True)
+    subprocess.run(
+        (
+            "ffmpeg",
+            "-nostdin", "-y", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30:duration=1",
+            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-ar", "48000", "-ac", "2",
+            "-shortest", str(out),
+        ),
+        check=False, capture_output=True, timeout=30,
+    )
+    assert out.is_file()
+    _write_native_meta(out, job_id="job-x", duration_seconds=99.0, width=3840)
+    assert _load_native_render(tmp_path, "ep-test") is None
+
+
+def test_future_finishing_binds_final_preview_to_resolve_native_render(
+    tmp_path: Path,
+) -> None:
+    """Native render block binds the real media's own identity (unit proof)."""
+
+    import subprocess  # noqa: PLC0415
+
+    repo = Path(__file__).resolve().parents[2]
+    ffmpeg = repo / ".venv" / "bin" / "ffmpeg"
+    ffmpeg_bin = str(ffmpeg) if ffmpeg.is_file() else "ffmpeg"
+    target = tmp_path / "final-resolve-render" / "finishing-native-ep-test.mp4"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        (
+            ffmpeg_bin,
+            "-nostdin",
+            "-y",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x180:rate=30:duration=1",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=1",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-shortest",
+            str(target),
+        ),
+        check=False,
+        capture_output=True,
+        timeout=30,
+    )
+    assert target.is_file()
+    assert target.stat().st_size > 0
+    from services.cli._v44_finishing_report import NativeRenderBlockV1  # noqa: PLC0415
+
+    native = NativeRenderBlockV1(
+        job_id="job-native-unit-1",
+        output_path=str(target),
+        output_sha256=sha256_file(target),
+        output_size_bytes=target.stat().st_size,
+        duration_seconds=1.0,
+        video_codec="h264",
+        width=320,
+        height=180,
+        audio_codec="aac",
+        audio_channels=2,
+    )
+    assert sha256_file(Path(native.output_path)) == native.output_sha256
+    assert native.output_size_bytes > 0
+
+
+def test_resolve_executor_probes_media_eof_into_the_live_adapter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The live arm must establish trusted per-source media frame EOFs
+    (ffprobe nb_frames) and hand them to the adapter — the EOF-aware
+    placement reconciliation is inactive without them (r3/r4 blocker)."""
+
+    media = tmp_path / "edit-source.mov"
+    media.write_bytes(b"stub")
+
+    def fake_probe(pin: Path) -> object:
+        def raw(*args: object, **kwargs: object) -> object:
+            return {"success": True}
+
+        return raw
+
+    monkeypatch.setattr(_v44_finishing_run, "_probe_live_executor", fake_probe)
+
+    def fake_counts(paths: object) -> dict[str, int]:
+        return {"ep-457dfac97989568e-edit-source": 8467}
+
+    monkeypatch.setattr(exec_mod, "_media_frame_counts", fake_counts)
+
+    args_live = argparse.Namespace(executor="live", pin=Path("pin.json"))
+    dummy_plan = McpExecutionPlanV1.model_construct()
+    executor, _note = _v44_finishing_run.resolve_executor(
+        args_live, dummy_plan, {"ep-457dfac97989568e-edit-source": str(media)}
+    )
+    assert isinstance(executor, LiveMcpAdapter)
+    assert executor._ctx.media_frame_counts == {  # wiring proof
+        "ep-457dfac97989568e-edit-source": 8467
+    }
+
+
+def test_resolve_executor_blocks_typed_when_media_eof_unprobeable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    media = tmp_path / "edit-source.mov"
+    media.write_bytes(b"stub")
+
+    def fake_probe(pin: Path) -> object:
+        def raw(*args: object, **kwargs: object) -> object:
+            return {"success": True}
+
+        return raw
+
+    monkeypatch.setattr(_v44_finishing_run, "_probe_live_executor", fake_probe)
+
+    def broken_counts(paths: object) -> dict[str, int]:
+        raise LiveAdapterError("media-frame-count-missing", "no nb_frames")
+
+    monkeypatch.setattr(exec_mod, "_media_frame_counts", broken_counts)
+
+    args_live = argparse.Namespace(executor="live", pin=Path("pin.json"))
+    dummy_plan = McpExecutionPlanV1.model_construct()
+
+    with pytest.raises(FinishingError) as exc:
+        _v44_finishing_run.resolve_executor(
+            args_live, dummy_plan, {"src": str(media)}
+        )
+    assert exc.value.code == "media-frame-count-unavailable"
