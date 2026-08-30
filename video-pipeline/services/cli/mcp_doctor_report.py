@@ -8,11 +8,15 @@ the JSON contract printed to stdout.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+DEFAULT_COVERAGE_DIR: Path = (
+    Path(__file__).resolve().parents[2] / "capabilities" / "mcp-coverage"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +24,7 @@ class DoctorPaths:
     clone_dir: Path
     pin_path: Path
     repo_venv_python: Path
+    coverage_dir: Path = field(default_factory=lambda: DEFAULT_COVERAGE_DIR)
 
 
 class DoctorSection(BaseModel):
@@ -52,6 +57,7 @@ def fail_section(check: str, code: str, detail: str) -> DoctorSection:
 
 
 __all__ = [
+    "DEFAULT_COVERAGE_DIR",
     "DoctorPaths",
     "DoctorReport",
     "DoctorSection",
