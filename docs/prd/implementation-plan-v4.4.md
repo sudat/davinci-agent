@@ -610,6 +610,8 @@ If B fails:
 
 Then allow one targeted correction and one repeat by default.
 
+`v44-real-01`の実測診断は§5.10のとおりである。Arm Cは、§5.10の修正後Arm Bが依然として不合格の場合のみ実行する。
+
 Do not continue building downstream features while V44-0 remains unresolved.
 
 ## 5.9 Japanese evidence-quality test
@@ -625,6 +627,32 @@ Measure separately:
 - timestamp alignment error
 
 Do not mix with subtitle line-breaking quality.
+
+## 5.10 実測診断と限定修正（v44-real-01 arm-B-r2）
+
+`arm-B-r2`（本物のDirectorV2 three-pass、GPT-5.6 Sol、Moment Deep Review付き、commit `138072c0bf`）は事前合格基準（PRD §6.6）に失敗した。実測値:
+
+- must-keep recall 72/75（0.96、要求1.0）
+- catastrophic removal 3件（要求0）
+- must-remove残留 2/2（1.0、上限0.25）
+- evidence品質: transcript CER 0.104、timestamp誤差 p95 5740ms、発話欠落31件、発話重複37件（固有名詞recallは1.0）
+
+オペレーター継続判定はYESだったが、機械判定は不合格でpublishabilityは未記録であり、Gate V44-0は未達成である。あわせて、現行の最終出力は90度回転という独立blockerを抱えるため、現時点で公開可能とは扱わない（向きの診断・修正は別課題とする）。
+
+分類（PRD §21.1）: evidence生成・解釈の失敗である。欠落・重複・ずれたtimestampにより意思決定層が素材の忠実な写像を受け取れなかった。pipeline再構築の根拠ではなく、editorial reasoningやmodel選択の失敗の証拠でもない。
+
+PRD §6.7の「1回の的を絞った設計修正と1回の再実行」の枠内で、evidence生成に対する次の限定修正のみを行う。役割はPRD §8.5と同じ4つである。
+
+| 役割 | model / surface | 責務 | 境界 |
+|---|---|---|---|
+| 全編音声映像map/reduce | `gemini-3.7-flash`（Gemini Developer API） | 局所windowの一意和集合がEdit Source全体 `[0, source_duration)` を厳密に覆うmap確認と、episode単位のreduce 1回 | 実装前にlive-probeで保証する。Vertex AI等への黙替えおよびprovider/model fallbackは禁止。利用不可は型付きblocked |
+| 的を絞った映像専属 | `glm-5v-turbo`（公式にサポートされる動画転送方式） | 決定論的またはGemini指定の不確実・高価値領域について、音声除去済みの対象clipのみ確認 | 編集判断は行わない。音声は送らない |
+| fusion | 同一の`gemini-3.7-flash` pin | 局所/reduce結果と専属観察をprovider中立に融合 | 型付きpayload外の文章は信頼しない |
+| 編集判断の唯一の所有者 | GPT-5.6 Sol（DirectorV2） | keep/remove/順序/編集意図の選択はこの役割のみ | 融合evidenceを検証・commitの前に消費する。どのmodelもJob State・Selection Plan・Edit Plan・Resolveに書き込まない |
+
+権威artifactは融合済み`MomentDeepReviewV1`記録のみとし、段階別の来歴は既存記録内で検査可能とする。map/reduce/専属の実行時payloadは再生成可能な実行データであり、第三のauthoritative artifactは作らない（§0.3）。
+
+Arm C（§5.8）は、この修正後のArm Bが依然として不合格の場合のみ実行する。Gate V44-0 → V44-1 → V44-2の順序は変更しない。
 
 ## Gate V44-0
 
@@ -911,6 +939,13 @@ Record separately:
 - direct Resolve time
 
 Run label: `bootstrap`.
+
+各区分の意味（v44-real-01修正時に固定化、PRD §19.4と同一）:
+
+- 5区分は既存のfinishing time-log契約（`TimeLogLineV1` のphase）として記録する。運用時の通常レビュー・Production Kit準備・テスト/参照キャリブレーション・障害対応・Resolve直接作業を混ぜない。
+- 合計bootstrap AHT = 上記5区分の合計。
+- direct Resolve時間は合計に1回だけ含めた上で、内訳として別途報告する（二重計上しない）。
+- 未記入の区分は推定せずnullのまま残し、Gate V44-2を不合格にする。
 
 Do not compare this raw number directly to steady-state <=30 minute target.
 

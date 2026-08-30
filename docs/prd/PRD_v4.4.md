@@ -484,6 +484,8 @@ The experiment measures whether Progressive Attention actually improves editoria
 
 Experiment C is executed only if Experiment B fails the predeclared criteria.
 
+For `v44-real-01`, Experiment C is additionally conditional on the corrected Arm B of §6.7.1: it runs only if that corrected Arm B still fails.
+
 For a small set of failed regions, a human provides richer evidence or corrected evidence context.
 
 Purpose:
@@ -535,6 +537,23 @@ C: human-rich evidence control
 For each identified failure class, one targeted design correction and one re-run are allowed by default.
 
 If the corrected path still fails the same critical criterion, stop downstream feature expansion and explicitly revisit the editorial approach before continuing.
+
+### 6.7.1 `[FIRST-PUBLISH]` Measured diagnosis: corrected Arm B failure on `v44-real-01`
+
+The corrected Arm B run `arm-B-r2` (real DirectorV2 three-pass, GPT-5.6 Sol, Moment Deep Review enabled) failed the predeclared criteria of §6.6. Measured facts:
+
+- Must-Keep recall 72/75 (0.96) against the required 1.0,
+- catastrophic Must-Keep removals 3 against the required 0,
+- Must-Remove retention 2/2 (1.0) against the maximum 0.25,
+- evidence quality: transcript CER 0.104, timestamp error p95 5740 ms, 31 omitted utterances, 37 duplicated utterances; proper-noun recall was 1.0.
+
+The operator continuation verdict was YES, but the machine pass policy failed and publishability was not recorded. This run does not satisfy Gate V44-0.
+
+Classification under §21.1: an evidence-generation/interpretation failure. Omitted and duplicated utterances and misaligned timestamps meant the decision layer received an unfaithful map of the source and made keep/remove decisions against incomplete or distorted evidence. It is not a reason to rebuild the pipeline, and it is not evidence that editorial reasoning or model selection failed.
+
+Under the §6.7 allowance of one targeted design correction and one re-run, v4.4 applies exactly one bounded `[FIRST-PUBLISH]` correction to evidence generation: full-source audiovisual map/reduce plus a targeted video-only specialist, fused before the editorial decision. The four role boundaries are defined in §8.5. This is not a rebuild and not a generic multi-agent framework.
+
+Arm C (§6.5) is executed only if this corrected Arm B still fails the §6.6 criteria.
 
 ---
 
@@ -667,6 +686,19 @@ moment becomes high-value candidate
 ```
 
 This is one of the central reasons v4.4 retains Progressive Attention.
+
+## 8.5 `[FIRST-PUBLISH]` Video-understanding roles for the corrected Arm B
+
+The §6.7.1 correction defines four bounded roles. They are evidence-generation roles only; this is not a generic multi-agent framework.
+
+| Role | Model / provider surface | Responsibility | Boundary |
+|---|---|---|---|
+| Full-source audiovisual map/reduce | `gemini-3.7-flash` via Gemini Developer API | Review bounded local windows whose unique union covers the entire Edit Source exactly `[0, source_duration)`, then produce one episode-level reduce | The provider surface is live-probe-gated before implementation. It must not silently switch to Vertex AI or any other provider/model; unavailability is a typed blocked state, not a fallback |
+| Targeted video-only specialist | `glm-5v-turbo` via its officially supported video transfer | Inspect audio-stripped targeted clips for deterministic or Gemini-selected uncertainty/high-value regions | Not an editorial decision maker; never receives audio |
+| Fusion | the same `gemini-3.7-flash` pin | Fuse local/reduce evidence and specialist observations into provider-neutral fused reviews | Does not trust provider prose outside the typed payload |
+| Editorial decision owner | GPT-5.6 Sol (DirectorV2) | The sole component allowed to choose keep/remove/order/edit intent | Consumes fused evidence before proposal validation and commit. No model writes Job State, Selection Plan, Edit Plan, or Resolve |
+
+Only fused `MomentDeepReviewV1` records are committed and indexed as authoritative evidence; per-stage provenance remains inspectable inside those existing records. Runtime map/reduce/specialist payloads are rebuildable execution data and do not create a third authoritative artifact type (§0.2).
 
 ---
 
@@ -1249,6 +1281,16 @@ Every real-episode run is labeled as either:
 
 AHT targets must not mix these regimes.
 
+For `bootstrap` runs, total Bootstrap AHT is the sum of five separately recorded active-human categories:
+
+1. ordinary edit review,
+2. Production Kit bootstrap,
+3. taste/reference calibration,
+4. troubleshooting,
+5. direct Resolve.
+
+Direct Resolve minutes are also reported as a subset of the total, never added a second time. A missing category stays null and fails the gate rather than being estimated.
+
 ## 19.5 First Preview Acceptance
 
 Track whether the first preview is:
@@ -1318,7 +1360,7 @@ Required:
 - technical QC passes,
 - editorial QC has no unresolved blocking item,
 - operator marks final video `publishable`,
-- Bootstrap AHT and TTFRP recorded.
+- Bootstrap AHT recorded as the §19.4 five-category total with direct Resolve minutes reported as a subset, and TTFRP recorded.
 
 This is the central v4.4 product gate.
 
