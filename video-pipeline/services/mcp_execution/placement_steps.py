@@ -5,6 +5,9 @@ subtitle plan artifact; every step goes through ``step_from`` (envelope
 invariants: PRD §19 fallback ladder, retry class, preconditions).
 """
 
+# allow: SIZE_OK — pure flat emitter table (one builder per placement kind);
+# splitting would separate the emitters from the shared step_from envelope.
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
@@ -15,7 +18,6 @@ from services.mcp_execution.plan_models import (
     McpExecutionStepV1,
 )
 from services.mcp_execution.plan_payloads import (
-    CueCountReadback,
     ImportMediaParams,
     ImportReadback,
     PlaceAudioParams,
@@ -25,6 +27,8 @@ from services.mcp_execution.plan_payloads import (
     PlaceTitleParams,
     PrepareProjectParams,
     ProjectReadback,
+    SubtitleCuePayload,
+    SubtitleCuesReadback,
     SubtitleParams,
     TitleReadback,
 )
@@ -243,17 +247,30 @@ def subtitle_step(plan: SubtitlePlanV1, caps: CapabilityView) -> McpExecutionSte
             capability="subtitle-capability",
             status=plan.capability_path.matrix_status,
         )
-    cue_count = len(plan.cues)
+    cue_payloads = tuple(
+        SubtitleCuePayload(
+            cue_id=cue.cue_id,
+            # Plan display lines survive as rendered lines: joining with
+            # newlines keeps long committed text legible (no right-edge
+            # clipping from a single overlong centered line).
+            text="\n".join(cue.lines),
+            record_span=cue.record_span,
+        )
+        for cue in plan.cues
+    )
     first = min((cue.record_span.start_frame for cue in plan.cues), default=0)
     return step_from(
         "stp-subtitle-plan",
         SubtitleParams(
             action="apply_subtitles",
             selected_path=selected,
-            cue_count=cue_count,
+            cues=cue_payloads,
             style_profile_id=plan.style_profile.profile_id,
         ),
-        CueCountReadback(kind="cue_count", cue_count=cue_count),
+        # Task 8: the runner gate is the complete committed cue set (the
+        # handler returns exact per-cue evidence; a count-only gate dropped
+        # it and failed every live attempt with `cue_count: missing`).
+        SubtitleCuesReadback(kind="subtitle_cues", cues=cue_payloads),
         mcp_or_executor(rung, "subtitle_generation_probe"),
         rung,
         record,

@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BeforeValidator, Field
+from pydantic import BeforeValidator, Field, model_validator
+from pydantic_core import PydanticCustomError
 
 from services.contracts.primitives import (
     Identifier,
@@ -56,10 +57,12 @@ StepAction = Literal[
     "apply_ducking",
     "apply_color",
     "apply_transform",
+    "set_transform",
     "apply_speed_change",
     "apply_transition",
     "manual_required",
     "apply_kit_recipe",
+    "render_native",
 ]
 
 
@@ -111,11 +114,44 @@ class PlaceAudioParams(StrictModel):
     av_link_id: Identifier | None = None
 
 
+class SubtitleCuePayload(StrictModel):
+    """One committed cue: exact display text + half-open record span.
+
+    The text is the plan cue's display lines joined with newlines (each
+    rendered line preserved); the record span is the committed half-open
+    frame range the native mutation must reproduce exactly
+    (probe-evidenced construction: nested-timeline Fusion Title).
+    """
+
+    cue_id: Identifier
+    text: _NonEmpty
+    record_span: RecordFrameSpan
+
+
 class SubtitleParams(StrictModel):
+    """Exact committed cues for the native subtitle mutation (Task 4).
+
+    Replaces the former cue_count-only payload: a count cannot drive an
+    exact text/timing mutation, so every cue's text and record span ride
+    the typed payload itself. ``style_profile_id`` is the style reference
+    (the plan artifact's ``SubtitleStyleProfileV1.profile_id``); the live
+    handler resolves it to bound Text+ presentation inputs and refuses
+    unknown references typed.
+    """
+
     action: Literal["apply_subtitles"]
     selected_path: SubtitlePathKind
-    cue_count: int = Field(ge=0, strict=True)
+    cues: Annotated[tuple[SubtitleCuePayload, ...], BeforeValidator(_to_tuple)] = ()
     style_profile_id: Identifier
+
+    @model_validator(mode="after")
+    def require_non_empty_spans(self) -> SubtitleParams:
+        for cue in self.cues:
+            if cue.record_span.end_frame <= cue.record_span.start_frame:
+                raise PydanticCustomError(
+                    "span_empty", "cue {cue_id} record span is non-empty", {"cue_id": cue.cue_id}
+                )
+        return self
 
 
 class VoiceIsolationParams(StrictModel):
@@ -142,6 +178,10 @@ class AudioStageParams(StrictModel):
     minimum: float = Field(strict=True)
     maximum: float = Field(strict=True)
     unit: _NonEmpty
+    #: The dialogue-chain Fairlight binding this stage resolves through
+    #: (mcp-complete-parity Task 5); None keeps legacy executor payloads
+    #: valid while the stage rides a non-MCP rung.
+    preset_ref: _NonEmpty | None = None
 
 
 class DuckingParams(StrictModel):
@@ -151,11 +191,48 @@ class DuckingParams(StrictModel):
     target_item_id: Identifier | None = None
 
 
+class ColorTargetPayload(StrictModel):
+    """One explicit DRX target: the product item id plus its committed
+    record span (the join key against the live timeline-structure
+    readback — never a selection or an implicit current clip).
+
+    ``source_span`` is the committed SOURCE identity of the same item (its
+    cut of the edit mezzanine): when several placed video items share one
+    record span — measured on v44-real-01, every subtitle cue card sits on
+    the overlay track at exactly the span of the clip beneath it — the
+    source frames are the deterministic independent join that selects the
+    placed clip and never a positional first hit. None keeps legacy
+    executor payloads valid on non-MCP rungs (span-only resolution).
+    """
+
+    item_id: Identifier
+    record_span: RecordFrameSpan
+    source_span: SourceFrameSpan | None = None
+
+
 class ColorParams(StrictModel):
     action: Literal["apply_color"]
     section: _NonEmpty
     target_note: _NonEmpty
     look_ref: Identifier | None = None
+    #: Task 6 binding id resolving the kit selection to ONE hash-pinned
+    #: DRX (handler-side table). None keeps legacy executor payloads valid
+    #: on non-MCP rungs; the live handler refuses a missing ref typed.
+    drx_ref: Identifier | None = None
+    #: Explicit target items (product item ids + committed record spans).
+    #: The live handler refuses an empty target list typed.
+    targets: Annotated[tuple[ColorTargetPayload, ...], BeforeValidator(_to_tuple)] = ()
+
+    @model_validator(mode="after")
+    def require_non_empty_target_spans(self) -> ColorParams:
+        for target in self.targets:
+            if target.record_span.end_frame <= target.record_span.start_frame:
+                raise PydanticCustomError(
+                    "span_empty",
+                    "target {item_id} record span is non-empty",
+                    {"item_id": target.item_id},
+                )
+        return self
 
 
 class TransformParams(StrictModel):
@@ -163,6 +240,14 @@ class TransformParams(StrictModel):
     effect_kind: Literal["punch_in", "crop"]
     target_item_id: Identifier | None = None
     note: str = ""
+
+
+class SetTransformParams(StrictModel):
+    action: Literal["set_transform"]
+    track_index: int = Field(ge=1, strict=True)
+    item_index: int = Field(ge=0, strict=True)
+    rotation_angle: float = Field(strict=True)
+    target_item_id: Identifier | None = None
 
 
 class SpeedChangeParams(StrictModel):
@@ -201,6 +286,27 @@ class KitRecipeParams(StrictModel):
     note: str = ""
 
 
+class RenderNativeParams(StrictModel):
+    """Typed native render lifecycle params (Task 7).
+
+    Every setting is an explicit field so the handler can list, validate,
+    apply, and read back each one independently. The custom name is
+    deterministic per episode so rerun/resume can reconcile the same output.
+    """
+
+    action: Literal["render_native"]
+    custom_name: _NonEmpty
+    format_id: _NonEmpty
+    codec_id: _NonEmpty
+    width: int = Field(ge=1, strict=True)
+    height: int = Field(ge=1, strict=True)
+    frame_rate: float = Field(gt=0, strict=True)
+    select_all_frames: bool = Field(strict=True)
+    export_video: bool = Field(strict=True)
+    export_audio: bool = Field(strict=True)
+    data_burn_in: _NonEmpty
+
+
 StepParams = Annotated[
     PrepareProjectParams
     | ImportMediaParams
@@ -215,10 +321,12 @@ StepParams = Annotated[
     | DuckingParams
     | ColorParams
     | TransformParams
+    | SetTransformParams
     | SpeedChangeParams
     | TransitionParams
     | ManualRequiredParams
-    | KitRecipeParams,
+    | KitRecipeParams
+    | RenderNativeParams,
     Field(discriminator="action"),
 ]
 
@@ -255,6 +363,22 @@ class CueCountReadback(StrictModel):
     cue_count: int = Field(ge=0, strict=True)
 
 
+class SubtitleCuesReadback(StrictModel):
+    """Expected readback for the native subtitle mutation (Task 8).
+
+    The live handler returns exact per-cue evidence (id, text, record
+    span, readback-sourced style); the runner gate verifies the COMPLETE
+    committed cue set — count plus every cue's identity, text, and span.
+    A count-only gate could not consume that evidence (measured on
+    v44-real-01: every attempt failed ``cue_count: missing`` while the
+    cues existed natively). ``CueCountReadback`` stays in the union so
+    previously committed plans keep parsing.
+    """
+
+    kind: Literal["subtitle_cues"]
+    cues: Annotated[tuple[SubtitleCuePayload, ...], BeforeValidator(_to_tuple)] = ()
+
+
 class AudioStateReadback(StrictModel):
     kind: Literal["audio_state"]
     item_ref: _NonEmpty
@@ -282,6 +406,13 @@ class TransformReadback(StrictModel):
     properties: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
 
 
+class SetTransformReadback(StrictModel):
+    kind: Literal["set_transform"]
+    track_index: int = Field(ge=1, strict=True)
+    item_index: int = Field(ge=0, strict=True)
+    rotation_angle: float = Field(strict=True)
+
+
 class ManualNoteReadback(StrictModel):
     kind: Literal["manual_note"]
     expectation: _NonEmpty
@@ -293,18 +424,32 @@ class RecipeParamsReadback(StrictModel):
     param_names: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
 
 
+class RenderNativeReadback(StrictModel):
+    """Expected readback for the native render step.
+
+    The custom name is deterministic per episode so the runner can
+    verify the handler used the same name it was given.
+    """
+
+    kind: Literal["render_native"]
+    custom_name: _NonEmpty
+
+
 ExpectedReadback = Annotated[
     ProjectReadback
     | ImportReadback
     | PlacementReadback
     | TitleReadback
     | CueCountReadback
+    | SubtitleCuesReadback
     | AudioStateReadback
     | AudioMetricReadback
     | GradeReadback
     | TransformReadback
+    | SetTransformReadback
     | ManualNoteReadback
-    | RecipeParamsReadback,
+    | RecipeParamsReadback
+    | RenderNativeReadback,
     Field(discriminator="kind"),
 ]
 
@@ -315,6 +460,7 @@ __all__ = [
     "AudioStageParams",
     "AudioStateReadback",
     "ColorParams",
+    "ColorTargetPayload",
     "CueCountReadback",
     "DuckingParams",
     "ExpectedReadback",
@@ -332,9 +478,13 @@ __all__ = [
     "PrepareProjectParams",
     "ProjectReadback",
     "RecipeParamsReadback",
+    "RenderNativeParams",
+    "RenderNativeReadback",
     "SpeedChangeParams",
     "StepAction",
     "StepParams",
+    "SubtitleCuePayload",
+    "SubtitleCuesReadback",
     "SubtitleParams",
     "TitleReadback",
     "TransformParams",

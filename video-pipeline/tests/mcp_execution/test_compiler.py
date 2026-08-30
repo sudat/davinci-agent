@@ -32,6 +32,7 @@ import services.mcp_execution.compiler as compiler_module
 import services.mcp_execution.plan_models as models_module
 from services.contracts.primitives import RationalFrameRate, RecordFrameSpan
 from services.creative_plan.audio_finishing import (
+    AUDIO_LADDER,
     DEFAULT_AUDIO_POLICY,
     AudioFactsV1,
     AudioOpRequestV1,
@@ -77,6 +78,7 @@ from services.mcp_execution.plan_models import (
     McpExecutionPlanV1,
     McpExecutionStepV1,
 )
+from services.mcp_execution.plan_payloads import SubtitleCuesReadback
 from services.production_kit.recipe_select import select_recipe
 from services.production_kit.registry import load_kit
 from tests.editorial_v2.fixtures.three_pass_fixture import (
@@ -356,12 +358,24 @@ def test_every_audio_item_has_a_placement_step(compiled: SimpleNamespace) -> Non
         assert item_id in placed, f"audio item {item_id} has no placement step"
 
 
-def test_subtitle_plan_step_carries_cue_count(compiled: SimpleNamespace) -> None:
+def test_subtitle_plan_step_carries_the_committed_cue_set(compiled: SimpleNamespace) -> None:
+    """Task 8 repair: the runner gate for the native subtitle mutation is
+    the COMPLETE committed cue set (per-cue id/text/record span), never a
+    bare count — the count-only readback failed every live attempt with
+    `cue_count: missing` because the handler returns exact per-cue rows."""
+
     subtitle_steps = [
         s for s in compiled.plan.steps if s.normalized_params.action == "apply_subtitles"
     ]
     assert len(subtitle_steps) == 1
-    assert subtitle_steps[0].expected_readback.cue_count == len(compiled.subtitle_plan.cues)
+    readback = subtitle_steps[0].expected_readback
+    assert isinstance(readback, SubtitleCuesReadback)
+    assert readback.kind == "subtitle_cues"
+    committed = [
+        (cue.cue_id, "\n".join(cue.lines), cue.record_span)
+        for cue in compiled.subtitle_plan.cues
+    ]
+    assert [(c.cue_id, c.text, c.record_span) for c in readback.cues] == committed
 
 
 @pytest.mark.parametrize(
@@ -593,3 +607,153 @@ def test_episode_mismatch_is_typed_error(compiled: SimpleNamespace) -> None:
             kit_selections={},
         )
     assert error.value.code == "episode-mismatch"
+
+
+def test_phase_order_all_placements_before_subtitle_with_multiple_positions() -> None:
+    """Regression for Task 5 ordering defect: execution phases are ordered by
+    STEP_CLASS_RANK first, record_position second.
+
+    The compiled plan previously sorted by (record_position, STEP_CLASS_RANK),
+    so `apply_subtitles` at position 0 ran after only the first audio/video
+    placement pair and before remaining placements at later positions.
+    Correct phase order keeps ALL placements before subtitles/effects regardless
+    of their record positions, while preserving deterministic position+id within
+    each phase.
+    """
+
+    selection = _selection(_candidate("cand-s1", 0, 90), _candidate("cand-s2", 96, 186))
+    ops: list[dict[str, object]] = [
+        {"op_id": "op-1", "kind": "place_primary_clip", "candidate_ref": "cand-s1"},
+        {"op_id": "op-2", "kind": "place_primary_clip", "candidate_ref": "cand-s2"},
+    ]
+    ir = compile_ir_v2(selection, _plan31(ops), source_facts=_facts())
+    subtitle_plan = build_subtitle_plan(
+        (
+            AsrSegmentV1(
+                segment_id="tr-a1",
+                source_id=SOURCE_ID,
+                text="hello",
+                start_seconds=0,
+                end_seconds=3,
+            ),
+        ),
+        source_facts=_facts(),
+        ir_v2=ir,
+    )
+    plan = compile_execution_plan(
+        ir,
+        subtitle_plan=subtitle_plan,
+        audio_plan=_audio_plan(),
+        color_plan=_color_plan(),
+        presentation_intents=(),
+        kit_selections={},
+    )
+    actions = [s.action for s in plan.steps]
+    # prepare and import remain first
+    assert actions.index("prepare_project") < actions.index("import_media")
+    assert actions.index("import_media") < actions.index("place_clip")
+    # every placement precedes subtitle/effect/audio/color/render regardless of position
+    place_actions = {"place_clip", "place_audio", "place_overlay", "place_title"}
+    place_indices = [i for i, a in enumerate(actions) if a in place_actions]
+    subtitle_idx = actions.index("apply_subtitles")
+    assert place_indices, "no placement steps emitted"
+    assert max(place_indices) < subtitle_idx, (
+        f"subtitle interleaved before later placement: actions={actions} "
+        f"place_indices={place_indices} subtitle_idx={subtitle_idx} "
+        f"steps={[(s.step_id, s.action, s.record_position) for s in plan.steps]}"
+    )
+    # deterministic within phase: placements ordered by position then id
+    place_steps = [s for s in plan.steps if s.action in place_actions]
+    assert place_steps == sorted(
+        place_steps, key=lambda s: (s.record_position, s.step_id)
+    )
+
+
+def test_dialogue_only_final_loudness_qc_after_voice_isolation() -> None:
+    """Regression for second audio-phase ordering defect: lexical step_id
+    placed loudness_peak_qc before voice_isolation, while the committed
+    AudioFinishingPlanV1 ladder requires cleanup → normalization →
+    voice_isolation → loudness_peak_qc so QC measures the post-voice timeline."""
+
+    selection = _selection(_candidate("cand-s1", 0, 90))
+    ir = compile_ir_v2(
+        selection,
+        _plan31([{"op_id": "op-1", "kind": "place_primary_clip", "candidate_ref": "cand-s1"}]),
+        source_facts=_facts(),
+    )
+    subtitle_plan = build_subtitle_plan((), source_facts=_facts(), ir_v2=ir)
+    audio_plan = build_audio_plan(
+        AudioFactsV1(
+            episode_id=selection.episode_id,
+            dialogue_clean=False,
+            has_bgm=False,
+            has_ambience=False,
+            measured_loudness_ok=False,
+        ),
+        policy=DEFAULT_AUDIO_POLICY,
+        op_requests=(AudioOpRequestV1(op="voice_isolation"),),
+    )
+    plan = compile_execution_plan(
+        ir,
+        subtitle_plan=subtitle_plan,
+        audio_plan=audio_plan,
+        color_plan=_color_plan(),
+        presentation_intents=(),
+        kit_selections={},
+    )
+    # sanity: ladder order is cleanup, normalization, optional(voice), loudness
+    assert [s.stage for s in audio_plan.stages if s.enabled] == [
+        "dialogue_cleanup",
+        "dialogue_level_normalization",
+        "optional_eq_compression_voice_isolation",
+        "loudness_peak_qc",
+    ]
+    actions = [s.action for s in plan.steps]
+    # phase order still holds: placements before subtitles before audio
+    place_actions = {"place_clip", "place_audio", "place_overlay", "place_title"}
+    assert max(
+        i for i, a in enumerate(actions) if a in place_actions
+    ) < actions.index("apply_subtitles")
+    assert actions.index("apply_subtitles") < actions.index("apply_audio_stage")
+    # audio phase must preserve committed stage order; QC never before preceding mutation
+    audio_actions = {
+        "apply_audio_stage",
+        "apply_voice_isolation",
+        "apply_audio_op",
+        "apply_ducking",
+    }
+    audio_steps = [s for s in plan.steps if s.action in audio_actions]
+    audio_ids = [s.step_id for s in audio_steps]
+    # enabled audio ops: only voice_isolation in this dialogue-only fixture
+    assert "stp-audioop-voice_isolation" in audio_ids
+    assert "stp-audio-loudness_peak_qc" in audio_ids
+    voice_idx = audio_ids.index("stp-audioop-voice_isolation")
+    qc_idx = audio_ids.index("stp-audio-loudness_peak_qc")
+    cleanup_idx = audio_ids.index("stp-audio-dialogue_cleanup")
+    norm_idx = audio_ids.index("stp-audio-dialogue_level_normalization")
+    assert cleanup_idx < norm_idx < voice_idx < qc_idx, (
+        f"audio order must be cleanup → normalization → voice → QC, got {audio_ids}"
+    )
+    # general property: among enabled audio stages, order follows AUDIO_LADDER
+    ladder_pos = {name: i for i, name in enumerate(AUDIO_LADDER)}
+
+    def ladder_of(step):  # type: ignore[no-untyped-def]
+        params = step.normalized_params
+        stage = getattr(params, "stage", None)
+        if getattr(params, "action", None) == "apply_voice_isolation":
+            return ladder_pos["optional_eq_compression_voice_isolation"]
+        if getattr(params, "action", None) == "apply_audio_op":
+            return ladder_pos["optional_eq_compression_voice_isolation"]
+        if getattr(params, "action", None) == "apply_ducking":
+            return ladder_pos["music_ducking"]
+        if isinstance(stage, str):
+            return ladder_pos.get(stage, 999)
+        return 999
+
+    ladder_indices = [ladder_of(s) for s in audio_steps]
+    assert ladder_indices == sorted(ladder_indices), (
+        f"audio steps must be ladder-ordered, got "
+        f"{[(s.step_id, ladder_of(s)) for s in audio_steps]}"
+    )
+
+

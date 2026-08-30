@@ -59,6 +59,7 @@ from services.mcp_execution.fallback import (
     plan_declared_entry,
     runtime_transition,
 )
+from services.mcp_execution.live_errors import LiveAdapterError
 from services.mcp_execution.plan_models import (  # noqa: TC001 (pydantic field types)
     FallbackRung,
     McpExecutionPlanV1,
@@ -107,6 +108,7 @@ _ACTION_KIND: Final[dict[str, str]] = {
             "apply_transition",
             "manual_required",
             "apply_kit_recipe",
+            "render_native",
         ),
         "effect",
     ),
@@ -284,6 +286,23 @@ class McpExecutionRunnerV2:
 
     # ---------------------------------------------------- one attempt
 
+    @staticmethod
+    def _error_identity(exc: Exception) -> str:
+        """Typed ``code``/``detail`` when the executor's exception carries
+        them (the LiveAdapterError / StateStoreError envelope convention),
+        else the bare class name. The run report's attempt detail must name
+        the typed cause — ``LiveAdapterError`` alone hid the real blocker
+        on the v44-real-01 run."""
+
+        code = getattr(exc, "code", None)
+        detail = getattr(exc, "detail", None)
+        name = type(exc).__name__
+        if not isinstance(code, str):
+            return name
+        if isinstance(detail, str) and detail:
+            return f"{name}({code}): {detail}"
+        return f"{name}({code})"
+
     def _attempt(
         self,
         step: McpExecutionStepV1,
@@ -291,12 +310,17 @@ class McpExecutionRunnerV2:
         recorder: McpCallRecorder,
         index: int,
         records: list[McpExecutionCallV1],
-    ) -> StepAttemptV1:
+    ) -> tuple[StepAttemptV1, bool]:
+        """One attempt plus its retryability: ``False`` means the failure
+        is a typed deterministic verdict (e.g. a measured-policy gate on an
+        already-mutated timeline) whose retry could only re-observe the
+        mutated state — the loop must not spend the retry budget on it."""
         payload = step.normalized_params.model_dump(mode="json")
         self._guard_mutating_step(recorder, step, payload)
         started = self._clock.now
         status: StatusLiteral = "ok"
         error_name = ""
+        retryable = True
         actual: object = None
         try:
             actual = executor(step.tool_surface, step.action, payload)
@@ -305,7 +329,8 @@ class McpExecutionRunnerV2:
             error_name = type(exc).__name__
         except Exception as exc:  # noqa: BLE001 (attempt outcome mapping for the ledger)
             status = "error"
-            error_name = type(exc).__name__
+            error_name = self._error_identity(exc)
+            retryable = not (isinstance(exc, LiveAdapterError) and not exc.retryable)
         verification = verify_readback(step.expected_readback, actual) if status == "ok" else None
         record = recorder.build_record(
             tool_name=step.tool_surface,
@@ -321,14 +346,20 @@ class McpExecutionRunnerV2:
         append_call_record(record, self._ledger_dir)
         records.append(record)
         if verification is None:
-            return StepAttemptV1(
-                attempt=index, status=status, readback_matched=None, detail=error_name or status
+            return (
+                StepAttemptV1(
+                    attempt=index, status=status, readback_matched=None, detail=error_name or status
+                ),
+                retryable,
             )
-        return StepAttemptV1(
-            attempt=index,
-            status="ok",
-            readback_matched=verification.matched,
-            detail="ok" if verification.matched else "; ".join(verification.mismatches),
+        return (
+            StepAttemptV1(
+                attempt=index,
+                status="ok",
+                readback_matched=verification.matched,
+                detail="ok" if verification.matched else "; ".join(verification.mismatches),
+            ),
+            True,
         )
 
     # -------------------------------------------------------- the run
@@ -368,15 +399,17 @@ class McpExecutionRunnerV2:
                         detail=f"unmet preconditions: {unmet}",
                     )
                 )
-                continue
+                break
             max_attempts = self._retry_policy.max_attempts if step.retry_class == "transient" else 1
             attempts: list[StepAttemptV1] = []
             failure_code: str | None = None
             for index in range(1, max_attempts + 1):
-                attempt = self._attempt(step, executor, recorder, index, records)
+                attempt, retryable = self._attempt(step, executor, recorder, index, records)
                 attempts.append(attempt)
                 if attempt.status != "ok":
                     failure_code = f"executor-{attempt.status}"
+                    if not retryable:
+                        break
                 elif attempt.readback_matched is False:
                     failure_code = "readback-mismatch"
                 else:
@@ -407,6 +440,13 @@ class McpExecutionRunnerV2:
                     detail=attempts[-1].detail if attempts else "",
                 )
             )
+            # Fail-fast: the serial single-writer run stops at the FIRST
+            # terminal step failure — later steps are never dispatched and
+            # the report truthfully carries the attempted prefix ending in
+            # the failed step (live blocker: the six-hour finishing run
+            # kept dispatching ~200 later steps after the first terminal
+            # placement timeout).
+            break
         outcome = "completed" if all(r.status == "completed" for r in results) else "failed"
         return McpExecutionRunReportV1(
             schema_version="mcp-execution-run-report-v1",

@@ -15,8 +15,8 @@ their matrix fallback rung WITH a fallback record — the plan stays
 complete and the downgrade is explicit (PRD §19: report, never silently
 downgrade).
 
-Determinism: steps sort by ``(record_position, STEP_CLASS_RANK[action],
-step_id)`` and ``plan_id`` is the sha256 of the canonical bytes with the id
+Determinism: steps sort by ``(STEP_CLASS_RANK[action], record_position,
+audio_order, step_id)`` and ``plan_id`` is the sha256 of the canonical bytes with the id
 zeroed — the same inputs yield IDENTICAL canonical bytes (locked by
 tests). There is no LLM path and no raw-call constructor: the step action
 vocabulary is closed and the normalized-params union is discriminated, so
@@ -39,13 +39,13 @@ from services.mcp_execution.placement_steps import (
     video_steps,
 )
 from services.mcp_execution.plan_models import (
-    STEP_CLASS_RANK,
     CompileExecutionPlanError,
     McpExecutionPlanV1,
     McpExecutionStepV1,
     compute_plan_id,
+    step_sort_key,
 )
-from services.mcp_execution.plan_steps import audio_plan_steps, color_steps
+from services.mcp_execution.plan_steps import audio_plan_steps, color_steps, render_native_steps
 from services.mcp_execution.step_builders import CapabilityView, timeline_end
 from services.toolchain.mcp_fit import load_mcp_fit
 
@@ -64,7 +64,6 @@ _MATRIX_PATH: Final[Path] = (
 _VALID_STATUSES: Final[frozenset[str]] = frozenset(
     {"accepted", "failed", "partial", "not_available"}
 )
-
 
 def _load_matrix() -> tuple[dict[str, str], dict[str, str]]:
     document = load_mcp_fit(_MATRIX_PATH)
@@ -149,10 +148,9 @@ def compile_execution_plan(  # noqa: PLR0913 (task-mandated compiler signature)
     )
     steps.extend(transition_steps(ir_v2, caps))
     steps.extend(audio_plan_steps(audio_plan, caps, wide))
-    steps.extend(color_steps(color_plan, caps, wide))
-    ordered = tuple(
-        sorted(steps, key=lambda s: (s.record_position, STEP_CLASS_RANK[s.action], s.step_id))
-    )
+    steps.extend(color_steps(color_plan, caps, wide, ir_v2))
+    steps.extend(render_native_steps(ir_v2, caps, wide))
+    ordered = tuple(sorted(steps, key=step_sort_key))
     return McpExecutionPlanV1(
         schema_version="mcp-execution-plan-v1",
         plan_id=compute_plan_id(episode, ordered),

@@ -67,7 +67,8 @@ MCP_RUNGS: frozenset[FallbackRung] = frozenset(
     {"mcp_verified_workflow", "mcp_granular_tool", "advanced_mcp_library"}
 )
 
-#: Stable step-class order within one record position (sort key component 2).
+#: Stable step-class order (sort key component 1); record position is component 2;
+#: audio order is component 3 (stage ladder), step id is component 4.
 STEP_CLASS_RANK: dict[StepAction, int] = {
     "prepare_project": 0,
     "import_media": 1,
@@ -85,7 +86,8 @@ STEP_CLASS_RANK: dict[StepAction, int] = {
     "apply_transition": 6,
     "apply_kit_recipe": 7,
     "apply_color": 8,
-    "manual_required": 9,
+    "render_native": 9,
+    "manual_required": 10,
 }
 
 ToolSurface = Literal[
@@ -102,6 +104,7 @@ ToolSurface = Literal[
     "safe_apply_drx",
     "subtitle_generation_probe",
     "render_boundary_report",
+    "render_native",
     "direct_script_adapter",
     "external_asset_builder",
     "manual_operator",
@@ -192,8 +195,51 @@ class McpExecutionStepV1(StrictModel):
         return self
 
 
-def _step_sort_key(step: McpExecutionStepV1) -> tuple[int, int, str]:
-    return (step.record_position, STEP_CLASS_RANK[step.action], step.step_id)
+#: Audio ladder order for deterministic within-phase sorting (final QC last).
+#: Maps each distinct audio step to its committed AudioFinishingPlanV1 position:
+#: cleanup 0, normalization 1, eq 2, compression 3, voice 4, bgm 5, ducking 6,
+#: ambience 7, sfx 8, loudness 9. All other actions use 0.
+_AUDIO_ORDER: dict[str, int] = {
+    "dialogue_cleanup": 0,
+    "dialogue_level_normalization": 1,
+    "eq": 2,
+    "compression": 3,
+    "voice_isolation": 4,
+    "bgm_placement": 5,
+    "music_ducking": 6,
+    "ambience_preservation": 7,
+    "optional_sfx": 8,
+    "loudness_peak_qc": 9,
+}
+
+
+def _audio_order(step: McpExecutionStepV1) -> int:  # noqa: PLR0911
+    action = step.action
+    params = step.normalized_params
+    if action == "apply_audio_stage":
+        stage = getattr(params, "stage", None)
+        if isinstance(stage, str):
+            return _AUDIO_ORDER.get(stage, 99)
+        return 99
+    if action == "apply_voice_isolation":
+        return _AUDIO_ORDER["voice_isolation"]
+    if action == "apply_audio_op":
+        effect = getattr(params, "effect_kind", None)
+        if isinstance(effect, str) and effect in _AUDIO_ORDER:
+            return _AUDIO_ORDER[effect]
+        return 99
+    if action == "apply_ducking":
+        return _AUDIO_ORDER["music_ducking"]
+    return 0
+
+
+def step_sort_key(step: McpExecutionStepV1) -> tuple[int, int, int, str]:
+    return (
+        STEP_CLASS_RANK[step.action],
+        step.record_position,
+        _audio_order(step),
+        step.step_id,
+    )
 
 
 class McpExecutionPlanV1(StrictModel):
@@ -212,10 +258,10 @@ class McpExecutionPlanV1(StrictModel):
         if len(set(step_ids)) != len(step_ids):
             raise PydanticCustomError("duplicate_step", "step ids are unique")
         for earlier, later in pairwise(self.steps):
-            if _step_sort_key(later) < _step_sort_key(earlier):
+            if step_sort_key(later) < step_sort_key(earlier):
                 raise PydanticCustomError(
                     "step_order",
-                    "steps are sorted by (record position, step class, id): {step}",
+                    "steps are sorted by (step class, record position, audio order, id): {step}",
                     {"step": later.step_id},
                 )
         return self
@@ -248,4 +294,5 @@ __all__ = [
     "ToolSurface",
     "compute_plan_id",
     "next_rung",
+    "step_sort_key",
 ]

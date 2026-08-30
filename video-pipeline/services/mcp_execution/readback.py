@@ -17,7 +17,7 @@ section a Build Report writer can merge in.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, assert_never
 
 from pydantic import BaseModel, BeforeValidator, Field
 
@@ -33,6 +33,10 @@ from services.mcp_execution.plan_payloads import (
     PlacementReadback,
     ProjectReadback,
     RecipeParamsReadback,
+    RenderNativeReadback,
+    SetTransformReadback,
+    SubtitleCuePayload,
+    SubtitleCuesReadback,
     TitleReadback,
     TransformReadback,
 )
@@ -106,6 +110,47 @@ def _compare_names(
     return tuple(mismatches)
 
 
+def _compare_cues(
+    actual: Mapping[str, object], cues: tuple[SubtitleCuePayload, ...]
+) -> tuple[str, ...]:
+    """The committed cue set verified per cue: count, id, text, span.
+
+    Style evidence is handler-sourced (verified against the style binding
+    at mutation time) and is deliberately not compared here — only the
+    committed fields gate at the runner level.
+    """
+
+    got = actual.get("cues")
+    if not isinstance(got, list | tuple):
+        suffix = "missing" if got is None else f"not a list, got {got!r}"
+        return (f"cues: {suffix}",)
+    if len(got) != len(cues):
+        return (f"cues: expected {len(cues)} cues, got {len(got)}",)
+    mismatches: list[str] = []
+    for row, cue in zip(got, cues, strict=True):
+        if not isinstance(row, Mapping):
+            mismatches.append(f"cue {cue.cue_id}: not an object, got {row!r}")
+            continue
+        if row.get("cue_id") != cue.cue_id:
+            mismatches.append(
+                f"cue {cue.cue_id}: cue_id expected {cue.cue_id!r}, got {row.get('cue_id')!r}"
+            )
+        if row.get("text") != cue.text:
+            mismatches.append(
+                f"cue {cue.cue_id}: text expected {cue.text!r}, got {row.get('text')!r}"
+            )
+        span = row.get("record_span")
+        if isinstance(span, Mapping):
+            pair = (span.get("start_frame"), span.get("end_frame"))
+            expected_pair = (cue.record_span.start_frame, cue.record_span.end_frame)
+            if pair != expected_pair:
+                mismatches.append(f"cue {cue.cue_id}: record_span expected {expected_pair}, got {pair}")  # noqa: E501
+        else:
+            suffix = "missing" if span is None else f"not a span object, got {span!r}"
+            mismatches.append(f"cue {cue.cue_id}: record_span {suffix}")
+    return tuple(mismatches)
+
+
 def _bounds(expected: AudioMetricReadback, actual: Mapping[str, object]) -> tuple[str, ...]:
     value = actual.get("value")
     if not isinstance(value, int | float) or isinstance(value, bool):
@@ -119,7 +164,7 @@ def _frames(span: SourceFrameSpan | RecordFrameSpan) -> tuple[int, int]:
     return (span.start_frame, span.end_frame)
 
 
-def verify_readback(  # noqa: C901 (flat 11-kind match; splitting would separate kinds)
+def verify_readback(  # noqa: C901, PLR0912 (flat 12-kind match; splitting would separate kinds)
     expected: ExpectedReadback, actual: object
 ) -> ReadbackVerification:
     """Verify the executor's actual payload against the expected readback."""
@@ -154,6 +199,8 @@ def verify_readback(  # noqa: C901 (flat 11-kind match; splitting would separate
             )
         case CueCountReadback():
             mismatches = _compare(actual_map, {"cue_count": expected.cue_count})
+        case SubtitleCuesReadback():
+            mismatches = _compare_cues(actual_map, expected.cues)
         case AudioStateReadback():
             mismatches = _compare(
                 actual_map,
@@ -178,6 +225,19 @@ def verify_readback(  # noqa: C901 (flat 11-kind match; splitting would separate
             mismatches = _compare(actual_map, {"recipe_id": expected.recipe_id}) + _compare_names(
                 actual_map, {"param_names": tuple(expected.param_names)}
             )
+        case RenderNativeReadback():
+            mismatches = _compare(actual_map, {"custom_name": expected.custom_name})
+        case SetTransformReadback():
+            mismatches = _compare(
+                actual_map,
+                {
+                    "track_index": expected.track_index,
+                    "item_index": expected.item_index,
+                    "rotation_angle": expected.rotation_angle,
+                },
+            )
+        case unreachable:
+            assert_never(unreachable)
     return ReadbackVerification(kind=expected.kind, matched=not mismatches, mismatches=mismatches)
 
 

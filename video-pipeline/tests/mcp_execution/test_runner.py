@@ -55,6 +55,7 @@ from services.mcp_execution.fallback import (
     plan_declared_entry,
     runtime_transition,
 )
+from services.mcp_execution.live_errors import LiveAdapterError
 from services.mcp_execution.plan_models import (
     FallbackRung,
     FallbackStepRecordV1,
@@ -72,6 +73,8 @@ from services.mcp_execution.plan_payloads import (
     PlacementReadback,
     PrepareProjectParams,
     ProjectReadback,
+    SubtitleCuePayload,
+    SubtitleCuesReadback,
     TransformParams,
     TransformReadback,
 )
@@ -116,7 +119,12 @@ class FakeExecutor:
         self.calls: list[tuple[str, str, dict[str, object]]] = []
 
     def __call__(
-        self, tool_name: str, action: str, normalized_params: Mapping[str, object]
+        self,
+        tool_name: str,
+        action: str,
+        normalized_params: Mapping[str, object],
+        *,
+        timeout_seconds: float | None = None,
     ) -> object:
         self.calls.append((tool_name, action, dict(normalized_params)))
         queue = self.script.get(action)
@@ -374,9 +382,60 @@ def test_failed_step_makes_outcome_failed(tmp_path: Path) -> None:
     executor = FakeExecutor({"prepare_project": ACTUAL_PREPARE, "place_clip": ACTUAL_PLACE})
     report = _run(runner, _happy_plan(), executor)
     assert report.outcome == "failed"
+    # Fail-fast contract: the run stops at the first terminal step failure
+    # (the unscripted import step), so the report carries the attempted
+    # PREFIX ending in the failed step and never dispatches place_clip.
     statuses = {s.step_id: s.status for s in report.steps}
     assert statuses["stp-prepare-ep-run-1"] == "completed"
-    assert statuses["stp-place-itm-1"] == "failed"
+    assert statuses["stp-import-src-cam-a"] == "failed"
+    assert "stp-place-itm-1" not in statuses
+    assert not any(action == "place_clip" for _surface, action, _params in executor.calls)
+
+
+# --------------------------------------- (a2) first terminal failure stops
+
+
+@pytest.mark.parametrize(
+    "failing_actual",
+    [
+        McpTimeoutError("tools/call", 5.0),
+        LiveAdapterError("preset-missing", "0 presets"),
+        [dict(ACTUAL_PLACE, item_id="itm-OTHER")],  # readback mismatch, exhausted
+    ],
+    ids=["timeout", "typed-error", "readback-mismatch"],
+)
+def test_first_terminal_failure_stops_the_run(
+    tmp_path: Path, failing_actual: object
+) -> None:
+    """The serial runner must stop immediately after the first terminal
+    step failure: NO later plan step is dispatched, whatever the failure
+    class (exhausted timeout, typed error, or exhausted readback mismatch).
+
+    Live blocker this locks out: the six-hour finishing run kept
+    dispatching every later step after the first terminal placement
+    timeout, burning the session on a prefix that was already dead."""
+    store = StateStore.open(tmp_path / "state.sqlite3")
+    _acquire_lease(store)
+    runner = _make_runner(tmp_path, store)
+    executor = FakeExecutor(
+        {
+            "prepare_project": ACTUAL_PREPARE,
+            "import_media": failing_actual,
+            "place_clip": ACTUAL_PLACE,
+        }
+    )
+    report = _run(runner, _happy_plan(), executor)
+
+    assert report.outcome == "failed"
+    assert [s.step_id for s in report.steps] == [
+        "stp-prepare-ep-run-1",
+        "stp-import-src-cam-a",
+    ]
+    assert report.steps[-1].status == "failed"
+    assert not any(action == "place_clip" for _surface, action, _params in executor.calls)
+    records = read_call_records(tmp_path / "ledger")
+    assert not any(r.action == "place_clip" for r in records)
+    store.close()
 
 
 # ------------------------------------- (b) readback mismatch + retry policy
@@ -410,6 +469,36 @@ def test_readback_mismatch_retries_then_succeeds(tmp_path: Path) -> None:
     store.close()
 
 
+def test_typed_executor_error_code_survives_into_report(tmp_path: Path) -> None:
+    """A typed adapter refusal (LiveAdapterError carries code/detail) must
+    surface its code and detail in the run report — not collapse to the bare
+    exception class name. Measured on v44-real-01: stp-render-native failed
+    as `executor-error | LiveAdapterError` with the real cause invisible."""
+
+    store = StateStore.open(tmp_path / "state.sqlite3")
+    _acquire_lease(store)
+    runner = _make_runner(tmp_path, store)
+    executor = FakeExecutor(
+        {
+            "prepare_project": ACTUAL_PREPARE,
+            "import_media": ACTUAL_IMPORT,
+            "place_clip": LiveAdapterError(
+                "render-already-in-progress",
+                "render queue busy: job c42fe33f still rendering",
+            ),
+        }
+    )
+    report = _run(runner, _happy_plan(), executor)
+    place = next(s for s in report.steps if s.step_id == "stp-place-itm-1")
+    assert place.status == "failed"
+    assert place.failure_code == "executor-error"
+    assert "render-already-in-progress" in place.detail
+    assert "c42fe33f" in place.detail
+    assert "LiveAdapterError" in place.attempts[-1].detail
+    assert "render-already-in-progress" in place.attempts[-1].detail
+    store.close()
+
+
 def test_transient_failure_exhausts_bounded_retries(tmp_path: Path) -> None:
     store = StateStore.open(tmp_path / "state.sqlite3")
     _acquire_lease(store)
@@ -431,6 +520,62 @@ def test_transient_failure_exhausts_bounded_retries(tmp_path: Path) -> None:
     assert len(executor.calls) == 4  # prepare + import + 2 bounded place attempts
     records = read_call_records(tmp_path / "ledger")
     assert len(records) == 4
+    store.close()
+
+
+def test_post_mutation_policy_failure_is_attempted_once(tmp_path: Path) -> None:
+    """A typed non-retryable adapter failure — the measured live case:
+    ``audio-stage-out-of-range`` raised AFTER the preset mutation succeeded,
+    where re-running the step re-measured the already-mutated timeline and
+    overwrote attempt-1's real value (-6.198 dB) with 0.0 — must be
+    attempted exactly once, preserving the first measurement as evidence."""
+    store = StateStore.open(tmp_path / "state.sqlite3")
+    _acquire_lease(store)
+    runner = _make_runner(tmp_path, store, retry_policy=RetryPolicy(max_attempts=3))
+    first = LiveAdapterError(
+        "audio-stage-out-of-range",
+        "dialogue_cleanup measured noise_reduction -6.198 db outside [3.0, 12.0]",
+        retryable=False,
+    )
+    executor = FakeExecutor(
+        {
+            "prepare_project": ACTUAL_PREPARE,
+            "import_media": ACTUAL_IMPORT,
+            "place_clip": first,
+        }
+    )
+    report = _run(runner, _happy_plan(), executor)
+    place = next(s for s in report.steps if s.step_id == "stp-place-itm-1")
+    assert place.status == "failed"
+    assert place.failure_code == "executor-error"
+    assert len(place.attempts) == 1
+    assert "-6.198" in place.attempts[0].detail
+    assert "-6.198" in place.detail
+    place_dispatches = [c for c in executor.calls if c[1] == "place_clip"]
+    assert len(place_dispatches) == 1
+    store.close()
+
+
+def test_retryable_typed_failure_keeps_bounded_retries(tmp_path: Path) -> None:
+    """A typed adapter failure without the non-retryable signal (default)
+    keeps the bounded transient retry contract — only an explicit
+    ``retryable=False`` opts out."""
+    store = StateStore.open(tmp_path / "state.sqlite3")
+    _acquire_lease(store)
+    runner = _make_runner(tmp_path, store, retry_policy=RetryPolicy(max_attempts=3))
+    executor = FakeExecutor(
+        {
+            "prepare_project": ACTUAL_PREPARE,
+            "import_media": ACTUAL_IMPORT,
+            "place_clip": LiveAdapterError(
+                "render-already-in-progress", "queue busy (transient)"
+            ),
+        }
+    )
+    report = _run(runner, _happy_plan(), executor)
+    place = next(s for s in report.steps if s.step_id == "stp-place-itm-1")
+    assert place.status == "failed"
+    assert len(place.attempts) == 3
     store.close()
 
 
@@ -652,10 +797,14 @@ def test_failed_step_yields_failure_row(tmp_path: Path) -> None:
     executor = FakeExecutor({"prepare_project": ACTUAL_PREPARE, "place_clip": ACTUAL_PLACE})
     report = _run(runner, _happy_plan(), executor)
     rows = to_build_report_rows(report)
-    place_failures = [row for row in rows["failures"] if "stp-place-itm-1" in str(row["code"])]
-    assert len(place_failures) == 1
-    assert place_failures[0]["code"] == "mcp-step-failed-stp-place-itm-1"
-    assert "precondition" in str(place_failures[0]["detail"])
+    import_failures = [
+        row for row in rows["failures"] if "stp-import-src-cam-a" in str(row["code"])
+    ]
+    assert len(import_failures) == 1
+    assert import_failures[0]["code"] == "mcp-step-failed-stp-import-src-cam-a"
+    assert "executor-error" in str(import_failures[0]["detail"])
+    # fail-fast: the never-attempted place step produces no row at all
+    assert not any("stp-place-itm-1" in str(row["code"]) for row in rows["failures"])
     store.close()
 
 
@@ -709,6 +858,86 @@ def test_verify_readback_audio_metric_range() -> None:
     )
     assert over.matched is False
     assert any("value" in m for m in over.mismatches)
+
+
+# --------------------------- subtitle runner-level readback (Task 8 repair)
+#
+# Measured on v44-real-01: the live subtitle handler returns exact per-cue
+# evidence ({"cues": [...]}) while the runner expected CueCountReadback, so
+# every attempt failed readback with "cue_count: missing" even though the
+# cues existed natively. The runner gate must verify the COMPLETE committed
+# cue set — count plus each cue's id, text, and record span.
+
+_HANDLER_CUE_ROWS: tuple[dict[str, object], ...] = (
+    {
+        "cue_id": "cue-asr-st3",
+        "text": "今日ね、\nスクワってやってたんだけど",
+        "record_span": {"start_frame": 0, "end_frame": 96},
+        "style": {"font": "Hiragino Sans W3", "size": 0.04, "center": [0.5, 0.14]},
+    },
+    {
+        "cue_id": "cue-asr-st4",
+        "text": "今1セット目終わった",
+        "record_span": {"start_frame": 96, "end_frame": 183},
+        "style": {"font": "Hiragino Sans W3", "size": 0.04, "center": [0.5, 0.14]},
+    },
+)
+
+
+def _expected_cue_readback() -> SubtitleCuesReadback:
+    return SubtitleCuesReadback(
+        kind="subtitle_cues",
+        cues=(
+            SubtitleCuePayload(
+                cue_id="cue-asr-st3",
+                text="今日ね、\nスクワってやってたんだけど",
+                record_span=RecordFrameSpan(start_frame=0, end_frame=96),
+            ),
+            SubtitleCuePayload(
+                cue_id="cue-asr-st4",
+                text="今1セット目終わった",
+                record_span=RecordFrameSpan(start_frame=96, end_frame=183),
+            ),
+        ),
+    )
+
+
+def test_verify_readback_subtitle_cues_matches_handler_evidence() -> None:
+    """The exact handler shape (per-cue rows, no cue_count key) verifies
+    against the committed cue set — the measured `cue_count: missing`
+    failure mode is unrepresentable after the repair."""
+
+    result = verify_readback(_expected_cue_readback(), {"cues": list(_HANDLER_CUE_ROWS)})
+    assert result.matched is True
+    assert result.mismatches == ()
+
+
+def test_verify_readback_subtitle_cues_names_drift_per_cue() -> None:
+    drifted = [dict(_HANDLER_CUE_ROWS[0]), dict(_HANDLER_CUE_ROWS[1])]
+    drifted[0] = {**drifted[0], "text": "別のテキスト"}
+    result = verify_readback(_expected_cue_readback(), {"cues": drifted})
+    assert result.matched is False
+    assert any("cue-asr-st3" in m and "text" in m for m in result.mismatches)
+
+    span_drift = [dict(_HANDLER_CUE_ROWS[0]), dict(_HANDLER_CUE_ROWS[1])]
+    span_drift[1] = {
+        **span_drift[1],
+        "record_span": {"start_frame": 96, "end_frame": 200},
+    }
+    result_span = verify_readback(_expected_cue_readback(), {"cues": span_drift})
+    assert result_span.matched is False
+    assert any("cue-asr-st4" in m and "record_span" in m for m in result_span.mismatches)
+
+
+def test_verify_readback_subtitle_cues_requires_exact_count() -> None:
+    short = {"cues": [_HANDLER_CUE_ROWS[0]]}
+    result = verify_readback(_expected_cue_readback(), short)
+    assert result.matched is False
+    assert any("cues" in m and "expected 2" in m for m in result.mismatches)
+
+    missing = verify_readback(_expected_cue_readback(), {})
+    assert missing.matched is False
+    assert any("cues: missing" in m for m in missing.mismatches)
 
 
 # ------------------------------------------------ fallback module checks

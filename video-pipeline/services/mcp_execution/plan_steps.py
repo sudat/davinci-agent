@@ -2,12 +2,17 @@
 
 Enabled audio finishing stages become audio steps (voice-isolation gated by
 its accepted matrix row; eq/compression and ducking land on their failed
-capabilities' fallback rungs; loudness/peak QC rides the accepted
+capabilities' fallback rungs; the Task 5 dialogue-chain stages ride the
+granular Fairlight preset route; loudness/peak QC rides the accepted
 advanced-delivery-qc row read-only). Needed color sections become grade
 steps on the task-35 preferred path. Presentation intents become
 production-kit recipe steps via task-37 selections — the accepted_only
 binding refuses the whole compile when its capability is not accepted.
 """
+
+# allow: SIZE_OK — pure flat emitter table (one builder per plan domain);
+# splitting would separate the emitters from the shared step_from envelope
+# (placement_steps.py precedent).
 
 from __future__ import annotations
 
@@ -15,6 +20,7 @@ from typing import TYPE_CHECKING, Final, Literal
 
 from services.mcp_execution.plan_models import (
     MCP_RUNGS,
+    FallbackRung,
     FallbackStepRecordV1,
     McpExecutionStepV1,
 )
@@ -24,8 +30,11 @@ from services.mcp_execution.plan_payloads import (
     AudioStageParams,
     AudioStateReadback,
     ColorParams,
+    ColorTargetPayload,
     DuckingParams,
     GradeReadback,
+    RenderNativeParams,
+    RenderNativeReadback,
     VoiceIsolationParams,
 )
 from services.mcp_execution.step_builders import (
@@ -37,8 +46,27 @@ from services.mcp_execution.step_builders import (
 if TYPE_CHECKING:
     from services.creative_plan.audio_finishing import AudioFinishingPlanV1
     from services.creative_plan.color_finishing import ColorFinishingPlanV1
+    from services.creative_plan.ir_models_v2 import TimelineIrV2
 
 _OPTIONAL_STAGE: Final = "optional_eq_compression_voice_isolation"
+
+#: Task 5: the dialogue-chain stages ride the pinned MCP's granular
+#: Fairlight preset actions (resolve_control list + project_settings
+#: apply), so they take the granular MCP rung directly — the color_steps
+#: precedent for a measured vendor route without a v4.3 matrix row. Every
+#: other audio stage keeps its matrix-driven rung.
+_PRESET_STAGES: Final[dict[str, str]] = {
+    "dialogue_cleanup": "fairlight-dialogue-chain-v1",
+    "dialogue_level_normalization": "fairlight-dialogue-chain-v1",
+}
+
+#: Task 6: the measured exposure-correction section rides the pinned
+#: MCP's guarded DRX route (dry-run → confirmation token → apply) with a
+#: hash-pinned DRX binding and explicit target item ids; other color
+#: sections keep their current surface and refuse live typed (no binding).
+_DRX_SECTIONS: Final[dict[str, str]] = {
+    "technical_correction.exposure": "drx-technical-normalize-v1",
+}
 
 
 def audio_plan_steps(
@@ -71,8 +99,13 @@ def audio_plan_steps(
                 )
             )
         else:
-            capability = "advanced-delivery-qc" if name == "loudness_peak_qc" else None
-            rung, record = caps.rung_for(capability, f"{name} stage")
+            preset_ref = _PRESET_STAGES.get(name)
+            if preset_ref is not None:
+                rung: FallbackRung = "mcp_granular_tool"
+                record = None
+            else:
+                capability = "advanced-delivery-qc" if name == "loudness_peak_qc" else None
+                rung, record = caps.rung_for(capability, f"{name} stage")
             target = stage.target_ranges[0]
             steps.append(
                 step_from(
@@ -85,6 +118,7 @@ def audio_plan_steps(
                         minimum=target.minimum,
                         maximum=target.maximum,
                         unit=target.unit,
+                        preset_ref=preset_ref,
                     ),
                     AudioMetricReadback(
                         kind="audio_metric",
@@ -94,7 +128,10 @@ def audio_plan_steps(
                         maximum=target.maximum,
                         unit=target.unit,
                     ),
-                    mcp_or_executor(rung, "render_boundary_report"),
+                    mcp_or_executor(
+                        rung,
+                        "render_boundary_report" if preset_ref is None else "safe_set_audio_properties",  # noqa: E501
+                    ),
                     rung,
                     record,
                     wide,
@@ -154,8 +191,45 @@ def _audio_op_step(
     ]
 
 
+def _exposure_targets(
+    plan: ColorFinishingPlanV1, ir_v2: TimelineIrV2 | None
+) -> tuple[ColorTargetPayload, ...]:
+    """Explicit target items for the exposure DRX: video items placed from
+    the sources the exposure evidence cites (builder-pinned
+    ``"{source_id}: {detail}"`` prefix), ordered by record position."""
+
+    if ir_v2 is None or not plan.technical_correction.exposure.needed:
+        return ()
+    sources = {
+        row.split(": ", 1)[0]
+        for row in plan.technical_correction.exposure.evidence
+    }
+    items = sorted(
+        (
+            item
+            for track in ir_v2.video_tracks
+            for item in track.items
+            if item.source.source_id in sources
+        ),
+        key=lambda item: (item.record_span.start_frame, str(item.item_id)),
+    )
+    # source_span is the committed identity that disambiguates duplicate
+    # record spans live (subtitle cue cards share each target's span).
+    return tuple(
+        ColorTargetPayload(
+            item_id=item.item_id,
+            record_span=item.record_span,
+            source_span=item.source.span,
+        )
+        for item in items
+    )
+
+
 def color_steps(
-    plan: ColorFinishingPlanV1, caps: CapabilityView, wide: int
+    plan: ColorFinishingPlanV1,
+    caps: CapabilityView,
+    wide: int,
+    ir_v2: TimelineIrV2 | None = None,
 ) -> list[McpExecutionStepV1]:
     technical = plan.technical_correction
     sections: list[tuple[str, str, str | None]] = []
@@ -184,6 +258,7 @@ def color_steps(
             )
         )
     steps: list[McpExecutionStepV1] = []
+    drx_targets = _exposure_targets(plan, ir_v2)
     for section, note, look_ref in sections:
         if plan.preferred_path == "mcp_live_grading":
             rung, record = caps.rung_for("color-grade-preset-drx", f"{section} grade")
@@ -202,7 +277,9 @@ def color_steps(
                 capability="color-grade-preset-drx",
             )
         section_id = section.replace(".", "-")
-        preset = look_ref if look_ref is not None else "channel-default"
+        drx_ref = _DRX_SECTIONS.get(section)
+        targets = drx_targets if drx_ref is not None else ()
+        preset = look_ref if look_ref is not None else drx_ref or "channel-default"
         steps.append(
             step_from(
                 f"stp-color-{section_id}",
@@ -211,6 +288,8 @@ def color_steps(
                     section=section,
                     target_note=note or "needed section",
                     look_ref=look_ref,  # type: ignore[arg-type]
+                    drx_ref=drx_ref,
+                    targets=targets,
                 ),
                 GradeReadback(kind="grade", target=section, preset_ref=preset),
                 mcp_or_executor(rung, "safe_apply_drx"),
@@ -219,9 +298,47 @@ def color_steps(
                 wide,
                 dry_run_token=f"dryrun:stp-color-{section_id}" if rung in MCP_RUNGS else None,
                 timeline_ready=True,
+                items=tuple(target.item_id for target in targets),
             )
         )
     return steps
 
 
-__all__ = ["audio_plan_steps", "color_steps"]
+def render_native_steps(
+    ir_v2: TimelineIrV2,
+    caps: CapabilityView,  # noqa: ARG001 (uniform emitter signature)
+    wide: int,
+) -> list[McpExecutionStepV1]:
+    """One deterministic native render step at the end of the plan."""
+
+    custom_name = f"finishing-native-{ir_v2.episode_id}"
+    rung: FallbackRung = "mcp_verified_workflow"
+    record = None
+    return [
+        step_from(
+            "stp-render-native",
+            RenderNativeParams(
+                action="render_native",
+                custom_name=custom_name,
+                format_id="mp4",
+                codec_id="H264",
+                width=1920,
+                height=1080,
+                frame_rate=30.0,
+                select_all_frames=True,
+                export_video=True,
+                export_audio=True,
+                data_burn_in="None",
+            ),
+            RenderNativeReadback(kind="render_native", custom_name=custom_name),
+            mcp_or_executor(rung, "render_native"),
+            rung,
+            record,
+            wide,
+            destructive=True,
+            timeline_ready=True,
+        )
+    ]
+
+
+__all__ = ["audio_plan_steps", "color_steps", "render_native_steps"]
