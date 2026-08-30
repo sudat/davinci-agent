@@ -2272,6 +2272,88 @@ def test_arm_unknown_reason_string_is_refused_at_parse(tmp_path: Path) -> None:
     assert not (inputs.workspace / "moment-selection").exists()
 
 
+def _dual_speech() -> tuple[SpeechSegment, ...]:
+    """s2 is eligible for BOTH reasons: a byte-equal duplicate of s1 AND the
+    abandoned half of a false start restarted by s3; s1 is the brief's
+    must-include keep."""
+    return (
+        SpeechSegment("s1", "DJI Pocket 4 のケースを探す", 0, 90),
+        SpeechSegment("s2", "DJI Pocket 4 のケースを探す", 90, 180),
+        SpeechSegment("s3", "DJI Pocket 4 のケースを探すって話", 180, 270),
+    )
+
+
+def _dual_analysis() -> ArmPipelineData:
+    speech = _dual_speech()
+    return ArmPipelineData(
+        episode_id="v44-arm-cut",
+        source_id="v44-arm-cut-edit-source",
+        total_frames=270,
+        speech=speech,
+        transcript_segments_ms=(
+            (0, 3000, speech[0].text),
+            (3000, 6000, speech[1].text),
+            (6000, 9000, speech[2].text),
+        ),
+        mezzanine=None,
+        mezzanine_sha256=None,
+    )
+
+
+def test_compute_removal_eligibility_dual_reason_keeps_both_evidence_pairs() -> None:
+    """A candidate eligible for BOTH reasons must retain every deterministic
+    evidence pair — merged and deduplicated in speech order, never
+    overwritten by the second rule."""
+    eligibility = compute_removal_eligibility(_dual_speech(), _SHA)
+    by_id = {entry.candidate_id: entry for entry in eligibility}
+    dual = by_id["cand-s2"]
+    assert dual.allowed_reasons == frozenset({"false_start", "exact_duplicate"})
+    assert dual.evidence_refs == ("s1", "s2", "s3")
+
+
+def test_arm_dual_reason_remove_with_partial_evidence_is_refused(
+    tmp_path: Path,
+) -> None:
+    """A dual-reason remove citing only the UNRELATED reason's evidence
+    (false_start without the restart ref) is a typed refusal — the merged
+    deterministic refs, not one pair, are the citation contract."""
+    removals = {
+        "cand-s2": {
+            "intent": "remove",
+            "removal_reason": "false_start",
+            "evidence_refs": ["s1", "s2"],
+            "rationale": "cites only the duplicate pair for a false-start cut",
+        }
+    }
+    inputs = replace(
+        _cut_inputs(tmp_path, _dual_analysis()), llm_call=_removing_llm(removals)
+    )
+    with pytest.raises(DirectorV2Error) as error:
+        run_arm_pipeline(inputs)
+    assert error.value.code == "removal-not-eligible"
+    assert "does not cite" in error.value.detail
+    assert not (inputs.workspace / "moment-selection").exists()
+
+
+def test_arm_dual_reason_remove_citing_all_merged_refs_commits(tmp_path: Path) -> None:
+    """The happy dual case: citing the full merged deterministic set (s1, s2,
+    s3) commits, and the remaining keep/optional candidates are preserved."""
+    removals = {
+        "cand-s2": {
+            "intent": "remove",
+            "removal_reason": "false_start",
+            "evidence_refs": ["s1", "s2", "s3"],
+            "rationale": "deterministic false start over the dual-eligible span",
+        }
+    }
+    inputs = replace(
+        _cut_inputs(tmp_path, _dual_analysis()), llm_call=_removing_llm(removals)
+    )
+    result = run_arm_pipeline(inputs)
+    assert result.commit_version == 2
+    assert result.kept_candidate_ids == ("cand-s1", "cand-s3")
+
+
 def test_arm_transcript_injection_cannot_create_eligibility(tmp_path: Path) -> None:
     """Even when the transcript carries removal instructions AND the model
     obeys them, the precomputed eligibility (empty) refuses the cut."""

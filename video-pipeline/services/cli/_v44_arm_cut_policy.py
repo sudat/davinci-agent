@@ -66,9 +66,15 @@ def _span_map(speech: Sequence[SpeechSegment]) -> TranscriptSpanMap:
 def compute_removal_eligibility(
     speech: Sequence[SpeechSegment], transcript_sha256: str
 ) -> tuple[RemovalEligibilityV1, ...]:
-    """One deny-by-default entry per speech candidate, in speech order."""
+    """One deny-by-default entry per speech candidate, in speech order.
+
+    A candidate eligible for BOTH reasons carries the MERGED, deduplicated
+    evidence of every firing rule (in speech order) — one rule's pair never
+    overwrites the other's, so a remove under either reason must cite all
+    the deterministic refs ``ineligible_removal_detail`` checks.
+    """
     allowed: dict[str, set[RemovalReason]] = {}
-    evidence: dict[str, tuple[str, ...]] = {}
+    evidence: dict[str, set[str]] = {}
     for candidate in generate_false_start_candidates(
         _span_map(speech), ANALYZER_VERSION, (transcript_sha256,)
     ):
@@ -78,18 +84,25 @@ def compute_removal_eligibility(
         restart = speech[candidate.evidence.restart_segment_index]
         cid = f"cand-{abandoned.segment_id}"
         allowed.setdefault(cid, set()).add("false_start")
-        evidence[cid] = (abandoned.segment_id, restart.segment_id)
+        evidence.setdefault(cid, set()).update(
+            (abandoned.segment_id, restart.segment_id)
+        )
     for first, second in pairwise(speech):
         normalized = normalize_duplicate_text(first.text)
         if normalized and normalized == normalize_duplicate_text(second.text):
             cid = f"cand-{second.segment_id}"
             allowed.setdefault(cid, set()).add("exact_duplicate")
-            evidence[cid] = (first.segment_id, second.segment_id)
+            evidence.setdefault(cid, set()).update((first.segment_id, second.segment_id))
+    position_of = {
+        segment.segment_id: position for position, segment in enumerate(speech)
+    }
     return tuple(
         RemovalEligibilityV1(
             candidate_id=cid,
             allowed_reasons=frozenset(allowed.get(cid, ())),
-            evidence_refs=evidence.get(cid, ()),
+            evidence_refs=tuple(
+                sorted(evidence.get(cid, ()), key=position_of.__getitem__)
+            ),
         )
         for cid in (f"cand-{segment.segment_id}" for segment in speech)
     )
