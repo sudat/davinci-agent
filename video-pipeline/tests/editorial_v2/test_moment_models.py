@@ -181,3 +181,65 @@ def test_source_span_strict_int_rejected_when_float() -> None:
                 "provenance": {"producer": "analyzer"},
             }
         )
+
+
+def test_historical_payload_parses_with_removal_reason_none() -> None:
+    """Additive compatibility: historical MomentSelection payloads (no
+    removal_reason key) parse and default to None."""
+    payload = _candidate_kwargs()
+    assert "removal_reason" not in payload
+    model = MomentCandidateV2.model_validate(payload)
+    assert model.removal_reason is None
+
+
+@pytest.mark.parametrize("reason", ["false_start", "exact_duplicate"])
+def test_remove_candidate_carries_each_eligible_reason(reason: str) -> None:
+    kwargs = _candidate_kwargs() | {"intent": "remove", "removal_reason": reason}
+    model = MomentCandidateV2.model_validate(kwargs)
+    assert model.removal_reason == reason
+
+
+def test_unknown_removal_reason_rejected() -> None:
+    kwargs = _candidate_kwargs() | {"intent": "remove", "removal_reason": "redundant"}
+    with pytest.raises(ValidationError):
+        MomentCandidateV2.model_validate(kwargs)
+
+
+@pytest.mark.parametrize("intent", ["keep", "optional"])
+def test_keep_or_optional_with_removal_reason_rejected(intent: str) -> None:
+    kwargs = _candidate_kwargs() | {"intent": intent, "removal_reason": "false_start"}
+    with pytest.raises(ValidationError) as excinfo:
+        MomentCandidateV2.model_validate(kwargs)
+    assert excinfo.value.errors()[0]["type"] == "removal_reason_intent"
+
+
+def test_remove_without_reason_parses_like_historical_artifacts() -> None:
+    """Historical remove candidates carry no reason; parsing stays legal —
+    eligibility is enforced at the policy boundary, not at parse time."""
+    kwargs = _candidate_kwargs() | {"intent": "remove"}
+    model = MomentCandidateV2.model_validate(kwargs)
+    assert model.removal_reason is None
+
+
+def test_proposal_round_trip_preserves_removal_reason() -> None:
+    keep = MomentCandidateV2.model_validate(_candidate_kwargs())
+    cut = MomentCandidateV2.model_validate(
+        _candidate_kwargs(candidate_id="cand-cut")
+        | {
+            "intent": "remove",
+            "removal_reason": "exact_duplicate",
+            "evidence_refs": ["ev-001", "ev-002"],
+        }
+    )
+    proposal = MomentSelectionProposalV2.model_validate(
+        {
+            "proposal_id": "prop-r",
+            "episode_id": "ep-001",
+            "candidates": [keep.model_dump(mode="json"), cut.model_dump(mode="json")],
+        }
+    )
+    reparsed = MomentSelectionProposalV2.model_validate_json(
+        proposal.model_dump_json()
+    )
+    cut_back = next(c for c in reparsed.candidates if c.candidate_id == "cand-cut")
+    assert cut_back.removal_reason == "exact_duplicate"

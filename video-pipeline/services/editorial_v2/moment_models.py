@@ -48,6 +48,7 @@ MomentCandidateType = Literal[
 
 MomentIntent = Literal["keep", "remove", "optional"]
 MomentLockState = Literal["unlocked", "locked"]
+RemovalReason = Literal["false_start", "exact_duplicate"]
 
 
 class MomentSourceSpan(StrictModel):
@@ -88,6 +89,7 @@ class MomentCandidateV2(StrictModel):
     source_span: MomentSourceSpan
     story_block_ref: Identifier | None = None
     intent: MomentIntent
+    removal_reason: RemovalReason | None = None
     rationale: Annotated[str, Field(min_length=1, strict=True)]
     evidence_refs: Annotated[
         tuple[Identifier, ...], BeforeValidator(_to_tuple)
@@ -97,6 +99,17 @@ class MomentCandidateV2(StrictModel):
     handles: MomentHandles | None = None
     lock_state: MomentLockState = "unlocked"
     provenance: MomentProvenance
+
+    @model_validator(mode="after")
+    def require_removal_reason_only_on_remove(self) -> MomentCandidateV2:
+        if self.removal_reason is not None and self.intent != "remove":
+            raise PydanticCustomError(
+                "removal_reason_intent",
+                "removal_reason {reason} is only legal on intent 'remove', "
+                "not {intent}",
+                {"reason": self.removal_reason, "intent": self.intent},
+            )
+        return self
 
 
 class MomentSelectionProposalV2(StrictModel):
@@ -134,4 +147,5 @@ __all__ = [
     "MomentProvenance",
     "MomentSelectionProposalV2",
     "MomentSourceSpan",
+    "RemovalReason",
 ]
