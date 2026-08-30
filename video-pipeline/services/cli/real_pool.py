@@ -40,6 +40,8 @@ from services.fixtures.manifest_phase1 import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from services.analyze.asr_models import TranscriptArtifact
     from services.analyze.candidate_models import AnalysisArtifact
     from services.contracts.primitives import ArtifactRef
@@ -83,20 +85,30 @@ def _frame(ms: int, *, end: bool) -> int:
     return ms * RATE_NUM // 1000
 
 
-def speech_segments(
-    transcript: TranscriptArtifact, total_frames: int
+def segments_from_ms(
+    segments_ms: Sequence[tuple[int, int, str]], total_frames: int
 ) -> tuple[SpeechSegment, ...]:
-    """Non-empty transcript segments on the exact-ms frame lattice, ordered."""
+    """Non-empty ``(start_ms, end_ms, text)`` spans on the exact-ms frame
+    lattice, ordered ``s1..sN``.
+
+    The ONE deterministic ms→frame conversion, shared by the ASR transcript
+    path (:func:`speech_segments`) and the operator corrected-sample path
+    (Task-3 diagnostic lane). 30fps half-open lattice: floor-start snapped
+    down to a multiple of 3, ceil-end snapped up; the ≤LATTICE boundary
+    residue collapses to contiguity and clamps at the source tail. A genuine
+    overlap beyond the residue, a span past the source, and a collapsed span
+    stay typed refusals; no non-empty input is a typed refusal too.
+    """
 
     segments: list[SpeechSegment] = []
     position = 0
     previous_end = 0
-    for raw in transcript.segments:
-        if not raw.text.strip():
+    for start_ms, end_ms, text in segments_ms:
+        if not text.strip():
             continue
         position += 1
-        start = _frame(raw.start_ms, end=False) // LATTICE * LATTICE
-        end = _ceil_lattice(max(_frame(raw.end_ms, end=True), start + 1))
+        start = _frame(start_ms, end=False) // LATTICE * LATTICE
+        end = _ceil_lattice(max(_frame(end_ms, end=True), start + 1))
         # Lattice residue, MEASURED on v44-real-01 real speech (99 segments,
         # 73 collisions): adjacent segments share one boundary timestamp, and
         # ceil-end (N → next multiple of 3) vs floor-start (same N → previous
@@ -130,7 +142,7 @@ def speech_segments(
         previous_end = end
         segments.append(
             SpeechSegment(
-                segment_id=f"s{position}", text=raw.text.strip(),
+                segment_id=f"s{position}", text=text.strip(),
                 start_frame=start, end_frame=end,
             )
         )
@@ -139,6 +151,16 @@ def speech_segments(
             "speech_absent", "the transcript carries no non-empty speech segments"
         )
     return tuple(segments)
+
+
+def speech_segments(
+    transcript: TranscriptArtifact, total_frames: int
+) -> tuple[SpeechSegment, ...]:
+    """Non-empty transcript segments on the exact-ms frame lattice, ordered."""
+    return segments_from_ms(
+        tuple((raw.start_ms, raw.end_ms, raw.text) for raw in transcript.segments),
+        total_frames,
+    )
 
 
 def _ceil_lattice(frame: int) -> int:
@@ -260,5 +282,6 @@ __all__ = [
     "evidence_index_for",
     "pool_for",
     "rules_for",
+    "segments_from_ms",
     "speech_segments",
 ]

@@ -25,7 +25,7 @@ from services.analyze.asr_models import (
     WavProbeSummary,
     transcript_content_hash,
 )
-from services.cli.real_pool import RealPoolError, speech_segments
+from services.cli.real_pool import RealPoolError, segments_from_ms, speech_segments
 
 TOTAL_FRAMES: Final = 8467  # the real episode's verified mezzanine frames
 
@@ -77,6 +77,23 @@ def test_adjacent_real_speech_segments_share_boundaries_without_collision() -> N
     assert speech[0].end_frame == speech[1].start_frame  # contiguous, no overlap
     assert speech[0].start_frame == 0
     assert speech[1].text == "テスト動画だよ"
+
+
+def test_segments_from_ms_shares_the_transcript_lattice() -> None:
+    """Task 3: the extracted ms-triples helper IS the speech_segments
+    conversion — the corrected-sample path and the ASR path quantize through
+    the identical deterministic lattice."""
+    spans = ((0, 2780, "はじめまーす"), (2780, 7080, "テスト動画だよ"))
+
+    direct = segments_from_ms(spans, TOTAL_FRAMES)
+    via_transcript = speech_segments(_transcript(spans), TOTAL_FRAMES)
+
+    assert direct == via_transcript
+
+
+def test_segments_from_ms_preserves_the_overlap_refusal_directly() -> None:
+    with pytest.raises(RealPoolError, match="overlaps the previous segment"):
+        segments_from_ms(((0, 3000, "一本目"), (1500, 6000, "重複")), TOTAL_FRAMES)
 
 
 def test_full_real_segment_chain_is_fully_contiguous() -> None:
