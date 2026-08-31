@@ -1,0 +1,84 @@
+{
+ "audio_placement": {
+  "audio_track_count_before": 1,
+  "audio_track_items_after": 1,
+  "source_frame_count": 8467
+ },
+ "cleanup": {
+  "delete_success": true,
+  "load_after_delete_ok": false
+ },
+ "elapsed_ms": 30474.0,
+ "generation": {
+  "echo_setting_count": 1,
+  "ignored_keys": [],
+  "subtitle_tracks_after": 1,
+  "subtitle_tracks_before": 0,
+  "success": true,
+  "verified": true
+ },
+ "input_media_bytes": 2015592964,
+ "input_media_sha256": "0b3298443d756e1c27d24b1d2512aa4fc7a2e67e7957768dfc8e29d01d193c1a",
+ "mcp_version": "2.98.3",
+ "phases_ms": {
+  "append_audio": {
+   "elapsed_ms": 1662.6
+  },
+  "clip_props": {
+   "elapsed_ms": 1635.2
+  },
+  "generate": {
+   "elapsed_ms": 30278.8
+  },
+  "import": {
+   "elapsed_ms": 1632.6
+  },
+  "project_exists_check": {
+   "elapsed_ms": 7.4
+  },
+  "readback": {
+   "elapsed_ms": 30473.3
+  },
+  "settings_echo": {
+   "elapsed_ms": 1667.1
+  },
+  "tracks_before": {
+   "elapsed_ms": 1526.1
+  }
+ },
+ "pin_commit": "132e134d3aa25d3d0df6bdf38f051bd29d128211",
+ "project_name": "probe-resolve-autocap-r1",
+ "readback": {
+  "all_text_nonempty": true,
+  "canonical_sha256": "836b77af6566d4a9763a0a6558d68f6a24b8dacc7a233fe250cfbe02f077b703",
+  "item_count": 79,
+  "max_end_frame": 116415,
+  "min_start_frame": 108059,
+  "relative_max_end_frame": 8415,
+  "relative_min_start_frame": 59,
+  "transcript_cue_count": 79
+ },
+ "resolve_version": "21.0.4.5",
+ "run": "r1",
+ "schema_version": "resolve-auto-caption-capability-v1",
+ "server_mode": "compound",
+ "settings_candidates": [
+  {
+   "accepted": false,
+   "echo_setting_count": 0,
+   "ignored_keys": [
+    "language"
+   ],
+   "value": "ja"
+  },
+  {
+   "accepted": true,
+   "echo_setting_count": 1,
+   "ignored_keys": [],
+   "value": "japanese"
+  }
+ ],
+ "timeline_name": "probe-autocap-tl",
+ "timeline_start_frame": 108000,
+ "verdict": "generated-and-read"
+}
