@@ -193,7 +193,7 @@ def test_diagnostic_lane_requantizes_sample_through_shared_lattice(
     """The corrected ms spans go through the SAME 30fps half-open lattice as
     the ASR path: adjacent spans collapse to contiguity, ids stay s1..sN, and
     the ASR-derived speech never reaches the return value."""
-    sample_ms = ((0, 2780, "はじめまーす"), (2780, 7080, "テスト動画だよ"))
+    sample_ms = ((120, 1234, "合成台本一号"), (1234, 2468, "合成台本二号"))
     sample = _write_sample(tmp_path / "corrected.json", sample_ms)
     speech, hypothesis_ms, _edits, alignment = prepare_arm_transcript(
         _data(total_frames=8467),
@@ -203,8 +203,8 @@ def test_diagnostic_lane_requantizes_sample_through_shared_lattice(
         ),
     )
     assert tuple((seg.segment_id, seg.text) for seg in speech) == (
-        ("s1", "はじめまーす"),
-        ("s2", "テスト動画だよ"),
+        ("s1", "合成台本一号"),
+        ("s2", "合成台本二号"),
     )
     assert speech[0].end_frame == speech[1].start_frame  # lattice contiguity
     assert hypothesis_ms == sample_ms  # ms hypothesis IS the corrected sample

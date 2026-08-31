@@ -64,26 +64,26 @@ def _transcript(spans_ms: tuple[tuple[int, int, str], ...]) -> TranscriptArtifac
 
 
 def test_adjacent_real_speech_segments_share_boundaries_without_collision() -> None:
-    """Given: the episode's first two spans sharing the 2780 ms boundary
-    (floor-start 81 < ceil-end 84 under the old math); Then: the residue
+    """Given: two synthetic spans sharing a non-lattice-aligned ms boundary
+    (floor-start 36 < ceil-end 39 under the old math); Then: the residue
     collapses to contiguity — segment 2 starts exactly at segment 1's end."""
 
     speech = speech_segments(
-        _transcript(((0, 2780, "はじめまーす"), (2780, 7080, "テスト動画だよ"))),
+        _transcript(((120, 1234, "合成台本一号"), (1234, 2468, "合成台本二号"))),
         TOTAL_FRAMES,
     )
 
     assert len(speech) == 2
     assert speech[0].end_frame == speech[1].start_frame  # contiguous, no overlap
-    assert speech[0].start_frame == 0
-    assert speech[1].text == "テスト動画だよ"
+    assert speech[0].start_frame == 3
+    assert speech[1].text == "合成台本二号"
 
 
 def test_segments_from_ms_shares_the_transcript_lattice() -> None:
     """Task 3: the extracted ms-triples helper IS the speech_segments
     conversion — the corrected-sample path and the ASR path quantize through
     the identical deterministic lattice."""
-    spans = ((0, 2780, "はじめまーす"), (2780, 7080, "テスト動画だよ"))
+    spans = ((120, 1234, "合成台本一号"), (1234, 2468, "合成台本二号"))
 
     direct = segments_from_ms(spans, TOTAL_FRAMES)
     via_transcript = speech_segments(_transcript(spans), TOTAL_FRAMES)
