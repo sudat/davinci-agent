@@ -22,3 +22,10 @@
 - Root cause: execution steps were sorted by record position before phase, so the 100-cue subtitle verifier ran after the first pair. Audio steps at the same phase also sorted by ID, placing final loudness QC before voice isolation.
 - Fix: one shared `step_sort_key` now orders phase first and preserves the committed audio ladder. Real plan order is all 194 placements → subtitles → cleanup → normalization → voice isolation → final loudness QC.
 - Remaining external blocker: focused real-episode cleanup measured `0.0 dB` noise improvement versus required `3–12 dB`. The operator must tune and resave Fairlight preset `dialogue-chain`; code must not clamp or fabricate success.
+
+## Generated attempt cleanup dependency (2026-08-31)
+
+- Symptom: deleting the approved `.omo/start-work/attempts` tree made the full Python test collection crash while importing Phase 2 and Phase 3 fault harnesses.
+- Root cause: those modules discovered the active frozen policy at import time by reading a user-specific generated attempt path.
+- Fix: pin the harnesses to the tracked frozen policy versions and keep missing historical receipts as explicit runtime failures; never recreate or fabricate deleted evidence.
+- Regression guard: import both harness modules with the attempt tree absent and verify their policy paths resolve to tracked files.

@@ -37,36 +37,8 @@ ATTEMPT: Final = Path(
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
 PARENTS: Final = ("phase-0a", "phase-0b", "phase-1-technical")
-
-
-def _cascade_receipt() -> Path:
-    """The receipt matching the current frozen phase-2 gate version."""
-    import json  # noqa: PLC0415
-
-    result = json.loads((ATTEMPT / "phase-2" / "gate-result.json").read_text())
-    version = result.get("gate_version")
-    if isinstance(version, str) and version != "v1":
-        cascaded = ATTEMPT / "gate-cascade" / "receipts" / f"phase-2-{version}.json"
-        if cascaded.is_file():
-            return cascaded
-    return ATTEMPT / "task-47-freeze-receipt.json"
-
-
-RECEIPT: Final = _cascade_receipt()
-
-
-def _current_policy() -> Path:
-    """The cascade-tracked current phase-2 policy (mirror of RECEIPT)."""
-    import json  # noqa: PLC0415
-
-    result = json.loads((ATTEMPT / "phase-2" / "gate-result.json").read_text())
-    version = result.get("gate_version")
-    if isinstance(version, str) and version != "v1":
-        return Path(f"config/gates/phase-2-{version}.json")
-    return Path("config/gates/phase-2-v1.json")
-
-
-POLICY: Final = _current_policy()
+RECEIPT: Final = ATTEMPT / "gate-cascade" / "receipts" / "phase-2-v4.json"
+POLICY: Final = Path("config/gates/phase-2-v4.json")
 
 
 @dataclass(frozen=True, slots=True)
