@@ -113,15 +113,16 @@ def test_full_real_segment_chain_is_fully_contiguous() -> None:
 
 
 def test_lattice_tail_overrun_clamps_to_the_source_bound() -> None:
-    """Given: the real final span [279540, 282240) ms whose ceil-lattice
-    end (8469) passes the 8467-frame source by 2 frames of pure rounding;
+    """Given: a synthetic tail span [280000, 282300) ms whose ceil-lattice
+    end (8469) passes the 8467-frame source by 2 frames of pure rounding
+    (the overrun shape measured on the real episode's final segment);
     Then: it clamps to the source bound instead of refusing the episode."""
 
     speech = speech_segments(
-        _transcript(((279540, 282240, "わかんねえってわけ"),)), TOTAL_FRAMES
+        _transcript(((280000, 282300, "合成台本ラスト"),)), TOTAL_FRAMES
     )
 
-    assert speech[-1].end_frame == TOTAL_FRAMES
+    assert speech[-1].end_frame == TOTAL_FRAMES == 8467
 
 
 def test_genuine_overlap_beyond_the_residue_is_still_typed() -> None:

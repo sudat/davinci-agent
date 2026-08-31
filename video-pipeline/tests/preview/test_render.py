@@ -125,7 +125,7 @@ def test_cue_from_record_span_rounds_off_lattice_at_30fps() -> None:
     cue = cue_from_record_span(
         RecordFrameSpan(start_frame=7926, end_frame=8005),
         RationalFrameRate(num=30, den=1),
-        "わかんねえってわけ",
+        "合成字幕の文面",
     )
     assert cue.start_ms == 264200
     assert cue.end_ms == 266833
