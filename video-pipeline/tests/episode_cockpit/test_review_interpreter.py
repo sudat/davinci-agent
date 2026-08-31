@@ -238,7 +238,7 @@ def test_llm_delta_only_applies_to_keep_longer_rule() -> None:
 
 def test_multi_proposal_message_yields_drafts_in_order() -> None:
     drafts = interpret_message(
-        "0:00と0:02の「はじめまーす」「テスト動画だよ」を削除して",
+        "0:00と0:02の「合成台本一号」「合成台本二号」を削除して",
         ReviewChatContext(at_seconds=None),
         NearbyContext(),
         _fake_llm(
@@ -678,7 +678,7 @@ def test_review_chat_route_multi_proposal_returns_draft_and_drafts(
     episode_id = _create_episode(client, source_folder)
     response = client.post(
         f"/episodes/{episode_id}/review-chat",
-        json={"text": "0:00と0:02の「はじめまーす」「テスト動画だよ」を削除して"},
+        json={"text": "0:00と0:02の「合成台本一号」「合成台本二号」を削除して"},
     )
     assert response.status_code == 200
     body = response.json()

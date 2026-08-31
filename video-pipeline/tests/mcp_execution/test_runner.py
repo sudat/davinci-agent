@@ -871,13 +871,13 @@ def test_verify_readback_audio_metric_range() -> None:
 _HANDLER_CUE_ROWS: tuple[dict[str, object], ...] = (
     {
         "cue_id": "cue-asr-st3",
-        "text": "今日ね、\nスクワってやってたんだけど",
+        "text": "合成ケュー前半、\n合成ケュー後半",
         "record_span": {"start_frame": 0, "end_frame": 96},
         "style": {"font": "Hiragino Sans W3", "size": 0.04, "center": [0.5, 0.14]},
     },
     {
         "cue_id": "cue-asr-st4",
-        "text": "今1セット目終わった",
+        "text": "合成ケュー最終文",
         "record_span": {"start_frame": 96, "end_frame": 183},
         "style": {"font": "Hiragino Sans W3", "size": 0.04, "center": [0.5, 0.14]},
     },
@@ -890,12 +890,12 @@ def _expected_cue_readback() -> SubtitleCuesReadback:
         cues=(
             SubtitleCuePayload(
                 cue_id="cue-asr-st3",
-                text="今日ね、\nスクワってやってたんだけど",
+                text="合成ケュー前半、\n合成ケュー後半",
                 record_span=RecordFrameSpan(start_frame=0, end_frame=96),
             ),
             SubtitleCuePayload(
                 cue_id="cue-asr-st4",
-                text="今1セット目終わった",
+                text="合成ケュー最終文",
                 record_span=RecordFrameSpan(start_frame=96, end_frame=183),
             ),
         ),
