@@ -637,17 +637,6 @@ def _burn_font_size(resolved_params: dict[str, float]) -> int:
     return max(12, min(48, round(24 * scale)))  # type: ignore[arg-type]
 
 
-def _subtitle_overlay_text(subtitle_items: tuple[TimelineItem0C, ...]) -> str:
-    """Concatenate wrapped cue texts for the burn overlay (one block, bottom)."""
-
-    if not subtitle_items:
-        return ""
-    # lines already wrapped at line_length; join distinct cues with newline
-    return "\n".join(
-        (item.subtitle_text or "") for item in subtitle_items if (item.subtitle_text or "").strip()
-    )
-
-
 def _timed_overlay_filter_complex(
     windows: Sequence[tuple[float, float]],
 ) -> str:
