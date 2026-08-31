@@ -820,7 +820,7 @@ def test_brief_preservation_guidance_reaches_pass_requests(tmp_path: Path) -> No
 def _misheard_analysis() -> ArmPipelineData:
     speech = (
         SpeechSegment(
-            segment_id="s1", text="このDJIポケット4のケースが無くなった", start_frame=0,
+            segment_id="s1", text="新しいDJIポケット4の予備バッテリーが届いた", start_frame=0,
             end_frame=90,
         ),
         SpeechSegment(
@@ -833,7 +833,7 @@ def _misheard_analysis() -> ArmPipelineData:
         total_frames=180,
         speech=speech,
         transcript_segments_ms=(
-            (0, 3000, "このDJIポケット4のケースが無くなった"),
+            (0, 3000, "新しいDJIポケット4の予備バッテリーが届いた"),
             (3000, 6000, "PSとか値段変わるあたり"),
         ),
         mezzanine=None,
@@ -881,10 +881,10 @@ def test_arm_substitutes_episode_proper_nouns_pre_mi(tmp_path: Path) -> None:
     mi = _load_json(inputs.workspace / "media-intelligence.json")
     assert isinstance(mi, dict)
     descriptions = [shot["description"] for shot in mi["shots"]]
-    assert "このDJI Pocket 4のケースが無くなった" in descriptions
+    assert "新しいDJI Pocket 4の予備バッテリーが届いた" in descriptions
     assert "PS5とか値段変わるあたり" in descriptions
     assert result.hypothesis_segments_ms == (
-        (0, 3000, "このDJI Pocket 4のケースが無くなった"),
+        (0, 3000, "新しいDJI Pocket 4の予備バッテリーが届いた"),
         (3000, 6000, "PS5とか値段変わるあたり"),
     )
     assert any(
