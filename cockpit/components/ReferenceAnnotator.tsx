@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  apiFailure,
   parseReferencePreview,
   registerReference,
-  CockpitApiError,
   type DomainPolarities,
   type ParsePreviewDraft,
 } from "@/lib/api";
@@ -82,11 +82,7 @@ export default function ReferenceAnnotator({
       setDraft(next);
       setDomains(next.domains);
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
-      }
+      setError(apiFailure(cause));
     } finally {
       setBusy(false);
     }
@@ -115,11 +111,7 @@ export default function ReferenceAnnotator({
       setDraft(null);
       setDomains({});
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
-      }
+      setError(apiFailure(cause));
     } finally {
       setBusy(false);
     }

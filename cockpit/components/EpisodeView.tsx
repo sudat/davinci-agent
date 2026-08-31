@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  apiFailure,
   getEpisodeFlags,
   getEpisodeStatus,
   probeEpisodePreview,
@@ -62,14 +63,10 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         }
       } catch (cause) {
         if (cancelled) return;
-        if (cause instanceof CockpitApiError) {
-          setError({ code: cause.code, detail: cause.detail });
-          if (cause.status === 404) {
-            setNotFound(true);
-            return; // stop polling — the episode does not exist
-          }
-        } else {
-          setError({ code: "unexpected-client-error", detail: String(cause) });
+        setError(apiFailure(cause));
+        if (cause instanceof CockpitApiError && cause.status === 404) {
+          setNotFound(true);
+          return; // stop polling — the episode does not exist
         }
       }
       if (!cancelled) {

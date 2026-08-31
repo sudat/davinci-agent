@@ -362,6 +362,45 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
     );
   });
 
+  it("APIエラー以外の失敗は unexpected-client-error に丸めて表示する", async () => {
+    // request() は fetch の throw を network-error に変換するため、
+    // 本文読み込み自身の失敗がフォールバック経路の唯一の実経路。
+    const fetchImpl: typeof fetch = async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.error(new Error("レスポンスの読み込みに失敗"));
+          },
+        }),
+        { status: 200 },
+      );
+
+    render(
+      <ReviewChatPanel
+        episodeId="ep-abc"
+        getAtSeconds={() => null}
+        status={null}
+        fetchImpl={fetchImpl}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+      target: { value: "この後2秒残して" },
+    });
+    fireEvent.click(screen.getByTestId("review-chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error-notice")).toBeTruthy();
+    });
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "[unexpected-client-error]",
+    );
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "Error: レスポンスの読み込みに失敗",
+    );
+    expect(screen.queryByTestId("review-draft")).toBeNull();
+  });
+
   it("複数ドラフトのうち1つでも曖昧なら適用できない", async () => {
     const clear = {
       ...DRAFT_KEEP_LONGER,

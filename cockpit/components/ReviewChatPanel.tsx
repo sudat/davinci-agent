@@ -2,10 +2,10 @@
 
 import { useMemo, useRef, useState } from "react";
 import {
+  apiFailure,
   applyReviewCommand,
   postRebuild,
   postReviewChat,
-  CockpitApiError,
   type EpisodeStatus,
   type RebuildResult,
   type ReviewApplyResult,
@@ -70,7 +70,7 @@ export default function ReviewChatPanel({
       );
       setDrafts(result.drafts ?? [result.draft]);
     } catch (cause) {
-      setError(failure(cause));
+      setError(apiFailure(cause));
     } finally {
       setBusy(false);
     }
@@ -110,7 +110,7 @@ export default function ReviewChatPanel({
           : null,
       );
     } catch (cause) {
-      setError(failure(cause));
+      setError(apiFailure(cause));
     } finally {
       setBusy(false);
     }
@@ -231,11 +231,4 @@ export default function ReviewChatPanel({
       ) : null}
     </section>
   );
-}
-
-function failure(cause: unknown): { code: string; detail: string } {
-  if (cause instanceof CockpitApiError) {
-    return { code: cause.code, detail: cause.detail };
-  }
-  return { code: "unexpected-client-error", detail: String(cause) };
 }

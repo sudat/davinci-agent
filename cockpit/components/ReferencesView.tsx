@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  apiFailure,
   listReferences,
   registerReference,
-  CockpitApiError,
   type LibraryReference,
 } from "@/lib/api";
 import { DOMAIN_LABEL, POLARITY_LABEL } from "@/lib/domains";
@@ -41,11 +41,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
     try {
       setLibrary((await listReferences(fetchImpl)).references);
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
-      }
+      setError(apiFailure(cause));
     }
   }, [fetchImpl]);
 
@@ -73,11 +69,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
       setPath("");
       await refreshLibrary();
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
-      }
+      setError(apiFailure(cause));
     } finally {
       setBusy(false);
     }

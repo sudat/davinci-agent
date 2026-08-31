@@ -7,7 +7,7 @@ import {
   validateIntake,
   type IntakeFieldErrors,
 } from "@/lib/intake";
-import { createEpisode, CockpitApiError } from "@/lib/api";
+import { apiFailure, createEpisode } from "@/lib/api";
 import AdvancedSection from "@/components/AdvancedSection";
 import ReferenceList from "@/components/ReferenceList";
 import ErrorNotice from "@/components/ErrorNotice";
@@ -64,11 +64,7 @@ export default function IntakeForm() {
       });
       router.push(`/episodes/${result.episode_id}`);
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        setApiError({ code: cause.code, detail: cause.detail });
-      } else {
-        setApiError({ code: "unexpected-client-error", detail: String(cause) });
-      }
+      setApiError(apiFailure(cause));
       setSubmitting(false);
     }
   };

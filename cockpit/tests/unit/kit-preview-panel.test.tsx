@@ -119,6 +119,40 @@ describe("KitPreviewPanel", () => {
     ]);
   });
 
+  it("500はエラー envelope の code/detail をそのまま表示する", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      jsonResponse(
+        { error: { code: "kit-preview-failed", detail: "スニペットの生成に失敗しました" } },
+        500,
+      );
+
+    render(<KitPreviewPanel episodeId="ep-abc" fetchImpl={fetchImpl} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error-notice")).toBeTruthy();
+    });
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "[kit-preview-failed]",
+    );
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "スニペットの生成に失敗しました",
+    );
+  });
+
+  it("404はエラー扱いせずパネルごと黙って消える", async () => {
+    const fetchImpl: typeof fetch = async () => new Response("", { status: 404 });
+
+    const { container } = render(
+      <KitPreviewPanel episodeId="ep-abc" fetchImpl={fetchImpl} />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="kit-preview-panel"]')).toBeNull();
+    });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toBe("");
+  });
+
   it("どちらも不要ボタンは recipe_id=null で記録する", async () => {
     const posts: unknown[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

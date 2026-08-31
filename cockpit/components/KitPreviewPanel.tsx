@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  apiFailure,
   CockpitApiError,
   getKitPreviews,
   kitPreviewFileUrl,
@@ -41,15 +42,11 @@ export default function KitPreviewPanel({
       setError(null);
       setNotFound(false);
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        if (cause.status === 404) {
-          setNotFound(true);
-          return;
-        }
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
+      if (cause instanceof CockpitApiError && cause.status === 404) {
+        setNotFound(true);
+        return;
       }
+      setError(apiFailure(cause));
     }
   }, [episodeId, fetchImpl]);
 
@@ -71,11 +68,7 @@ export default function KitPreviewPanel({
       );
       await refresh();
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
-      }
+      setError(apiFailure(cause));
     } finally {
       setBusyDomain(null);
     }

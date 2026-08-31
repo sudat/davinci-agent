@@ -60,9 +60,9 @@ const EXCEPTION_SESSION = {
   decided: [],
 };
 
-function jsonResponse(payload: object): Response {
+function jsonResponse(payload: object, status = 200): Response {
   return new Response(JSON.stringify(payload), {
-    status: 200,
+    status,
     headers: { "content-type": "application/json" },
   });
 }
@@ -112,6 +112,43 @@ describe("ApprovalSessions（bundling + 承認フロー）", () => {
     expect(screen.getAllByTestId("decided-item")).toHaveLength(4);
     expect(screen.getByTestId("blocking-session-count").textContent).toContain("0");
     expect(approved).toEqual(["opr-00000001", "opr-00000002"]);
+  });
+
+  it("承認実行が500で失敗しても code/detail を表示し、取得済みの一覧は保持される", async () => {
+    const failureResponse = () =>
+      jsonResponse(
+        { error: { code: "approval-execution-failed", detail: "記録の更新に失敗しました" } },
+        500,
+      );
+    let gets = 0;
+    const fetchImpl: typeof fetch = async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      if (init?.method === "POST") return failureResponse();
+      gets += 1;
+      // 初回取得だけ成功。失敗後の再取得は同じ500を返す（バックエンド障害）。
+      return gets === 1 ? jsonResponse(TWO_SESSIONS) : failureResponse();
+    };
+
+    render(<ApprovalSessions episodeId="ep-abc" fetchImpl={fetchImpl} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("blocking-session-count").textContent).toContain("2");
+    });
+    fireEvent.click(screen.getAllByTestId("approve-session-button")[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("approve-session-button")[0]).not.toBeDisabled();
+    });
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "[approval-execution-failed]",
+    );
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "記録の更新に失敗しました",
+    );
+    expect(screen.getAllByTestId("approval-session")).toHaveLength(2);
+    expect(screen.queryByTestId("approvals-empty")).toBeNull();
   });
 
   it("例外セッションはgrouped説明付きで追加stopとして出る", async () => {

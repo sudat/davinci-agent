@@ -44,6 +44,18 @@ export class CockpitApiError extends Error {
 
 export type FetchLike = typeof fetch;
 
+/**
+ * Convert a caught error into the UI error-state shape `{code, detail}`:
+ * a CockpitApiError keeps its machine code/detail; anything else becomes
+ * `unexpected-client-error` with `String(cause)`.
+ */
+export function apiFailure(cause: unknown): { code: string; detail: string } {
+  if (cause instanceof CockpitApiError) {
+    return { code: cause.code, detail: cause.detail };
+  }
+  return { code: "unexpected-client-error", detail: String(cause) };
+}
+
 function stringifyDetail(detail: unknown): string {
   if (typeof detail === "string") return detail;
   if (detail === undefined || detail === null) return "";

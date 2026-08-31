@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  apiFailure,
   executeApproval,
   getApprovalSessions,
   CockpitApiError,
@@ -52,17 +53,13 @@ export default function ApprovalSessions({
       setError(null);
       setNotFound(false);
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        // A missing episode is the page-level 404 (EpisodeView surfaces it);
-        // the sessions panel stays quiet instead of duplicating the card.
-        if (cause.status === 404) {
-          setNotFound(true);
-          return;
-        }
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
+      // A missing episode is the page-level 404 (EpisodeView surfaces it);
+      // the sessions panel stays quiet instead of duplicating the card.
+      if (cause instanceof CockpitApiError && cause.status === 404) {
+        setNotFound(true);
+        return;
       }
+      setError(apiFailure(cause));
     }
   }, [episodeId, fetchImpl]);
 
@@ -84,11 +81,7 @@ export default function ApprovalSessions({
       }
       await refresh();
     } catch (cause) {
-      if (cause instanceof CockpitApiError) {
-        setError({ code: cause.code, detail: cause.detail });
-      } else {
-        setError({ code: "unexpected-client-error", detail: String(cause) });
-      }
+      setError(apiFailure(cause));
       await refresh();
     } finally {
       setBusy(false);
