@@ -7,14 +7,10 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, StringConstraints, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 from services.reference_learning.models import PreferenceDomain
 
 EXPECTED_RECIPE_COUNT: int = 12
-
-
-def _tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 def _tuple_domains(value: object) -> object:
@@ -88,7 +84,7 @@ class ProvenanceV1(StrictModel):
 
     origin: Annotated[str, Field(min_length=1, strict=True)]
     license: Annotated[str, Field(min_length=1, strict=True)]
-    assets: Annotated[tuple[str, ...], BeforeValidator(_tuple)] = Field(default=())
+    assets: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(default=())
 
 
 class ProductionRecipeV1(StrictModel):
@@ -137,7 +133,7 @@ class ChannelProductionKitV1(StrictModel):
     """Versioned set of 12 tested production recipes."""
 
     kit_version: Annotated[str, Field(min_length=1, strict=True)]
-    recipes: Annotated[tuple[ProductionRecipeV1, ...], BeforeValidator(_tuple)]
+    recipes: Annotated[tuple[ProductionRecipeV1, ...], BeforeValidator(to_tuple)]
 
     @model_validator(mode="after")
     def check_count_and_unique(self) -> ChannelProductionKitV1:

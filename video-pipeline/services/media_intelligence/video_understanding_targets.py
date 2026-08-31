@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Annotated, Final
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 from services.media_intelligence.budget import (
     AnalysisBudgetV1,
     BudgetRequest,
@@ -59,10 +59,6 @@ HARD_TRIGGER_REASONS: Final[frozenset[TriggerReason]] = frozenset(
 GEMINI_REQUEST_SOURCE: Final = "gemini:global_reduce"
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 class SpecialistSelectionError(ValueError):
     """Specialist-target selection failure."""
 
@@ -77,15 +73,15 @@ class TargetSelection(StrictModel):
     so the GLM document can cite why Gemini requested that target.
     """
 
-    selected: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(_to_tuple)] = Field(
+    selected: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    deferred: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(_to_tuple)] = Field(
+    deferred: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     targeted_budget: AnalysisBudgetV1
     reduce_spans: Annotated[
-        tuple[SpecialistRequestSpan, ...], BeforeValidator(_to_tuple)
+        tuple[SpecialistRequestSpan, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
 
 

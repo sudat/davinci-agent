@@ -17,18 +17,11 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.metrics.v44_baseline import (
     CommitSha40,  # noqa: TC001 (pydantic resolves it at class build)
 )
-
-
-def _to_tuple(value: object) -> object:
-    """Coerce a JSON array to a tuple (StrictModel strict mode rejects lists)."""
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 class V44GateBlockedV1(StrictModel):
@@ -45,7 +38,7 @@ class V44GateBlockedV1(StrictModel):
     schema_version: Literal["v44-gate-blocked-v1"] = "v44-gate-blocked-v1"
     gate: Literal["V44-0", "V44-1", "V44-2"]
     reason: Literal["operator-needed", "asr-alignment-failed"]
-    missing: Annotated[tuple[str, ...], BeforeValidator(_to_tuple), Field(min_length=1)]
+    missing: Annotated[tuple[str, ...], BeforeValidator(to_tuple), Field(min_length=1)]
     operator_instructions: Annotated[str, Field(min_length=1, strict=True)]
     checked_at: Annotated[str, Field(min_length=1, strict=True)]
     commit_sha: CommitSha40
@@ -91,7 +84,7 @@ class ObservationStageTimelineV1(StrictModel):
         "FROZEN",
     ]
     current_stage: Identifier
-    runs: Annotated[tuple[ObservationStageRunV1, ...], BeforeValidator(_to_tuple)]
+    runs: Annotated[tuple[ObservationStageRunV1, ...], BeforeValidator(to_tuple)]
 
 
 class ObservationCorrectionV1(StrictModel):
@@ -114,9 +107,9 @@ class ObservationCorrectionV1(StrictModel):
 class ObservationRebuildV1(StrictModel):
     sequence: int = Field(ge=1, strict=True)
     applied_command: Identifier
-    stages: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    stages: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
     rebuild_wall_clock_seconds: Annotated[float, Field(ge=0.0, strict=True)]
-    unrelated_stages_skipped: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    unrelated_stages_skipped: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
     at: Annotated[str, Field(min_length=1, strict=True)]
     interpretation_ms: Annotated[float, Field(ge=0.0, strict=True)] | None = None
 
@@ -128,8 +121,8 @@ class V1ObservationRecord(StrictModel):
     episode_id: Identifier
     stage_timeline: ObservationStageTimelineV1
     ttfrp_seconds: Annotated[float, Field(ge=0.0, strict=True)] | None = None
-    corrections: Annotated[tuple[ObservationCorrectionV1, ...], BeforeValidator(_to_tuple)]
-    rebuild_records: Annotated[tuple[ObservationRebuildV1, ...], BeforeValidator(_to_tuple)]
+    corrections: Annotated[tuple[ObservationCorrectionV1, ...], BeforeValidator(to_tuple)]
+    rebuild_records: Annotated[tuple[ObservationRebuildV1, ...], BeforeValidator(to_tuple)]
     operator_note: Annotated[str, Field(min_length=1, strict=True)] | None = None
     internal_path_leak: bool
     observed_at: Annotated[str, Field(min_length=1, strict=True)]
@@ -201,7 +194,7 @@ class V44GateSummaryV1(StrictModel):
     gate: Literal["V44-2"] = "V44-2"
     passed: bool
     operator_verdict: OperatorVerdict | None = None
-    blocked_domains: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    blocked_domains: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
     technical_qc: _QcVerdict | None = None
     editorial_qc_blocked_items: int | None = Field(default=None, ge=0, strict=True)
     bootstrap_aht_minutes: float | None = Field(default=None, ge=0.0, strict=True)
@@ -210,7 +203,7 @@ class V44GateSummaryV1(StrictModel):
     evidence_pins: dict[str, str] = Field(default_factory=dict)
     finishing_report_ref: str | None = Field(default=None, min_length=1, strict=True)
     subtitle_proof_ref: str | None = Field(default=None, min_length=1, strict=True)
-    artifacts: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    artifacts: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
     recorded_at: Annotated[str, Field(min_length=1, strict=True)]
     commit_sha: CommitSha40
 

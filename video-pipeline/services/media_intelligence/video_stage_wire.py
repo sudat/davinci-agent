@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Annotated, Final, Literal
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Frame, StrictModel
+from services.contracts.primitives import Frame, StrictModel, to_tuple
 from services.media_intelligence.video_review_wire import (
     GEMINI_REVIEW_INSTRUCTIONS,
     UNTRUSTED_DATA_MARKER,
@@ -59,10 +59,6 @@ _STAGE_INSTRUCTIONS: Final[dict[str, str]] = {
     "global_reduce": GEMINI_GLOBAL_REDUCE_INSTRUCTIONS,
     "fusion": GEMINI_FUSION_INSTRUCTIONS,
 }
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 def gemini_response_text(raw: bytes) -> str:
@@ -111,12 +107,12 @@ class GeminiEpisodeReduce(StrictModel):
     analyzed_start_frame: Frame
     analyzed_end_frame: Frame
     summary: str = Field(min_length=1, max_length=_MAX_CHARS, strict=True)
-    observations: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    observations: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple, max_length=_MAX_ITEMS
     )
     audio_note: str | None = Field(default=None, max_length=_MAX_CHARS, strict=True)
     specialist_requests: Annotated[
-        tuple[SpecialistRequestSpan, ...], BeforeValidator(_to_tuple)
+        tuple[SpecialistRequestSpan, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple, max_length=_MAX_ITEMS)
 
 
@@ -154,17 +150,17 @@ class GeminiFusionReview(StrictModel):
     reaction_notes: str = Field(min_length=1, max_length=_MAX_CHARS, strict=True)
     timing_notes: str = Field(min_length=1, max_length=_MAX_CHARS, strict=True)
     best_sub_span: FusionSubSpan
-    keep_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = (
+    keep_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = (
         Field(default_factory=tuple, max_length=_MAX_ITEMS)
     )
-    remove_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = (
+    remove_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = (
         Field(default_factory=tuple, max_length=_MAX_ITEMS)
     )
     cut_in_handle: str = Field(min_length=1, max_length=_MAX_CHARS, strict=True)
     cut_out_handle: str = Field(min_length=1, max_length=_MAX_CHARS, strict=True)
     confidence: FusionConfidence
     unresolved_acknowledgements: Annotated[
-        tuple[UnresolvedRange, ...], BeforeValidator(_to_tuple)
+        tuple[UnresolvedRange, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple, max_length=_MAX_ITEMS)
 
 

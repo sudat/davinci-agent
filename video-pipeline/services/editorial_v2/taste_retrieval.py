@@ -14,7 +14,7 @@ from typing import Annotated
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 from services.reference_learning.models import (  # noqa: TC001 (runtime models)
     DerivedTasteProfileV1,
     Polarity,
@@ -23,17 +23,13 @@ from services.reference_learning.models import (  # noqa: TC001 (runtime models)
 from services.reference_learning.retrieval import retrieve_relevant_evidence
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 class TasteCitation(StrictModel):
     """One citable taste statement in director context."""
 
     domain: PreferenceDomain
     statement: Annotated[str, Field(min_length=1, strict=True)]
     polarity: Polarity
-    entry_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)] = Field(
+    entry_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
 

@@ -70,6 +70,7 @@ from services.contracts.primitives import (
     RecordFrameSpan,
     ResolveFreeModel,
     StrictModel,
+    to_tuple,
 )
 from services.creative_plan.audio_finishing import (
     AudioFinishingPlanV1,  # noqa: TC001 (pydantic runtime)
@@ -139,10 +140,6 @@ DEFAULT_SENSITIVE_PATTERNS: tuple[str, ...] = (
 )
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 # ------------------------------------------------------------- models
 
 
@@ -152,10 +149,10 @@ class EditorialQcCandidateV1(ResolveFreeModel):
     check: EditorialQcCheck
     detail: Annotated[str, Field(min_length=1, strict=True)]
     record_span: RecordFrameSpan | None = None
-    item_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)] = ()
+    item_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = ()
     severity: EditorialQcSeverity
     needs_human_review: bool = False
-    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
 
     @model_validator(mode="after")
     def require_critical_review(self) -> EditorialQcCandidateV1:
@@ -172,7 +169,7 @@ class EditorialQcReportV1(ResolveFreeModel):
     """Aggregated editorial QC candidates with count + review invariants."""
 
     schema_version: Literal["editorial-qc-report-v1"]
-    candidates: Annotated[tuple[EditorialQcCandidateV1, ...], BeforeValidator(_to_tuple)] = ()
+    candidates: Annotated[tuple[EditorialQcCandidateV1, ...], BeforeValidator(to_tuple)] = ()
     counts_by_severity: dict[EditorialQcSeverity, int]
     counts_by_check: dict[EditorialQcCheck, int]
 
@@ -210,7 +207,7 @@ class EditorialQcThresholds(StrictModel):
     low_value_min_span_frames: int = Field(default=450, gt=0, strict=True)
     low_value_max_router_score: float = Field(default=0.3, ge=0.0, le=1.0, strict=True)
     audio_gap_tolerance_frames: int = Field(default=2, ge=0, strict=True)
-    sensitive_patterns: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    sensitive_patterns: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default=DEFAULT_SENSITIVE_PATTERNS, min_length=1
     )
 
@@ -241,9 +238,9 @@ class EditorialQcInput(StrictModel):
     selection: MomentSelectionProposalV2 | None = None
     creative_plan: CreativeEditPlanProposalV2 | None = None
     story_plan: StoryPlanV1 | None = None
-    triage: Annotated[tuple[TriageEntry, ...], BeforeValidator(_to_tuple)] = ()
+    triage: Annotated[tuple[TriageEntry, ...], BeforeValidator(to_tuple)] = ()
     presentation_intents: Annotated[
-        tuple[PresentationIntentV2, ...], BeforeValidator(_to_tuple)
+        tuple[PresentationIntentV2, ...], BeforeValidator(to_tuple)
     ] = ()
     presentation_profile: ChannelPresentationProfile | None = None
     audio_plan: AudioFinishingPlanV1 | None = None
@@ -834,14 +831,14 @@ class QcReviewContextItemV1(StrictModel):
     severity: EditorialQcSeverity
     needs_human_review: bool
     note: Annotated[str, Field(min_length=1, strict=True)]
-    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
 
 
 class QcReviewContextV1(StrictModel):
     """Structured QC payload the review-command parser side can consume."""
 
     schema_version: Literal["editorial-qc-review-context-v1"]
-    items: Annotated[tuple[QcReviewContextItemV1, ...], BeforeValidator(_to_tuple)] = ()
+    items: Annotated[tuple[QcReviewContextItemV1, ...], BeforeValidator(to_tuple)] = ()
 
 
 def to_review_context(

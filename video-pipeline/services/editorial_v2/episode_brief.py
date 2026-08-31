@@ -19,14 +19,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 
 # ---------------------------------------------------------------------------
 # Sub-models
@@ -123,11 +116,11 @@ class EpisodeBriefV1(StrictModel):
     viewer_promise: Annotated[str, Field(min_length=1, strict=True)]
     episode_objective: Annotated[str, Field(min_length=1, strict=True)]
     must_include: Annotated[
-        tuple[MustIncludeEntry, ...], BeforeValidator(_to_tuple)
+        tuple[MustIncludeEntry, ...], BeforeValidator(to_tuple)
     ] = Field(min_length=1)
     must_not_misrepresent: Annotated[
         tuple[Annotated[str, Field(min_length=1, strict=True)], ...],
-        BeforeValidator(_to_tuple),
+        BeforeValidator(to_tuple),
     ] = Field(min_length=1)
     target_duration_minutes: TargetDurationMinutes
     cta: Annotated[str, Field(min_length=1, strict=True)] | None = None
@@ -135,11 +128,11 @@ class EpisodeBriefV1(StrictModel):
     editing_intensity: Annotated[str, Field(min_length=1, strict=True)]
     required_assets: Annotated[
         tuple[Annotated[str, Field(min_length=1, strict=True)], ...],
-        BeforeValidator(_to_tuple),
+        BeforeValidator(to_tuple),
     ] = Field(default_factory=tuple)
     publication_constraints: Annotated[
         tuple[Annotated[str, Field(min_length=1, strict=True)], ...],
-        BeforeValidator(_to_tuple),
+        BeforeValidator(to_tuple),
     ] = Field(default_factory=tuple)
 
     # Approval reference — only present when status == "approved"

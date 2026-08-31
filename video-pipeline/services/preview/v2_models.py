@@ -22,14 +22,11 @@ from services.contracts.primitives import (
     Sha256,
     SourceId,
     StrictModel,
+    to_tuple,
 )
 from services.preview.models import (  # noqa: TC001 (pydantic runtime)
     FfprobeSummary,
 )
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 class SourceMediaEntryV2(StrictModel):
@@ -50,7 +47,7 @@ class SourceMediaEntryV2(StrictModel):
 class SourceMediaMapV2(StrictModel):
     """source_id -> media file mapping for the editorial render."""
 
-    entries: Annotated[tuple[SourceMediaEntryV2, ...], BeforeValidator(_to_tuple)] = Field(
+    entries: Annotated[tuple[SourceMediaEntryV2, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
 
@@ -147,9 +144,9 @@ class PreviewTraceV2(StrictModel):
     total_record_frames: int = Field(gt=0, strict=True)
     preview: PreviewFileV2
     subtitle_sidecar: SubtitleSidecarV2 | None = None
-    flags: Annotated[tuple[PreviewFlagV2, ...], BeforeValidator(_to_tuple)] = ()
-    cut_ins: Annotated[tuple[CutInRecordV2, ...], BeforeValidator(_to_tuple)] = ()
-    audio_placeholders: Annotated[tuple[AudioPlaceholderV2, ...], BeforeValidator(_to_tuple)] = ()
+    flags: Annotated[tuple[PreviewFlagV2, ...], BeforeValidator(to_tuple)] = ()
+    cut_ins: Annotated[tuple[CutInRecordV2, ...], BeforeValidator(to_tuple)] = ()
+    audio_placeholders: Annotated[tuple[AudioPlaceholderV2, ...], BeforeValidator(to_tuple)] = ()
     fidelity: FidelityNotesV2
     ffprobe_summary: FfprobeSummary
 

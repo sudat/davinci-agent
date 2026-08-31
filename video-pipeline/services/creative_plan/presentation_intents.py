@@ -49,6 +49,7 @@ from services.contracts.primitives import (
     RecordFrameSpan,
     ResolveFreeModel,
     StrictModel,
+    to_tuple,
 )
 
 if TYPE_CHECKING:
@@ -83,10 +84,6 @@ ALL_KINDS: tuple[PresentationIntentKind, ...] = (
 _Frames = Annotated[int, Field(gt=0, strict=True)]
 _NonEmpty = Annotated[str, Field(min_length=1, strict=True)]
 RecipeRef = _NonEmpty
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 # ------------------------------------------------------------ per-kind params
@@ -285,7 +282,7 @@ class SubtitleStyle(StrictModel):
 
 class TransitionPreferences(StrictModel):
     preferred_order: Annotated[
-        tuple[Literal["dissolve", "motion", "hard_cut"], ...], BeforeValidator(_to_tuple)
+        tuple[Literal["dissolve", "motion", "hard_cut"], ...], BeforeValidator(to_tuple)
     ] = Field(min_length=1)
     max_duration_frames: _Frames
 
@@ -320,10 +317,10 @@ class LicenseEvidence(StrictModel):
 
 
 class BrandAssets(StrictModel):
-    fonts: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    fonts: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
     logo: str | None = None
     safe_margin_pct: float = Field(ge=0.0, le=50.0, strict=True)
-    licenses: Annotated[tuple[LicenseEvidence, ...], BeforeValidator(_to_tuple)] = ()
+    licenses: Annotated[tuple[LicenseEvidence, ...], BeforeValidator(to_tuple)] = ()
 
 
 def _canonical_families(families: tuple[str, ...]) -> tuple[str, ...]:
@@ -336,7 +333,7 @@ class ChannelPresentationProfile(ResolveFreeModel):
     schema_version: Literal["channel-presentation-profile-v1"]
     channel_id: Identifier
     allowed_recipe_families: Annotated[
-        tuple[RecipeRef, ...], BeforeValidator(_to_tuple), AfterValidator(_canonical_families)
+        tuple[RecipeRef, ...], BeforeValidator(to_tuple), AfterValidator(_canonical_families)
     ] = Field(min_length=1)
     density: DensityLimits
     title_choices: TitleChoices
@@ -373,7 +370,7 @@ class DensityReport(StrictModel):
     timeline_duration_seconds: float = Field(gt=0.0, strict=True)
     intent_count: int = Field(ge=0, strict=True)
     counts_by_kind: dict[PresentationIntentKind, int]
-    violations: Annotated[tuple[DensityViolation, ...], BeforeValidator(_to_tuple)] = ()
+    violations: Annotated[tuple[DensityViolation, ...], BeforeValidator(to_tuple)] = ()
 
 
 class DensityLimitExceededError(ValueError):

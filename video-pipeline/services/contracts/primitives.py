@@ -26,6 +26,10 @@ PositiveInteger = Annotated[int, Field(gt=0, strict=True)]
 TrackKind = Literal["video", "audio"]
 
 
+def to_tuple(value: object) -> object:
+    return tuple(value) if isinstance(value, list) else value
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 

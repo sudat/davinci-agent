@@ -23,6 +23,7 @@ from services.contracts.primitives import (
     Identifier,
     RationalFrameRate,
     StrictModel,
+    to_tuple,
 )
 from services.media_intelligence.budget import (
     AnalysisBudgetV1,
@@ -45,12 +46,6 @@ _REACTION_ROLES: Final[frozenset[str]] = frozenset(
     {"reaction", "action", "demonstration", "visual_comedy", "timing"}
 )
 _SCORE_DECIMALS: Final = 6
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 class ProgressivePlanError(ValueError):
@@ -85,9 +80,9 @@ class ProgressivePolicy(StrictModel):
     low_stratum_quantile: float = Field(default=0.25, gt=0, le=1)
     recall_audit_sample_count: int = Field(default=0, ge=0)
     human_review_windows: Annotated[
-        tuple[HumanReviewWindow, ...], BeforeValidator(_to_tuple)
+        tuple[HumanReviewWindow, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
-    expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
 
@@ -109,11 +104,11 @@ class ProgressivePlan(StrictModel):
 
     schema_version: Literal["progressive-plan-v1"] = "progressive-plan-v1"
     episode_id: Identifier
-    triage: Annotated[tuple[TriageEntry, ...], BeforeValidator(_to_tuple)] = Field(
+    triage: Annotated[tuple[TriageEntry, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     deep_review_windows: Annotated[
-        tuple[DeepReviewWindow, ...], BeforeValidator(_to_tuple)
+        tuple[DeepReviewWindow, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
     budget: AnalysisBudgetV1
 

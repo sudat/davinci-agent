@@ -49,7 +49,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 from services.toolchain.mcp_fit import load_mcp_fit
 
 DEFAULT_MCP_FIT_PATH = (
@@ -140,10 +140,6 @@ _NOT_PRESENT = "not-present: episode facts contain no material for this stage"
 _NOT_REQUESTED = "not-requested: kept disabled absent an explicit request"
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 class AudioFinishingError(ValueError):
     """Typed refusal from the audio finishing builder/guard (never silent)."""
 
@@ -221,11 +217,11 @@ class AudioFinishingStageV1(StrictModel):
     stage: AudioStageName
     goal: Annotated[str, Field(min_length=1, strict=True)]
     target_ranges: Annotated[
-        tuple[TargetRangeV1, ...], BeforeValidator(_to_tuple)
+        tuple[TargetRangeV1, ...], BeforeValidator(to_tuple)
     ] = Field(min_length=1)
     enabled: bool
     justification: _Justification = None
-    ops: Annotated[tuple[AudioProcessingOpV1, ...], BeforeValidator(_to_tuple)] = ()
+    ops: Annotated[tuple[AudioProcessingOpV1, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_coherent_stage(self) -> AudioFinishingStageV1:
@@ -274,7 +270,7 @@ class AudioFinishingPlanV1(StrictModel):
 
     schema_version: Literal["audio-finishing-plan-v1"]
     episode_id: Identifier
-    stages: Annotated[tuple[AudioFinishingStageV1, ...], BeforeValidator(_to_tuple)]
+    stages: Annotated[tuple[AudioFinishingStageV1, ...], BeforeValidator(to_tuple)]
 
     @model_validator(mode="after")
     def require_ladder(self) -> AudioFinishingPlanV1:

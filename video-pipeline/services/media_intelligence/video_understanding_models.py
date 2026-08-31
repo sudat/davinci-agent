@@ -14,7 +14,13 @@ from typing import TYPE_CHECKING, Annotated, Final, Protocol
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Frame, Identifier, RationalFrameRate, StrictModel
+from services.contracts.primitives import (
+    Frame,
+    Identifier,
+    RationalFrameRate,
+    StrictModel,
+    to_tuple,
+)
 from services.media_intelligence.budget import (
     AnalysisBudgetV1,  # noqa: TC001 (pydantic field)
     DeepReviewWindow,  # noqa: TC001 (pydantic field)
@@ -100,10 +106,6 @@ class ClipSource(Protocol):
     def extract(self, window: ReviewWindow) -> ClipEvidencePair: ...
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 class SpecialistGap(StrictModel):
     """One advisory specialist target that failed after the bounded retry."""
 
@@ -133,9 +135,9 @@ class VideoUnderstandingRequest(StrictModel):
     )
     known_shot_ids: frozenset[str] = Field(default_factory=frozenset)
     progressive_windows: Annotated[
-        tuple[DeepReviewWindow, ...], BeforeValidator(_to_tuple)
+        tuple[DeepReviewWindow, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
-    speech_boundaries: Annotated[tuple[Frame, ...], BeforeValidator(_to_tuple)] = Field(
+    speech_boundaries: Annotated[tuple[Frame, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     lead_policy: LeadMapWindowPolicy = Field(default_factory=LeadMapWindowPolicy)
@@ -172,9 +174,9 @@ class VideoUnderstandingResult(StrictModel):
     targeted_budget: AnalysisBudgetV1
     reduce_stage: ReviewStageLineage
     specialist_stages: Annotated[
-        tuple[ReviewStageLineage, ...], BeforeValidator(_to_tuple)
+        tuple[ReviewStageLineage, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
-    deferred: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(_to_tuple)] = Field(
+    deferred: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
 

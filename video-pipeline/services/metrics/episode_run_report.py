@@ -38,7 +38,7 @@ from typing import Annotated, Final, Literal, get_args
 from pydantic import BeforeValidator, Field, ValidationError, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 from services.creative_plan.quality_domains import (
     QUALITY_DOMAINS,
     QualityDomainReportV1,
@@ -86,17 +86,13 @@ class EpisodeRunReportError(ValueError):
         self.detail = detail
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 def _coerce_float(value: object) -> object:
     if isinstance(value, int) and not isinstance(value, bool):
         return float(value)
     return value
 
 
-StrSeq = Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+StrSeq = Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
 NonNegativeFloat = Annotated[float, BeforeValidator(_coerce_float), Field(ge=0, strict=True)]
 UnitRatio = Annotated[float, BeforeValidator(_coerce_float), Field(ge=0, le=1, strict=True)]
 NonNegativeInt = Annotated[int, Field(ge=0, strict=True)]
@@ -165,7 +161,7 @@ class FieldCoverage(StrictModel):
 
     filled: NonNegativeInt
     total: NonNegativeInt
-    gaps: Annotated[tuple[CoverageGap, ...], BeforeValidator(_to_tuple)] = ()
+    gaps: Annotated[tuple[CoverageGap, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_accounting(self) -> FieldCoverage:
@@ -618,7 +614,7 @@ class Phase6SummaryV1(StrictModel):
     """Phase-6 exit-criteria summary over the three episode reports."""
 
     schema_version: Literal["phase6-summary-v1"]
-    rows: Annotated[tuple[Phase6EpisodeRowV1, ...], BeforeValidator(_to_tuple)]
+    rows: Annotated[tuple[Phase6EpisodeRowV1, ...], BeforeValidator(to_tuple)]
     non_talking_head_failure_zero: bool
     non_talking_head_failure_asserted: bool
     automation_rate_estimate: AutomationRateEstimateV1
@@ -748,7 +744,7 @@ class FootageDecisionV1(StrictModel):
     """Pre-start decision record for the three Phase-6 footage sources."""
 
     schema_version: Literal["footage-decision-v1"]
-    checks: Annotated[tuple[FootageSourceCheckV1, ...], BeforeValidator(_to_tuple)]
+    checks: Annotated[tuple[FootageSourceCheckV1, ...], BeforeValidator(to_tuple)]
     wait_policy: Literal["no_indefinite_wait"] = "no_indefinite_wait"
 
     @model_validator(mode="after")

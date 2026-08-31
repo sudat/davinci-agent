@@ -31,14 +31,11 @@ from services.contracts.primitives import (
     SourceFrameSpan,
     SourceId,
     StrictModel,
+    to_tuple,
 )
 
 if TYPE_CHECKING:
     from services.creative_plan.subtitle_text import ProperNounDictionaryV1
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 def _to_float(value: object) -> object:
@@ -138,7 +135,7 @@ class SubtitlePlanCueV1(ResolveFreeModel):
     cue_id: Identifier
     transcript_ref: Identifier
     source_id: SourceId
-    lines: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    lines: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
     source_span: SourceFrameSpan
     record_span: RecordFrameSpan
 
@@ -162,8 +159,8 @@ class ReconciliationRecordV1(StrictModel):
 class SubtitleReconciliationV1(StrictModel):
     """Result of ``reconcile_after_edit``: surviving cues + explicit records."""
 
-    cues: Annotated[tuple[SubtitleReconciledCueV1, ...], BeforeValidator(_to_tuple)] = ()
-    records: Annotated[tuple[ReconciliationRecordV1, ...], BeforeValidator(_to_tuple)] = ()
+    cues: Annotated[tuple[SubtitleReconciledCueV1, ...], BeforeValidator(to_tuple)] = ()
+    records: Annotated[tuple[ReconciliationRecordV1, ...], BeforeValidator(to_tuple)] = ()
 
 
 class TextProvenanceNoteV1(StrictModel):
@@ -227,7 +224,7 @@ class SubtitleCapabilityPathV1(StrictModel):
     ``mov_text`` ladder stays as that rung's fallback, never deleted).
     """
 
-    ordered_paths: Annotated[tuple[SubtitlePathKind, ...], BeforeValidator(_to_tuple)] = Field(
+    ordered_paths: Annotated[tuple[SubtitlePathKind, ...], BeforeValidator(to_tuple)] = Field(
         min_length=4
     )
     selected: SubtitlePathKind
@@ -250,10 +247,10 @@ class SubtitlePlanV1(ResolveFreeModel):
     rate: RationalFrameRate
     style_profile: SubtitleStyleProfileV1
     filler_policy: Literal["retain", "remove"]
-    cues: Annotated[tuple[SubtitlePlanCueV1, ...], BeforeValidator(_to_tuple)] = ()
-    text_provenance: Annotated[tuple[TextProvenanceNoteV1, ...], BeforeValidator(_to_tuple)] = ()
-    reconciliation: Annotated[tuple[ReconciliationRecordV1, ...], BeforeValidator(_to_tuple)] = ()
-    violations: Annotated[tuple[ReadingSpeedViolationV1, ...], BeforeValidator(_to_tuple)] = ()
+    cues: Annotated[tuple[SubtitlePlanCueV1, ...], BeforeValidator(to_tuple)] = ()
+    text_provenance: Annotated[tuple[TextProvenanceNoteV1, ...], BeforeValidator(to_tuple)] = ()
+    reconciliation: Annotated[tuple[ReconciliationRecordV1, ...], BeforeValidator(to_tuple)] = ()
+    violations: Annotated[tuple[ReadingSpeedViolationV1, ...], BeforeValidator(to_tuple)] = ()
     capability_path: SubtitleCapabilityPathV1
 
     @model_validator(mode="after")

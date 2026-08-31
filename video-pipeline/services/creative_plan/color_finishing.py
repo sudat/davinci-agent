@@ -32,7 +32,7 @@ Live MCP grading is the preferred path where fixtures pass; a per-shot
 generative grade is NOT required (stable channel looks, matching, and
 readable images over random stylistic variation).
 
-Tuple coercion: every ``tuple`` field carries ``BeforeValidator(_to_tuple)``
+Tuple coercion: every ``tuple`` field carries ``BeforeValidator(to_tuple)``
 so JSON lists round-trip (cf. tasks 12/22/24/31).
 """
 
@@ -53,6 +53,7 @@ from services.contracts.primitives import (
     ResolveFreeModel,
     SourceId,
     StrictModel,
+    to_tuple,
 )
 
 # Mirrors services.toolchain.mcp_fit.VALID_STATUSES; kept as a static
@@ -64,11 +65,7 @@ PreferredPath = Literal["mcp_live_grading", "advanced_drx_qc", "external"]
 _MATCHING_MIN_CAMERAS: Final[int] = 2
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
-_StrTuple = Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+_StrTuple = Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
 
 
 # ------------------------------------------------------------ color facts
@@ -85,16 +82,16 @@ class CameraSourceV1(ResolveFreeModel):
     """A camera identity plus the sources it shot (matching input)."""
 
     camera_id: Identifier
-    source_ids: Annotated[tuple[SourceId, ...], BeforeValidator(_to_tuple)] = ()
+    source_ids: Annotated[tuple[SourceId, ...], BeforeValidator(to_tuple)] = ()
 
 
 class ColorFactsV1(ResolveFreeModel):
     """Analysis facts the plan is derived from (observed reality)."""
 
     episode_id: Identifier
-    exposure_issues: Annotated[tuple[ColorIssueV1, ...], BeforeValidator(_to_tuple)] = ()
-    wb_issues: Annotated[tuple[ColorIssueV1, ...], BeforeValidator(_to_tuple)] = ()
-    cameras: Annotated[tuple[CameraSourceV1, ...], BeforeValidator(_to_tuple)] = ()
+    exposure_issues: Annotated[tuple[ColorIssueV1, ...], BeforeValidator(to_tuple)] = ()
+    wb_issues: Annotated[tuple[ColorIssueV1, ...], BeforeValidator(to_tuple)] = ()
+    cameras: Annotated[tuple[CameraSourceV1, ...], BeforeValidator(to_tuple)] = ()
     look_configured: bool = False
     look_ref: Identifier | None = None
     skin_tone_relevant: bool = False
@@ -141,7 +138,7 @@ class MatchGroupV1(ResolveFreeModel):
 
     group_id: Identifier
     camera_ids: Annotated[
-        tuple[Identifier, ...], Field(min_length=1), BeforeValidator(_to_tuple)
+        tuple[Identifier, ...], Field(min_length=1), BeforeValidator(to_tuple)
     ] = ()
     note: str = ""
 
@@ -149,7 +146,7 @@ class MatchGroupV1(ResolveFreeModel):
 class CameraShotMatchingV1(_JustifiedSection):
     """Camera-to-camera and shot-to-shot matching."""
 
-    groups: Annotated[tuple[MatchGroupV1, ...], BeforeValidator(_to_tuple)] = ()
+    groups: Annotated[tuple[MatchGroupV1, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def _enforce_group_parity(self) -> CameraShotMatchingV1:
@@ -215,7 +212,7 @@ class ColorPlanPolicy(StrictModel):
 
     color_grade_status: McpCapabilityStatus
     advanced_qc_status: McpCapabilityStatus
-    visual_qc_checks: Annotated[tuple[VisualQcCheckV1, ...], BeforeValidator(_to_tuple)] = ()
+    visual_qc_checks: Annotated[tuple[VisualQcCheckV1, ...], BeforeValidator(to_tuple)] = ()
 
 
 class ColorFinishingPlanV1(ResolveFreeModel):
@@ -225,9 +222,9 @@ class ColorFinishingPlanV1(ResolveFreeModel):
     camera_shot_matching: CameraShotMatchingV1
     channel_episode_look: ChannelEpisodeLookV1
     reference_sanity_checks: Annotated[
-        tuple[ReferenceSanityCheckV1, ...], BeforeValidator(_to_tuple)
+        tuple[ReferenceSanityCheckV1, ...], BeforeValidator(to_tuple)
     ] = ()
-    visual_qc: Annotated[tuple[VisualQcCheckV1, ...], BeforeValidator(_to_tuple)] = ()
+    visual_qc: Annotated[tuple[VisualQcCheckV1, ...], BeforeValidator(to_tuple)] = ()
     preferred_path: PreferredPath
 
     @model_validator(mode="after")

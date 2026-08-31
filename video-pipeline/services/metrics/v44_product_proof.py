@@ -25,7 +25,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Frame, Identifier, Sha256, StrictModel
+from services.contracts.primitives import Frame, Identifier, Sha256, StrictModel, to_tuple
 from services.media_intelligence.moment_review import MomentDeepReviewV1  # noqa: TC001
 from services.media_intelligence.moment_review_real import require_real_lineage
 from services.metrics.v44_video_understanding_metrics import (
@@ -36,12 +36,6 @@ from services.metrics.v44_video_understanding_metrics import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 def _spans_overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
@@ -104,7 +98,7 @@ class EditorialGroundTruthV1(StrictModel):
 
     schema_version: Literal["editorial-ground-truth-v1"] = "editorial-ground-truth-v1"
     episode_id: Identifier
-    anchors: Annotated[tuple[GroundTruthAnchor, ...], BeforeValidator(_to_tuple)]
+    anchors: Annotated[tuple[GroundTruthAnchor, ...], BeforeValidator(to_tuple)]
     continuation_question: Literal["この選択なら続きを作る価値があるか"] = (
         "この選択なら続きを作る価値があるか"  # type: ignore[assignment]
     )
@@ -170,7 +164,7 @@ class TranscriptSampleV1(StrictModel):
     """Corrected transcript sample (authoritative input for JP metrics)."""
 
     schema_version: Literal["v44-transcript-sample-v1"] = "v44-transcript-sample-v1"
-    segments: Annotated[tuple[TranscriptSegment, ...], BeforeValidator(_to_tuple)] = Field(
+    segments: Annotated[tuple[TranscriptSegment, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     proper_nouns: dict[str, str] = Field(default_factory=dict)
@@ -361,13 +355,13 @@ class PassPolicyResult(StrictModel):
     """Outcome of evaluate_pass_policy."""
 
     passed: bool = Field(strict=True)
-    failed_criteria: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    failed_criteria: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    pending_criteria: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    pending_criteria: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    not_measured_criteria: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = (
+    not_measured_criteria: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = (
         Field(default_factory=tuple)
     )
 
@@ -985,11 +979,6 @@ def run_arm_b(  # noqa: PLR0913
         evaluation_binding=evaluation_binding,
     )
     return ArmResult(report=report, deep_reviews=tuple(deep_reviews))
-
-
-# keep for basedpyright: validate arm names exhaustively when dispatching
-def _assert_never(value: object) -> None:
-    raise AssertionError(f"unhandled arm: {value!r}")
 
 
 ArmCClassification = Literal["evidence_failure", "reasoning_failure", "inconclusive"]

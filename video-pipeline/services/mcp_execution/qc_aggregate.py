@@ -19,7 +19,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 
 TechnicalCheckId = Literal[
     "gaps_overlaps",
@@ -52,10 +52,6 @@ _PLACEMENT_ACTIONS: Final[frozenset[str]] = frozenset(
 )
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 class ProviderCheckV1(StrictModel):
     """One provider-side technical check result + its evidence reference."""
 
@@ -70,7 +66,7 @@ class TechnicalQcSummaryV1(StrictModel):
     """Aggregated technical-QC summary (provider evidence referenced)."""
 
     schema_version: Literal["technical-qc-summary-v1"]
-    checks: Annotated[tuple[ProviderCheckV1, ...], BeforeValidator(_to_tuple)] = ()
+    checks: Annotated[tuple[ProviderCheckV1, ...], BeforeValidator(to_tuple)] = ()
     passed: int = Field(ge=0, strict=True)
     failed: int = Field(ge=0, strict=True)
     not_available: int = Field(ge=0, strict=True)

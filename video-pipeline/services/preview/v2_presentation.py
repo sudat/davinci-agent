@@ -24,6 +24,7 @@ from services.contracts.primitives import (
     ResolveFreeModel,
     Sha256,
     StrictModel,
+    to_tuple,
 )
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.preview.errors import PreviewError
@@ -36,10 +37,6 @@ PLACEHOLDER_NOTE: Final = (
     "W6 launch test only: the real low-cost presentation build arrives with "
     "task 39's runner; no media is fabricated at this rung"
 )
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 class PresentationPreviewError(PreviewError):
@@ -65,7 +62,7 @@ class McpExecutionPlanStub(ResolveFreeModel):
     schema_version: Literal["mcp-execution-plan-stub-v1"]
     episode_id: Identifier
     ir_sha256: Sha256
-    steps: Annotated[tuple[StubStepV2, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    steps: Annotated[tuple[StubStepV2, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
 
     def canonical_sha256(self) -> str:
         return hashlib.sha256(canonical_model_bytes(self)).hexdigest()

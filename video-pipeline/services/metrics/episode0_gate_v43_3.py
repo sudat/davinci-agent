@@ -40,7 +40,7 @@ from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 from services.creative_plan.presentation_intents import (  # noqa: TC001 (pydantic runtime)
     PresentationIntentV2,
 )
@@ -73,10 +73,6 @@ _VALID_PUBLISHABLE = frozenset({"as_is", "after_small_corrections", "not_yet"})
 _ROLLBACK_TRANSITIONS: tuple[str, str] = ("mcp->legacy_direct", "legacy_direct->mcp")
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 # ------------------------------------------------------------ report models
 
 
@@ -102,7 +98,7 @@ class BuildPlansV1(StrictModel):
     subtitle_cue_count: int = Field(ge=0, strict=True)
     audio_plan: ArtifactFileRef
     color_plan: ArtifactFileRef
-    kit_selections: Annotated[tuple[BuildKitSelectionV1, ...], BeforeValidator(_to_tuple)]
+    kit_selections: Annotated[tuple[BuildKitSelectionV1, ...], BeforeValidator(to_tuple)]
     execution_plan: ArtifactFileRef
     plan_step_count: int = Field(ge=1, strict=True)
     plan_id: Sha256
@@ -126,7 +122,7 @@ class BuildQualityV1(StrictModel):
 
     domain_report: ArtifactFileRef
     domain_statuses: dict[str, str]
-    blocked_domains: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    blocked_domains: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
     editorial_qc_report: ArtifactFileRef
     qc_candidate_count: int = Field(ge=0, strict=True)
     qc_critical_count: int = Field(ge=0, strict=True)
@@ -152,7 +148,7 @@ class BuildRollbackV1(StrictModel):
     """The legacy-backend rollback leg executed inside the run."""
 
     checked: bool
-    transitions: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    transitions: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
     legacy_verified_backend: str | None = None
 
 
@@ -203,7 +199,7 @@ class PresentationIntentsArtifactV1(StrictModel):
 
     schema_version: Literal["presentation-intents-v1"]
     episode_id: Identifier
-    intents: Annotated[tuple[PresentationIntentV2, ...], BeforeValidator(_to_tuple)] = ()
+    intents: Annotated[tuple[PresentationIntentV2, ...], BeforeValidator(to_tuple)] = ()
     timeline_duration_seconds: float = Field(gt=0.0, strict=True)
     density_within_limits: bool
 
@@ -213,7 +209,7 @@ class KitSelectionsArtifactV1(StrictModel):
 
     schema_version: Literal["kit-selections-v1"]
     episode_id: Identifier
-    selections: Annotated[tuple[BuildKitSelectionV1, ...], BeforeValidator(_to_tuple)]
+    selections: Annotated[tuple[BuildKitSelectionV1, ...], BeforeValidator(to_tuple)]
 
 
 # ------------------------------------------------------------ gate checklist
@@ -224,7 +220,7 @@ class FullBuildGateCheckV1(StrictModel):
     gate: Literal["V43-3"]
     run_id: str
     passed: bool
-    criteria: Annotated[tuple[GateCriterionV1, ...], BeforeValidator(_to_tuple)] = Field(
+    criteria: Annotated[tuple[GateCriterionV1, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
 
@@ -237,11 +233,11 @@ class FullBuildGateEvidenceV1(StrictModel):
     dialogue_present: bool
     audio_steps_executed: bool
     color_steps_executed: bool
-    color_sections_needed: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    color_sections_needed: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
     b_roll_track_present: bool
     primary_track_present: bool
     domain_statuses: dict[str, str]
-    blocked_domains: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    blocked_domains: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
     recipe_selection_count: int = Field(ge=0, strict=True)
     provenance_complete: bool
     readback_matched_step_count: int = Field(ge=0, strict=True)
@@ -249,7 +245,7 @@ class FullBuildGateEvidenceV1(StrictModel):
     render_record_present: bool
     publishability_scaffold_present: bool
     publishable: Publishable | None = None
-    rollback_transitions: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    rollback_transitions: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
 
 
 def _criterion(requirement: str, *, ok: bool, detail: str) -> GateCriterionV1:

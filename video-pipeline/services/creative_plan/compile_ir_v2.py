@@ -44,6 +44,7 @@ from services.contracts.primitives import (
     SourceId,
     SourceRef,
     StrictModel,
+    to_tuple,
 )
 from services.creative_plan.edit_models_v2 import (
     BRollOverlayOp,
@@ -79,10 +80,6 @@ from services.editorial_v2.moment_models import (  # noqa: TC001 (runtime lookup
 )
 
 _Frames = Annotated[int, Field(gt=0, strict=True)]
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 # ------------------------------------------------------------ source facts
@@ -129,9 +126,9 @@ class SourceFactsV2(StrictModel):
     """
 
     rate: RationalFrameRate
-    sources: Annotated[tuple[SourceFactV2, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
-    transcripts: Annotated[tuple[TranscriptFactV2, ...], BeforeValidator(_to_tuple)] = ()
-    bindings: Annotated[tuple[CandidateSourceBindingV2, ...], BeforeValidator(_to_tuple)] = ()
+    sources: Annotated[tuple[SourceFactV2, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
+    transcripts: Annotated[tuple[TranscriptFactV2, ...], BeforeValidator(to_tuple)] = ()
+    bindings: Annotated[tuple[CandidateSourceBindingV2, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_unique_ids(self) -> SourceFactsV2:

@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 
 type ParitySideKind = Literal["preview", "final"]
 
@@ -41,11 +41,7 @@ type ParityMismatchCode = Literal[
 ]
 
 
-def _tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
-type ParitySequence[Value] = Annotated[tuple[Value, ...], BeforeValidator(_tuple)]
+type ParitySequence[Value] = Annotated[tuple[Value, ...], BeforeValidator(to_tuple)]
 
 
 class ItemPlacementObservation(StrictModel):

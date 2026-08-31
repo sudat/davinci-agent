@@ -31,7 +31,7 @@ from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, Field, model_validator
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 from services.editorial_v2.taste_retrieval import TasteCitation  # noqa: TC001 (pydantic field)
 from services.metrics.episode0_baseline import (  # noqa: TC001 (pydantic fields)
     Episode0ReportV1,
@@ -41,10 +41,6 @@ from services.metrics.episode0_baseline import (  # noqa: TC001 (pydantic fields
 
 RERUN_REPORT_SCHEMA: Literal["episode0-rerun-report-v1"] = "episode0-rerun-report-v1"  # type: ignore[assignment] — Literal for schema field, narrowed by validator
 _MIN_COMMITTED_EVENTS = 2
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 # ------------------------------------------------------------ report models
@@ -78,7 +74,7 @@ class RerunValidationV1(StrictModel):
     candidates_checked: int = Field(ge=1, strict=True)
     refs_verified: int = Field(ge=0, strict=True)
     hallucination_count: int = Field(ge=0, strict=True)
-    hallucinated_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    hallucinated_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_count_matches_refs(self) -> RerunValidationV1:
@@ -107,7 +103,7 @@ class RerunTasteV1(StrictModel):
     profile_supplied: bool
     explicitly_absent: bool
     citation_count: int = Field(ge=0, strict=True)
-    citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(_to_tuple)] = ()
+    citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(to_tuple)] = ()
 
 
 class RerunEditorialMetricsV1(StrictModel):
@@ -172,7 +168,7 @@ class GateCheckV1(StrictModel):
     gate: Literal["V43-2"]
     run_id: str
     passed: bool
-    criteria: Annotated[tuple[GateCriterionV1, ...], BeforeValidator(_to_tuple)] = Field(
+    criteria: Annotated[tuple[GateCriterionV1, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
 
@@ -184,7 +180,7 @@ class GateEvidenceV1(StrictModel):
     selection_candidate_count: int = Field(ge=1, strict=True)
     non_speech_candidate_count: int = Field(ge=0, strict=True)
     review_committed_event_count: int = Field(ge=0, strict=True)
-    hallucinated_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    hallucinated_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
 
 
 def _criterion(requirement: str, *, ok: bool, detail: str) -> GateCriterionV1:

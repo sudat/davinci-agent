@@ -24,15 +24,11 @@ from services.contracts.primitives import (
     RecordFrameSpan,
     Sha256,
     StrictModel,
+    to_tuple,
 )
 from services.contracts.serialization import GENESIS_SHA256, canonical_json_bytes
 
-
-def _tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
-type Sequence[Value] = Annotated[tuple[Value, ...], BeforeValidator(_tuple)]
+type Sequence[Value] = Annotated[tuple[Value, ...], BeforeValidator(to_tuple)]
 
 type LogicalRole = Literal["dialogue", "ambient", "music", "sfx"]
 type AudioLadderRung = Literal[

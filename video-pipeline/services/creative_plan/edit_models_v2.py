@@ -41,7 +41,7 @@ Taste/presentation intents are NOT modeled here: the
 schema replaces the record contents in task 32 without touching the plan
 envelope.
 
-Tuple coercion: every ``tuple`` field carries ``BeforeValidator(_to_tuple)``
+Tuple coercion: every ``tuple`` field carries ``BeforeValidator(to_tuple)``
 so JSON lists round-trip (cf. tasks 12/22/24).
 """
 
@@ -62,6 +62,7 @@ from services.contracts.primitives import (
     ResolveFreeModel,
     Sha256,
     StrictModel,
+    to_tuple,
 )
 from services.editorial_v2.moment_models import (
     MomentCandidateV2,
@@ -74,10 +75,6 @@ from services.editorial_v2.prompt_v2 import (
 )
 
 _Frames = Annotated[int, Field(gt=0, strict=True)]
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 # ------------------------------------------------------------ op variants
@@ -243,11 +240,11 @@ class CreativeEditPlanProposalV2(ResolveFreeModel):
     proposal_id: Identifier
     episode_id: Identifier
     selection_ref: SelectionRefV2
-    operations: Annotated[tuple[EditOperationV2, ...], BeforeValidator(_to_tuple)] = Field(
+    operations: Annotated[tuple[EditOperationV2, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
     presentation_intents: Annotated[
-        tuple[PresentationIntentRecordV2, ...], BeforeValidator(_to_tuple)
+        tuple[PresentationIntentRecordV2, ...], BeforeValidator(to_tuple)
     ] = ()
 
     @model_validator(mode="after")

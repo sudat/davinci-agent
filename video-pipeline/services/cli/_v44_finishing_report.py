@@ -22,7 +22,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 
 #: The seven PRD 14.3 domains, in canonical report order (quality_domains).
 REPORT_NAME: str = "finishing-run.json"
@@ -47,11 +47,7 @@ TimeLogPhase = Literal[
 ]
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
-_StrTuple = Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+_StrTuple = Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
 
 
 class FinishingKitSelectionV1(StrictModel):
@@ -146,7 +142,7 @@ class FinishingRunReportV1(StrictModel):
     analysis_provider: str = Field(min_length=1, strict=True)
     review_head_version: int = Field(ge=1, strict=True)
     kit_selections: Annotated[
-        tuple[FinishingKitSelectionV1, ...], BeforeValidator(_to_tuple)
+        tuple[FinishingKitSelectionV1, ...], BeforeValidator(to_tuple)
     ]
     plan_compiled: bool
     plan_id: str | None = None

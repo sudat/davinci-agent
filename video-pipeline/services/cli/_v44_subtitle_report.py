@@ -15,7 +15,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field
 
 from services.build.render_models import RenderPresetExpectation
-from services.contracts.primitives import Sha256, StrictModel
+from services.contracts.primitives import Sha256, StrictModel, to_tuple
 from services.qc.models import (
     AudioThresholds,
     IrThresholds,
@@ -24,11 +24,6 @@ from services.qc.models import (
     SubtitleThresholds,
     VideoThresholds,
 )
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
 
 SUBTITLE_PROOF_THRESHOLD_VERSION = "qc-thresholds-subtitle-proof-v1"
 
@@ -132,7 +127,7 @@ class SubtitleBlock(StrictModel):
     snippet_path: str = Field(min_length=1, strict=True)
     snippet_sha256: Sha256
     qc_issue_count: int = Field(ge=0, strict=True)
-    qc_rule_ids: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    qc_rule_ids: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
     reading_speed_violations: int = Field(ge=0, strict=True)
     legibility_note: str = Field(min_length=1, strict=True)
 
@@ -148,7 +143,7 @@ class SubtitleProofReport(StrictModel):
     evidence: EvidenceBlock
     subtitle: SubtitleBlock
     sample: SampleBlock
-    notes: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    notes: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
 
 
 __all__ = [

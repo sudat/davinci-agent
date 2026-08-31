@@ -20,18 +20,12 @@ from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from services.media_intelligence.progressive import TriageEntry
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +77,7 @@ class RecallAuditSample(StrictModel):
     """Drawn sentinel sample (``recall-audit-sample-v1``)."""
 
     schema_version: Literal["recall-audit-sample-v1"] = "recall-audit-sample-v1"
-    sampled: Annotated[tuple[SampledShot, ...], BeforeValidator(_to_tuple)] = Field(
+    sampled: Annotated[tuple[SampledShot, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
 
@@ -121,7 +115,7 @@ class RecallAuditReportV1(StrictModel):
     valuable_miss_count: int = Field(ge=0)
     miss_rate: float = Field(ge=0, le=1)
     degradation_signal: Literal["ok", "degraded"]
-    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
 

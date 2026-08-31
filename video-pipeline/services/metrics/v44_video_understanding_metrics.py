@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Annotated, Final
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 from services.media_intelligence.moment_review import (
     MomentDeepReviewV1,  # noqa: TC001 (pydantic field)
 )
@@ -40,10 +40,6 @@ LEAD_PURPOSES: Final[frozenset[str]] = frozenset({"local_map", "global_reduce"})
 #: lineage record; a DIFFERENT pin hash is a distinct call (a re-pin must
 #: not collapse spend).
 _StageKey = tuple[str, int, int, str, str]
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 def _union_frames(spans: Sequence[tuple[int, int]]) -> int:
@@ -87,7 +83,7 @@ class VideoUnderstandingMetrics(StrictModel):
     lead_cost: Annotated[float, Field(ge=0.0, strict=True)] | None = None
     specialist_cost: Annotated[float, Field(ge=0.0, strict=True)] | None = None
     fusion_cost: Annotated[float, Field(ge=0.0, strict=True)] | None = None
-    stage_pin_sha256: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = ()
+    stage_pin_sha256: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_specialist_counts_consistent(self) -> VideoUnderstandingMetrics:

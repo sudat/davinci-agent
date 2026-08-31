@@ -27,7 +27,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, ValidationError, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 
 # ---------------------------------------------------------------------------
 # Four evidence classes (PRD 16.1) — field, not comment
@@ -69,10 +69,6 @@ def _coerce_domain(value: object) -> object:
     if isinstance(value, str):
         return ChannelProfileDomain(value)
     return value
-
-
-def _tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 type EvidenceClassField = Annotated[EvidenceClass, BeforeValidator(_coerce_evidence_class)]
@@ -127,7 +123,7 @@ class ChannelProfileChangeProposalV1(StrictModel):
     evidence_class: EvidenceClassField
     domain: DomainField
     statement: Annotated[str, Field(min_length=1, strict=True)]
-    supporting_evidence: Annotated[tuple[Identifier, ...], BeforeValidator(_tuple)] = Field(
+    supporting_evidence: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
     evidence_count: Annotated[int, Field(ge=1, strict=True)]

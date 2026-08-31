@@ -27,7 +27,13 @@ from typing import Annotated, Final, Literal, assert_never
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Frame, Identifier, RationalFrameRate, StrictModel
+from services.contracts.primitives import (
+    Frame,
+    Identifier,
+    RationalFrameRate,
+    StrictModel,
+    to_tuple,
+)
 
 BudgetKind = Literal["targeted_deep_review", "lead_map"]
 
@@ -58,12 +64,6 @@ TRIGGER_REASONS: Final[frozenset[str]] = frozenset(
         "specialist_target",
     )
 )
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 # ---------------------------------------------------------------------------
@@ -148,13 +148,13 @@ class AnalysisBudgetV1(StrictModel):
     source_duration_seconds: float = Field(ge=0)
     universal_pass: UniversalPassRecord
     deep_review_windows: Annotated[
-        tuple[DeepReviewWindow, ...], BeforeValidator(_to_tuple)
+        tuple[DeepReviewWindow, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
     reviewed_seconds: float = Field(ge=0)
     frame_or_token_counters: AnalysisCounters
     cache_hits: int = Field(default=0, ge=0)
     policy_limits: PolicyLimits
-    expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     budget_kind: BudgetKind = "targeted_deep_review"
@@ -166,13 +166,13 @@ class BudgetRequest(StrictModel):
     source_duration_frames: Frame
     frame_rate: RationalFrameRate
     universal_pass: UniversalPassRecord
-    windows: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(_to_tuple)] = Field(
+    windows: Annotated[tuple[DeepReviewWindow, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     cache_hits: int = Field(default=0, ge=0)
     counters: AnalysisCounters | None = None
     policy_limits: PolicyLimits = Field(default_factory=PolicyLimits)
-    expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    expansion_reasons: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     budget_kind: BudgetKind = "targeted_deep_review"

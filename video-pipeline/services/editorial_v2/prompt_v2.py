@@ -26,7 +26,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 
 # TC001 suppression: pydantic resolves these models at class-creation time; a
 # TYPE_CHECKING move breaks every StrictModel field below (cf. v2_models.py).
@@ -39,11 +39,6 @@ from services.editorial_v2.moment_models import (  # noqa: TC001
 from services.editorial_v2.removal_policy import RemovalEligibilityV1  # noqa: TC001
 from services.editorial_v2.story_plan import StoryPlanV1  # noqa: TC001
 from services.editorial_v2.taste_retrieval import TasteCitation  # noqa: TC001
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
 
 PassName = Literal["pass_a", "pass_b", "pass_c"]
 
@@ -109,7 +104,7 @@ class DimensionNoteV2(StrictModel):
         dict[EditorialDimension, _Score], BeforeValidator(_coerce_dimension_keys)
     ]
     low_energy_role: LowEnergyRole | None = None
-    taste_entry_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)] = ()
+    taste_entry_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_all_dimensions(self) -> DimensionNoteV2:
@@ -141,7 +136,7 @@ class EvidenceDigestV2(StrictModel):
     shot_count: int = Field(ge=0, strict=True)
     covered_frames: int = Field(ge=0, strict=True)
     source_total_frames: int | None = Field(default=None, ge=1, strict=True)
-    shots: Annotated[tuple[ShotDigestV2, ...], BeforeValidator(_to_tuple)] = Field(
+    shots: Annotated[tuple[ShotDigestV2, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
 
@@ -160,13 +155,13 @@ class PassBRequest(StrictModel):
     stage: Literal["pass_b"] = "pass_b"
     brief: EpisodeBriefV1
     story_plan: StoryPlanV1
-    candidates: Annotated[tuple[MomentCandidateV2, ...], BeforeValidator(_to_tuple)] = Field(
+    candidates: Annotated[tuple[MomentCandidateV2, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
     evidence: EvidenceBundleV2
     evidence_digest: EvidenceDigestV2
     removal_eligibility: Annotated[
-        tuple[RemovalEligibilityV1, ...], BeforeValidator(_to_tuple)
+        tuple[RemovalEligibilityV1, ...], BeforeValidator(to_tuple)
     ] = ()
 
 
@@ -175,18 +170,18 @@ class BrollMatchV2(StrictModel):
 
     speech_candidate_id: Identifier
     b_roll_candidate_id: Identifier
-    shared_terms: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    shared_terms: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
 
 
 class MomentSelectionDraft(StrictModel):
     proposal: MomentSelectionProposalV2
-    dimension_notes: Annotated[tuple[DimensionNoteV2, ...], BeforeValidator(_to_tuple)] = Field(
+    dimension_notes: Annotated[tuple[DimensionNoteV2, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
-    b_roll_matches: Annotated[tuple[BrollMatchV2, ...], BeforeValidator(_to_tuple)] = ()
-    taste_citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(_to_tuple)] = ()
+    b_roll_matches: Annotated[tuple[BrollMatchV2, ...], BeforeValidator(to_tuple)] = ()
+    taste_citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_notes_and_matches_reference_proposal(self) -> MomentSelectionDraft:
@@ -209,8 +204,8 @@ class MomentSelectionDraft(StrictModel):
 class PassCRequest(StrictModel):
     stage: Literal["pass_c"] = "pass_c"
     selection: MomentSelectionDraft
-    taste_citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(_to_tuple)] = ()
-    intent_menu: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = INTENT_MENU
+    taste_citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(to_tuple)] = ()
+    intent_menu: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = INTENT_MENU
 
 
 class CreativeIntentV2(StrictModel):
@@ -220,12 +215,12 @@ class CreativeIntentV2(StrictModel):
     kind: CreativeIntentKind
     target_candidate_id: Identifier | None = None
     note: Annotated[str, Field(min_length=1, strict=True)]
-    taste_entry_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)] = ()
+    taste_entry_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = ()
 
 
 class CreativeEditDraft(StrictModel):
-    intents: Annotated[tuple[CreativeIntentV2, ...], BeforeValidator(_to_tuple)] = ()
-    taste_citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(_to_tuple)] = ()
+    intents: Annotated[tuple[CreativeIntentV2, ...], BeforeValidator(to_tuple)] = ()
+    taste_citations: Annotated[tuple[TasteCitation, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_intent_citations_cited(self) -> CreativeEditDraft:

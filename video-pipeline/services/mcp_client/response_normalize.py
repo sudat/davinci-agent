@@ -20,7 +20,7 @@ from typing import Annotated
 
 from pydantic import BeforeValidator, ConfigDict, Field, ValidationError
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 from services.mcp_client.errors import McpClientError
 
 
@@ -31,13 +31,6 @@ class NormalizationError(McpClientError):
         super().__init__(f"normalization failed for {tool!r}: {reason}")
         self.tool = tool
         self.reason = reason
-
-
-def _to_tuple(value: object) -> object:
-    """Coerce a JSON array to a tuple (StrictModel strict mode rejects lists)."""
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 def _to_float(value: object) -> object:
@@ -120,7 +113,7 @@ class ToolInfo(StrictModel):
 class ToolsList(StrictModel):
     """The ``tools/list`` result envelope."""
 
-    tools: Annotated[tuple[ToolInfo, ...], BeforeValidator(_to_tuple)]
+    tools: Annotated[tuple[ToolInfo, ...], BeforeValidator(to_tuple)]
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +124,7 @@ class ToolsList(StrictModel):
 class ResolveBuildInfo(StrictModel):
     """The ``build`` block of the live get_version payload."""
 
-    unavailable_on_this_build: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    unavailable_on_this_build: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
     known_gates: int
     note: str
 
@@ -165,7 +158,7 @@ class ResolveVersionPayload(StrictModel):
     """``resolve_control {action: get_version}`` text payload (live shape)."""
 
     product: str
-    version: Annotated[tuple[int, int, int, int, str], BeforeValidator(_to_tuple)]
+    version: Annotated[tuple[int, int, int, int, str], BeforeValidator(to_tuple)]
     version_string: str
     build: ResolveBuildInfo
     mcp: McpInfo
@@ -241,7 +234,7 @@ class MediaAnalysisShotDescription(StrictModel):
     shot_index: int
     time_seconds_start: float
     time_seconds_end: float
-    frame_indices_used: Annotated[tuple[int, ...], BeforeValidator(_to_tuple)]
+    frame_indices_used: Annotated[tuple[int, ...], BeforeValidator(to_tuple)]
     visual: ShotVisual
     content: ShotContent
     editorial: ShotEditorial
@@ -268,7 +261,7 @@ class MediaAnalysisStandardReport(StrictModel):
     schema_version: str
     editorial_classification: MediaAnalysisEditorialClassification
     shot_descriptions: Annotated[
-        tuple[MediaAnalysisShotDescription, ...], BeforeValidator(_to_tuple)
+        tuple[MediaAnalysisShotDescription, ...], BeforeValidator(to_tuple)
     ]
 
 
@@ -293,7 +286,7 @@ class DeepShot(StrictModel):
     shot_index: int
     time_seconds_start: float
     time_seconds_end: float
-    frame_indices: Annotated[tuple[int, ...], BeforeValidator(_to_tuple)]
+    frame_indices: Annotated[tuple[int, ...], BeforeValidator(to_tuple)]
     visual: ShotVisual
     content: DeepShotContent
     editorial: ShotEditorial
@@ -305,7 +298,7 @@ class DeepShot(StrictModel):
 class DeepShotAnalysisReport(StrictModel):
     """The deep-shot analysis payload (``{"shots": [...]}``)."""
 
-    shots: Annotated[tuple[DeepShot, ...], BeforeValidator(_to_tuple)]
+    shots: Annotated[tuple[DeepShot, ...], BeforeValidator(to_tuple)]
 
 
 # ---------------------------------------------------------------------------

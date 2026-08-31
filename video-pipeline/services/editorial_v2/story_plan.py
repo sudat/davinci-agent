@@ -13,14 +13,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 
 # ---------------------------------------------------------------------------
 # Typed error for unknown ref
@@ -62,7 +55,7 @@ class StoryBlock(StrictModel):
     block_kind: Annotated[str, Field(min_length=1, strict=True)]
     order: Annotated[int, Field(ge=0, strict=True)]
     source_refs: Annotated[
-        tuple[Identifier, ...], BeforeValidator(_to_tuple)
+        tuple[Identifier, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
     notes: Annotated[str, Field(min_length=1, strict=True)] | None = None
 
@@ -77,7 +70,7 @@ class StoryPlanV1(StrictModel):
     episode_id: Identifier
     brief_ref: StoryBriefRef
     blocks: Annotated[
-        tuple[StoryBlock, ...], BeforeValidator(_to_tuple)
+        tuple[StoryBlock, ...], BeforeValidator(to_tuple)
     ] = Field(min_length=1)
 
     @model_validator(mode="after")

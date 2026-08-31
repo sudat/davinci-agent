@@ -44,7 +44,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 from services.creative_plan.audio_finishing import (  # noqa: TC001 (pydantic resolves it at runtime)
     AudioFinishingPlanV1,
 )
@@ -99,11 +99,7 @@ _OUTCOME_STATUS: dict[DomainExecutionOutcome, QualityDomainStatus] = {
 }
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
-_StrTuple = Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+_StrTuple = Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
 
 
 class QualityDomainError(ValueError):
@@ -155,7 +151,7 @@ class QualityDomainReportV1(StrictModel):
 
     schema_version: Literal["quality-domain-report-v1"]
     episode_id: Identifier
-    domains: Annotated[tuple[QualityDomainEntryV1, ...], BeforeValidator(_to_tuple)]
+    domains: Annotated[tuple[QualityDomainEntryV1, ...], BeforeValidator(to_tuple)]
 
     @model_validator(mode="after")
     def require_all_seven_domains(self) -> QualityDomainReportV1:
@@ -211,7 +207,7 @@ class ExecutionFactsV1(StrictModel):
     """Adapter seam for task 39's ``mcp-execution-report-v1`` (module docstring)."""
 
     episode_id: Identifier
-    domains: Annotated[tuple[DomainExecutionV1, ...], BeforeValidator(_to_tuple)] = ()
+    domains: Annotated[tuple[DomainExecutionV1, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_unique_domains(self) -> ExecutionFactsV1:

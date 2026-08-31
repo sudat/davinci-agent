@@ -17,7 +17,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.release.legacy_removal import (
     ConformanceGuardEntry,
@@ -30,18 +30,12 @@ from services.release.legacy_removal import (
 from services.toolchain.mcp_fit import McpFitError, load_mcp_fit
 
 
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
-
 class ConformanceGuardRegistryV1(StrictModel):
     """Registry file contract mapping guards to candidates/capabilities."""
 
     schema_version: Literal["conformance-guard-registry-v1"]
     guards: Annotated[
-        tuple[ConformanceGuardEntry, ...], BeforeValidator(_to_tuple)
+        tuple[ConformanceGuardEntry, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
 
     @model_validator(mode="after")

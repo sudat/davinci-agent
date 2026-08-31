@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, StringConstraints, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 from services.contracts.serialization import GENESIS_SHA256, canonical_json_bytes
 
 type PresetKind = Literal["lut", "drx", "preset"]
@@ -26,10 +26,6 @@ type WorkingSpace = Literal["rec709"]
 type ColorRung = Literal["project_setting", "external_validation"]
 
 HexColor = Annotated[str, StringConstraints(pattern=r"^#[0-9A-F]{6}$", strict=True)]
-
-
-def _tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 class DeclaredCameraColor(StrictModel):
@@ -62,7 +58,7 @@ class CameraPresetEntry(StrictModel):
 class CameraPresetCatalog(StrictModel):
     """The deterministic selection catalog: unique keys, no ambiguity."""
 
-    presets: Annotated[tuple[CameraPresetEntry, ...], BeforeValidator(_tuple)] = (
+    presets: Annotated[tuple[CameraPresetEntry, ...], BeforeValidator(to_tuple)] = (
         Field(min_length=1)
     )
 

@@ -32,16 +32,10 @@ from typing import Annotated, Final, Literal, Protocol
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Frame, Identifier, StrictModel
+from services.contracts.primitives import Frame, Identifier, StrictModel, to_tuple
 from services.foundation_io import canonical_model_bytes
 
 _IDENTIFIER_RE: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 # ---------------------------------------------------------------------------
@@ -125,10 +119,10 @@ class AudioContext(StrictModel):
 class ReviewEvidence(StrictModel):
     """Short-window evidence bundle backing the assessment."""
 
-    frame_bundle: Annotated[tuple[FrameBundleEntry, ...], BeforeValidator(_to_tuple)] = Field(
+    frame_bundle: Annotated[tuple[FrameBundleEntry, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    transcript_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    transcript_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     audio_context: AudioContext
@@ -154,8 +148,8 @@ class MomentAssessment(StrictModel):
     reaction_notes: Annotated[str, Field(min_length=1, strict=True)]
     timing_notes: Annotated[str, Field(min_length=1, strict=True)]
     best_sub_span: BestSubSpan
-    keep_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
-    remove_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    keep_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
+    remove_rationale_candidates: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
     cut_in_handle: Annotated[str, Field(min_length=1, strict=True)]
     cut_out_handle: Annotated[str, Field(min_length=1, strict=True)]
 
@@ -234,7 +228,7 @@ class ReviewLineage(StrictModel):
     provider_version: Annotated[str, Field(min_length=1, strict=True)]
     tool: Annotated[str, Field(min_length=1, strict=True)]
     cost: float | None = Field(default=None, ge=0.0)
-    stage_lineage: Annotated[tuple[ReviewStageLineage, ...], BeforeValidator(_to_tuple)] = (
+    stage_lineage: Annotated[tuple[ReviewStageLineage, ...], BeforeValidator(to_tuple)] = (
         Field(default_factory=tuple)
     )
 

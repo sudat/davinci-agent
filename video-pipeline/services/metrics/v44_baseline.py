@@ -6,14 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, Field, StringConstraints
 
-from services.contracts.primitives import Sha256, StrictModel
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
+from services.contracts.primitives import Sha256, StrictModel, to_tuple
 
 CommitSha40 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{40}$", strict=True)]
 
@@ -37,7 +30,7 @@ class BaselineRecordV1(StrictModel):
     ruff_result: Annotated[str, Field(min_length=1, strict=True)]
     basedpyright_result: Annotated[str, Field(min_length=1, strict=True)]
     mcp_fit_sha256: Sha256
-    v43_gate_evidence: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    v43_gate_evidence: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
     backends: dict[str, str]
     created_at: Annotated[str, Field(min_length=1, strict=True)]
     notes: str | None = None

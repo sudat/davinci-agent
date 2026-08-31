@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Annotated, Final
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 from services.editorial_v2.evidence_v2_probes import (
     PROBES,
     CorroborationMethod,
@@ -63,12 +63,6 @@ _METHOD_CHAINS: Final[dict[str, tuple[CorroborationMethod, ...]]] = {
 }
 
 
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
-
 class CandidateEvidenceV2(StrictModel):
     """Per-candidate corroboration record; every ref is a real index id.
 
@@ -77,10 +71,10 @@ class CandidateEvidenceV2(StrictModel):
     """
 
     candidate_id: Identifier
-    methods: Annotated[tuple[CorroborationMethod, ...], BeforeValidator(_to_tuple)]
-    evidence_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)]
-    lineage: Annotated[tuple[Sha256, ...], BeforeValidator(_to_tuple)]
-    moment_reviews: Annotated[tuple[MomentReviewCitationV2, ...], BeforeValidator(_to_tuple)] = (
+    methods: Annotated[tuple[CorroborationMethod, ...], BeforeValidator(to_tuple)]
+    evidence_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)]
+    lineage: Annotated[tuple[Sha256, ...], BeforeValidator(to_tuple)]
+    moment_reviews: Annotated[tuple[MomentReviewCitationV2, ...], BeforeValidator(to_tuple)] = (
         Field(default_factory=tuple)
     )
 
@@ -92,11 +86,11 @@ class BudgetUsageV2(StrictModel):
 
 
 class EvidenceBundleV2(StrictModel):
-    entries: Annotated[tuple[CandidateEvidenceV2, ...], BeforeValidator(_to_tuple)]
-    lineage: Annotated[tuple[Sha256, ...], BeforeValidator(_to_tuple)]
+    entries: Annotated[tuple[CandidateEvidenceV2, ...], BeforeValidator(to_tuple)]
+    lineage: Annotated[tuple[Sha256, ...], BeforeValidator(to_tuple)]
     budget: BudgetUsageV2
     partial: bool
-    missing: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)]
+    missing: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)]
 
 
 def _corroborate(deps: ProbeDeps, candidate: MomentCandidateV2) -> CandidateEvidenceV2 | None:

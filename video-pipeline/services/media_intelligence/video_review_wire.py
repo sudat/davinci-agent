@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Annotated, Final, Literal
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Frame, StrictModel
+from services.contracts.primitives import Frame, StrictModel, to_tuple
 from services.media_intelligence.video_wire_schema import gemini_wire_schema
 
 if TYPE_CHECKING:
@@ -76,12 +76,6 @@ class VideoProviderError(Exception):
         self.attempts = attempts
 
 
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
-
 class GeminiClipReview(StrictModel):
     """Bounded Gemini structured observation over one clip.
 
@@ -93,7 +87,7 @@ class GeminiClipReview(StrictModel):
     analyzed_start_frame: Frame
     analyzed_end_frame: Frame
     summary: str = Field(min_length=1, strict=True)
-    observations: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    observations: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     audio_note: str | None = None
@@ -104,7 +98,7 @@ class GlmClipObservation(StrictModel):
 
     analyzed_start_frame: Frame
     analyzed_end_frame: Frame
-    visual_findings: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    visual_findings: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
     uncertainty: str | None = None
 
 

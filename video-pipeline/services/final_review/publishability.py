@@ -29,12 +29,6 @@ ABPreferred = Literal["a", "b"]
 # ---------------------------------------------------------------------------
 
 
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
-
 def _coerce_float(value: object) -> object:
     if isinstance(value, int) and not isinstance(value, bool):
         return float(value)
@@ -162,8 +156,6 @@ def aggregate_trend(  # noqa: C901
     in the pairs are informational — the publishable signal comes from the
     review's ``publishable`` field.
     """
-    # Defensive tuple coercion for list inputs sneaking in via JSON
-    _ = _to_tuple  # reference to satisfy lint for unused helper
     runs_compared = len(reviews)
     if runs_compared == 0:
         return PublishabilityTrendV1(

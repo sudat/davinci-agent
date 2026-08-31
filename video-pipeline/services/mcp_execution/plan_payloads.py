@@ -27,6 +27,7 @@ from services.contracts.primitives import (
     SourceId,
     SourceRef,
     StrictModel,
+    to_tuple,
 )
 from services.creative_plan.ir_models_v2 import (  # noqa: TC001 (pydantic field types)
     AudioTrackRoleV2,
@@ -37,10 +38,6 @@ from services.creative_plan.subtitle_models import (  # noqa: TC001 (pydantic fi
 )
 
 _NonEmpty = Annotated[str, Field(min_length=1, strict=True)]
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 StepAction = Literal[
@@ -141,7 +138,7 @@ class SubtitleParams(StrictModel):
 
     action: Literal["apply_subtitles"]
     selected_path: SubtitlePathKind
-    cues: Annotated[tuple[SubtitleCuePayload, ...], BeforeValidator(_to_tuple)] = ()
+    cues: Annotated[tuple[SubtitleCuePayload, ...], BeforeValidator(to_tuple)] = ()
     style_profile_id: Identifier
 
     @model_validator(mode="after")
@@ -221,7 +218,7 @@ class ColorParams(StrictModel):
     drx_ref: Identifier | None = None
     #: Explicit target items (product item ids + committed record spans).
     #: The live handler refuses an empty target list typed.
-    targets: Annotated[tuple[ColorTargetPayload, ...], BeforeValidator(_to_tuple)] = ()
+    targets: Annotated[tuple[ColorTargetPayload, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_non_empty_target_spans(self) -> ColorParams:
@@ -376,7 +373,7 @@ class SubtitleCuesReadback(StrictModel):
     """
 
     kind: Literal["subtitle_cues"]
-    cues: Annotated[tuple[SubtitleCuePayload, ...], BeforeValidator(_to_tuple)] = ()
+    cues: Annotated[tuple[SubtitleCuePayload, ...], BeforeValidator(to_tuple)] = ()
 
 
 class AudioStateReadback(StrictModel):
@@ -403,7 +400,7 @@ class GradeReadback(StrictModel):
 class TransformReadback(StrictModel):
     kind: Literal["transform"]
     item_id: _NonEmpty
-    properties: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    properties: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
 
 
 class SetTransformReadback(StrictModel):
@@ -421,7 +418,7 @@ class ManualNoteReadback(StrictModel):
 class RecipeParamsReadback(StrictModel):
     kind: Literal["recipe_params"]
     recipe_id: _NonEmpty
-    param_names: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    param_names: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
 
 
 class RenderNativeReadback(StrictModel):

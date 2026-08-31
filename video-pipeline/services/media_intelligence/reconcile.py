@@ -20,7 +20,7 @@ from typing import Annotated
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Frame, Identifier, SourceId, StrictModel
+from services.contracts.primitives import Frame, Identifier, SourceId, StrictModel, to_tuple
 from services.media_intelligence.models import (
     AudioMeasurements,
     EditSourceSpan,
@@ -35,13 +35,6 @@ from services.media_intelligence.shot_identity import (
     derive_shot_id,
     ensure_source_known,
 )
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
 
 # ---------------------------------------------------------------------------
 # Typed errors
@@ -69,20 +62,20 @@ class LocalSourceEvidence(StrictModel):
     """Per-source deterministic facts (adapter, not the analyzer model)."""
 
     source_id: SourceId
-    scene_boundaries: Annotated[tuple[Frame, ...], BeforeValidator(_to_tuple)] = Field(
+    scene_boundaries: Annotated[tuple[Frame, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    black_spans: Annotated[tuple[EditSourceSpan, ...], BeforeValidator(_to_tuple)] = Field(
+    black_spans: Annotated[tuple[EditSourceSpan, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    blur_spans: Annotated[tuple[EditSourceSpan, ...], BeforeValidator(_to_tuple)] = Field(
+    blur_spans: Annotated[tuple[EditSourceSpan, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    exposure_spans: Annotated[tuple[EditSourceSpan, ...], BeforeValidator(_to_tuple)] = Field(
+    exposure_spans: Annotated[tuple[EditSourceSpan, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     silence_segments: Annotated[
-        tuple[SilenceSegment, ...], BeforeValidator(_to_tuple)
+        tuple[SilenceSegment, ...], BeforeValidator(to_tuple)
     ] = Field(default_factory=tuple)
     audio_measurements: AudioMeasurements | None = None
 
@@ -90,7 +83,7 @@ class LocalSourceEvidence(StrictModel):
 class LocalEvidenceBatch(StrictModel):
     """Batch of per-source local facts merged against one episode."""
 
-    sources: Annotated[tuple[LocalSourceEvidence, ...], BeforeValidator(_to_tuple)] = Field(
+    sources: Annotated[tuple[LocalSourceEvidence, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
 
@@ -98,7 +91,7 @@ class LocalEvidenceBatch(StrictModel):
 class ConformContext(StrictModel):
     """Allowed source_ids from the Conform Map / Source Manifest world."""
 
-    source_ids: Annotated[tuple[SourceId, ...], BeforeValidator(_to_tuple)] = Field(
+    source_ids: Annotated[tuple[SourceId, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
 

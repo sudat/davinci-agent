@@ -18,14 +18,7 @@ from typing import Annotated
 
 from pydantic import BeforeValidator, ConfigDict, Field
 
-from services.contracts.primitives import StrictModel
-
-
-def _to_tuple(value: object) -> object:
-    """Coerce a JSON array to a tuple (StrictModel strict mode rejects lists)."""
-    if isinstance(value, list):
-        return tuple(value)
-    return value
+from services.contracts.primitives import StrictModel, to_tuple
 
 
 def _to_float(value: object) -> object:
@@ -106,7 +99,7 @@ class ImportResult(McpActionOutcome):
     """``media_pool {safe_import_media}`` readback."""
 
     imported: int = 0
-    clips: Annotated[tuple[ClipSummary, ...], BeforeValidator(_to_tuple)] = ()
+    clips: Annotated[tuple[ClipSummary, ...], BeforeValidator(to_tuple)] = ()
 
 
 class AppendedItem(StrictModel):
@@ -121,7 +114,7 @@ class AppendResult(McpActionOutcome):
     """``media_pool {append_to_timeline}`` readback (verified operation)."""
 
     count: int | None = None
-    items: Annotated[tuple[AppendedItem, ...], BeforeValidator(_to_tuple)] = ()
+    items: Annotated[tuple[AppendedItem, ...], BeforeValidator(to_tuple)] = ()
     verification_status: str | None = None
 
 
@@ -158,7 +151,7 @@ class TrackRow(StrictModel):
 
     track_index: int
     item_count: int
-    items: Annotated[tuple[StructureItem, ...], BeforeValidator(_to_tuple)] = ()
+    items: Annotated[tuple[StructureItem, ...], BeforeValidator(to_tuple)] = ()
 
 
 class TrackGroup(StrictModel):
@@ -167,7 +160,7 @@ class TrackGroup(StrictModel):
     model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
 
     track_count: int
-    tracks: Annotated[tuple[TrackRow, ...], BeforeValidator(_to_tuple)] = ()
+    tracks: Annotated[tuple[TrackRow, ...], BeforeValidator(to_tuple)] = ()
 
 
 class StructureSnapshot(McpActionOutcome):
@@ -255,7 +248,7 @@ class FairlightPresetsReadback(McpActionOutcome):
     """``resolve_control {get_fairlight_presets}`` preset-name listing."""
 
     presets: Annotated[
-        tuple[str, ...], BeforeValidator(_preset_names), BeforeValidator(_to_tuple)
+        tuple[str, ...], BeforeValidator(_preset_names), BeforeValidator(to_tuple)
     ] = ()
 
 
@@ -299,9 +292,9 @@ class GradeVersionSnapshotResult(McpActionOutcome):
     """
 
     current: object = None
-    local: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
-    remote: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
-    errors: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
+    local: Annotated[tuple[object, ...], BeforeValidator(to_tuple)] = ()
+    remote: Annotated[tuple[object, ...], BeforeValidator(to_tuple)] = ()
+    errors: Annotated[tuple[object, ...], BeforeValidator(to_tuple)] = ()
 
 
 class NodeGraphRow(StrictModel):
@@ -324,7 +317,7 @@ class NodeGraphResult(McpActionOutcome):
 
     available: bool | None = None
     num_nodes: int | None = None
-    nodes: Annotated[tuple[NodeGraphRow, ...], BeforeValidator(_to_tuple)] = ()
+    nodes: Annotated[tuple[NodeGraphRow, ...], BeforeValidator(to_tuple)] = ()
     source: str | None = None
 
 
@@ -347,7 +340,7 @@ class TrackItemRow(StrictModel):
 class TrackItemsResult(McpActionOutcome):
     """``timeline {get_items_in_track}`` readback."""
 
-    items: Annotated[tuple[TrackItemRow, ...], BeforeValidator(_to_tuple)] = ()
+    items: Annotated[tuple[TrackItemRow, ...], BeforeValidator(to_tuple)] = ()
 
 
 class SourceFrameResult(McpActionOutcome):
@@ -417,8 +410,8 @@ class SourceRangeOccurrence(StrictModel):
     model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
 
     key: str | None = None
-    source_range: Annotated[tuple[int, ...] | None, BeforeValidator(_to_tuple)] = None
-    timeline_range: Annotated[tuple[int, ...] | None, BeforeValidator(_to_tuple)] = None
+    source_range: Annotated[tuple[int, ...] | None, BeforeValidator(to_tuple)] = None
+    timeline_range: Annotated[tuple[int, ...] | None, BeforeValidator(to_tuple)] = None
     timeline_item_id: str | None = None
     track_type: str | None = None
 
@@ -463,7 +456,7 @@ class RenderInProgressResult(McpActionOutcome):
 class RenderJobList(McpActionOutcome):
     """``render {list_jobs}`` readback."""
 
-    jobs: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
+    jobs: Annotated[tuple[dict[str, object], ...], BeforeValidator(to_tuple)] = ()
 
 
 class AddJobResult(McpActionOutcome):
@@ -492,8 +485,8 @@ class GapRecord(StrictModel):
 class GapsOverlapsResult(McpActionOutcome):
     """``timeline {detect_gaps_overlaps}`` readback."""
 
-    gaps: Annotated[tuple[GapRecord, ...], BeforeValidator(_to_tuple)] = ()
-    overlaps: Annotated[tuple[GapRecord, ...], BeforeValidator(_to_tuple)] = ()
+    gaps: Annotated[tuple[GapRecord, ...], BeforeValidator(to_tuple)] = ()
+    overlaps: Annotated[tuple[GapRecord, ...], BeforeValidator(to_tuple)] = ()
 
 
 class MissingMediaResult(McpActionOutcome):
@@ -511,7 +504,7 @@ class SourceRangeResult(McpActionOutcome):
 
     ranges: dict[str, object] | None = None
     occurrences: Annotated[
-        tuple[SourceRangeOccurrence, ...], BeforeValidator(_to_tuple)
+        tuple[SourceRangeOccurrence, ...], BeforeValidator(to_tuple)
     ] = ()
 
 
@@ -539,7 +532,7 @@ class DeepenResult(McpActionOutcome):
 
     confirm_token: str | None = None
     vision_token: str | None = None
-    shot_table: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
+    shot_table: Annotated[tuple[dict[str, object], ...], BeforeValidator(to_tuple)] = ()
 
 
 class CommitShotResult(McpActionOutcome):
@@ -551,8 +544,8 @@ class CommitShotResult(McpActionOutcome):
 class FindSimilarResult(McpActionOutcome):
     """``media_analysis {find_similar}`` readback."""
 
-    results: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
-    matches: Annotated[tuple[dict[str, object], ...], BeforeValidator(_to_tuple)] = ()
+    results: Annotated[tuple[dict[str, object], ...], BeforeValidator(to_tuple)] = ()
+    matches: Annotated[tuple[dict[str, object], ...], BeforeValidator(to_tuple)] = ()
 
 
 class EditPlanResult(McpActionOutcome):
@@ -598,8 +591,8 @@ class ValidatedSettings(McpActionOutcome):
 
     valid: bool | None = None
     settings: dict[str, object] | None = None
-    errors: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
-    warnings: Annotated[tuple[object, ...], BeforeValidator(_to_tuple)] = ()
+    errors: Annotated[tuple[object, ...], BeforeValidator(to_tuple)] = ()
+    warnings: Annotated[tuple[object, ...], BeforeValidator(to_tuple)] = ()
 
 
 class SafeSetRenderResult(McpActionOutcome):

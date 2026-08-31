@@ -42,13 +42,10 @@ from typing import Annotated, Final, Literal
 from pydantic import BeforeValidator, Field, ValidationError, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 
 FillerPolicy = Literal["retain", "remove"]
 
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 PUNCT_NORMALIZATION: Final[dict[str, str]] = {
     ",": "、",
@@ -121,14 +118,14 @@ class ProperNounEntryV1(StrictModel):
     """One canonical channel term plus the ASR variants that map onto it."""
 
     canonical: Annotated[str, Field(min_length=1, strict=True)]
-    variants: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    variants: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
 
 
 class ProperNounDictionaryV1(StrictModel):
     """Channel profile proper-noun dictionary (config/subtitles)."""
 
     schema_version: Literal["proper-nouns-ja-v1"]
-    entries: Annotated[tuple[ProperNounEntryV1, ...], BeforeValidator(_to_tuple)] = ()
+    entries: Annotated[tuple[ProperNounEntryV1, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_unique_canonicals(self) -> ProperNounDictionaryV1:

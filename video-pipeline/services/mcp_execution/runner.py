@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, Annotated, Final, Literal, NoReturn
 from pydantic import BeforeValidator, Field
 
 from services.config.backends import load_backends
-from services.contracts.primitives import Identifier, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 from services.job_runner.stage_runner import STAGE_LEASE_TTL_SECONDS, stage_resource
 from services.job_runner.state_errors import StateStoreError
 from services.mcp_client.call_models import (
@@ -81,10 +81,6 @@ if TYPE_CHECKING:
 
 _DEV_TEST_PREFIXES: Final = ("dev-", "test-")
 _DEFAULT_BACKENDS_PATH: Final = Path(__file__).resolve().parents[2] / "config" / "backends.json"
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 # Action -> execution kind (the dispatch table): an action absent from it
@@ -146,7 +142,7 @@ class StepResultV1(StrictModel):
     action: str = Field(min_length=1, strict=True)
     rung: FallbackRung
     status: Literal["completed", "failed"]
-    attempts: Annotated[tuple[StepAttemptV1, ...], BeforeValidator(_to_tuple)] = ()
+    attempts: Annotated[tuple[StepAttemptV1, ...], BeforeValidator(to_tuple)] = ()
     failure_code: str | None = None
     detail: str = ""
 
@@ -158,8 +154,8 @@ class McpExecutionRunReportV1(StrictModel):
     plan_id: Sha256
     episode_id: Identifier
     outcome: Literal["completed", "failed"]
-    steps: Annotated[tuple[StepResultV1, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
-    rung_entries: Annotated[tuple[FallbackRungEntryV1, ...], BeforeValidator(_to_tuple)] = ()
+    steps: Annotated[tuple[StepResultV1, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
+    rung_entries: Annotated[tuple[FallbackRungEntryV1, ...], BeforeValidator(to_tuple)] = ()
     calls: McpExecutionReportV1
     started_at: int = Field(ge=0, strict=True)
     finished_at: int = Field(ge=0, strict=True)

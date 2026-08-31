@@ -15,13 +15,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BeforeValidator, ConfigDict, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Frame, Identifier, SourceId, StrictModel
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
+from services.contracts.primitives import Frame, Identifier, SourceId, StrictModel, to_tuple
 
 # ---------------------------------------------------------------------------
 # PRD 7.2 evidence-category → field mapping (test hook for category coverage)
@@ -92,7 +86,7 @@ class ShotConfidence(StrictModel):
 class ShotVisual(StrictModel):
     shot_size: Annotated[str, Field(min_length=1, strict=True)]
     camera_motion: Annotated[str, Field(min_length=1, strict=True)]
-    quality_flags: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    quality_flags: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     framing: str | None = None
@@ -121,7 +115,7 @@ class TranscriptSegment(StrictModel):
     text: Annotated[str, Field(min_length=1, strict=True)]
     start_frame: Frame
     end_frame: Frame
-    words: Annotated[tuple[TranscriptWordTiming, ...], BeforeValidator(_to_tuple)] | None = None
+    words: Annotated[tuple[TranscriptWordTiming, ...], BeforeValidator(to_tuple)] | None = None
 
 
 class SpeakerInfo(StrictModel):
@@ -221,27 +215,27 @@ class Shot(StrictModel):
     description: Annotated[str, Field(min_length=1, strict=True)]
     visual: ShotVisual
     editorial: ShotEditorial
-    transcript_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    transcript_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    evidence_refs: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
     confidence: ShotConfidence
 
     # --- optional PRD 7.2 evidence (additive, all None by default) ---
     transcript_segments: Annotated[
-        tuple[TranscriptSegment, ...], BeforeValidator(_to_tuple)
+        tuple[TranscriptSegment, ...], BeforeValidator(to_tuple)
     ] | None = None
     word_timings: Annotated[
-        tuple[TranscriptWordTiming, ...], BeforeValidator(_to_tuple)
+        tuple[TranscriptWordTiming, ...], BeforeValidator(to_tuple)
     ] | None = None
     speaker_info: SpeakerInfo | None = None
     silence_segments: Annotated[
-        tuple[SilenceSegment, ...], BeforeValidator(_to_tuple)
+        tuple[SilenceSegment, ...], BeforeValidator(to_tuple)
     ] | None = None
     filler_words: Annotated[
-        tuple[FillerWord, ...], BeforeValidator(_to_tuple)
+        tuple[FillerWord, ...], BeforeValidator(to_tuple)
     ] | None = None
     audio_measurements: AudioMeasurements | None = None
     shot_boundary: ShotBoundaryInfo | None = None
@@ -249,23 +243,23 @@ class Shot(StrictModel):
     subject_action: SubjectAction | None = None
     location: LocationInfo | None = None
     visible_texts: Annotated[
-        tuple[VisibleText, ...], BeforeValidator(_to_tuple)
+        tuple[VisibleText, ...], BeforeValidator(to_tuple)
     ] | None = None
     visual_quality_detail: VisualQualityDetail | None = None
     similarity_refs: Annotated[
-        tuple[SimilarityRef, ...], BeforeValidator(_to_tuple)
+        tuple[SimilarityRef, ...], BeforeValidator(to_tuple)
     ] | None = None
     object_refs: Annotated[
-        tuple[ObjectRef, ...], BeforeValidator(_to_tuple)
+        tuple[ObjectRef, ...], BeforeValidator(to_tuple)
     ] | None = None
     product_refs: Annotated[
-        tuple[ProductRef, ...], BeforeValidator(_to_tuple)
+        tuple[ProductRef, ...], BeforeValidator(to_tuple)
     ] | None = None
     face_reaction_cues: Annotated[
-        tuple[FaceReactionCue, ...], BeforeValidator(_to_tuple)
+        tuple[FaceReactionCue, ...], BeforeValidator(to_tuple)
     ] | None = None
     provenance: Annotated[
-        tuple[ProvenanceRecord, ...], BeforeValidator(_to_tuple)
+        tuple[ProvenanceRecord, ...], BeforeValidator(to_tuple)
     ] | None = None
 
 
@@ -274,7 +268,7 @@ class MediaIntelligenceArtifact(StrictModel):
 
     schema_version: Literal["media-intelligence-v2"] = "media-intelligence-v2"
     episode_id: Identifier
-    sources: Annotated[tuple[MediaSource, ...], BeforeValidator(_to_tuple)] = Field(
+    sources: Annotated[tuple[MediaSource, ...], BeforeValidator(to_tuple)] = Field(
         default_factory=tuple
     )
-    shots: Annotated[tuple[Shot, ...], BeforeValidator(_to_tuple)] = Field(default_factory=tuple)
+    shots: Annotated[tuple[Shot, ...], BeforeValidator(to_tuple)] = Field(default_factory=tuple)

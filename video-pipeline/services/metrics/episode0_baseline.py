@@ -15,18 +15,12 @@ from typing import Annotated, Final, Literal
 
 from pydantic import BeforeValidator, Field, ValidationError
 
-from services.contracts.primitives import Sha256, StrictModel
+from services.contracts.primitives import Sha256, StrictModel, to_tuple
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 def _coerce_float(value: object) -> object:
@@ -41,7 +35,7 @@ NonNegativeFloat = Annotated[
     BeforeValidator(_coerce_float),
     Field(ge=0, strict=True),
 ]
-Seq = Annotated[tuple[object, ...], BeforeValidator(_to_tuple)]  # generic placeholder
+Seq = Annotated[tuple[object, ...], BeforeValidator(to_tuple)]  # generic placeholder
 
 
 # ---------------------------------------------------------------------------
@@ -154,10 +148,10 @@ class Episode0BaselineLogV1(StrictModel):
     ttfrp_minutes: NonNegativeFloat
     wall_clock_minutes: NonNegativeFloat
     manual_resolve_minutes: NonNegativeFloat
-    wrong_keep_remove: Annotated[tuple[TimestampNote, ...], BeforeValidator(_to_tuple)]
-    missed_moments: Annotated[tuple[TimestampNote, ...], BeforeValidator(_to_tuple)]
-    finishing_deficits: Annotated[tuple[TimestampNote, ...], BeforeValidator(_to_tuple)]
-    interruption_points: Annotated[tuple[TimestampNote, ...], BeforeValidator(_to_tuple)]
+    wrong_keep_remove: Annotated[tuple[TimestampNote, ...], BeforeValidator(to_tuple)]
+    missed_moments: Annotated[tuple[TimestampNote, ...], BeforeValidator(to_tuple)]
+    finishing_deficits: Annotated[tuple[TimestampNote, ...], BeforeValidator(to_tuple)]
+    interruption_points: Annotated[tuple[TimestampNote, ...], BeforeValidator(to_tuple)]
     publishability: Publishability
 
 

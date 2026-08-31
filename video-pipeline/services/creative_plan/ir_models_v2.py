@@ -19,7 +19,7 @@ in record order / starting at frame 0 / contiguous (gaps and overlaps are
 typed errors), non-overlapping items on every other track, unique
 non-overlapping cues, unique effect/transition ids.
 
-Tuple coercion: every ``tuple`` field carries ``BeforeValidator(_to_tuple)``
+Tuple coercion: every ``tuple`` field carries ``BeforeValidator(to_tuple)``
 so JSON lists round-trip (cf. tasks 12/22/24).
 """
 
@@ -42,13 +42,10 @@ from services.contracts.primitives import (
     RecordFrameSpan,
     ResolveFreeModel,
     SourceRef,
+    to_tuple,
 )
 
 _Frames = Annotated[int, Field(gt=0, strict=True)]
-
-
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 VideoTrackRoleV2 = Literal["primary", "b_roll", "insert", "still", "graphic"]
@@ -119,13 +116,13 @@ class EffectIntentV2(ResolveFreeModel):
 class VideoTrackV2(ResolveFreeModel):
     role: VideoTrackRoleV2
     track_id: Identifier
-    items: Annotated[tuple[PlacedClipV2, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    items: Annotated[tuple[PlacedClipV2, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
 
 
 class AudioTrackV2(ResolveFreeModel):
     role: AudioTrackRoleV2
     track_id: Identifier
-    items: Annotated[tuple[AudioItemV2, ...], BeforeValidator(_to_tuple)] = Field(min_length=1)
+    items: Annotated[tuple[AudioItemV2, ...], BeforeValidator(to_tuple)] = Field(min_length=1)
 
 
 class TimelineIrV2(ResolveFreeModel):
@@ -134,14 +131,14 @@ class TimelineIrV2(ResolveFreeModel):
     schema_version: Literal["timeline-ir-v2"]
     episode_id: Identifier
     rate: RationalFrameRate
-    video_tracks: Annotated[tuple[VideoTrackV2, ...], BeforeValidator(_to_tuple)] = Field(
+    video_tracks: Annotated[tuple[VideoTrackV2, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
-    subtitle_cues: Annotated[tuple[SubtitleCueV2, ...], BeforeValidator(_to_tuple)] = ()
-    audio_tracks: Annotated[tuple[AudioTrackV2, ...], BeforeValidator(_to_tuple)] = ()
-    transitions: Annotated[tuple[SemanticTransitionV2, ...], BeforeValidator(_to_tuple)] = ()
-    effect_intents: Annotated[tuple[EffectIntentV2, ...], BeforeValidator(_to_tuple)] = ()
-    presentation_intent_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)] = ()
+    subtitle_cues: Annotated[tuple[SubtitleCueV2, ...], BeforeValidator(to_tuple)] = ()
+    audio_tracks: Annotated[tuple[AudioTrackV2, ...], BeforeValidator(to_tuple)] = ()
+    transitions: Annotated[tuple[SemanticTransitionV2, ...], BeforeValidator(to_tuple)] = ()
+    effect_intents: Annotated[tuple[EffectIntentV2, ...], BeforeValidator(to_tuple)] = ()
+    presentation_intent_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")
     def require_coherent_layout(self) -> TimelineIrV2:

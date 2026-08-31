@@ -26,7 +26,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, Sha256, SourceId, StrictModel
+from services.contracts.primitives import Identifier, Sha256, SourceId, StrictModel, to_tuple
 from services.foundation_io import canonical_model_bytes
 from services.mcp_execution.plan_payloads import (  # noqa: TC001 (pydantic field types)
     ExpectedReadback,
@@ -113,10 +113,6 @@ ToolSurface = Literal[
 RetryClass = Literal["transient", "permanent"]
 
 
-def _to_tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
 class CompileExecutionPlanError(ValueError):
     """Typed refusal from the execution-plan compiler (never a silent partial)."""
 
@@ -146,8 +142,8 @@ class StepPreconditionsV1(StrictModel):
 
     project_ready: bool = False
     timeline_ready: bool = False
-    media_imported: Annotated[tuple[SourceId, ...], BeforeValidator(_to_tuple)] = ()
-    items_placed: Annotated[tuple[Identifier, ...], BeforeValidator(_to_tuple)] = ()
+    media_imported: Annotated[tuple[SourceId, ...], BeforeValidator(to_tuple)] = ()
+    items_placed: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = ()
 
 
 class McpExecutionStepV1(StrictModel):
@@ -248,7 +244,7 @@ class McpExecutionPlanV1(StrictModel):
     schema_version: Literal["mcp-execution-plan-v1"]
     plan_id: Sha256
     episode_id: Identifier
-    steps: Annotated[tuple[McpExecutionStepV1, ...], BeforeValidator(_to_tuple)] = Field(
+    steps: Annotated[tuple[McpExecutionStepV1, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
 

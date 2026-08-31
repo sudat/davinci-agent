@@ -23,7 +23,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, Producer, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Producer, Sha256, StrictModel, to_tuple
 
 
 class PreferenceDomain(StrEnum):
@@ -50,10 +50,6 @@ EvidenceSourceKind = Literal[
     "pairwise",
 ]
 SourceKind = Literal["local_file", "youtube_url", "owned_render", "timestamp_range"]
-
-
-def _tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
 
 
 def _tuple_domains(value: object) -> object:
@@ -301,7 +297,7 @@ class DerivedTasteEntryV1(StrictModel):
     statement: Annotated[str, Field(min_length=1, strict=True)]
     polarity: Polarity
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
-    evidence_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_tuple)] = Field(
+    evidence_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
     source_kind: EvidenceSourceKind
@@ -312,7 +308,7 @@ class ContradictionRecordV1(StrictModel):
 
     domain: DomainField
     description: Annotated[str, Field(min_length=1, strict=True)]
-    conflicting_refs: Annotated[tuple[Identifier, ...], BeforeValidator(_tuple)] = Field(
+    conflicting_refs: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = Field(
         min_length=2
     )
     note: str | None = None
@@ -323,9 +319,9 @@ class DerivedTasteProfileV1(StrictModel):
 
     schema_version: Literal["derived-taste-profile-v1"] = "derived-taste-profile-v1"
     profile_id: Identifier
-    entries: Annotated[tuple[DerivedTasteEntryV1, ...], BeforeValidator(_tuple)] = ()
+    entries: Annotated[tuple[DerivedTasteEntryV1, ...], BeforeValidator(to_tuple)] = ()
     unresolved_contradictions: Annotated[
-        tuple[ContradictionRecordV1, ...], BeforeValidator(_tuple)
+        tuple[ContradictionRecordV1, ...], BeforeValidator(to_tuple)
     ] = ()
     provenance: Producer
     created_at: Annotated[str, Field(min_length=1, strict=True)]
@@ -342,8 +338,8 @@ class ReferenceLibraryV1(StrictModel):
     schema_version: Literal["reference-library-v1"] = "reference-library-v1"
     library_id: Identifier
     version: int = Field(ge=1, strict=True)
-    sources: Annotated[tuple[ReferenceSourceV1, ...], BeforeValidator(_tuple)] = ()
-    annotation_ids: Annotated[tuple[Identifier, ...], BeforeValidator(_tuple)] = ()
+    sources: Annotated[tuple[ReferenceSourceV1, ...], BeforeValidator(to_tuple)] = ()
+    annotation_ids: Annotated[tuple[Identifier, ...], BeforeValidator(to_tuple)] = ()
     provenance: Producer
     created_at: Annotated[str, Field(min_length=1, strict=True)]
 

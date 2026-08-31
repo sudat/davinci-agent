@@ -31,7 +31,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, StrictModel, to_tuple
 from services.foundation_io import canonical_model_bytes
 from services.media_intelligence.models import (
     AudioMeasurements,
@@ -80,12 +80,6 @@ _REAL_DURATION_NOTE: Final = (
     "synthetic fixtures verify the mechanism only; real 30/90/180-minute TTFRP "
     "and cost measurement happens at tasks 30/43/52"
 )
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
 
 
 class BenchmarkPolicy(StrictModel):
@@ -172,8 +166,8 @@ class BenchmarkRunV1(StrictModel):
     recall_audit: RecallSummary
     reanalysis_after_correction: ReanalysisRun
     ttfrp_wall_clock_seconds: float = Field(ge=0)
-    plan_unique_spans: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
-    notes: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(default_factory=tuple)
+    plan_unique_spans: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
+    notes: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(default_factory=tuple)
 
 
 # ---------------------------------------------------------------------------

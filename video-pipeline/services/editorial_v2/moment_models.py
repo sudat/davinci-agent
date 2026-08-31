@@ -9,7 +9,7 @@ enforces keep-count sanity and non-empty evidence.
 Coordinate contract: source_span frames are Edit Source Frames
 (CFR Edit Mezzanine) — strict integer via ``Frame``.
 
-Tuple coercion: every ``tuple`` field carries ``BeforeValidator(_to_tuple)``
+Tuple coercion: every ``tuple`` field carries ``BeforeValidator(to_tuple)``
 so JSON lists round-trip through ``model_validate`` (cf. tasks 12/24).
 """
 
@@ -20,14 +20,7 @@ from typing import Annotated, Literal
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Frame, Identifier, StrictModel
-
-
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
+from services.contracts.primitives import Frame, Identifier, StrictModel, to_tuple
 
 MomentCandidateType = Literal[
     "speech",
@@ -92,7 +85,7 @@ class MomentCandidateV2(StrictModel):
     removal_reason: RemovalReason | None = None
     rationale: Annotated[str, Field(min_length=1, strict=True)]
     evidence_refs: Annotated[
-        tuple[Identifier, ...], BeforeValidator(_to_tuple)
+        tuple[Identifier, ...], BeforeValidator(to_tuple)
     ] = Field(min_length=1)
     redundancy_group: Identifier | None = None
     confidence: Annotated[float, Field(ge=0, le=1)]
@@ -118,7 +111,7 @@ class MomentSelectionProposalV2(StrictModel):
     proposal_id: Identifier
     episode_id: Identifier
     candidates: Annotated[
-        tuple[MomentCandidateV2, ...], BeforeValidator(_to_tuple)
+        tuple[MomentCandidateV2, ...], BeforeValidator(to_tuple)
     ] = Field(min_length=1)
 
     @model_validator(mode="after")

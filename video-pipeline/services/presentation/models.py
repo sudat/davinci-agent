@@ -22,15 +22,10 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import Identifier, Sha256, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel, to_tuple
 from services.contracts.serialization import GENESIS_SHA256, canonical_json_bytes
 
-
-def _tuple(value: object) -> object:
-    return tuple(value) if isinstance(value, list) else value
-
-
-type Sequence[Value] = Annotated[tuple[Value, ...], BeforeValidator(_tuple)]
+type Sequence[Value] = Annotated[tuple[Value, ...], BeforeValidator(to_tuple)]
 
 type PresentationAssetKind = Literal["intro", "logo", "outro", "overlay", "se", "tone"]
 type Anchor = Literal["top-left", "top-right", "bottom-left", "bottom-right"]
@@ -117,11 +112,11 @@ def _canonical_catalog(catalog: tuple[Identifier, ...]) -> tuple[Identifier, ...
 
 type AssetBindings = Annotated[
     tuple[AssetBinding, ...],
-    BeforeValidator(_tuple),
+    BeforeValidator(to_tuple),
     AfterValidator(_canonical_bindings),
 ]
 type AssetCatalog = Annotated[
-    tuple[Identifier, ...], BeforeValidator(_tuple), AfterValidator(_canonical_catalog)
+    tuple[Identifier, ...], BeforeValidator(to_tuple), AfterValidator(_canonical_catalog)
 ]
 
 

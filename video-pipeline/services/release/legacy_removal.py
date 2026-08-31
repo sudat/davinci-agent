@@ -36,7 +36,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import StrictModel, to_tuple
 from services.mcp_client.call_models import (
     McpExecutionCallV1,
     McpExecutionReportV1,
@@ -107,12 +107,6 @@ class ConformanceGuardEntry(StrictModel):
     mcp_capability: str | None = None
 
 
-def _to_tuple(value: object) -> object:
-    if isinstance(value, list):
-        return tuple(value)
-    return value
-
-
 class ConditionAssessmentV1(StrictModel):
     condition: ConditionKind
     verdict: ConditionVerdict
@@ -124,18 +118,18 @@ class LegacyCandidateV1(StrictModel):
 
     candidate_id: str = Field(min_length=1)
     label: str = Field(min_length=1)
-    area_paths: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)] = Field(
+    area_paths: Annotated[tuple[str, ...], BeforeValidator(to_tuple)] = Field(
         min_length=1
     )
-    area_files_found: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
-    mcp_capabilities: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    area_files_found: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
+    mcp_capabilities: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
     mcp_production_use_count: int = Field(ge=0, strict=True)
     fallback_required_capabilities: Annotated[
-        tuple[str, ...], BeforeValidator(_to_tuple)
+        tuple[str, ...], BeforeValidator(to_tuple)
     ]
-    unique_guard_ids: Annotated[tuple[str, ...], BeforeValidator(_to_tuple)]
+    unique_guard_ids: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
     conditions: Annotated[
-        tuple[ConditionAssessmentV1, ...], BeforeValidator(_to_tuple)
+        tuple[ConditionAssessmentV1, ...], BeforeValidator(to_tuple)
     ]
     recommendation: Recommendation
 
@@ -176,7 +170,7 @@ class LegacyCandidateV1(StrictModel):
 class LegacyRemovalReportV1(StrictModel):
     schema_version: Literal["legacy-removal-report-v1"] = "legacy-removal-report-v1"
     candidates: Annotated[
-        tuple[LegacyCandidateV1, ...], BeforeValidator(_to_tuple)
+        tuple[LegacyCandidateV1, ...], BeforeValidator(to_tuple)
     ] = Field(min_length=1)
 
     @model_validator(mode="after")
