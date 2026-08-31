@@ -596,6 +596,43 @@ alignment is recorded as the next measured blocker. Gate V44-2 remains
 unsatisfied (`gate_v44_2_passed=false`); no Resolve build, publication work,
 or learning activation was started.
 
+### 6.7.3 `[FIRST-PUBLISH]` Measured record: Resolve auto-caption spike outcome on `v44-real-01` (2026-08-31)
+
+This subsection appends the measured Resolve auto-caption spike outcome after
+§6.7.2; it does not modify the earlier statements. Committed sanitized
+evidence: `video-pipeline/capabilities/v4.4/probes/resolve-auto-caption/summary.json`,
+backed by `capability-r1.json` (sha256 `f04415632aa9ffd5ab77594a4c9fd6c952dbe83ec9fb013038cb4433a5351450`),
+`capability-r2.json` (sha256 `08c1654c750783d2605a2b1357b21663f20165cbca922a50aaea1f6c7ea9413c`),
+and `quality-metrics.json` (sha256 `fb06cd1d794113c76fd3f569c5c927eb1a92ba7df605f78e9146e1a4f4e9a6ca`).
+
+A disposable two-run spike on Resolve 21.0.4.5 (pinned MCP 2.98.3, pin commit
+`132e134d3aa25d3d0df6bdf38f051bd29d128211`) proved the native Japanese
+auto-caption capability mechanically: both runs generated and read back 79
+subtitle items with an identical canonical readback sha256, and both
+disposable projects were deleted with deletion proven by load refusal. This
+is capability evidence only, not product quality evidence.
+
+Scored against the corrected reference with the same functions, sample, and
+pairing rule as the system-ASR readiness path, all four frozen quality limits
+failed: transcript CER 0.1622340425531915 > 0.10, timestamp error p95
+7849.0 ms > 500.0, 58 omitted utterances > 5, and 44 duplicated utterances
+> 5. The thresholds are imported from `services.cli._v44_arm_transcript` and
+were not redeclared or relaxed. The deterministic segmentation diagnosis
+classified the 58 omitted utterances as 0 segmentation merge/split plus 58
+actual missing, and the 44 duplicated cues as 15 segmentation split plus 29
+actual duplication. Because non-segmentation causes dominate, the spike
+plan's one-time deterministic merge/split correction exception was not
+applicable.
+
+No integration occurred: `integration_status=blocked-with-reason` with
+`blocked_reason=blocked-quality`, provider `resolve-auto-caption`, zero
+product-integration provider calls (the disposable spike's own recorded
+live runs above are the only Resolve/MCP calls made), zero segmentation
+adjustments, zero remeasurements, and no product code changes.
+System-ASR alignment therefore remains the recorded measured blocker.
+Gate V44-2 remains unsatisfied (`gate_v44_2_passed=false`); no finishing,
+publication, or learning work was started.
+
 ---
 
 # 7. MCP Evidence Quality Fit

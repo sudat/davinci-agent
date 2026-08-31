@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Protocol
 
 EVIDENCE = Path(__file__).resolve().parent
@@ -21,6 +21,7 @@ for _path in (VIDEO_PIPELINE, EVIDENCE):
         sys.path.insert(0, str(_path))
 
 import caption_logic as caption  # noqa: E402 (path bootstrap first — task4 pattern)
+import quality_allowlist_selfcheck as qallow  # noqa: E402 (path bootstrap first)
 import quality_logic as qlogic  # noqa: E402 (path bootstrap first)
 import quality_wiring as wiring  # noqa: E402 (services stack for source identity)
 
@@ -193,31 +194,6 @@ def _check_diagnosis(expect: ExpectFn) -> None:
                    and counts["actual_duplication"] == actual_duplication))
 
 
-def _check_allowlist(expect: ExpectFn) -> None:
-    good = {"schema_version": "resolve-auto-caption-quality-v1",
-            "provider": "resolve-auto-caption", "runs": ["r1", "r2"],
-            "decision": "thresholds-passed", "checks": {"transcript_cer": "pass"},
-            "source": "services.cli._v44_arm_transcript",
-            "r1_canonical_sha256": "a" * 64, "pin_commit": "b" * 40,
-            "resolve_version": "21.0.4.5", "count": 3, "ok": True}
-    try:
-        qlogic.assert_quality_sanitized(good)
-        expect("sanitized quality report passes allowlist", passed=True)
-    except qlogic.QualityRefusalError:
-        expect("sanitized quality report passes allowlist", passed=False)
-    for label, bad in (
-        ("caption prose refused", {**good, "verdict": "synthetic caption prose refused"}),
-        ("absolute path refused", {**good, "note": str(PurePosixPath(
-            "/", "Users", "x", "private", "media.mov"))}),
-        ("free-form error refused", {**good, "err": "boom at file /tmp/x"}),
-        ("bad key refused", {**good, "BadKey": 1}),
-    ):
-        expect(f"allowlist {label}",
-               passed=_quality_refused(
-                   lambda bad=bad: qlogic.assert_quality_sanitized(bad),
-                   "unsanitized-output"))
-
-
 def run_selfcheck() -> int:
     """Run every fabricated-row check; 0 iff all checks pass."""
     failures: list[str] = []
@@ -233,7 +209,7 @@ def run_selfcheck() -> int:
     _check_threshold_labels(expect)
     _check_threshold_source_and_decision(expect)
     _check_diagnosis(expect)
-    _check_allowlist(expect)
+    qallow.run_checks(expect)
     try:
         qlogic.QualityRefusalError("not-a-label")
     except ValueError:

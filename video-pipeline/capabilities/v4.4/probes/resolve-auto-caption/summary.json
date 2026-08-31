@@ -1,0 +1,76 @@
+{
+ "blocked_reason": "blocked-quality",
+ "capability": {
+  "canonical_sha256_r1": "836b77af6566d4a9763a0a6558d68f6a24b8dacc7a233fe250cfbe02f077b703",
+  "canonical_sha256_r2": "836b77af6566d4a9763a0a6558d68f6a24b8dacc7a233fe250cfbe02f077b703",
+  "deletion_proven_r1": true,
+  "deletion_proven_r2": true,
+  "item_count_r1": 79,
+  "item_count_r2": 79,
+  "proven": true,
+  "stable": true,
+  "status": "capability-proven",
+  "verdict_r1": "generated-and-read",
+  "verdict_r2": "generated-and-read"
+ },
+ "diagnosis": {
+  "actual_duplication": 29,
+  "actual_missing": 58,
+  "duplicated_total": 44,
+  "omitted_total": 58,
+  "segmentation_merge_split": 0,
+  "segmentation_split": 15
+ },
+ "evidence_file_sha256": {
+  "capability_r1": "f04415632aa9ffd5ab77594a4c9fd6c952dbe83ec9fb013038cb4433a5351450",
+  "capability_r2": "08c1654c750783d2605a2b1357b21663f20165cbca922a50aaea1f6c7ea9413c",
+  "quality_metrics": "fb06cd1d794113c76fd3f569c5c927eb1a92ba7df605f78e9146e1a4f4e9a6ca"
+ },
+ "gate": {
+  "finishing_executed": false,
+  "gate_v44_2_passed": false,
+  "learning_activated": false,
+  "publication_executed": false
+ },
+ "integration_status": "blocked-with-reason",
+ "metrics": {
+  "duplicated_utterances": 44,
+  "omitted_utterances": 58,
+  "timestamp_error_p95_ms": 7849.0,
+  "transcript_cer": 0.1622340425531915
+ },
+ "product_integration_provider_call_count": 0,
+ "provider": "resolve-auto-caption",
+ "readback": {
+  "input_media_bytes": 2015592964,
+  "input_media_sha256": "0b3298443d756e1c27d24b1d2512aa4fc7a2e67e7957768dfc8e29d01d193c1a",
+  "timeline_start_frame": 108000
+ },
+ "reference": {
+  "proper_noun_count": 2,
+  "sample_sha256": "101f96545d0baae2ca94d16abbd1ec956d927abb1c67dd5c9b1c76d54739a5c5",
+  "segment_count": 93
+ },
+ "remeasurement_count": 0,
+ "schema_version": "resolve-auto-caption-summary-v1",
+ "segmentation_adjustment_count": 0,
+ "threshold_checks": {
+  "duplicated_utterances": "fail",
+  "omitted_utterances": "fail",
+  "timestamp_error_p95_ms": "fail",
+  "transcript_cer": "fail"
+ },
+ "threshold_decision": "asr-alignment-failed",
+ "thresholds": {
+  "cer_max": 0.1,
+  "duplicated_max": 5,
+  "omitted_max": 5,
+  "source": "services.cli._v44_arm_transcript",
+  "timestamp_p95_ms_max": 500.0
+ },
+ "versions": {
+  "mcp_version": "2.98.3",
+  "pin_commit": "132e134d3aa25d3d0df6bdf38f051bd29d128211",
+  "resolve_version": "21.0.4.5"
+ }
+}

@@ -31,11 +31,13 @@ REFUSAL_LABELS: Final = frozenset({
 })
 
 #: Exact strings allowed in committed quality outputs beyond Task 1's
-#: allowlist (labels, provider id, schema id, threshold source module).
+#: allowlist (labels, provider id, schema ids, threshold source module,
+#: and the Task 5 spike-summary closure labels).
 QUALITY_LABELS: Final = frozenset({
     "thresholds-passed", "asr-alignment-failed", "pass", "fail", "r1", "r2",
     "resolve-auto-caption", "resolve-auto-caption-quality-v1",
     "services.cli._v44_arm_transcript",
+    "blocked-with-reason", "blocked-quality",
 })
 
 
