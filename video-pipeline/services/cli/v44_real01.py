@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,7 +34,7 @@ from typing import Literal
 from pydantic import Field
 
 from services.contracts.primitives import Identifier, Sha256, StrictModel
-from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
+from services.foundation_io import atomic_write, canonical_model_bytes, repo_root, sha256_file
 
 # ---------------------------------------------------------------------------
 # Error
@@ -225,29 +224,13 @@ SOURCES_MANIFEST_NAME = "sources-manifest.json"
 # ---------------------------------------------------------------------------
 
 
-def _repo_root() -> Path:
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-        if completed.returncode == 0:
-            return Path(completed.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return Path(__file__).resolve().parents[3]
-
-
 def _resolve_episode_dir(raw: str | None) -> Path:
     if raw is not None:
         p = Path(raw)
         if not p.is_absolute():
-            p = _repo_root() / p
+            p = repo_root() / p
         return p
-    return _repo_root() / "private" / "reference-episodes" / "v44-real-01"
+    return repo_root() / "private" / "reference-episodes" / "v44-real-01"
 
 
 def _is_placeholder_file(path: Path) -> bool:
@@ -456,12 +439,12 @@ def _resolve_state_paths(
     pipeline_root = Path(__file__).resolve().parents[2]
     if episodes_root is not None:
         p = Path(episodes_root)
-        ep_root = p if p.is_absolute() else (_repo_root() / p).resolve()
+        ep_root = p if p.is_absolute() else (repo_root() / p).resolve()
     else:
         ep_root = pipeline_root / "jobs" / "episodes"
     if state_store is not None:
         p = Path(state_store)
-        st_path = p if p.is_absolute() else (_repo_root() / p).resolve()
+        st_path = p if p.is_absolute() else (repo_root() / p).resolve()
     else:
         st_path = pipeline_root / "jobs" / "state.db"
     return ep_root, st_path
@@ -481,7 +464,7 @@ def _cmd_observe_v44_1(args: argparse.Namespace) -> int:
     raw_out = str(args.out)
     out_dir = Path(raw_out)
     if not out_dir.is_absolute():
-        out_dir = (_repo_root() / out_dir).resolve()
+        out_dir = (repo_root() / out_dir).resolve()
     episode_id = str(args.episode)
     try:
         inputs = collect_observation_inputs(
@@ -618,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prepare":
         source_folder = Path(str(args.source_folder))
         if not source_folder.is_absolute():
-            source_folder = (_repo_root() / source_folder).resolve()
+            source_folder = (repo_root() / source_folder).resolve()
         else:
             source_folder = source_folder.resolve()
         return _cmd_prepare(episode_dir, source_folder)

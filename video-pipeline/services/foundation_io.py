@@ -4,10 +4,27 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 import tempfile
 from pathlib import Path
 
 from pydantic import BaseModel
+
+
+def repo_root() -> Path:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if completed.returncode == 0:
+            return Path(completed.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return Path(__file__).resolve().parents[2]
 
 
 def sha256_file(path: Path) -> str:

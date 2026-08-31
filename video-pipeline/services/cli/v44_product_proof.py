@@ -31,7 +31,7 @@ from pydantic import ValidationError
 if TYPE_CHECKING:
     from services.editorial_v2.model_provider import CodexRunner
 
-from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
+from services.foundation_io import atomic_write, canonical_model_bytes, repo_root, sha256_file
 from services.metrics.v44_product_proof import (
     EditorialGroundTruthV1,
     EpisodeContext,
@@ -47,22 +47,6 @@ from services.metrics.v44_product_proof import (
     run_arm_b,
     run_arm_c,
 )
-
-
-def _repo_root() -> Path:
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-        if completed.returncode == 0:
-            return Path(completed.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return Path(__file__).resolve().parents[3]
 
 
 def _try_production_gate(transport: str = "codex-exec") -> None:
@@ -240,7 +224,7 @@ def _resolve_commit_sha() -> str:
 
 def _runtime_config_candidates() -> list[Path]:
     return [
-        _repo_root() / "video-pipeline" / "config" / "editorial-runtime.json",
+        repo_root() / "video-pipeline" / "config" / "editorial-runtime.json",
         Path("config/editorial-runtime.json").resolve(),
         Path(__file__).resolve().parents[2] / "config" / "editorial-runtime.json",
     ]

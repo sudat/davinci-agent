@@ -13,7 +13,12 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
+from services.foundation_io import (
+    atomic_write,
+    canonical_model_bytes,
+    sha256_file,
+)
+from services.foundation_io import repo_root as discover_repo_root
 from services.metrics.v44_baseline import BaselineRecordV1, PytestSummary
 
 BASELINE_COMMIT_SHA = "c37247e9c10fa7c1c2ca50b84f0d1296b50c9b81"
@@ -21,23 +26,6 @@ V43_GATE_EVIDENCE: tuple[str, ...] = (
     "capabilities/v4.3/runs/gate-v43-1/gate-summary.json",
     "capabilities/v4.3/runs/probes/episode0-freeze-manifest.json",
 )
-
-
-def _repo_root() -> Path:
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-        if completed.returncode == 0:
-            return Path(completed.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    # Fallback: parent of video-pipeline package directory.
-    return Path(__file__).resolve().parents[3]
 
 
 def _current_commit_sha(repo_root: Path) -> str:
@@ -103,7 +91,7 @@ def collect(
     repo_root: Path | None = None,
 ) -> dict[str, object]:
     """Gather cheap facts that do not require running the long pytest suite."""
-    root = repo_root or _repo_root()
+    root = repo_root or discover_repo_root()
     current = _current_commit_sha(root)
     mcp_hash = _mcp_fit_sha256(root)
     backends = _backends(root)
