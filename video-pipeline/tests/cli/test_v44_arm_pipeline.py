@@ -1179,13 +1179,13 @@ def test_compute_arm_evidence_quality_pairs_and_scores() -> None:
     corrected = TranscriptSampleV1(
         segments=(
             SampleSegment(start_ms=0, end_ms=2000, text="DJI Pocket 4 のケース"),
-            SampleSegment(start_ms=2000, end_ms=4000, text="無くなったのよ"),
+            SampleSegment(start_ms=2000, end_ms=4000, text="てすともじれし"),
         ),
         proper_nouns={"DJI Pocket 4": "ディージェイアイ ポケット4"},
     )
     hypothesis = (
         (150, 2100, "DJI Pocket 4 のケース"),
-        (2150, 4100, "無くなったのよ"),
+        (2150, 4100, "てすともじれし"),
     )
     quality = compute_arm_evidence_quality(corrected, hypothesis)
     assert quality.transcript_cer == 0.0
@@ -1992,9 +1992,9 @@ _CUT_MS: Final[tuple[tuple[int, int], ...]] = (
 def _cut_speech(s5_text: str) -> tuple[SpeechSegment, ...]:
     texts = (
         "DJI Pocket 4 のケースを探す",
-        "ちょっとさ",
-        "ちょっとさそれどこで買った",
-        "マジでおかしい。",
+        "きょうはね",
+        "きょうはねとにかく探した",
+        "しんこのてすと発話。",
         s5_text,
     )
     return tuple(
@@ -2008,7 +2008,7 @@ def _cut_speech(s5_text: str) -> tuple[SpeechSegment, ...]:
     )
 
 
-def _cut_analysis(s5_text: str = "マジでおかしい") -> ArmPipelineData:
+def _cut_analysis(s5_text: str = "しんこのてすと発話") -> ArmPipelineData:
     speech = _cut_speech(s5_text)
     return ArmPipelineData(
         episode_id="v44-arm-cut",
@@ -2116,14 +2116,14 @@ def test_compute_removal_eligibility_matches_analyzer_false_start_rule() -> None
 
 
 def test_compute_removal_eligibility_ignores_punctuation_only_difference() -> None:
-    speech = _cut_speech("マジで、おかしい")
+    speech = _cut_speech("しんこの、てすと発話")
     eligibility = compute_removal_eligibility(speech, _SHA)
     by_id = {entry.candidate_id: entry for entry in eligibility}
     assert by_id["cand-s5"].allowed_reasons == frozenset({"exact_duplicate"})
 
 
 def test_compute_removal_eligibility_refuses_near_match_and_nonadjacent() -> None:
-    near = compute_removal_eligibility(_cut_speech("マジで変な話だった"), _SHA)
+    near = compute_removal_eligibility(_cut_speech("ぜんぜんちがう感想"), _SHA)
     assert all("exact_duplicate" not in e.allowed_reasons for e in near)
 
     speech = (
@@ -2138,7 +2138,7 @@ def test_compute_removal_eligibility_refuses_near_match_and_nonadjacent() -> Non
 def test_compute_removal_eligibility_recomputes_from_current_transcript() -> None:
     """Stale-state control: changing the effective transcript immediately
     changes eligibility — no permission persists across inputs."""
-    before = compute_removal_eligibility(_cut_speech("マジでおかしい"), _SHA)
+    before = compute_removal_eligibility(_cut_speech("しんこのてすと発話"), _SHA)
     after = compute_removal_eligibility(_cut_speech("別の結論の発話"), _SHA)
     s5_before = next(e for e in before if e.candidate_id == "cand-s5")
     s5_after = next(e for e in after if e.candidate_id == "cand-s5")
@@ -2246,7 +2246,7 @@ def test_arm_semantic_similarity_rationale_is_typed_refusal(tmp_path: Path) -> N
         }
     }
     inputs = replace(
-        _cut_inputs(tmp_path, _cut_analysis("マジで変な話だった")),
+        _cut_inputs(tmp_path, _cut_analysis("ぜんぜんちがう感想")),
         llm_call=_removing_llm(removals),
     )
     with pytest.raises(DirectorV2Error) as error:
