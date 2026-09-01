@@ -50,7 +50,7 @@ if TYPE_CHECKING:
     from services.media_intelligence.models import MediaIntelligenceArtifact
 
 
-PHASE_0C_LOCK = Path("config/toolchains/phase-0c-v1.json")
+PHASE_0C_LOCK = Path("config/toolchains/phase-0c-v2.json")
 GATE_REQUIREMENTS = {
     "story-plan-generated",
     "non-speech-candidates-present",

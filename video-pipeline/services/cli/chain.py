@@ -43,8 +43,8 @@ if TYPE_CHECKING:
     from services.job_runner.state_models import JobStatus
 
 STAGE_ORDER: Final = ("ANALYZED", "PLAN_COMMITTED", "PREVIEW_READY")
-PHASE1_LOCK: Final = Path("config/toolchains/phase-1-technical-v1.json")
-PREVIEW_TOOLS_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
+PHASE1_LOCK: Final = Path("config/toolchains/phase-1-technical-v2.json")
+PREVIEW_TOOLS_LOCK: Final = Path("config/toolchains/phase-0c-v2.json")
 MANIFEST_NAME: Final = "manifest.json"
 
 

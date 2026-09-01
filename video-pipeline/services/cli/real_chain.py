@@ -58,9 +58,9 @@ if TYPE_CHECKING:
 
 JOB_ID: Final = "job-real-episode-run"
 REPORT_NAME: Final = "run-report.json"
-PHASE1_LOCK: Final = Path("config/toolchains/phase-1-technical-v1.json")
-PHASE0B_LOCK: Final = Path("config/toolchains/phase-0b-v1.json")
-PREVIEW_TOOLS_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
+PHASE1_LOCK: Final = Path("config/toolchains/phase-1-technical-v2.json")
+PHASE0B_LOCK: Final = Path("config/toolchains/phase-0b-v2.json")
+PREVIEW_TOOLS_LOCK: Final = Path("config/toolchains/phase-0c-v2.json")
 STAGE_ORDER: Final = ("ANALYZED", "PLAN_COMMITTED", "PREVIEW_READY")
 MEZZANINE_NAME: Final = "edit-source.mov"
 

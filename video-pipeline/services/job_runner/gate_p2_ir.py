@@ -49,8 +49,8 @@ if TYPE_CHECKING:
 
 MANIFEST_DIR: Final = Path("tests/fixtures/manifests/phase-2")
 P1_MANIFEST_DIR: Final = Path("tests/fixtures/manifests/phase-1-technical")
-LOCK_PATH: Final = Path("config/toolchains/phase-2-v1.json")
-P1_LOCK_PATH: Final = Path("config/toolchains/phase-1-technical-v1.json")
+LOCK_PATH: Final = Path("config/toolchains/phase-2-v2.json")
+P1_LOCK_PATH: Final = Path("config/toolchains/phase-1-technical-v2.json")
 IR_PRODUCER: Final = Producer(name="phase2-gate-rig", version="1")
 CUE_STYLE_REF: Final = "style-default-ja"
 CUE_MIN_DURATION_FRAMES: Final = 15

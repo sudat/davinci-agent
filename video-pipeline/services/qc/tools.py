@@ -23,7 +23,7 @@ from services.resolve_bridge.fixed_presentation_models import (
 from services.toolchain.models import Phase2ToolchainLock, load_lock
 from services.toolchain.verify import verify_binary
 
-PHASE2_LOCK: Final = Path("config/toolchains/phase-2-v1.json")
+PHASE2_LOCK: Final = Path("config/toolchains/phase-2-v2.json")
 PROBE_TIMEOUT_SEC: Final = 120
 DECODE_TIMEOUT_SEC: Final = 300
 MEASURE_TIMEOUT_SEC: Final = 300

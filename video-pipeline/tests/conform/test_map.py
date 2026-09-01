@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from services.normalize.models import NormalizeRecord
     from services.toolchain.models import AnyToolchainLock
 
-PHASE_0B_LOCK = Path("config/toolchains/phase-0b-v1.json")
+PHASE_0B_LOCK = Path("config/toolchains/phase-0b-v2.json")
 MANIFEST_DIR = Path("tests/fixtures/manifests/phase-0b")
 MEDIA_FIXTURES = (
     "p0b-rotate90",

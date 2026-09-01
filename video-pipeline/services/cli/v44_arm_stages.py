@@ -20,7 +20,10 @@ from services.cli.real_episode import ingest_real_episode, load_real_episode
 from services.cli.real_pool import SpeechSegment, pool_for
 from services.toolchain.models import Phase1TechnicalToolchainLock, load_lock
 
-_WHISPER_PIN_CANDIDATES: Final = (Path("config/toolchains/pins/whisper-ja.json"),)
+_WHISPER_PIN_CANDIDATES: Final = (
+    Path("config/toolchains/pins/whisper-ja-v2.json"),
+    Path("config/toolchains/pins/whisper-ja.json"),
+)
 
 
 class ArmPipelineError(Exception):

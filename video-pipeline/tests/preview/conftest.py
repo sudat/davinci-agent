@@ -33,7 +33,7 @@ from services.preview.tools import PinnedTools, load_pinned_tools
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-PHASE_0C_LOCK = Path("config/toolchains/phase-0c-v1.json")
+PHASE_0C_LOCK = Path("config/toolchains/phase-0c-v2.json")
 P0A_MANIFEST = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixed.json")
 P0C_REMOVE_CLEAR = Path("tests/fixtures/manifests/phase-0c/p0c-remove-clear.json")
 RATE = RationalFrameRate(num=30, den=1)

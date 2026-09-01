@@ -40,7 +40,7 @@ def _expectation(
     declared_video_pix_fmt: str | None = None,
     declared_conversions: tuple[str, ...] = (),
 ) -> OutputExpectation:
-    lock = load_phase0b_lock(Path("config/toolchains/phase-0b-v1.json"))
+    lock = load_phase0b_lock(Path("config/toolchains/phase-0b-v2.json"))
     return OutputExpectation(
         target=lock.normalization.target,
         source=source,

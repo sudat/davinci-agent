@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from services.resolve_adapter.models import ResolvePackage
 
 MANIFEST_0A: Final = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixed.json")
-LOCK_PATH: Final = Path("config/toolchains/phase-2-v1.json")
+LOCK_PATH: Final = Path("config/toolchains/phase-2-v2.json")
 IR_PRODUCER: Final = Producer(name="todo48-build-rig", version="1")
 CUE_STYLE_REF: Final = "style-fixed-0a"
 CUE_MIN_DURATION_FRAMES: Final = 15

@@ -75,7 +75,7 @@ def test_mutated_duration_yields_single_diff() -> None:
     # Use the harness's legacy builder indirectly via run_parity's structure,
     # but also exercise extract_structure directly for adversarial probe.
 
-    lock_path = Path("config/toolchains/phase-2-v1.json")
+    lock_path = Path("config/toolchains/phase-2-v2.json")
     lock = load_lock(lock_path)
     assert isinstance(lock, Phase2ToolchainLock)
     lock_sha = sha256_file(lock_path)

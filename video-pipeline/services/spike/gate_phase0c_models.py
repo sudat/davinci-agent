@@ -32,7 +32,7 @@ EVENTS_LOG_NAME: Final = "events.jsonl"
 RESULT_NAME: Final = "gate-result.json"
 MATRIX0C_NAME: Final = "capability-matrix-0c.json"
 
-DEFAULT_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
+DEFAULT_LOCK: Final = Path("config/toolchains/phase-0c-v2.json")
 MANIFEST_DIR: Final = Path("tests/fixtures/manifests/phase-0c")
 GOLDEN_DIR: Final = Path("tests/goldens/reference/phase-0c")
 GOLDEN_INDEX_NAME: Final = "index.json"

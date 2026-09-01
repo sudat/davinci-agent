@@ -57,7 +57,7 @@ PHRASES = (
     "それでは、行きましょう。",
 )
 GAP_SECONDS = 2
-LOCK = Path("config/toolchains/phase-1-technical-v1.json")
+LOCK = Path("config/toolchains/phase-1-technical-v2.json")
 
 
 @dataclass(frozen=True, slots=True)

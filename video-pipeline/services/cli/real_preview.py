@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 REPORT_NAME = "run-report.json"
 BUNDLE_NAME = "review-bundle.json"
-PREVIEW_TOOLS_LOCK = Path("config/toolchains/phase-0c-v1.json")
+PREVIEW_TOOLS_LOCK = Path("config/toolchains/phase-0c-v2.json")
 
 
 def render_preview_tail(  # noqa: PLR0913 (the preview tail wires every committed artifact)

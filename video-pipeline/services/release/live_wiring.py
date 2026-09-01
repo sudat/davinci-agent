@@ -49,7 +49,7 @@ FINAL_GEO = (1920, 1080)
 RATE_NUM = 30
 TOTAL_FRAMES = 600
 OVERLAY_KIND = "overlay"
-PHASE3_LOCK = Path("config/toolchains/phase-3-v1.json")
+PHASE3_LOCK = Path("config/toolchains/phase-3-v2.json")
 
 
 def resolve_host_report(out: Path) -> Path:

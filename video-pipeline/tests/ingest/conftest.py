@@ -12,7 +12,7 @@ from services.ingest.fixture_inputs import PHASE_0B_FIXTURE_IDS, materialize_fix
 from services.toolchain.models import AnyToolchainLock, Phase0BToolchainLock, load_lock
 from services.toolchain.normalization import NormalizationSection
 
-PHASE_0B_LOCK = Path("config/toolchains/phase-0b-v1.json")
+PHASE_0B_LOCK = Path("config/toolchains/phase-0b-v2.json")
 PHASE_0B_MANIFEST_DIR = Path("tests/fixtures/manifests/phase-0b")
 PIN_PATH = Path("config/toolchains/pins/normalize-recipes.json")
 

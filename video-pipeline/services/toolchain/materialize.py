@@ -197,8 +197,11 @@ def resolve_pin_paths(raw: str) -> tuple[Path, Path]:
     names = raw.split(",")
     if names != ["whisper-ja", "editorial-model"]:
         raise MaterializeError("phase-1-technical pins exactly whisper-ja,editorial-model")
+    whisper_v2 = Path.cwd() / PINS_ROOT / "whisper-ja-v2.json"
+    whisper_v1 = Path.cwd() / PINS_ROOT / "whisper-ja.json"
+    whisper = whisper_v2 if whisper_v2.exists() else whisper_v1
     return (
-        Path.cwd() / PINS_ROOT / "whisper-ja.json",
+        whisper,
         Path.cwd() / PINS_ROOT / "editorial-model.json",
     )
 

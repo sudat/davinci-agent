@@ -175,9 +175,9 @@ def _load_ir(
 
 def _resolve_lock_path() -> Path:
     candidates = [
-        Path.cwd() / "config/toolchains/phase-2-v1.json",
-        Path(__file__).resolve().parents[2] / "config/toolchains/phase-2-v1.json",
-        Path(__file__).resolve().parents[3] / "video-pipeline/config/toolchains/phase-2-v1.json",
+        Path.cwd() / "config/toolchains/phase-2-v2.json",
+        Path(__file__).resolve().parents[2] / "config/toolchains/phase-2-v2.json",
+        Path(__file__).resolve().parents[3] / "video-pipeline/config/toolchains/phase-2-v2.json",
     ]
     for candidate in candidates:
         if candidate.is_file():

@@ -90,7 +90,7 @@ TRANSCRIPT_SEGMENTS = (
     (5500, 12500, "まずカメラのセッティングからです。"),
 )
 
-PHASE1_LOCK = Path("config/toolchains/phase-1-technical-v1.json")
+PHASE1_LOCK = Path("config/toolchains/phase-1-technical-v2.json")
 SQUARE = r"if(lt(mod(t*440\,1)\,0.5)\,0.5\,-0.5)"
 SEGMENT_GRAPHS = (
     ("color=black:s=320x180:r=30", 10),

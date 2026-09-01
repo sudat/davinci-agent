@@ -57,7 +57,7 @@ EXIT_USAGE: Final = 2
 EXIT_STOP: Final = 3
 GOLDENS_DIR: Final = Path("tests/goldens/reference/phase-1-technical")
 MANIFEST_DIR: Final = Path("tests/fixtures/manifests/phase-1-technical")
-TOOLCHAIN_LOCK: Final = Path("config/toolchains/phase-1-technical-v1.json")
+TOOLCHAIN_LOCK: Final = Path("config/toolchains/phase-1-technical-v2.json")
 LEDGER: Final = Path("../.omo/start-work/ledger.jsonl")
 PLAN_PATH: Final = Path("../.omo/plans/foundation-video-pipeline.md")
 

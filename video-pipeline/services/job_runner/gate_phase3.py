@@ -97,7 +97,7 @@ def resolve_connection(evidence: Path) -> ResolveConnection:
 
 
 def _media_bins() -> tuple[Path, Path]:
-    lock = load_lock(repo_root() / "config/toolchains/phase-3-v1.json")
+    lock = load_lock(repo_root() / "config/toolchains/phase-3-v2.json")
     return Path(lock.ffmpeg.ffmpeg.path), Path(lock.ffmpeg.ffprobe.path)
 
 

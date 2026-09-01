@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 MANIFEST_DIR = Path("tests/fixtures/manifests/phase-2")
 GOLDEN_PATH = Path("tests/goldens/reference/phase-2/expected.json")
-LOCK_PATH = Path("config/toolchains/phase-2-v1.json")
+LOCK_PATH = Path("config/toolchains/phase-2-v2.json")
 IR_PRODUCER = Producer(name="phase2-test-rig", version="1")
 CUE_STYLE_REF = "style-default-ja"
 CUE_MIN_DURATION_FRAMES = 15

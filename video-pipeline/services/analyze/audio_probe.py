@@ -40,7 +40,7 @@ from services.toolchain.models import (
 )
 from services.toolchain.verify import verify_binary
 
-DEFAULT_LOCK_PATH: Final = Path("config/toolchains/phase-1-technical-v1.json")
+DEFAULT_LOCK_PATH: Final = Path("config/toolchains/phase-1-technical-v2.json")
 DECODE_TIMEOUT_SEC: Final = 300
 PROBE_TIMEOUT_SEC: Final = 120
 

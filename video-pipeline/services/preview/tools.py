@@ -22,7 +22,7 @@ from services.preview.models import (
 )
 from services.toolchain.models import Phase0CToolchainLock, load_lock
 
-PHASE_0C_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
+PHASE_0C_LOCK: Final = Path("config/toolchains/phase-0c-v2.json")
 FFMPEG_TIMEOUT_SECONDS: Final = 600
 PROBE_TIMEOUT_SECONDS: Final = 120
 HASH_PREFIX: Final = "SHA256="

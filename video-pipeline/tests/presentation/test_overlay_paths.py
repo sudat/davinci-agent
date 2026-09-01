@@ -400,7 +400,7 @@ class Pinned:
 @pytest.fixture(scope="module")
 def tools() -> Pinned:
     try:
-        pinned = load_pinned_tools(Path("config/toolchains/phase-0c-v1.json"))
+        pinned = load_pinned_tools(Path("config/toolchains/phase-0c-v2.json"))
     except Exception as error:  # noqa: BLE001 (skip on any toolchain failure)
         pytest.skip(f"pinned toolchain unavailable: {error}")
     return Pinned(ffmpeg=pinned.ffmpeg, ffprobe=pinned.ffprobe)

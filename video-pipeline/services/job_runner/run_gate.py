@@ -34,7 +34,7 @@ MARKER: Final = "cp-gate:"
 EXIT_PASS: Final = 0
 EXIT_FAIL: Final = 1
 EXIT_USAGE: Final = 2
-DEFAULT_TOOLCHAIN_LOCK: Final = Path("config/toolchains/phase-0c-v1.json")
+DEFAULT_TOOLCHAIN_LOCK: Final = Path("config/toolchains/phase-0c-v2.json")
 
 
 def _parser() -> argparse.ArgumentParser:

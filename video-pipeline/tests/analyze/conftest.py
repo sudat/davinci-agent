@@ -12,7 +12,7 @@ from services.analyze.asr_models import AsrRequest, PinnedTool
 from services.foundation_io import sha256_file
 from services.toolchain.models import Phase1TechnicalToolchainLock, load_lock
 
-PHASE1_LOCK = Path("config/toolchains/phase-1-technical-v1.json")
+PHASE1_LOCK = Path("config/toolchains/phase-1-technical-v2.json")
 
 
 @dataclass(frozen=True, slots=True)

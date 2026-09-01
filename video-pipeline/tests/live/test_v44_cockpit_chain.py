@@ -62,7 +62,7 @@ FIXTURE_CLIP = (
     / "fixtures"
     / "live-e2e-ja-speech.mp4"
 )
-LOCK_PATH = Path("config/toolchains/phase-1-technical-v1.json")
+LOCK_PATH = Path("config/toolchains/phase-1-technical-v2.json")
 
 
 def _require_live_env() -> None:

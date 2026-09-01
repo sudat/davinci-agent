@@ -115,7 +115,7 @@ class VisualTools:
 
 @pytest.fixture(scope="session")
 def visual_tools() -> VisualTools:
-    lock = load_lock(Path("config/toolchains/phase-1-technical-v1.json"))
+    lock = load_lock(Path("config/toolchains/phase-1-technical-v2.json"))
     assert isinstance(lock, Phase1TechnicalToolchainLock)
     tools = VisualTools(
         ffmpeg=Path(lock.ffmpeg.ffmpeg.path),

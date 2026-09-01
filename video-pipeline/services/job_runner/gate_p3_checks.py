@@ -56,7 +56,7 @@ from services.presentation.manifest import PresentationManifest
 if TYPE_CHECKING:
     from services.gates import GatePolicy
 
-LOCK_PATH: Final = Path("config/toolchains/phase-3-v1.json")
+LOCK_PATH: Final = Path("config/toolchains/phase-3-v2.json")
 PARENT_GATE: Final = "phase-2"
 PARENT_POLICY: Final = Path("config/gates/phase-2-v1.json")
 

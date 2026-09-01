@@ -28,7 +28,7 @@ from services.fixtures.manifest_phase1 import PHASE_1_FIXTURE_IDS
 from services.foundation_io import canonical_model_bytes
 
 PIN_PATH = Path("config/toolchains/pins/editorial-director.json")
-FROZEN_LOCK_PATH = Path("config/toolchains/phase-1-technical-v1.json")
+FROZEN_LOCK_PATH = Path("config/toolchains/phase-1-technical-v2.json")
 
 _ENV_NAME_PATTERN = "must be an env-var NAME (UPPER_SNAKE), never a value"
 

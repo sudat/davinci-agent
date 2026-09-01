@@ -39,7 +39,7 @@ from services.analyze.visual_models import (
 from services.contracts.primitives import Sha256, StrictModel
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 
-DEFAULT_LOCK_PATH = Path("config/toolchains/phase-1-technical-v1.json")
+DEFAULT_LOCK_PATH = Path("config/toolchains/phase-1-technical-v2.json")
 
 
 class VisualAnalysisRequest(StrictModel):

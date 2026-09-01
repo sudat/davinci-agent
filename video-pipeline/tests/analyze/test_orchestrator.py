@@ -80,7 +80,7 @@ from services.foundation_io import canonical_model_bytes, sha256_file
 from services.media_query.index import MEDIA_DB_NAME, MediaQueryIndex
 from services.toolchain.models import Phase1TechnicalToolchainLock, load_lock
 
-PHASE1_LOCK = Path("config/toolchains/phase-1-technical-v1.json")
+PHASE1_LOCK = Path("config/toolchains/phase-1-technical-v2.json")
 SQUARE = r"if(lt(mod(t*440\,1)\,0.5)\,0.5\,-0.5)"
 TRANSCRIPT_SEGMENTS = (
     (0, 1750, "今日は撮影の裏側をお見せします。"),

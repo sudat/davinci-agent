@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from services.ingest.models import SourceManifest
     from services.normalize.models import NormalizeRecord
 
-PHASE_0B_LOCK = Path("config/toolchains/phase-0b-v1.json")
+PHASE_0B_LOCK = Path("config/toolchains/phase-0b-v2.json")
 PHASE_0B_MANIFEST_DIR = Path("tests/fixtures/manifests/phase-0b")
 
 

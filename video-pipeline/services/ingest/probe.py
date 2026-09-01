@@ -17,7 +17,7 @@ from typing import Final, cast
 
 from services.foundation_io import sha256_file
 
-FROZEN_FFPROBE_SHA256: Final = "44d20924faa535d1ac616bac5345e1c2a50a9ea697ea722033cbd664a5b62df5"
+FROZEN_FFPROBE_SHA256: Final = "1dc6d8d86361a7384ea97627f4e2afd24ac44cef13b1ad5276800c799783a80f"
 PROBE_TIMEOUT_SECONDS: Final = 120
 DEFAULT_PACKET_SAMPLE_COUNT: Final = 200
 

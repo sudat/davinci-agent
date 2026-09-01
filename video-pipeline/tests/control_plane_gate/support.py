@@ -12,7 +12,7 @@ from services.job_runner.gate_cp_scenarios import combined_manifest_sha256 as _c
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_DIR = PIPELINE_ROOT / "tests" / "fixtures" / "manifests" / "control-plane"
-TOOLCHAIN_LOCK = PIPELINE_ROOT / "config" / "toolchains" / "phase-0c-v1.json"
+TOOLCHAIN_LOCK = PIPELINE_ROOT / "config" / "toolchains" / "phase-0c-v2.json"
 
 
 def combined_manifest_sha256() -> str:

@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from services.mcp_execution.plan_models import McpExecutionPlanV1
     from services.mcp_execution.runner import McpExecutionRunReportV1
 
-WHISPER_PIN: Final = Path("config/toolchains/pins/whisper-ja.json")
+WHISPER_PIN: Final = Path("config/toolchains/pins/whisper-ja-v2.json")
 JOB_ID: Final = "job-v44-finishing"
 STAGE_NAME: Final = "stage-finish"
 HOLDER: Final = "v44-finishing"

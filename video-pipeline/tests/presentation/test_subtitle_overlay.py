@@ -103,7 +103,7 @@ if TYPE_CHECKING:
 MANIFEST_DIR = Path("tests/fixtures/manifests/phase-3")
 GOLDEN_PATH = Path("tests/goldens/reference/phase-3/expected.json")
 P0A_MANIFEST = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixed.json")
-PHASE_0C_LOCK = Path("config/toolchains/phase-0c-v1.json")
+PHASE_0C_LOCK = Path("config/toolchains/phase-0c-v2.json")
 REF01 = "p1-ref-01-clean-ja"
 SEGMENTS = ("s1", "s2", "s3", "s4")
 JOB_DATE = "2026-01-01"

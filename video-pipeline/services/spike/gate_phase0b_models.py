@@ -33,7 +33,7 @@ RESULT_NAME: Final = "gate-result.json"
 MATRIX0B_NAME: Final = "capability-matrix-0b.json"
 EDIT_SOURCES_DIR: Final = "edit-sources"
 
-DEFAULT_LOCK: Final = Path("config/toolchains/phase-0b-v1.json")
+DEFAULT_LOCK: Final = Path("config/toolchains/phase-0b-v2.json")
 MANIFEST_DIR: Final = Path("tests/fixtures/manifests/phase-0b")
 GOLDEN_DIR: Final = Path("tests/goldens/reference/phase-0b")
 PARENT_DIR: Final = "phase-0a"

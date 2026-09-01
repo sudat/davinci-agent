@@ -104,7 +104,7 @@ def default_receipt(evidence: Path) -> Path:
 
 
 def _media_bins() -> tuple[Path, Path]:
-    lock = load_lock(Path("config/toolchains/phase-2-v1.json"))
+    lock = load_lock(Path("config/toolchains/phase-2-v2.json"))
     return Path(lock.ffmpeg.ffmpeg.path), Path(lock.ffmpeg.ffprobe.path)
 
 

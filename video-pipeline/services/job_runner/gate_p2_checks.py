@@ -36,7 +36,7 @@ from services.job_runner.gate_p2_routes import check_recovery
 C_COMPILE, C_CONFORM, C_RENDER, C_QC, C_RECOVERY = PHASE_2_CRITERIA
 MANIFEST_DIR: Final = Path("tests/fixtures/manifests/phase-2")
 GOLDENS_DIR: Final = Path("tests/goldens/reference/phase-2")
-LOCK_PATH: Final = Path("config/toolchains/phase-2-v1.json")
+LOCK_PATH: Final = Path("config/toolchains/phase-2-v2.json")
 PARENT_GATES: Final = ("phase-0a", "phase-0b", "phase-1-technical")
 
 

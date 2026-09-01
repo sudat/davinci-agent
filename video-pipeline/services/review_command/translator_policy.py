@@ -10,7 +10,7 @@ toolchain-pin bindings (policy profile + schema version) on top, and its
 deny-by-default outcome is unchanged.
 
 What the frozen pin actually freezes for the translator
-(``config/toolchains/phase-0c-v1.json`` → ``preview_review``):
+(``config/toolchains/phase-0c-v2.json`` → ``preview_review``):
 
 - ``review_translator_policy_profile_id`` = ``phase-0c-deterministic-classifier-v1``
   (the translator policy version this adapter binds),
@@ -55,7 +55,7 @@ SPIKE_ALLOWLIST_SUNSET_NOTE = (
     "bindings remain adapter-local. It may authorize ONLY the frozen synthetic "
     "phase-0C Cloud fixtures, never Production Episode data."
 )
-DEFAULT_TOOLCHAIN_LOCK = Path("config/toolchains/phase-0c-v1.json")
+DEFAULT_TOOLCHAIN_LOCK = Path("config/toolchains/phase-0c-v2.json")
 SYNTHETIC_FIXTURE_EPISODE_IDS: frozenset[str] = frozenset(PHASE_0C_FIXTURE_IDS)
 TRANSLATOR_DATA_CLASS: DataClass = "review_instruction_text"
 TRANSLATOR_STAGE = "review_translate"
