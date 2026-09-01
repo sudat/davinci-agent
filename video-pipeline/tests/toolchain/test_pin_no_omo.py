@@ -5,6 +5,7 @@ from typing import Final
 
 PIPELINE_ROOT: Final = Path(__file__).resolve().parents[2]
 TOOLCHAIN_ROOT: Final = PIPELINE_ROOT / "config" / "toolchains"
+OMO_MARKER: Final = ".omo" + "/"
 LEGACY_OMO_ALLOWLIST: Final[frozenset[str]] = frozenset(
     {
         "phase-0a-v1.json",
@@ -24,10 +25,10 @@ def test_no_omo_references_in_non_legacy_pins() -> None:
         relative_path = json_path.relative_to(TOOLCHAIN_ROOT).as_posix()
         if relative_path in LEGACY_OMO_ALLOWLIST:
             continue
-        if ".omo/" in json_path.read_text(encoding="utf-8"):
+        if OMO_MARKER in json_path.read_text(encoding="utf-8"):
             violations.append(relative_path)
     assert not violations, (
-        "Non-legacy toolchain pins must not contain .omo/ references: "
+        f"Non-legacy toolchain pins must not contain {OMO_MARKER} references: "
         + ", ".join(violations)
     )
 

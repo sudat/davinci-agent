@@ -83,7 +83,6 @@ from tests.build.support import (
     write_offline_media,
 )
 from tests.resolve_locale import native_bridge_locale
-from tests.work_init_support import FROZEN_ATTEMPT_DIR
 
 if TYPE_CHECKING:
     from services.resolve_adapter.models import ResolvePackage
@@ -479,9 +478,6 @@ def _report_path(config: pytest.Config) -> Path | None:
         candidate = Path(str(evidence)).resolve().parent / "resolve-host.json"
         if candidate.is_file():
             return candidate
-    frozen = FROZEN_ATTEMPT_DIR / "resolve-host.json"
-    if frozen.is_file():
-        return frozen
     return None
 
 

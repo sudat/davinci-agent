@@ -70,7 +70,6 @@ from services.resolve_bridge.lifecycle import project_names
 from services.resolve_bridge.readiness import load_host_report
 from tests.build.support import compile_build_package, manifest_0a
 from tests.resolve_locale import native_bridge_locale
-from tests.work_init_support import FROZEN_ATTEMPT_DIR
 
 if TYPE_CHECKING:
     from services.fixtures.manifest import Phase0AFixtureManifest
@@ -570,9 +569,6 @@ def _report_path(config: pytest.Config) -> Path | None:
         candidate = Path(str(evidence)).resolve().parent / "resolve-host.json"
         if candidate.is_file():
             return candidate
-    frozen = FROZEN_ATTEMPT_DIR / "resolve-host.json"
-    if frozen.is_file():
-        return frozen
     return None
 
 

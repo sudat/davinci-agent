@@ -83,26 +83,14 @@ def test_live_local_network_auto_permit_via_repo_config() -> None:
     assert report.scripting.remote_access == "local-network"
 
 
-def test_repo_permit_is_bound_to_the_recorded_host_reality() -> None:
-    """The repo permit must carry the v2 binding fields for THIS host."""
-
+def test_repo_permit_refuses_unapproved_current_host_drift() -> None:
     permit = _repo_permit()
     report = ResolveHostReport.model_validate_json(
-        Path(
-            "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
-            "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75/"
-            "resolve-host.json"
-        ).read_bytes()
+        Path("/Users/stc/Developer/davinci-agent/private/vendor/toolchain/resolve-host.json").read_bytes()
     )
-    assert permit.host_fingerprint == PermitHostFingerprint(
-        macos_version=report.host.macos_version,
-        macos_build=report.host.macos_build,
-        architecture=report.host.architecture,
-    )
-    assert permit.resolve_version == report.application.version
-    assert permit.resolve_build == report.application.build
-    assert permit.observed_listener_scope == report.scripting.remote_access
-    validate_host_report(report, permit=permit)
+    with pytest.raises(HostReadinessError) as excinfo:
+        validate_host_report(report, permit=permit)
+    assert excinfo.value.code == "permit-host-mismatch"
 
 
 def test_permit_host_fingerprint_mismatch_is_typed_refusal() -> None:

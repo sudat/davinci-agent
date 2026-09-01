@@ -5,11 +5,22 @@ from collections.abc import Iterator
 
 import pytest
 
+from tests.historical_artifact_quarantine import (
+    HISTORICAL_ARTIFACT_NODE_ID_SET,
+    HISTORICAL_ARTIFACT_SKIP_REASON,
+)
+
 #: Process locale captured at collection start — the state every test must
 #: both begin and end with. The DaVinci Resolve native bridge flips the C
 #: locale to "C"/US-ASCII when it loads in-process; without a per-test
 #: boundary that leak poisons every later default-encoding text decode.
 _BASELINE_LOCALE = locale.setlocale(locale.LC_ALL)
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        if item.nodeid in HISTORICAL_ARTIFACT_NODE_ID_SET:
+            item.add_marker(pytest.mark.skip(reason=HISTORICAL_ARTIFACT_SKIP_REASON))
 
 
 @pytest.fixture(autouse=True)

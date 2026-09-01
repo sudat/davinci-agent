@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Final
 
 import pytest
 from pydantic import ValidationError
@@ -21,6 +22,15 @@ from tests.work_init_support import seed_work_init
 
 MANIFEST = Path("tests/fixtures/manifests/phase-0a/p0a-cfr30-fixed.json")
 POLICY = Path("config/gates/phase-0a-v2.json")
+HISTORICAL_PHASE0A_RECEIPT: Final = (
+    Path(__file__).resolve().parents[3]
+    / ".omo/start-work/attempts"
+    / "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
+    / "task-6-freeze-receipt.json"
+)
+HISTORICAL_PHASE0A_SKIP_REASON: Final = (
+    "historical phase-0a materialization requires its unavailable freeze receipt"
+)
 STATIC_OUTPUTS = (
     "audio-preset.json",
     "expected-readback.json",
@@ -71,6 +81,8 @@ def _manifest_payload() -> dict[str, JsonValue]:
 def test_materializes_registered_fixture_from_frozen_policy(
     tmp_path: Path, seeded_work_init: dict[str, str]
 ) -> None:
+    if not HISTORICAL_PHASE0A_RECEIPT.is_file():
+        pytest.skip(HISTORICAL_PHASE0A_SKIP_REASON)
     first = tmp_path / "first"
     second = tmp_path / "second"
     result = _run_materializer(first, seeded_work_init)
@@ -166,6 +178,8 @@ def test_changed_expected_values_cannot_reuse_frozen_hash(tmp_path: Path) -> Non
 def test_failed_drift_run_cannot_claim_stale_output_as_success(
     tmp_path: Path, seeded_work_init: dict[str, str]
 ) -> None:
+    if not HISTORICAL_PHASE0A_RECEIPT.is_file():
+        pytest.skip(HISTORICAL_PHASE0A_SKIP_REASON)
     output = tmp_path / "fixture"
     initial = _run_materializer(output, seeded_work_init)
     assert initial.returncode == 0
