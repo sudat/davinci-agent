@@ -685,6 +685,21 @@ correct outcome recorded as evidence. Gate V44-2 remains unsatisfied
 (`gate_v44_2_passed=false`); no finishing, publication, or learning work is
 started by this policy.
 
+Measured outcome (2026-09-01, `probe-system-asr-r2`, sanitized evidence
+`video-pipeline/capabilities/v4.4/product-proof/v44-0/asr-alignment-v2.json`):
+the gate refused exactly as predeclared, on the two predicted criteria only —
+transcript CER 0.10372340425531915 > 0.10 and timestamp error p95 4200.0 ms
+> 500.0 (inside the predicted 3.3–8.6 s genuine-drift band). Under the v2
+definitions omitted utterances are 5 (≤ 5) and duplicated utterances are 4
+(≤ 5); alignment paired 88/93 references with signed median +40 ms,
+absolute median 300 ms, and 23 pairs drifting over 1 s. A fresh run-arm
+workspace was not built because the committed toolchain pin
+(`config/toolchains/phase-0b-v1.json`) references the deleted
+`.omo/start-work` bootstrap tree — a pre-existing breakage recorded for
+separate repair; the measurement replays the saved `probe-system-asr-r1`
+inputs through the same production gate functions at the same refusal
+point. Thresholds were not relaxed; Gate V44-2 remains unsatisfied.
+
 ---
 
 # 7. MCP Evidence Quality Fit

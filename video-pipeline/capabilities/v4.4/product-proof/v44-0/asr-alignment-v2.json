@@ -1,0 +1,51 @@
+{
+ "schema_version": "v44-0-asr-alignment-v2-v1",
+ "run_label": "probe-system-asr-r2",
+ "recorded_at": "2026-09-01",
+ "measurement_policy": "v44-asr-measurement-v2",
+ "evidence_lane": "system_asr",
+ "predeclaration": "asr-measurement-policy-v2.md (committed 7994afd before this measurement)",
+ "measurement_path": "replay over the saved probe-system-asr-r1 inputs through the production gate functions (substituted_arm_transcript -> compute_arm_evidence_quality v2 -> enforce_system_asr_thresholds), the same refusal point as r1; a fresh run-arm workspace was not built because the committed toolchain pin phase-0b-v1.json references the deleted .omo/start-work bootstrap tree (pre-existing breakage, repair planned separately)",
+ "inputs": {
+  "asr_artifact_sha256": "9b40e189420388917d4c8e410fd4a3e2c9036711c0095574363cfd550ff5a8a3",
+  "corrected_sample_sha256": "101f96545d0baae2ca94d16abbd1ec956d927abb1c67dd5c9b1c76d54739a5c5",
+  "proper_noun_substitutions": 2,
+  "total_frames": 8467
+ },
+ "thresholds": {
+  "source": "services.cli._v44_arm_transcript",
+  "cer_max": 0.1,
+  "timestamp_p95_ms_max": 500.0,
+  "omitted_max": 5,
+  "duplicated_max": 5
+ },
+ "gate_metrics": {
+  "transcript_cer": 0.10372340425531915,
+  "timestamp_error_p95_ms": 4200.0,
+  "omitted_utterances": 5,
+  "duplicated_utterances": 4,
+  "proper_noun_recall": 1.0
+ },
+ "alignment": {
+  "reference_count": 93,
+  "hypothesis_count": 99,
+  "paired_count": 88,
+  "omitted_utterances": 5,
+  "duplicated_utterances": 4,
+  "segmentation_split_count": 2,
+  "signed_median_ms": 40,
+  "abs_median_ms": 300,
+  "outlier_count_over_1000ms": 23
+ },
+ "gate_decision": "asr-alignment-failed",
+ "refusal_detail": "asr-alignment-failed: system_asr transcript alignment failed the predeclared thresholds: transcript_cer=0.10372340425531915 exceeds 0.1; timestamp_error_p95_ms=4200.0 exceeds 500.0",
+ "predeclared_prediction_check": {
+  "cer_refuses": true,
+  "p95_inside_predicted_tail_band_3300_8600_ms": true,
+  "omitted_within_band": true,
+  "duplicated_small": true
+ },
+ "operator_context": "on 2026-09-01 the operator judged this transcript quality as passing for publishing purposes in the episode diagnostic viewing; the machine gate still refuses honestly on CER and genuine timing drift",
+ "thresholds_relaxed_after_observation": false,
+ "gate_v44_2_passed": false
+}
