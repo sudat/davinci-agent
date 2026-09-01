@@ -16,8 +16,9 @@ from services.build.builder_models import BuildInterrupted, RenderTiming
 from services.build.render_jobs import DEFAULT_RENDER_ATTEMPTS, RenderJobRunner
 from services.build.render_models import OutputAllowlist, RenderJobFailure, RenderJobRequest
 from services.fixtures.manifest_phase2 import FalseRenderCompleteFault, Phase2FixtureManifest
+from services.job_runner import gate_p2_faults
 from services.job_runner.gate_p2_fake_tree import FaultKnobs
-from services.job_runner.gate_p2_faults import FAULTS, evaluate_fake
+from services.job_runner.gate_p2_faults import FAULTS
 from services.job_runner.gate_p2_finalize import fixture_privacy_declarations
 from services.job_runner.gate_p2_ir import (
     compile_package,
@@ -26,7 +27,6 @@ from services.job_runner.gate_p2_ir import (
     wrong_media_presented,
 )
 from services.job_runner.gate_p2_live import CountingPool
-from services.job_runner.gate_phase2 import load_policy
 from services.qc.privacy_gate import evaluate_privacy_gate
 from services.resolve_adapter.errors import PackageCompileError
 from services.resolve_bridge.fixed_presentation_fakes import FakeFpMediaPool
@@ -34,6 +34,12 @@ from services.toolchain.render_qc import render_complete
 from tests.resolve_adapter.support import phase2_lock
 
 MANIFEST_DIR = Path("tests/fixtures/manifests/phase-2")
+POLICY = Path("config/gates/phase-2-v4.json")
+
+
+@pytest.fixture(scope="module")
+def context() -> gate_p2_faults._FaultContext:
+    return gate_p2_faults._build_context(POLICY)
 
 
 def manifest(fixture_id: str) -> Phase2FixtureManifest:
@@ -209,10 +215,11 @@ def test_interrupt_after_partial_placements_raises_the_kill_seam() -> None:
 
 
 @pytest.mark.parametrize("fault", sorted(FAULTS))
-def test_fault_is_detected_from_recomputed_evidence(fault: str, tmp_path: Path) -> None:
-    policy, policy_sha256 = load_policy(Path("config/gates/phase-2-v4.json"))
-    baseline = evaluate_fake(policy, policy_sha256, tmp_path / "baseline", FaultKnobs())
-    probe = evaluate_fake(policy, policy_sha256, tmp_path / "fault", FaultKnobs(fault=fault))
+def test_fault_is_detected_from_recomputed_evidence(
+    context: gate_p2_faults._FaultContext, fault: str, tmp_path: Path
+) -> None:
+    baseline = gate_p2_faults._evaluate_fake(tmp_path / "baseline", FaultKnobs(), context)
+    probe = gate_p2_faults._evaluate_fake(tmp_path / "fault", FaultKnobs(fault=fault), context)
     assert baseline.result.passed, (fault, baseline.mismatches)
     assert not probe.result.passed, (fault, probe.mismatches)
     assert probe.expected_code in {code for code, _detail in probe.mismatches}, (
@@ -221,9 +228,10 @@ def test_fault_is_detected_from_recomputed_evidence(fault: str, tmp_path: Path) 
     )
 
 
-def test_fake_baseline_passes_every_criterion(tmp_path: Path) -> None:
-    policy, policy_sha256 = load_policy(Path("config/gates/phase-2-v4.json"))
-    outcome = evaluate_fake(policy, policy_sha256, tmp_path, FaultKnobs())
+def test_fake_baseline_passes_every_criterion(
+    context: gate_p2_faults._FaultContext, tmp_path: Path
+) -> None:
+    outcome = gate_p2_faults._evaluate_fake(tmp_path, FaultKnobs(), context)
     assert outcome.result.passed, list(outcome.mismatches)
     assert outcome.marker is not None
     assert outcome.marker.fixture_records_are_publication_decisions is False

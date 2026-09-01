@@ -1,78 +1,104 @@
-"""Regression (round-2 QA): the phase-2 fault CLI must follow the
-cascade-tracked current policy version and turn GateP2Error into a typed
-fault-error exit — never an unhandled traceback.
+"""The phase-2 fault CLI honors the SUPPLIED policy through the synthetic
+seam and turns typed refusals into fault-error exits — never a traceback.
 
-At the frozen chain state (phase-2 v4 + its cascade receipt) the CLI
-previously crashed: POLICY was hard-pinned to phase-2-v1.json while the
-receipt resolved to gate-cascade/receipts/phase-2-v4.json, so
-GateP2Error(freeze-receipt-binding-drift) escaped as a traceback with
-exit 1, violating the 0=detected / 2=missed-or-typed-error contract.
-
-This module is workspace-anchored (reads the live attempt directory) and
-is excluded from clean-room replay by WORKSPACE_ANCHORED_IGNORES.
+Durable replacement for the workspace-anchored round-2 QA regression: the
+harness follows the operator-supplied current policy (never the live attempt
+directory), detects the injected fault from recomputed evidence, and fails
+closed when the selected toolchain lock changes between baseline and probe.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from services.job_runner import gate_p2_faults
+from services.job_runner import gate_p2_checks, gate_p2_faults
 
+POLICY = Path("config/gates/phase-2-v4.json")
+WRONG_POLICY = Path("config/gates/phase-2-v1.json")
 FAULT_FIXTURE = Path("tests/fixtures/phase2-gate-faults/item_mismatch.json")
-ATTEMPT = (
-    Path(
-        "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
-        "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
-    )
-)
+EXPECTED_CODE = "item-conformance-defect"
+
+if TYPE_CHECKING:
+    from services.job_runner.gate_p2_fake_tree import FaultKnobs
 
 
-def test_policy_follows_cascade_tracked_current_version() -> None:
-    result = Path(ATTEMPT / "phase-2" / "gate-result.json")
-    assert result.is_file(), "workspace-anchored: attempt dir must exist"
-    import json  # noqa: PLC0415
+def test_run_fault_cli_honors_the_supplied_current_policy(capsys) -> None:
+    code = gate_p2_faults.run_fault_cli(FAULT_FIXTURE, POLICY)
+    captured = capsys.readouterr()
 
-    gate_version = json.loads(result.read_bytes())["gate_version"]
-    assert gate_version != "v1"
-    assert Path(f"config/gates/phase-2-{gate_version}.json") == gate_p2_faults.POLICY
-    assert (
-        ATTEMPT / "gate-cascade" / "receipts" / f"phase-2-{gate_version}.json"
-    ) == gate_p2_faults.RECEIPT
+    assert code == 0
+    assert "phase2-gate mode=synthetic synthetic_policy_sha256=" in captured.out
+    assert "baseline=PASS" in captured.out
+    assert f"detected=true expected_code={EXPECTED_CODE}" in captured.out
 
 
 def test_cli_detects_fault_at_current_frozen_chain_state(capsys) -> None:
-    code = gate_p2_faults.run_fault_cli(FAULT_FIXTURE, gate_p2_faults.POLICY)
+    fixture = Path("tests/fixtures/phase2-gate-faults/unbounded_retry.json")
+    code = gate_p2_faults.run_fault_cli(fixture, POLICY)
     captured = capsys.readouterr()
+
     assert code == 0
-    assert "detected=true" in captured.out
+    assert "detected=true expected_code=unbounded-retry" in captured.out
     assert "baseline=PASS" in captured.out
 
 
-def test_cli_gate_p2_error_is_typed_fault_error_not_traceback(
-    tmp_path: Path, capsys, monkeypatch
-) -> None:
-    stale_policy = Path("config/gates/phase-2-v1.json")
-    assert stale_policy.is_file()
-    monkeypatch.setattr(gate_p2_faults, "POLICY", stale_policy)
-    code = gate_p2_faults.run_fault_cli(FAULT_FIXTURE, stale_policy)
+def test_cli_gate_p2_error_is_typed_fault_error_not_traceback(capsys) -> None:
+    assert WRONG_POLICY.is_file()
+
+    code = gate_p2_faults.run_fault_cli(FAULT_FIXTURE, WRONG_POLICY)
     captured = capsys.readouterr()
+
     assert code == 2
-    assert "fault-error" in captured.err
-    assert "freeze-receipt-binding-drift" in captured.err
+    assert "fault-error policy-gate-mismatch" in captured.err
     assert "Traceback" not in captured.err
+    assert "detected=true" not in captured.out
 
 
 def test_cli_malformed_fault_spec_is_typed_refusal(tmp_path: Path, capsys) -> None:
     broken = tmp_path / "broken.json"
     broken.write_text("{not json")
-    code = gate_p2_faults.run_fault_cli(broken, gate_p2_faults.POLICY)
+    code = gate_p2_faults.run_fault_cli(broken, POLICY)
     captured = capsys.readouterr()
     assert code == 2
     assert "fault-unreadable" in captured.err
 
     not_object = tmp_path / "list.json"
     not_object.write_text("[1, 2]")
-    code = gate_p2_faults.run_fault_cli(not_object, gate_p2_faults.POLICY)
+    code = gate_p2_faults.run_fault_cli(not_object, POLICY)
     captured = capsys.readouterr()
     assert code == 2
     assert "fault-unreadable" in captured.err
+
+
+def test_selected_lock_change_between_baseline_and_probe_fails_closed(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    fixture = tmp_path / "fault.json"
+    fixture.write_text(json.dumps({"fault": "item_mismatch"}))
+    selected = tmp_path / "selected-toolchain.json"
+    selected.write_bytes(b"selected toolchain before baseline")
+    monkeypatch.setattr(gate_p2_checks, "LOCK_PATH", selected)
+    real_evaluate_fake = gate_p2_faults._evaluate_fake
+
+    def evaluate_then_change_lock(
+        root: Path,
+        knobs: FaultKnobs,
+        context: gate_p2_faults._FaultContext,
+    ) -> gate_p2_faults.FakeOutcome:
+        outcome = real_evaluate_fake(root, knobs, context)
+        if knobs.fault == "":
+            assert outcome.result.passed, outcome.mismatches
+            selected.write_bytes(b"selected toolchain changed after baseline")
+        return outcome
+
+    monkeypatch.setattr(gate_p2_faults, "_evaluate_fake", evaluate_then_change_lock)
+
+    code = gate_p2_faults.run_fault_cli(fixture, POLICY)
+    captured = capsys.readouterr()
+
+    assert code == 2
+    assert "baseline=PASS" in captured.out
+    assert "detected=false" in captured.out
+    assert "toolchain-lock-drift" in captured.out

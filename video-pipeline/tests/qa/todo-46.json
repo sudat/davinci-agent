@@ -133,7 +133,7 @@
       "uv",
       "run",
       "pytest",
-      "tests/phase1/test_gate_units.py::test_verify_refuses_synthetic_episode_claimed_as_real",
+      "tests/phase1/test_checkpoint_verification.py::test_verify_refuses_synthetic_episode_claimed_as_real",
       "-q"
     ],
     "stdin_fixture": null,
@@ -144,13 +144,13 @@
     "expected_observation": "1 passed"
   },
   {
-    "case_id": "happy-h1-waiting-marker-schema",
+    "case_id": "happy-five-synthetic-fault-detections",
     "kind": "happy",
     "argv": [
       "uv",
       "run",
       "pytest",
-      "tests/phase1/test_gate_units.py::test_fault_is_detected_from_recomputed_evidence",
+      "tests/phase1/test_gate_fault_harness.py::test_fault_is_detected_from_recomputed_evidence",
       "-q"
     ],
     "stdin_fixture": null,

@@ -2,20 +2,26 @@
 
 Synthesizes the full five-fixture evidence tree offline with one injected
 defect each (no Resolve, no ffmpeg), then runs the REAL evaluator with
-driving disabled. The baseline no-fault synthesis must PASS every
-criterion (printed as ``baseline=PASS``) — a fault is ``detected`` only
-when the gate FAILS and the recomputed mismatches carry the expected
-code. Exit 0 = detected, 2 = missed/unknown fault.
+driving disabled against a truthful temporary synthetic context: three
+canonical synthetic parents, a typed clearly-synthetic H1
+checkpoint/display-receipt pair, and a typed freeze receipt bound to the
+derived policy (see ``gate_p2_synthetic_chain``). The baseline no-fault
+synthesis must PASS every criterion (printed as ``baseline=PASS``) — a
+fault is ``detected`` only when the baseline passed, the probe failed with
+the expected typed code, and no infrastructure mismatch fired. Exit
+0 = detected, 2 = missed/unknown fault.
 """
 
 from __future__ import annotations
 
-import shutil
+import json
 import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
+
+from pydantic import ValidationError
 
 from services.job_runner.gate_p2_fake_tree import (
     EXPECTED_CODES,
@@ -23,22 +29,38 @@ from services.job_runner.gate_p2_fake_tree import (
     FaultKnobs,
     synthesize_evidence,
 )
+from services.job_runner.gate_p2_synthetic_chain import (
+    SYNTHETIC_VERSION,
+    build_synthetic_context,
+)
+from services.job_runner.gate_p2_synthetic_chain import (
+    FaultContext as _FaultContext,
+)
 from services.job_runner.gate_phase2 import GateP2Error, evaluate, load_policy
 
 if TYPE_CHECKING:
-    from services.gates import GatePolicy, GateResult
+    from services.gates import GateResult
     from services.job_runner.gate_p2_models import Phase2ExitMarker
 
 MARKER: Final = "phase2-gate"
 EXIT_DETECTED: Final = 0
 EXIT_FAULT: Final = 2
-ATTEMPT: Final = Path(
-    "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
-    "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
-)
-PARENTS: Final = ("phase-0a", "phase-0b", "phase-1-technical")
-RECEIPT: Final = ATTEMPT / "gate-cascade" / "receipts" / "phase-2-v4.json"
 POLICY: Final = Path("config/gates/phase-2-v4.json")
+CURRENT_CHAIN_VERSION: Final = "v4"
+_PHASE2_GATE_ID: Final = "phase-2"
+_INFRASTRUCTURE_MISMATCH_CODES: Final = frozenset(
+    {
+        "toolchain-lock-drift",
+        "fixture-manifest-drift",
+        "golden-index-drift",
+        "golden-expected-drift",
+        "parent-gate-unbound",
+        "parent-gate-drift",
+        "freeze-receipt-missing",
+        "prerequisite-stale",
+        "prerequisite-binding-drift",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,31 +71,56 @@ class FakeOutcome:
     expected_code: str
 
 
-def _link_parents(root: Path) -> None:
-    for relative in PARENTS:
-        target = root / relative
-        target.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(
-            ATTEMPT / relative / "gate-result.json", target / "gate-result.json"
+def _build_context(policy_path: Path) -> _FaultContext:
+    """Derive the synthetic context from the SUPPLIED current chain policy."""
+
+    source, _source_sha = load_policy(policy_path)
+    if source.gate_id != _PHASE2_GATE_ID:
+        raise GateP2Error(
+            "policy-gate-mismatch",
+            f"expected gate {_PHASE2_GATE_ID}, actual {source.gate_id}",
         )
+    if source.gate_version != CURRENT_CHAIN_VERSION:
+        raise GateP2Error(
+            "policy-gate-mismatch",
+            f"expected the current chain policy version {CURRENT_CHAIN_VERSION}, "
+            f"actual {source.gate_version} (stale policies cannot seed a "
+            "synthetic run)",
+        )
+    return build_synthetic_context(source, policy_path)
 
 
-def evaluate_fake(
-    policy: GatePolicy, policy_sha256: str, root: Path, knobs: FaultKnobs
-) -> FakeOutcome:
-    """Synthesize one evidence tree and run the REAL evaluator over it."""
+def _write_parents(root: Path, context: _FaultContext) -> None:
+    for parent in context.parents:
+        target = root / parent.relative
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "gate-result.json").write_bytes(parent.raw)
 
-    from services.job_runner.gate_phase2 import load_receipt  # noqa: PLC0415
 
-    _link_parents(root)
+def _write_checkpoint(root: Path, context: _FaultContext) -> Path:
+    checkpoint_path = root / context.checkpoint_relative
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    (checkpoint_path.parent / "display-receipt.json").write_bytes(
+        context.display_receipt_raw
+    )
+    checkpoint_path.write_bytes(context.checkpoint_raw)
+    return checkpoint_path
+
+
+def _evaluate_fake(root: Path, knobs: FaultKnobs, context: _FaultContext) -> FakeOutcome:
+    _write_parents(root, context)
+    checkpoint_path = _write_checkpoint(root, context)
+    receipt = context.freeze_receipt.model_copy(
+        update={"prerequisite_checkpoint_path": str(checkpoint_path)}
+    )
     tree = synthesize_evidence(root, knobs)
     outcome = evaluate(
-        policy,
-        policy_sha256,
+        context.policy,
+        context.policy_sha256,
         tree.evidence,
         drive=False,
         observations=tree.observations,
-        freeze_receipt=load_receipt(RECEIPT, policy_sha256),
+        freeze_receipt=receipt,
     )
     expected = EXPECTED_CODES.get(knobs.fault, "")
     return FakeOutcome(
@@ -85,9 +132,6 @@ def evaluate_fake(
 
 
 def run_fault_cli(fault_fixture: Path, policy_path: Path) -> int:
-    del policy_path  # the frozen in-repo policy is the only fault target
-    import json  # noqa: PLC0415
-
     try:
         spec = json.loads(fault_fixture.read_bytes())
     except (OSError, ValueError) as error:
@@ -101,19 +145,24 @@ def run_fault_cli(fault_fixture: Path, policy_path: Path) -> int:
         print(f"{MARKER} fault-unknown fault={fault}", file=sys.stderr)
         return EXIT_FAULT
     try:
-        policy, policy_sha256 = load_policy(POLICY)
+        context = _build_context(policy_path)
+        print(f"{MARKER} mode=synthetic synthetic_policy_sha256={context.policy_sha256}")
         with tempfile.TemporaryDirectory(prefix="p2-fault-baseline-") as tmp:
-            baseline = evaluate_fake(policy, policy_sha256, Path(tmp), FaultKnobs())
+            baseline = _evaluate_fake(Path(tmp), FaultKnobs(), context)
         with tempfile.TemporaryDirectory(prefix="p2-fault-probe-") as tmp:
-            probe = evaluate_fake(policy, policy_sha256, Path(tmp), FaultKnobs(fault=fault))
-    except GateP2Error as error:
+            probe = _evaluate_fake(Path(tmp), FaultKnobs(fault=fault), context)
+    except (GateP2Error, OSError, ValidationError, TypeError, ValueError) as error:
         print(f"{MARKER} fault-error {error}", file=sys.stderr)
         return EXIT_FAULT
-    except (OSError, ValueError) as error:
-        print(f"{MARKER} fault-error {error}", file=sys.stderr)
-        return EXIT_FAULT
+    expected = EXPECTED_CODES[fault]
     codes = [code for code, _detail in probe.mismatches]
-    detected = probe.expected_code in codes and not probe.result.passed
+    infrastructure_codes = _INFRASTRUCTURE_MISMATCH_CODES.intersection(codes)
+    detected = (
+        baseline.result.passed
+        and expected in codes
+        and not probe.result.passed
+        and not infrastructure_codes
+    )
     print(
         f"{MARKER} fault={fault} "
         f"baseline={'PASS' if baseline.result.passed else 'FAIL'}"
@@ -126,6 +175,22 @@ def run_fault_cli(fault_fixture: Path, policy_path: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     fault_fixture = Path(argv[0]) if argv else Path("fault.json")
     return run_fault_cli(fault_fixture, POLICY)
+
+
+__all__ = [
+    "EXIT_DETECTED",
+    "EXIT_FAULT",
+    "MARKER",
+    "POLICY",
+    "SYNTHETIC_VERSION",
+    "_FaultContext",
+    "_build_context",
+    "_evaluate_fake",
+    "_write_checkpoint",
+    "_write_parents",
+    "main",
+    "run_fault_cli",
+]
 
 
 if __name__ == "__main__":

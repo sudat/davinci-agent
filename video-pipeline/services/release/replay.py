@@ -60,7 +60,6 @@ WORKSPACE_ANCHORED_IGNORES: tuple[str, ...] = (
     "tests/gates/test_control_plane_inputs.py",
     "tests/gates/test_phase0c_policy.py",
     "tests/gates/test_phase1_inputs.py",
-    "tests/gates/test_phase2_fault_cli.py",
     "tests/gates/test_phase2_inputs.py",
     "tests/gates/test_phase3_inputs.py",
     "tests/phase0a/test_fixture_contract.py",

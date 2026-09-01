@@ -30,6 +30,7 @@ ATTEMPT: Final = Path(
     "/Users/stc/Developer/davinci-agent/.omo/start-work/attempts/"
     "0d13f6a4397e3f032d918760cb1708dffa523c6db975a8267d511b103b0e4b75"
 )
+PHASE_2_POLICY: Final = Path("config/gates/phase-2-v1.json")
 DEFAULT_TIMEOUT_SECONDS: Final = 5400.0
 
 
@@ -43,7 +44,8 @@ def _phase2_version() -> str:
 
 
 def phase2_policy() -> Path:
-    return Path("config") / "gates" / f"phase-2-{_phase2_version()}.json"
+    """The frozen phase-2 policy this regression re-runs (pinned to v1)."""
+    return PHASE_2_POLICY
 
 
 def default_receipt(evidence: Path) -> Path:

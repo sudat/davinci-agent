@@ -8,11 +8,13 @@ static Builder inspection records (channel branching, Phase-4 imports).
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import Field, StringConstraints
 
 from services.contracts.primitives import StrictModel
+
+SYNTHETIC_VERSION: Final = "synthetic-fault-harness-v1"
 
 type SnapshotId = Literal["p3-brand-a", "p3-brand-b"]
 type SideName = Literal["preview", "final"]
@@ -124,6 +126,7 @@ __all__ = [
     "REGRESSION_DIR_NAME",
     "RESULT_NAME",
     "SCAN_NAME",
+    "SYNTHETIC_VERSION",
     "P3BuildObservation",
     "P3GateObservation",
     "P3PresentationHashes",

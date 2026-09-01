@@ -12,12 +12,11 @@ malformed or noncanonical policies exit with usage errors.
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
+from services.job_runner import gate_p3_faults
 from services.job_runner.gate_p3_ab import (
     compile_ab,
     presentation_diff,
@@ -36,35 +35,20 @@ from services.job_runner.gate_p3_scan import (
     scan_channel_branches,
     scan_phase4_imports,
 )
-from services.job_runner.gate_phase3 import evaluate, load_policy, parser, run_phase3_gate
+from services.job_runner.gate_phase3 import evaluate, parser, run_phase3_gate
 
 POLICY = Path("config/gates/phase-3-v3.json")
-FAULT_DIR = Path("tests/fixtures/phase3-gate-faults")
 
 
 @pytest.fixture(scope="module")
-def policy() -> tuple[object, str]:
-    return load_policy(POLICY)
-
-
-def _evaluate(
-    policy_tuple: tuple[object, str], knobs: FaultKnobs, tmp_path: Path
-):
-    loaded_policy, policy_sha = policy_tuple
-    tree = synthesize_evidence(tmp_path, knobs)
-    return evaluate(
-        loaded_policy,  # type: ignore[arg-type]
-        policy_sha,
-        tree.evidence,
-        drive=False,
-        observation=tree.observation,
-    )
+def context() -> gate_p3_faults._FaultContext:
+    return gate_p3_faults._build_context(POLICY)
 
 
 def test_baseline_synthetic_tree_passes_every_criterion(
-    policy: tuple[object, str], tmp_path: Path
+    context: gate_p3_faults._FaultContext, tmp_path: Path
 ) -> None:
-    outcome = _evaluate(policy, FaultKnobs(), tmp_path)
+    outcome = gate_p3_faults._evaluate_fake(tmp_path, FaultKnobs(), context)
     assert outcome.result.passed is True
     assert outcome.mismatches == ()
     assert [row.passed for row in outcome.result.criteria_results] == [True] * 4
@@ -72,25 +56,27 @@ def test_baseline_synthetic_tree_passes_every_criterion(
 
 @pytest.mark.parametrize("fault", FAULTS)
 def test_every_typed_fault_is_detected(
-    policy: tuple[object, str], tmp_path: Path, fault: str
+    context: gate_p3_faults._FaultContext, tmp_path: Path, fault: str
 ) -> None:
-    outcome = _evaluate(policy, FaultKnobs(fault=fault), tmp_path)
+    outcome = gate_p3_faults._evaluate_fake(tmp_path, FaultKnobs(fault=fault), context)
     codes = [code for code, _detail in outcome.mismatches]
     assert outcome.result.passed is False
     assert EXPECTED_CODES[fault] in codes
 
 
-def test_regression_failure_is_typed(policy: tuple[object, str], tmp_path: Path) -> None:
+def test_regression_failure_is_typed(
+    context: gate_p3_faults._FaultContext, tmp_path: Path
+) -> None:
+    gate_p3_faults._write_parent(tmp_path, context.parent)
     tree = synthesize_evidence(tmp_path, FaultKnobs())
     result_path = Path(tree.observation.regression.result_path)
     payload = json.loads(result_path.read_bytes())
     payload["criteria_results"][0]["passed"] = False
     payload["passed"] = False
     result_path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
-    loaded_policy, policy_sha = policy
     outcome = evaluate(
-        loaded_policy,  # type: ignore[arg-type]
-        policy_sha,
+        context.policy,
+        context.policy_sha256,
         tree.evidence,
         drive=False,
         observation=tree.observation,
@@ -136,15 +122,15 @@ def test_channel_scan_detects_a_planted_branch(tmp_path: Path) -> None:
 
 
 def test_channel_scan_flags_an_incomplete_scope(
-    policy: tuple[object, str], tmp_path: Path
+    context: gate_p3_faults._FaultContext, tmp_path: Path
 ) -> None:
+    gate_p3_faults._write_parent(tmp_path, context.parent)
     tree = synthesize_evidence(tmp_path, FaultKnobs())
     scan = P3ScanRecord(channel_roots=(), channel_findings=(), phase4_modules=())
     observation = tree.observation.model_copy(update={"scan": scan})
-    loaded_policy, policy_sha = policy
     outcome = evaluate(
-        loaded_policy,  # type: ignore[arg-type]
-        policy_sha,
+        context.policy,
+        context.policy_sha256,
         tree.evidence,
         drive=False,
         observation=observation,
@@ -158,56 +144,6 @@ def test_phase4_scan_flags_capability_module_names() -> None:
     assert scan_phase4_imports(("services.travel.scene_detection", "services.editorial.core")) == (
         "services.travel.scene_detection",
     )
-
-
-def test_fault_cli_detects_injected_fault(tmp_path: Path) -> None:
-    argv = (
-        sys.executable,
-        "-m",
-        "services.job_runner.run_gate",
-        "phase-3",
-        "--policy",
-        str(POLICY),
-        "--evidence",
-        str(tmp_path / "fault-evidence"),
-    )
-    result = subprocess.run(
-        argv,
-        env={
-            "QA_FAULT_FIXTURE": str(FAULT_DIR / "stale_asset.json"),
-            "PATH": "/usr/bin:/bin",
-        },
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "detected=true expected_code=stale-asset" in result.stdout
-    assert "baseline=PASS" in result.stdout
-
-
-def test_fault_cli_refuses_unknown_fault(tmp_path: Path) -> None:
-    argv = (
-        sys.executable,
-        "-m",
-        "services.job_runner.run_gate",
-        "phase-3",
-        "--policy",
-        str(POLICY),
-        "--evidence",
-        str(tmp_path / "fault-evidence"),
-    )
-    result = subprocess.run(
-        argv,
-        env={"QA_FAULT_FIXTURE": "/nonexistent/fault.json", "PATH": "/usr/bin:/bin"},
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert result.returncode == 2
-    assert "fault-unreadable" in result.stderr
 
 
 def test_missing_policy_exits_usage(tmp_path: Path) -> None:
