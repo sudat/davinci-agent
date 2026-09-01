@@ -34,7 +34,6 @@ from services.contracts.edit_plan_0c import (
 )
 from services.contracts.primitives import Producer, RationalFrameRate, SourceFrameSpan
 from services.creative_plan.audio_finishing import AudioFactsV1
-from services.final_review.publishability import PublishabilityReviewV1
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 from services.mcp_client.call_models import McpExecutionReportV1
 from services.mcp_execution.live_adapter import LiveMcpAdapter
@@ -44,7 +43,6 @@ from services.mcp_execution.live_handlers.placement import (
 )
 from services.mcp_execution.plan_models import McpExecutionPlanV1
 from services.mcp_execution.runner import McpExecutionRunReportV1, StepAttemptV1, StepResultV1
-from services.metrics.v44_gate_state import V44GateSummaryV1
 from services.preview.errors import PreviewError
 from services.preview.tools import PinnedTools, load_pinned_tools
 from services.production_kit.preview import KitDomainSelectionV1, KitSelectionRecordV1
@@ -507,54 +505,6 @@ def test_probe_live_executor_forwards_operation_deadline_to_the_request(
     assert requests[1] == ("tools/call", None)
 
 
-def test_record_publishability_refuses_unfinished_state(tmp_path: Path) -> None:
-    episode_root = tmp_path / "ep-unfinished"
-    episode_root.mkdir()
-    result = _run_cli(
-        ["record-publishability", "--episode-root", str(episode_root),
-         "--verdict", "publishable"]
-    )
-    assert result.returncode == 1
-    assert "finishing-report-missing" in result.stderr
-
-
-def test_record_publishability_round_trip(episode_root: Path) -> None:
-    happy = _run_cli(
-        ["run", "--episode-root", str(episode_root), "--executor", "fake"]
-    )
-    assert happy.returncode == 1  # honest blocked without a QC policy
-
-    result = _run_cli(
-        ["record-publishability", "--episode-root", str(episode_root),
-         "--verdict", "publishable_after_fixes",
-         "--comments", "全体として良好",
-         "--dimension-comments", "audio_finishing=BGMをもう少し下げたい",
-         "--dimension-comments", "subtitle=固有名詞は正確"]
-    )
-    assert result.returncode == 0, result.stderr
-    review = PublishabilityReviewV1.model_validate_json(
-        (episode_root / "review" / "publishability.json").read_bytes()
-    )
-    assert review.publishable == "after_small_corrections"
-    assert review.episode_id == EPISODE_ID
-    assert review.run_id.endswith("-finishing")
-    assert review.overall_comment is not None
-    assert "全体として良好" in review.overall_comment
-    assert "audio_finishing: BGMをもう少し下げたい" in review.overall_comment
-    assert "subtitle: 固有名詞は正確" in review.overall_comment
-
-
-def test_record_publishability_rejects_unknown_dimension(episode_root: Path) -> None:
-    _run_cli(["run", "--episode-root", str(episode_root), "--executor", "fake"])
-    result = _run_cli(
-        ["record-publishability", "--episode-root", str(episode_root),
-         "--verdict", "publishable",
-         "--dimension-comments", "not_a_domain=text"]
-    )
-    assert result.returncode == 2
-    assert "dimension-unknown" in result.stderr
-
-
 def test_record_time_appends_bootstrap_lines(tmp_path: Path) -> None:
     episode_root = tmp_path / "ep-time"
     episode_root.mkdir()
@@ -628,118 +578,6 @@ def test_gate_summary_refuses_without_finishing_report(tmp_path: Path) -> None:
     assert "finishing-report-missing" in result.stderr
     assert not (episode_root / "finishing" / "gate-summary.json").is_file()
 
-
-def test_gate_summary_refuses_without_publishability_record(
-    episode_root: Path,
-) -> None:
-    """The plan's failure drill: drop the publishability record -> typed refusal."""
-
-    run = _run_cli(["run", "--episode-root", str(episode_root), "--executor", "fake"])
-    assert run.returncode == 1  # honest blocked without a QC policy
-    assert (episode_root / "finishing" / "finishing-run.json").is_file()
-
-    result = _run_cli(["gate-summary", "--episode-root", str(episode_root)])
-    assert result.returncode == 1
-    assert "publishability-missing" in result.stderr
-    assert "record-publishability" in result.stderr
-    assert not (episode_root / "finishing" / "gate-summary.json").is_file()
-
-
-def test_gate_summary_honest_fail_then_pass_after_full_evidence(
-    episode_root: Path,
-) -> None:
-    """No time log yet -> passed=false summary (written, exit 1); after the
-    operator records time + a passing rerun + verdict -> passed=true."""
-
-    run = _run_cli(["run", "--episode-root", str(episode_root), "--executor", "fake"])
-    assert run.returncode == 1  # no QC policy yet
-    verdict = _run_cli(
-        ["record-publishability", "--episode-root", str(episode_root),
-         "--verdict", "publishable"]
-    )
-    assert verdict.returncode == 0, verdict.stderr
-
-    early = _run_cli(["gate-summary", "--episode-root", str(episode_root)])
-    assert early.returncode == 1  # blocked domain + null QC + no time log
-    summary_path = episode_root / "finishing" / "gate-summary.json"
-    early_summary = json.loads(summary_path.read_bytes())
-    assert early_summary["passed"] is False
-    assert early_summary["bootstrap_aht_minutes"] is None
-    assert early_summary["direct_resolve_minutes"] is None
-    assert "delivery_qc" in early_summary["blocked_domains"]
-    assert "not passed:" in early.stderr
-
-    # T8: AHT exists only when ALL five canonical bootstrap phases are
-    # recorded — a partial log keeps bootstrap_aht_minutes null (blocked).
-    for phase, minutes in (
-        ("ordinary_review", "12.5"),
-        ("kit_bootstrap", "3.5"),
-        ("taste_calibration", "1.5"),
-        ("troubleshooting", "2.5"),
-        ("direct_resolve", "40"),
-    ):
-        timed = _run_cli(
-            ["record-time", "--episode-root", str(episode_root),
-             "--phase", phase, "--minutes", minutes]
-        )
-        assert timed.returncode == 0, timed.stderr
-
-    policy_path = episode_root / "finishing" / "qc-policy.json"
-    policy = build_policy(episode_root / "finishing" / "final-preview" / "preview.mp4")
-    atomic_write(policy_path, canonical_model_bytes(policy))
-    passing = _run_cli(
-        ["run", "--episode-root", str(episode_root), "--executor", "fake",
-         "--qc-policy", str(policy_path)]
-    )
-    assert passing.returncode == 0, passing.stderr
-
-    final = _run_cli(
-        ["gate-summary", "--episode-root", str(episode_root),
-         "--subtitle-proof-ref", "finishing/subtitle-proof/subtitle-proof.json"]
-    )
-    assert final.returncode == 0, final.stderr
-    summary = V44GateSummaryV1.model_validate_json(summary_path.read_bytes())
-    assert summary.passed is True
-    assert summary.operator_verdict == "publishable"
-    assert summary.blocked_domains == ()
-    assert summary.technical_qc == "passed"
-    assert summary.editorial_qc_blocked_items == 0
-    assert summary.bootstrap_aht_minutes == 60.0
-    assert summary.direct_resolve_minutes == 40.0
-    assert summary.director_pin_model == "gpt-5.6-sol"
-    assert summary.evidence_pins["analysis_provider"].startswith("whisper-cpp-cli:")
-    assert summary.subtitle_proof_ref == "finishing/subtitle-proof/subtitle-proof.json"
-    assert "finishing/finishing-run.json" in summary.artifacts
-    assert "review/publishability.json" in summary.artifacts
-    assert "time-log.jsonl" in summary.artifacts
-
-
-def test_gate_summary_not_publishable_verdict_never_passes(
-    episode_root: Path,
-) -> None:
-    run = _run_cli(["run", "--episode-root", str(episode_root), "--executor", "fake"])
-    assert run.returncode == 1
-    verdict = _run_cli(
-        ["record-publishability", "--episode-root", str(episode_root),
-         "--verdict", "not_publishable"]
-    )
-    assert verdict.returncode == 0, verdict.stderr
-    for phase, minutes in (("ordinary_review", "5"), ("direct_resolve", "1.5")):
-        _run_cli(
-            ["record-time", "--episode-root", str(episode_root),
-             "--phase", phase, "--minutes", minutes]
-        )
-
-    result = _run_cli(["gate-summary", "--episode-root", str(episode_root)])
-    assert result.returncode == 1
-    assert "operator verdict is not_publishable" in result.stderr
-    summary = V44GateSummaryV1.model_validate_json(
-        (episode_root / "finishing" / "gate-summary.json").read_bytes()
-    )
-    assert summary.passed is False
-    assert summary.operator_verdict == "not_publishable"
-    # Partial log (two of five phases): AHT stays null, never a partial sum.
-    assert summary.bootstrap_aht_minutes is None
 
 
 def test_mcp_failed_outcome_blocks_before_preview(

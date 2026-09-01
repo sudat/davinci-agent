@@ -33,7 +33,7 @@ from services.cli._v44_finishing_report import (
     TimeLogLineV1,
     summarize_time_log,
 )
-from services.final_review.publishability import PublishabilityReviewV1
+from services.cli._v44_publishability_binding import load_bound_publishability
 from services.metrics.v44_gate_state import V44GateSummaryV1, write_v44_2_summary
 
 GATE_SUMMARY_NAME: Final = "gate-summary.json"
@@ -112,19 +112,7 @@ def build_v44_2_summary(
         "a v44-finishing-run-v1 report",
     )
 
-    review_path = episode_root.joinpath(*PUBLISHABILITY_RELATIVE)
-    if not review_path.is_file():
-        raise FinishingError(
-            "publishability-missing",
-            f"no publishability record at {review_path}; the operator must watch "
-            f"the final preview and record a verdict via `record-publishability` "
-            f"before a gate summary can exist",
-        )
-    review = _load_json(
-        review_path,
-        PublishabilityReviewV1.model_validate_json,
-        "a publishability-review-v1 record",
-    )
+    review = load_bound_publishability(episode_root, report=report)
 
     aht_minutes, direct_minutes = _sum_time_log(episode_root / TIME_LOG_NAME)
     verdict = VERDICT_FROM_REVIEW[review.publishable]

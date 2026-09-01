@@ -113,6 +113,12 @@ def _parser() -> argparse.ArgumentParser:
         choices=("publishable", "publishable_after_fixes", "not_publishable"),
         required=True,
     )
+    pub_parser.add_argument(
+        "--viewed-render-sha256",
+        required=True,
+        help="sha256 of the render the operator actually watched; must equal "
+        "the current render truth (native-render meta + QC report)",
+    )
     pub_parser.add_argument("--comments", default=None)
     pub_parser.add_argument(
         "--dimension-comments", action="append", default=None, metavar="KEY=TEXT",
@@ -158,6 +164,7 @@ def _dispatch_record(args: argparse.Namespace) -> PublishabilityReviewV1 | None:
             args.verdict,
             comments=args.comments,
             dimension_comments=_parse_dimension_comments(args.dimension_comments),
+            viewed_render_sha256=args.viewed_render_sha256,
         )
     record_time(args.episode_root, args.phase, args.minutes)
     return None

@@ -14,7 +14,7 @@ from typing import Annotated, Final, Literal
 
 from pydantic import BeforeValidator, Field
 
-from services.contracts.primitives import Identifier, StrictModel
+from services.contracts.primitives import Identifier, Sha256, StrictModel
 from services.reference_learning.models import PreferenceDomain
 
 PUBLISHABILITY_SCHEMA: Final = "publishability-review-v1"
@@ -92,6 +92,11 @@ class PublishabilityReviewV1(StrictModel):
         | None
     ) = None
     ab_comparison: ABComparison | None = None
+    #: Optional ONLY for persisted compatibility with pre-binding records:
+    #: the recording CLI always sets it and gate-summary readers refuse
+    #: records without it (fail closed on the stale unbound verdict).
+    viewed_render_sha256: Sha256 | None = None
+    viewed_at: Annotated[str, Field(min_length=1, strict=True)] | None = None
 
 
 def parse_publishability_input(payload: dict[str, object]) -> PublishabilityReviewV1:

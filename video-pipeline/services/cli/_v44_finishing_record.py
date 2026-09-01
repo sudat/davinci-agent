@@ -3,8 +3,11 @@
 ``record-publishability`` RECORDS the operator's verdict into the existing
 ``PublishabilityReviewV1`` (schema ``publishability-review-v1``) under the
 episode review conventions — it never decides anything itself and carries
-NO autonomous publication semantics. It refuses (typed) on unfinished
-episode states (no finishing report).
+NO autonomous publication semantics. The verdict is bound to the exact
+operator-viewed render sha256 (``--viewed-render-sha256``, required); it
+refuses (typed, writing nothing) on unfinished episode states and on
+missing/stale/ambiguous render bindings (see
+``services.cli._v44_publishability_binding``).
 
 ``record-time`` appends one ``v44-time-log-v1`` line to the episode
 ``time-log.jsonl``. The label is FIXED to ``bootstrap`` (PRD §19.4:
@@ -24,11 +27,15 @@ from services.cli._v44_finishing_report import (
     TimeLogLineV1,
     TimeLogPhase,
 )
+from services.cli._v44_publishability_binding import (
+    PUBLISHABILITY_RELATIVE,
+    require_matching_current_render,
+    validate_viewed_render_sha256,
+)
 from services.final_review.publishability import PublishabilityReviewV1
 from services.foundation_io import atomic_write, canonical_model_bytes
 
 FINISHING_REPORT_RELATIVE: Final = ("finishing", "finishing-run.json")
-PUBLISHABILITY_RELATIVE: Final = ("review", "publishability.json")
 TIME_LOG_NAME: Final = "time-log.jsonl"
 
 #: CLI verdict vocabulary -> PublishabilityReviewV1 publishable literal.
@@ -56,10 +63,14 @@ def record_publishability(
     *,
     comments: str | None,
     dimension_comments: dict[str, str],
+    viewed_render_sha256: str,
 ) -> PublishabilityReviewV1:
-    """Write the operator verdict; refuse on an unfinished episode state."""
+    """Write the operator verdict bound to the viewed render; refuse (typed,
+    writing nothing) on an unfinished episode state or a render binding that
+    is absent/stale/ambiguous."""
 
     _require_episode_root(episode_root)
+    validate_viewed_render_sha256(viewed_render_sha256)
     if verdict not in VERDICT_MAP:
         raise FinishingMalformedError(
             "verdict-invalid",
@@ -88,6 +99,7 @@ def record_publishability(
             "finishing-report-invalid",
             f"{report_path} is not a v44-finishing-run-v1 report: {error}",
         ) from error
+    require_matching_current_render(episode_root, viewed_render_sha256)
     overall = comments.strip() if comments and comments.strip() else None
     if dimension_comments:
         folded = " / ".join(
@@ -101,6 +113,8 @@ def record_publishability(
             "run_id": run_id,
             "publishable": VERDICT_MAP[verdict],
             "overall_comment": overall,
+            "viewed_render_sha256": viewed_render_sha256,
+            "viewed_at": _now_iso(),
         }
     )
     target = episode_root.joinpath(*PUBLISHABILITY_RELATIVE)
