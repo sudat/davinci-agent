@@ -633,6 +633,58 @@ System-ASR alignment therefore remains the recorded measured blocker.
 Gate V44-2 remains unsatisfied (`gate_v44_2_passed=false`); no finishing,
 publication, or learning work was started.
 
+### 6.7.4 `[FIRST-PUBLISH]` Operator decision and predeclared ASR measurement policy v2 (2026-09-01)
+
+This subsection appends the operator-approved measurement-policy correction
+after §6.7.3; it does not modify §6.7.1–§6.7.3. Committed sanitized
+predeclaration: `video-pipeline/capabilities/v4.4/product-proof/v44-0/asr-measurement-policy-v2.md`.
+
+On 2026-09-01 the operator approved (1) replacing the over-strict
+omitted/duplicated/timestamp measurement definitions with meaningful
+predeclared ones, and (2) a corrected-transcript finishing diagnostic
+recorded as non-product evidence. Role assignment: Sol implements; Opus
+reviews read-only.
+
+A read-only pairing analysis (which first reproduced the r3 system-ASR
+metrics byte-exactly) measured: corrected 93 / hypothesis 99 / paired 88;
+signed start-diff median -30 ms, absolute median 320 ms; best-match CER
+distribution byte-exact 62/93, materially wrong 14/93, unpairable 5; and
+5 exact-text tail pairs drifting -3.3 s to -8.6 s (genuine ASR timing
+drift). Constant-offset and timebase-scale hypotheses were refuted
+(drop_dup is 8 of 8467 frames; regression slope has the wrong sign).
+
+Classification: the v1 omitted/duplicated counts are strip-exact text
+multiset comparisons (a one-character difference counted as omitted+1 AND
+duplicated+1), and the v1 timestamp pairing is untimed greedy text matching
+that legally joined a 5-character utterance to an occurrence 54 s away.
+This was a measurement-instrument defect in the §6.7.1 evidence-quality
+lineage — not a pipeline redesign and not threshold relaxation.
+
+Under the §6.7 single-correction allowance, one bounded correction replaced
+the measurement definitions only (`services/metrics/v44_asr_measurement.py`,
+policy `v44-asr-measurement-v2`): monotonic one-to-one alignment over
+normalized-CER ≤ 0.5 edges (max cardinality, then exact min cost, then
+canonical earliest-index tie-break); omitted = unpaired references;
+duplicated = unaligned hypothesis utterances near-matching an already-paired
+reference; segmentation splits reported separately and never counted as
+duplication; timestamp p95 over ALL paired diffs with genuine drift pairs
+never excluded. The four numeric thresholds are carried over UNCHANGED
+(0.10 / 500.0 ms / 5 / 5) and any future change requires a fresh predeclared
+record committed before the next measurement.
+
+All pre-2026-09-01 reports keep their v1 interpretation: the v1 functions
+are frozen in place (docstring-marked), the closed resolve-auto-caption
+spike stays reproducible on v1 wiring, and frozen evidence hashes are
+pinned by `tests/capabilities/test_v44_frozen_evidence.py`.
+
+The predeclared prediction for the remeasurement (`probe-system-asr-r2`,
+zero paid calls, run only after the predeclaration commit): CER unchanged
+at 0.10372340425531915 > 0.10 and timestamp p95 inside the genuine
+tail-drift band → the gate refuses, and that refusal is the expected
+correct outcome recorded as evidence. Gate V44-2 remains unsatisfied
+(`gate_v44_2_passed=false`); no finishing, publication, or learning work is
+started by this policy.
+
 ---
 
 # 7. MCP Evidence Quality Fit

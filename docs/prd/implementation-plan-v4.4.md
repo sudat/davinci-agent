@@ -1699,3 +1699,16 @@ approved publish path
 The implementation agent's job in v4.4 is therefore not to make the repository look more complete.
 
 It is to turn the broad v4.3 implementation into a proven, comfortable production path for sudaさん's actual videos.
+
+---
+
+## 23. Progress record (append-only)
+
+### 2026-09-01: ASR measurement policy v2 (operator decision)
+
+オペレーター承認(2026-09-01)に基づき、書き起こし品質4基準のうち3つ(抜け・重複・時刻ずれ)の測定定義を計測ポリシーv2へ置換した。しきい値4値は不変。正本はPRD v4.4 §6.7.4と
+`video-pipeline/capabilities/v4.4/product-proof/v44-0/asr-measurement-policy-v2.md`。
+実装: `services/metrics/v44_asr_measurement.py`(commits 7cf93d9 / 789e227 / 7fe6686)。
+v1関数は凍結保存(クローズ済みspikeの再現性)、凍結証拠は
+`tests/capabilities/test_v44_frozen_evidence.py`が指紋固定する。
+以後の system_asr 測定は v2 で行うこと。
