@@ -30,12 +30,19 @@ from pathlib import Path
 from services.episode_cockpit.approval_sessions import ApprovalSessionsOps
 from services.episode_cockpit.episode_files import FileOps
 from services.episode_cockpit.episode_ops import JobOps
+from services.episode_cockpit.finishing_status import FinishingStatusOps
 from services.episode_cockpit.kit_previews import KitPreviewOps
 from services.episode_cockpit.side_desks import ApprovalOps, ReferenceOps
 
 
 class CockpitWorkspace(
-    JobOps, FileOps, ApprovalOps, ReferenceOps, ApprovalSessionsOps, KitPreviewOps
+    JobOps,
+    FileOps,
+    ApprovalOps,
+    ReferenceOps,
+    ApprovalSessionsOps,
+    KitPreviewOps,
+    FinishingStatusOps,
 ):
     """All cockpit state access, rooted at one StateStore path + episodes root."""
 

@@ -16,6 +16,7 @@ import EpisodeProgress from "@/components/EpisodeProgress";
 import PreviewPlayer, { type PreviewAvailability } from "@/components/PreviewPlayer";
 import FlagList from "@/components/FlagList";
 import BeforeAfterSummary from "@/components/BeforeAfterSummary";
+import FinishingDomainPanel from "@/components/FinishingDomainPanel";
 import ReviewChatPanel from "@/components/ReviewChatPanel";
 
 const POLL_INTERVAL_MS = 2000;
@@ -113,6 +114,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           <p className="empty-note">読み込み中…</p>
         )}
       </section>
+      <FinishingDomainPanel episodeId={episodeId} />
       <section className="card">
         <h2 className="card-title">プレビュー</h2>
         <PreviewPlayer episodeId={episodeId} state={preview} videoRef={videoRef} />

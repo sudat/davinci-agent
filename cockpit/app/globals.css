@@ -8,6 +8,8 @@
   --accent-ink: #ffffff;
   --danger: #b42318;
   --danger-bg: #fef1f0;
+  --warn: #8a5a00;
+  --warn-bg: #fdf6e7;
   --radius: 6px;
   --space-1: 4px;
   --space-2: 8px;
@@ -442,4 +444,98 @@ table.stage-runs th {
 
 .before-after-summary {
   margin: 0 0 var(--space-3);
+}
+
+.finishing-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.finishing-list > li {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.finishing-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.finishing-domain {
+  font-weight: 600;
+}
+
+.finishing-intro {
+  margin-bottom: var(--space-3);
+  text-wrap: pretty;
+}
+
+.finishing-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.finishing-chip-applied {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+
+.finishing-chip-intentionally-not-needed {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: transparent;
+  border-style: dashed;
+}
+
+.finishing-chip-manual {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.finishing-chip-blocked {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.finishing-chip-unknown {
+  border-color: var(--border);
+  color: var(--muted);
+  background: transparent;
+}
+
+.finishing-status-explanation {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-caption);
+  color: var(--muted);
+}
+
+.finishing-evidence {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+}
+
+.finishing-evidence summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.finishing-justification {
+  margin: var(--space-1) 0 0;
+  word-break: break-word;
 }

@@ -51,7 +51,30 @@ ProN", "Noto Sans JP", sans-serif`); IDs and technical values use
   error code + detail verbatim — never swallow structured errors.
 - Motion: none beyond native `<details>` toggle and focus rings.
 
-## 4. Extension notes (tasks 46/49/50)
+## 1b. Added tokens — finishing domains status (task finishing-panel)
+
+| Token | Value | Use |
+|---|---|---|
+| `--warn` | `#8a5a00` | intentionally-skipped / manual-fallback chip border+text (amber, AA on white) |
+| `--warn-bg` | `#fdf6e7` | manual-fallback chip background |
+
+Finishing status chips (`.finishing-chip-*`) reuse this palette only:
+
+| Status | Label | Chip class | Treatment |
+|---|---|---|---|
+| `applied` | 適用済み | `.finishing-chip-applied` | `--accent` solid (positive — matches `.chip-like`) |
+| `intentionally_not_needed` | 意図的に不要 | `.finishing-chip-intentionally-not-needed` | `--warn` dashed — visually distinct from applied by border-style + hue (the operator must notice skipped domains before watching) |
+| `manual_fallback_required` | 手動対応必要 | `.finishing-chip-manual` | `--warn` solid + `--warn-bg` |
+| `blocked` | ブロック中 | `.finishing-chip-blocked` | `--danger` + `--danger-bg` (matches `.chip-dislike` / `.error-notice`) |
+| unknown | raw status | `.finishing-chip-unknown` | `--muted` neutral |
+
+The normal view uses Japanese item labels and short Japanese state explanations.
+Recorded source-language reasons remain available under the native
+`<details>` disclosure labeled `記録された理由（原文）`; internal domain IDs are
+kept in DOM data attributes rather than operator-facing copy. While finishing
+has not run, the panel rechecks every two seconds and stops after data arrives.
+
+## 4. Extension notes (tasks 46/49/50 + finishing-panel)
 
 - New views live under `app/<route>/page.tsx`, shared pieces in
   `components/`, all API access via `lib/api.ts` (no direct `fetch` in

@@ -27,3 +27,4 @@ export * from "@/lib/reference-api";
 export * from "@/lib/review-api";
 export * from "@/lib/approval-api";
 export * from "@/lib/kit-preview-api";
+export * from "@/lib/finishing-api";
