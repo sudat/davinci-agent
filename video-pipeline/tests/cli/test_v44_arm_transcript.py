@@ -372,3 +372,20 @@ def test_expected_sha_match_proceeds(tmp_path: Path) -> None:
         ),
     )
     assert alignment.lane == "operator_corrected_diagnostic"
+
+
+def test_alignment_records_the_predeclared_measurement_policy_version(
+    tmp_path: Path,
+) -> None:
+    """Policy v2 (2026-09-01): every TranscriptAlignment carries the version
+    id of the measurement semantics that produced its evidence_quality, so a
+    report can never be silently reinterpreted under a different policy."""
+    data = _data()
+    _write_sample(
+        _episode(tmp_path) / "transcript-sample-corrected.json",
+        data.transcript_segments_ms,
+    )
+    _speech, _hypothesis_ms, _edits, alignment = prepare_arm_transcript(
+        data, _episode(tmp_path), TranscriptLaneInput(lane="system_asr")
+    )
+    assert alignment.measurement_policy == "v44-asr-measurement-v2"

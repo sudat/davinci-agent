@@ -31,11 +31,16 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from services.foundation_io import sha256_file
+from services.metrics.v44_asr_measurement import (
+    measure_asr_alignment_v2,
+    to_evidence_quality,
+)
 from services.metrics.v44_product_proof import (
     EvidenceQualityMetrics,
     TranscriptSampleV1,
     TranscriptSegment,
-    compute_evidence_quality,
+    cer,
+    proper_noun_recall,
 )
 
 if TYPE_CHECKING:
@@ -123,6 +128,11 @@ def utterance_diffs_ms(
 ) -> tuple[int, ...]:
     """Greedy one-to-one pairing over text similarity; start-time deltas.
 
+    V1 pairing — FROZEN for the closed resolve-auto-caption spike's
+    reproducibility (``capabilities/v4.4/probes/resolve-auto-caption``);
+    product paths measure under policy v2
+    (``services.metrics.v44_asr_measurement``).
+
     T5's ``timestamp_error_p95_ms`` consumes these diffs (matching policy is
     deliberately the caller's). Pairs below the similarity threshold never
     match; deterministic tie-break by (similarity desc, indices).
@@ -180,15 +190,20 @@ def evidence_quality(
     sample: TranscriptSampleV1,
     dictionary: ProperNounDictionaryV1,
 ) -> EvidenceQualityMetrics:
-    """Compose the evidence block via T5's canonical ``compute_evidence_quality``."""
+    """Compose the evidence block under measurement policy v2 (predeclared
+    2026-09-01): alignment-based omitted/duplicated/timestamps plus the
+    unchanged concatenated CER and dictionary-aware proper-noun recall."""
     raw_text = "".join(segment.text for segment in artifact_segments)
-    return compute_evidence_quality(
-        corrected=sample,
-        hypothesis_segments=tuple(artifact_segments),
-        hypothesis_proper_nouns=hypothesis_proper_nouns(raw_text, sample, dictionary),
-        timestamp_diffs_ms=[
-            float(diff) for diff in utterance_diffs_ms(artifact_segments, sample.segments)
-        ],
+    rendered = hypothesis_proper_nouns(raw_text, sample, dictionary)
+    measurement = measure_asr_alignment_v2(sample, tuple(artifact_segments))
+    return to_evidence_quality(
+        measurement,
+        cer_value=cer("".join(segment.text for segment in sample.segments), raw_text),
+        pn_recall=(
+            proper_noun_recall(sample.proper_nouns, rendered)
+            if sample.proper_nouns
+            else None
+        ),
     )
 
 

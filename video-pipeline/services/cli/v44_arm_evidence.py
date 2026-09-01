@@ -34,12 +34,16 @@ from services.media_intelligence.models import (
     ShotVisual,
     TranscriptSegment,
 )
+from services.metrics.v44_asr_measurement import (
+    measure_asr_alignment_v2,
+    to_evidence_quality,
+)
 from services.metrics.v44_product_proof import (
     EvidenceQualityMetrics,
     GroundTruthAnchor,
     TranscriptSampleV1,
     cer,
-    compute_evidence_quality,
+    proper_noun_recall,
 )
 from services.metrics.v44_product_proof import (
     TranscriptSegment as SampleSegment,
@@ -221,34 +225,6 @@ def _normalize_text(text: str) -> str:
     return "".join(text.split())
 
 
-_PAIRING_MAX_CER: Final = 0.5
-
-
-def _pair_timestamps(
-    corrected: TranscriptSampleV1,
-    hypothesis: Sequence[SampleSegment],
-) -> list[float]:
-    """Greedy in-order pairing by CER; start-ms diffs for confident pairs only."""
-
-    diffs: list[float] = []
-    used: set[int] = set()
-    for expected in corrected.segments:
-        best_index: int | None = None
-        best_cer = _PAIRING_MAX_CER + 1.0
-        for index, actual in enumerate(hypothesis):
-            if index in used:
-                continue
-            distance = cer(_normalize_text(expected.text), _normalize_text(actual.text))
-            if distance < best_cer:
-                best_cer = distance
-                best_index = index
-        if best_index is None or best_cer > _PAIRING_MAX_CER:
-            continue
-        used.add(best_index)
-        diffs.append(abs(float(expected.start_ms - hypothesis[best_index].start_ms)))
-    return diffs
-
-
 def _hypothesis_proper_nouns(
     corrected: TranscriptSampleV1, hypothesis_text: str
 ) -> dict[str, str]:
@@ -270,7 +246,8 @@ def compute_arm_evidence_quality(
     corrected: TranscriptSampleV1,
     hypothesis_ms: Sequence[tuple[int, int, str]],
 ) -> EvidenceQualityMetrics:
-    """JP evidence quality of the real ASR hypothesis vs the corrected sample."""
+    """JP evidence quality of the real ASR hypothesis vs the corrected sample
+    (measurement policy v2 — predeclared 2026-09-01)."""
 
     hypothesis = tuple(
         SampleSegment(start_ms=start, end_ms=end, text=text)
@@ -278,11 +255,17 @@ def compute_arm_evidence_quality(
         if text.strip()
     )
     full_text = "".join(text for _s, _e, text in hypothesis_ms)
-    return compute_evidence_quality(
-        corrected,
-        hypothesis,
-        hypothesis_proper_nouns=_hypothesis_proper_nouns(corrected, full_text),
-        timestamp_diffs_ms=_pair_timestamps(corrected, hypothesis),
+    reference_text = "".join(segment.text for segment in corrected.segments)
+    rendered = _hypothesis_proper_nouns(corrected, full_text)
+    measurement = measure_asr_alignment_v2(corrected, hypothesis)
+    return to_evidence_quality(
+        measurement,
+        cer_value=cer(reference_text, full_text),
+        pn_recall=(
+            proper_noun_recall(corrected.proper_nouns, rendered)
+            if corrected.proper_nouns
+            else None
+        ),
     )
 
 

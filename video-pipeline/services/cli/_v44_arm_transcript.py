@@ -31,6 +31,7 @@ from services.cli._v44_arm_proper_nouns import substituted_arm_transcript
 from services.cli.real_pool import SpeechSegment, segments_from_ms
 from services.cli.v44_arm_evidence import compute_arm_evidence_quality
 from services.cli.v44_arm_stages import ArmPipelineData, ArmPipelineError
+from services.metrics.v44_asr_measurement import POLICY_VERSION
 from services.metrics.v44_product_proof import (
     EvidenceLane,
     EvidenceQualityMetrics,
@@ -78,6 +79,7 @@ class TranscriptAlignment:
     effective_transcript_sha256: str
     evidence_quality: EvidenceQualityMetrics
     provenance: tuple[str, ...]
+    measurement_policy: str
 
 
 def effective_transcript_sha256(
@@ -223,6 +225,7 @@ def prepare_arm_transcript(
         effective_transcript_sha256=effective_transcript_sha256(hypothesis_ms),
         evidence_quality=compute_arm_evidence_quality(sample, hypothesis_ms),
         provenance=provenance,
+        measurement_policy=POLICY_VERSION,
     )
     if (
         lane_input.expected_sha256 is not None

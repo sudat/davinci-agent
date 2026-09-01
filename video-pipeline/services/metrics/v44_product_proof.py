@@ -585,6 +585,10 @@ def omitted_utterance_count(
 ) -> int:
     """Count of expected utterances (by exact text) not present in actual.
 
+    V1 measurement — FROZEN: closed reports (resolve-auto-caption spike,
+    r3/r4-era records) keep this interpretation; product paths count under
+    policy v2 (``services.metrics.v44_asr_measurement``).
+
     Duplicates in expected are counted per occurrence; presence in actual is
     checked by text equality (after strip).
     """
@@ -603,6 +607,9 @@ def duplicated_utterance_count(
     actual: TranscriptSampleV1 | Sequence[TranscriptSegment],
 ) -> int:
     """Count of duplicated utterances in actual vs expected.
+
+    V1 measurement — FROZEN: closed reports keep this interpretation;
+    product paths count under policy v2.
 
     A duplicated utterance is an extra occurrence of a text beyond what the
     corrected sample contains. If expected is None, any duplicate text in
@@ -631,6 +638,11 @@ def compute_evidence_quality(
     timestamp_diffs_ms: Sequence[float] | None = None,
 ) -> EvidenceQualityMetrics:
     """Build EvidenceQualityMetrics from a corrected sample vs hypothesis.
+
+    V1 composition — FROZEN: the closed resolve-auto-caption spike wires
+    this directly and its committed outputs must stay reproducible;
+    product paths compose under policy v2
+    (``services.metrics.v44_asr_measurement.to_evidence_quality``).
 
     When the corrected sample has no segments (no speech), all metrics stay None
     (nullable) instead of fabricating zeros.

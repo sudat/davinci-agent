@@ -1200,6 +1200,29 @@ def test_compute_arm_evidence_quality_pairs_and_scores() -> None:
     assert missed.timestamp_error_p95_ms is None
 
 
+def test_compute_arm_evidence_quality_rejects_distant_text_only_matches() -> None:
+    """Given: the r1 measurement shape — a short utterance whose identical
+    text reappears far away, which untimed v1 pairing could join across the
+    gap and inflate p95 to multi-second values; When: scored under policy
+    v2; Then: the local monotonic pair holds and p95 stays sub-second."""
+    corrected = TranscriptSampleV1(
+        segments=(
+            SampleSegment(start_ms=0, end_ms=1000, text="うん"),
+            SampleSegment(start_ms=54000, end_ms=55000, text="つぎのはなしです"),
+        ),
+    )
+    hypothesis = (
+        (600, 1600, "うん"),
+        (1000, 2000, "ちがうことをしゃべります"),  # insertion: never pairs
+        (54100, 55100, "つぎのはなしです"),
+    )
+    quality = compute_arm_evidence_quality(corrected, hypothesis)
+    assert quality.omitted_utterances == 0
+    assert quality.duplicated_utterances == 0
+    assert quality.timestamp_error_p95_ms is not None
+    assert quality.timestamp_error_p95_ms <= 600.0
+
+
 def test_dry_run_reports_toy_note_without_transport(tmp_path: Path) -> None:
     gt = EditorialGroundTruthV1(
         episode_id="v44-real-dry",
