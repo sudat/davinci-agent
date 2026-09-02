@@ -68,7 +68,7 @@ def test_var_alias_root_restores_with_canonical_paths(tmp_path: Path) -> None:
 def test_reused_root_removes_stale_attempt_outputs(tmp_path: Path) -> None:
     # Given stale mutable outputs in a reused attempt area.
     root = tmp_path / "reused"
-    attempt_dir = root / ".omo/start-work/attempts/seeded"
+    attempt_dir = root / ".omo" / "start-work/attempts/seeded"
     stale_ledger = attempt_dir / "execution-ledger.jsonl"
     stale_output = attempt_dir / "nested/stale.json"
     stale_ledger.parent.mkdir(parents=True)
