@@ -269,6 +269,16 @@ class SubtitleProbeResult(McpActionOutcome):
     settings: dict[str, object] | None = None
 
 
+class ProjectSettingReadback(McpActionOutcome):
+    """``project_settings {get_setting}`` single-name readback.
+
+    Live-measured 21.0.4.5: the single-name form returns the VALUE itself
+    (``{"success": true, "settings": "smart"}``), not a name→value dict.
+    """
+
+    settings: object = None
+
+
 class DrxApplyResult(McpActionOutcome):
     """``timeline_item_color {safe_apply_drx}`` readback.
 

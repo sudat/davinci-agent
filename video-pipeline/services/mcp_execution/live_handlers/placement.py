@@ -19,6 +19,7 @@ from services.mcp_client.ops_models import (
     ImportResult,
     McpActionOutcome,
     ProjectResult,
+    ProjectSettingReadback,
     TimelineResult,
 )
 from services.mcp_execution.live_errors import (
@@ -48,9 +49,42 @@ from services.mcp_execution.plan_payloads import (
 
 RANGE_PAIR_LENGTH: Final = 2
 
+#: Project-level render-cache mode written at prepare (DESIGN §11: the
+#: 155-card nested structure is disadvantaged with caching off; "smart" is
+#: API-writable — Opus-verified live 2026-09-04). Readback-verified: a
+#: refused write is a LOUD typed failure, never silent.
+_PERF_RENDER_CACHE_MODE: Final = "smart"
+
 
 def _fps_str(num: int, den: int) -> str:
     return str(num) if den == 1 else str(num / den)
+
+
+def _pin_perf_render_cache_mode(ctx: LiveSessionContext) -> None:
+    """Write + readback-verify perfRenderCacheMode on the fresh project."""
+    require_ok(
+        McpActionOutcome.model_validate(
+            ctx.transport(
+                "project_settings",
+                "set_setting",
+                {"name": "perfRenderCacheMode", "value": _PERF_RENDER_CACHE_MODE},
+            )
+        ),
+        "set-perf-render-cache-mode",
+    )
+    readback = ProjectSettingReadback.model_validate(
+        ctx.transport(
+            "project_settings", "get_setting", {"name": "perfRenderCacheMode"}
+        )
+    )
+    require_ok(readback, "get-perf-render-cache-mode")
+    # single-name readback returns the value itself (live-measured above)
+    if readback.settings != _PERF_RENDER_CACHE_MODE:
+        raise LiveAdapterError(
+            "perf-cache-mode-refused",
+            f"perfRenderCacheMode readback {readback.settings!r}"
+            f" != {_PERF_RENDER_CACHE_MODE!r}",
+        )
 
 
 def prepare_project(
@@ -74,6 +108,7 @@ def prepare_project(
         if created.name is not None:
             project_name = created.name
         require_ok(McpActionOutcome.model_validate(ctx.transport("project_settings", "set_setting", {"name": "timelineFrameRate", "value": fps})), "set-fps")  # noqa: E501
+        _pin_perf_render_cache_mode(ctx)
         require_ok(TimelineResult.model_validate(ctx.transport("media_pool", "create_timeline", {"name": p.timeline_name})), "create-timeline")  # noqa: E501
         require_ok(McpActionOutcome.model_validate(ctx.transport("timeline", "set_current", {"name": p.timeline_name})), "set-current")  # noqa: E501
     elif not McpActionOutcome.model_validate(
