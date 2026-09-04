@@ -48,6 +48,7 @@ StepAction = Literal[
     "place_title",
     "place_audio",
     "apply_subtitles",
+    "apply_telop",
     "apply_voice_isolation",
     "apply_audio_op",
     "apply_audio_stage",
@@ -88,11 +89,16 @@ class PlaceClipParams(StrictModel):
 
 
 class PlaceOverlayParams(StrictModel):
+    """Overlay placement: external transparent media stacks OVER base clips,
+    so it carries the explicit video track index (default 1 keeps stored
+    pre-track plans parsing and placing exactly where they did)."""
+
     action: Literal["place_overlay"]
     item_id: Identifier
     source: SourceRef
     record_span: RecordFrameSpan
     track_role: VideoTrackRoleV2
+    track_index: int = Field(default=1, ge=1, strict=True)
 
 
 class PlaceTitleParams(StrictModel):
@@ -147,6 +153,55 @@ class SubtitleParams(StrictModel):
             if cue.record_span.end_frame <= cue.record_span.start_frame:
                 raise PydanticCustomError(
                     "span_empty", "cue {cue_id} record span is non-empty", {"cue_id": cue.cue_id}
+                )
+        return self
+
+
+#: The committed telop card kinds (DESIGN telop-nested §1.1): opening is
+#: the large intro card, persistent the top-left always-on card (tiled),
+#: chapter the full-black chapter card whose span is also the tile gap.
+TelopKind = Literal["opening", "persistent", "chapter"]
+
+
+class TelopCardPayload(StrictModel):
+    """One committed telop card: kind, exact text, half-open record span.
+
+    The persistent kind's record span is the LOGICAL on-screen span; the
+    live handler tiles it with the measured insert-title card length,
+    skipping chapter-card gaps (DESIGN telop-nested §2.4). Appearance
+    never rides the payload — the style reference resolves through the
+    channel presentation profile's ``telop_style`` (WBS-0).
+    """
+
+    card_id: Identifier
+    kind: TelopKind
+    text: _NonEmpty
+    record_span: RecordFrameSpan
+
+
+class TelopParams(StrictModel):
+    """Exact committed telop cards for the native V3 nested-card mutation
+    (DESIGN telop-nested §8 WBS-2 — the ``SubtitleParams`` mirror).
+
+    ``style_profile_id`` is the channel profile's ``telop_style.recipe_id``
+    (``telop/default``); the live handler resolves it to the band template's
+    published inputs and refuses unknown references typed.
+    """
+
+    action: Literal["apply_telop"]
+    cards: Annotated[tuple[TelopCardPayload, ...], BeforeValidator(to_tuple)] = ()
+    #: The profile's ``telop_style.recipe_id`` (RecipeRef vocabulary —
+    #: slash-bearing, unlike an Identifier: ``telop/default``).
+    style_profile_id: _NonEmpty
+
+    @model_validator(mode="after")
+    def require_non_empty_spans(self) -> TelopParams:
+        for card in self.cards:
+            if card.record_span.end_frame <= card.record_span.start_frame:
+                raise PydanticCustomError(
+                    "span_empty",
+                    "card {card_id} record span is non-empty",
+                    {"card_id": card.card_id},
                 )
         return self
 
@@ -312,6 +367,7 @@ StepParams = Annotated[
     | PlaceTitleParams
     | PlaceAudioParams
     | SubtitleParams
+    | TelopParams
     | VoiceIsolationParams
     | AudioOpParams
     | AudioStageParams
@@ -347,6 +403,7 @@ class PlacementReadback(StrictModel):
     item_id: Identifier
     source_span: SourceFrameSpan
     record_span: RecordFrameSpan
+    track_index: int = Field(default=1, ge=1, strict=True)
 
 
 class TitleReadback(StrictModel):
@@ -374,6 +431,21 @@ class SubtitleCuesReadback(StrictModel):
 
     kind: Literal["subtitle_cues"]
     cues: Annotated[tuple[SubtitleCuePayload, ...], BeforeValidator(to_tuple)] = ()
+
+
+class TelopCardsReadback(StrictModel):
+    """Expected readback for the native telop mutation (DESIGN WBS-3).
+
+    The live handler returns exact per-card evidence (id, kind, text,
+    logical record span, tile spans, readback-sourced style); the runner
+    gate verifies the COMPLETE committed card set — identity, kind, text,
+    and record span per card (the subtitle Task-8 precedent: the gate must
+    consume the evidence the handler actually returns). Tile spans and
+    style are handler-sourced and verified inside the mutation itself.
+    """
+
+    kind: Literal["telop_cards"]
+    cards: Annotated[tuple[TelopCardPayload, ...], BeforeValidator(to_tuple)] = ()
 
 
 class AudioStateReadback(StrictModel):
@@ -439,6 +511,7 @@ ExpectedReadback = Annotated[
     | TitleReadback
     | CueCountReadback
     | SubtitleCuesReadback
+    | TelopCardsReadback
     | AudioStateReadback
     | AudioMetricReadback
     | GradeReadback
@@ -483,6 +556,10 @@ __all__ = [
     "SubtitleCuePayload",
     "SubtitleCuesReadback",
     "SubtitleParams",
+    "TelopCardPayload",
+    "TelopCardsReadback",
+    "TelopKind",
+    "TelopParams",
     "TitleReadback",
     "TransformParams",
     "TransformReadback",

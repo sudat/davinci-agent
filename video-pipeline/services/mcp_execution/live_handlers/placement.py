@@ -122,6 +122,7 @@ def append_to_timeline(
 ) -> dict[str, object]:
     if ctx.timeline_start is None:
         raise LiveAdapterError("timeline-not-prepared", "prepare first")
+    track_index = PLACEMENT_TRACK_INDEX
     if action == "place_clip":
         q = validate_params(PlaceClipParams, params)
         src, rec, item_id, media_type, track_type = (
@@ -133,12 +134,13 @@ def append_to_timeline(
         )
     elif action == "place_overlay":
         q2 = validate_params(PlaceOverlayParams, params)
-        src, rec, item_id, media_type, track_type = (
+        src, rec, item_id, media_type, track_type, track_index = (
             q2.source,
             q2.record_span,
             str(q2.item_id),
             1,
             "video",
+            q2.track_index,
         )
     elif action == "place_audio":
         q3 = validate_params(PlaceAudioParams, params)
@@ -162,25 +164,27 @@ def append_to_timeline(
     if not _placement_present(
         ctx,
         track_type,
-        _track_rows(ctx, track_type),
+        track_index,
+        _track_rows(ctx, track_type, track_index),
         (src_s, src_e),
         (abs_start, abs_end),
         media_eof,
     ):
-        info: dict[str, object] = {"clip_id": clip_id, "start_frame": src_s, "end_frame": src_e, "record_frame": abs_start, "record_frame_mode": "absolute", "track_index": PLACEMENT_TRACK_INDEX, "media_type": media_type}  # noqa: E501
+        info: dict[str, object] = {"clip_id": clip_id, "start_frame": src_s, "end_frame": src_e, "record_frame": abs_start, "record_frame_mode": "absolute", "track_index": track_index, "media_type": media_type}  # noqa: E501
         require_ok(AppendResult.model_validate(ctx.transport("media_pool", "append_to_timeline", {"clip_infos": [info]})), "append")  # noqa: E501
         ctx.mark_timeline_mutated()
         # fresh post-mutation bounded scan (the snapshot was just cleared)
         if not _placement_present(
             ctx,
             track_type,
-            _track_rows(ctx, track_type),
+            track_index,
+            _track_rows(ctx, track_type, track_index),
             (src_s, src_e),
             (abs_start, abs_end),
             media_eof,
         ):
             raise LiveAdapterError("placement-readback-mismatch", f"no {(src_s, src_e)}->{(abs_start, abs_end)}")  # noqa: E501
-    return {"item_id": item_id, "source_span": {"start_frame": src_s, "end_frame": src_e, "rate": {"num": src.span.rate.num, "den": src.span.rate.den}}, "record_span": {"start_frame": rec.start_frame, "end_frame": rec.end_frame}}  # noqa: E501
+    return {"item_id": item_id, "track_index": track_index, "source_span": {"start_frame": src_s, "end_frame": src_e, "rate": {"num": src.span.rate.num, "den": src.span.rate.den}}, "record_span": {"start_frame": rec.start_frame, "end_frame": rec.end_frame}}  # noqa: E501
 
 
 __all__ = [

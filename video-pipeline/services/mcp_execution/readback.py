@@ -1,3 +1,6 @@
+# allow: SIZE_OK — flat 14-kind match table; splitting would separate the
+# readback-union members from the exhaustive match that verifies them
+# (plan_payloads precedent).
 """Typed readback verification + Build-Report row mapping (task 39).
 
 Each step's ``expected_readback`` (one of the 11 T38 kinds) is verified
@@ -37,6 +40,8 @@ from services.mcp_execution.plan_payloads import (
     SetTransformReadback,
     SubtitleCuePayload,
     SubtitleCuesReadback,
+    TelopCardPayload,
+    TelopCardsReadback,
     TitleReadback,
     TransformReadback,
 )
@@ -151,6 +156,54 @@ def _compare_cues(
     return tuple(mismatches)
 
 
+def _compare_cards(
+    actual: Mapping[str, object], cards: tuple[TelopCardPayload, ...]
+) -> tuple[str, ...]:
+    """The committed card set verified per card: count, id, kind, text, span.
+
+    Tile spans and style evidence are handler-sourced (verified against
+    the binding at mutation time) and are deliberately not compared here —
+    only the committed fields gate at the runner level.
+    """
+
+    got = actual.get("cards")
+    if not isinstance(got, list | tuple):
+        suffix = "missing" if got is None else f"not a list, got {got!r}"
+        return (f"cards: {suffix}",)
+    if len(got) != len(cards):
+        return (f"cards: expected {len(cards)} cards, got {len(got)}",)
+    mismatches: list[str] = []
+    for row, card in zip(got, cards, strict=True):
+        if not isinstance(row, Mapping):
+            mismatches.append(f"card {card.card_id}: not an object, got {row!r}")
+            continue
+        if row.get("card_id") != card.card_id:
+            mismatches.append(
+                f"card {card.card_id}: card_id expected {card.card_id!r},"
+                f" got {row.get('card_id')!r}"
+            )
+        if row.get("kind") != card.kind:
+            mismatches.append(
+                f"card {card.card_id}: kind expected {card.kind!r}, got {row.get('kind')!r}"
+            )
+        if row.get("text") != card.text:
+            mismatches.append(
+                f"card {card.card_id}: text expected {card.text!r}, got {row.get('text')!r}"
+            )
+        span = row.get("record_span")
+        if isinstance(span, Mapping):
+            pair = (span.get("start_frame"), span.get("end_frame"))
+            expected_pair = (card.record_span.start_frame, card.record_span.end_frame)
+            if pair != expected_pair:
+                mismatches.append(
+                    f"card {card.card_id}: record_span expected {expected_pair}, got {pair}"
+                )
+        else:
+            suffix = "missing" if span is None else f"not a span object, got {span!r}"
+            mismatches.append(f"card {card.card_id}: record_span {suffix}")
+    return tuple(mismatches)
+
+
 def _bounds(expected: AudioMetricReadback, actual: Mapping[str, object]) -> tuple[str, ...]:
     value = actual.get("value")
     if not isinstance(value, int | float) or isinstance(value, bool):
@@ -186,7 +239,10 @@ def verify_readback(  # noqa: C901, PLR0912 (flat 12-kind match; splitting would
         case ImportReadback():
             mismatches = _compare(actual_map, {"source_id": expected.source_id})
         case PlacementReadback():
-            mismatches = _compare(actual_map, {"item_id": expected.item_id}) + _compare_spans(
+            mismatches = _compare(
+                actual_map,
+                {"item_id": expected.item_id, "track_index": expected.track_index},
+            ) + _compare_spans(
                 actual_map,
                 {
                     "source_span": _frames(expected.source_span),
@@ -201,6 +257,8 @@ def verify_readback(  # noqa: C901, PLR0912 (flat 12-kind match; splitting would
             mismatches = _compare(actual_map, {"cue_count": expected.cue_count})
         case SubtitleCuesReadback():
             mismatches = _compare_cues(actual_map, expected.cues)
+        case TelopCardsReadback():
+            mismatches = _compare_cards(actual_map, expected.cards)
         case AudioStateReadback():
             mismatches = _compare(
                 actual_map,

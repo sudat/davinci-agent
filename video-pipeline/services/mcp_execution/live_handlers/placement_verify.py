@@ -19,9 +19,10 @@ if TYPE_CHECKING:
     from services.mcp_client.ops_models import TrackItemRow
     from services.mcp_execution.live_handlers.common import LiveSessionContext
 
-#: Product placements always land on track 1 of their track type (the
-#: append payload pins it) — the single addressing authority for the
-#: bounded reconciliation readback.
+#: Product placements land on track 1 of their track type by default (the
+#: append payload pins it); overlay media may declare a higher video track
+#: to stack over base clips — every reconciliation readback is addressed by
+#: the placement's own (track type, track index) pair.
 PLACEMENT_TRACK_INDEX: Final = 1
 
 #: Measured deadline for ONE bounded per-track scan and the targeted
@@ -48,28 +49,31 @@ SOURCE_READBACK_TOLERANCE_FRAMES: Final = 1
 MEDIA_EOF_END_DRIFT_FRAMES: Final = 2
 
 
-def _track_rows(ctx: LiveSessionContext, track_type: str) -> tuple[TrackItemRow, ...]:
+def _track_rows(
+    ctx: LiveSessionContext, track_type: str, track_index: int
+) -> tuple[TrackItemRow, ...]:
     """Bounded per-track scan (session-scoped until any content mutation):
     ONE get_items_in_track walk covers every placement on the track —
     rows carry the ABSOLUTE record span; source spans are verified per
     item through the targeted frame readback, never assumed from rows."""
-    snapshot = ctx.placement_scan.get(track_type)
+    key = f"{track_type}:{track_index}"
+    snapshot = ctx.placement_scan.get(key)
     if snapshot is None:
         snapshot = TrackItemsResult.model_validate(
             ctx.transport(
                 "timeline",
                 "get_items_in_track",
-                {"track_type": track_type, "track_index": PLACEMENT_TRACK_INDEX},
+                {"track_type": track_type, "track_index": track_index},
                 timeout_seconds=PLACEMENT_TRACK_SCAN_TIMEOUT_SECONDS,
             )
         )
         require_ok(snapshot, "get-items-in-track")
-        ctx.placement_scan[track_type] = snapshot
+        ctx.placement_scan[key] = snapshot
     return snapshot.items
 
 
 def _source_frames(
-    ctx: LiveSessionContext, track_type: str, item_index: int
+    ctx: LiveSessionContext, track_type: str, track_index: int, item_index: int
 ) -> tuple[int, int]:
     """Targeted independent source-span readback for ONE item, addressed
     by its position in the same track list the bounded scan read. Both
@@ -78,7 +82,7 @@ def _source_frames(
     this source."""
     address: dict[str, object] = {
         "track_type": track_type,
-        "track_index": PLACEMENT_TRACK_INDEX,
+        "track_index": track_index,
         "item_index": item_index,
     }
     start = SourceFrameResult.model_validate(
@@ -121,13 +125,16 @@ def _source_end_matches(
 def _placement_present(  # noqa: PLR0913, PLR0917 (ctx+track+two span tuples+EOF is the irreducible reconciliation signature)
     ctx: LiveSessionContext,
     track_type: str,
+    track_index: int,
     rows: tuple[TrackItemRow, ...],
     source_range: tuple[int, int],
     timeline_range: tuple[int, int],
     media_eof: int | None,
 ) -> bool:
     """Independent presence proof on the placement's own track: the scan is
-    addressed BY track type (an item it returns IS on that track type), the
+    addressed BY track type and index (an item it returns IS on that exact
+    track, so a same-span base on another track is never mis-detected as
+    the overlay), the
     record span must match EXACTLY, and the source span is read back per
     candidate item. Vendor truth (probe-evidenced): GetSourceStartFrame may
     read one frame early or late, so the START bound tolerates exactly 1
@@ -140,7 +147,7 @@ def _placement_present(  # noqa: PLR0913, PLR0917 (ctx+track+two span tuples+EOF
     for index, row in enumerate(rows):
         if row.start != abs_start or row.end != abs_end:
             continue
-        src_start, src_end = _source_frames(ctx, track_type, index)
+        src_start, src_end = _source_frames(ctx, track_type, track_index, index)
         within_source_tolerance = (
             abs(src_start - src_s) <= SOURCE_READBACK_TOLERANCE_FRAMES
             and _source_end_matches(src_end, src_e, media_eof)

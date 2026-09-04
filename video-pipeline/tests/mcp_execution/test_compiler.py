@@ -30,7 +30,12 @@ from pydantic import ValidationError
 
 import services.mcp_execution.compiler as compiler_module
 import services.mcp_execution.plan_models as models_module
-from services.contracts.primitives import RationalFrameRate, RecordFrameSpan
+from services.contracts.primitives import (
+    RationalFrameRate,
+    RecordFrameSpan,
+    SourceFrameSpan,
+    SourceRef,
+)
 from services.creative_plan.audio_finishing import (
     AUDIO_LADDER,
     DEFAULT_AUDIO_POLICY,
@@ -55,6 +60,7 @@ from services.creative_plan.edit_models_v2 import (
     SelectionRefV2,
     upgrade_from_creative_draft,
 )
+from services.creative_plan.ir_models_v2 import PlacedClipV2, TimelineIrV2, VideoTrackV2
 from services.creative_plan.presentation_intents import (
     PresentationIntentV2,
     PunchInParams,
@@ -74,11 +80,18 @@ from services.mcp_execution.compiler import (
     CompileExecutionPlanError,
     compile_execution_plan,
 )
+from services.mcp_execution.placement_steps import video_steps
 from services.mcp_execution.plan_models import (
     McpExecutionPlanV1,
     McpExecutionStepV1,
 )
-from services.mcp_execution.plan_payloads import SubtitleCuesReadback
+from services.mcp_execution.plan_payloads import (
+    PlaceClipParams,
+    PlacementReadback,
+    PlaceOverlayParams,
+    SubtitleCuesReadback,
+)
+from services.mcp_execution.step_builders import CapabilityView
 from services.production_kit.recipe_select import select_recipe
 from services.production_kit.registry import load_kit
 from tests.editorial_v2.fixtures.three_pass_fixture import (
@@ -757,3 +770,48 @@ def test_dialogue_only_final_loudness_qc_after_voice_isolation() -> None:
     )
 
 
+def test_video_steps_emit_overlay_on_track_two_primary_on_track_one() -> None:
+    """The overlay-over-base stacking unlock: overlay-role items compile to
+    place_overlay on video track 2 while primary clips stay on track 1, so
+    both can occupy the same record span (measured v44-real-01 blocker)."""
+
+    def _clip(item_id: str) -> PlacedClipV2:
+        return PlacedClipV2(
+            item_id=item_id,
+            source=SourceRef(
+                source_id="src-001",
+                span=SourceFrameSpan(
+                    start_frame=10, end_frame=70, rate=RationalFrameRate(num=30, den=1)
+                ),
+            ),
+            record_span=RecordFrameSpan(start_frame=0, end_frame=60),
+            candidate_ref="cand-1",
+        )
+
+    ir = TimelineIrV2(
+        schema_version="timeline-ir-v2",
+        episode_id="ep-stack",
+        rate=RationalFrameRate(num=30, den=1),
+        video_tracks=(
+            VideoTrackV2(role="primary", track_id="vt-primary", items=(_clip("itm-base"),)),
+            VideoTrackV2(role="still", track_id="vt-theme", items=(_clip("itm-theme"),)),
+        ),
+    )
+    steps = video_steps(ir, CapabilityView({"exact-source-range-placement": "accepted"}, {}))
+
+    clip_steps = [s for s in steps if s.normalized_params.action == "place_clip"]
+    overlay_steps = [s for s in steps if s.normalized_params.action == "place_overlay"]
+    assert len(clip_steps) == 1
+    assert len(overlay_steps) == 1
+
+    overlay_params = overlay_steps[0].normalized_params
+    clip_readback = clip_steps[0].expected_readback
+    overlay_readback = overlay_steps[0].expected_readback
+    assert isinstance(overlay_params, PlaceOverlayParams)
+    assert isinstance(clip_readback, PlacementReadback)
+    assert isinstance(overlay_readback, PlacementReadback)
+
+    assert "track_index" not in PlaceClipParams.model_fields
+    assert overlay_params.track_index == 2
+    assert clip_readback.track_index == 1
+    assert overlay_readback.track_index == 2

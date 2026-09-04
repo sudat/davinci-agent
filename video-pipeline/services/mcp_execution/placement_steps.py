@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
+from services.creative_plan.presentation_intents import load_default_profile
 from services.mcp_execution.plan_models import (
     FallbackRung,
     FallbackStepRecordV1,
@@ -30,6 +31,9 @@ from services.mcp_execution.plan_payloads import (
     SubtitleCuePayload,
     SubtitleCuesReadback,
     SubtitleParams,
+    TelopCardPayload,
+    TelopCardsReadback,
+    TelopParams,
     TitleReadback,
 )
 from services.mcp_execution.step_builders import (
@@ -39,6 +43,8 @@ from services.mcp_execution.step_builders import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from services.creative_plan.ir_models_v2 import TimelineIrV2
     from services.creative_plan.subtitle_models import SubtitlePlanV1
 
@@ -54,6 +60,12 @@ _VIDEO_ROLE_ORDER: Final[dict[str, int]] = {
     "still": 3,
     "graphic": 4,
 }
+
+#: External transparent overlay media stacks OVER same-span base clips, so
+#: overlay-role placements target video track 2 (base clips stay on 1).
+#: Emitter-side constant only — the NLE-neutral Timeline IR never carries
+#: Resolve track numbers.
+OVERLAY_TRACK_INDEX: Final = 2
 
 
 def prepare_step(ir: TimelineIrV2, caps: CapabilityView) -> McpExecutionStepV1:
@@ -172,12 +184,14 @@ def video_steps(ir: TimelineIrV2, caps: CapabilityView) -> list[McpExecutionStep
                             source=item.source,
                             record_span=item.record_span,
                             track_role=track.role,
+                            track_index=OVERLAY_TRACK_INDEX,
                         ),
                         PlacementReadback(
                             kind="placement",
                             item_id=item.item_id,
                             source_span=item.source.span,
                             record_span=item.record_span,
+                            track_index=OVERLAY_TRACK_INDEX,
                         ),
                         mcp_or_executor(rung, "append_to_timeline"),
                         rung,
@@ -280,10 +294,43 @@ def subtitle_step(plan: SubtitlePlanV1, caps: CapabilityView) -> McpExecutionSte
     )
 
 
+def telop_step(cards: Sequence[TelopCardPayload]) -> McpExecutionStepV1:
+    """The native telop leg: every committed card in ONE ``apply_telop``
+    step (DESIGN telop-nested §8 WBS-3 — the ``subtitle_step`` mirror).
+
+    The pinned rung is NOT a matrix downgrade: the frozen v4.3 mcp-fit
+    matrix predates telop and carries no row to query, so the verification
+    authority is the WBS-1 live probe (``__fvp_test__telop_probe_20260903``)
+    plus the WBS-2 architecture-test registration lock. The style reference
+    comes from the channel profile's ``telop_style.recipe_id`` — the live
+    handler refuses any other reference typed (WBS-0 authority chain).
+    """
+    params = TelopParams(
+        action="apply_telop",
+        cards=tuple(cards),
+        style_profile_id=load_default_profile().telop_style.recipe_id,
+    )
+    first = min((card.record_span.start_frame for card in params.cards), default=0)
+    return step_from(
+        "stp-telop-plan",
+        params,
+        # The runner gate is the complete committed card set (the subtitle
+        # Task-8 precedent: the handler returns exact per-card evidence).
+        TelopCardsReadback(kind="telop_cards", cards=params.cards),
+        mcp_or_executor("mcp_verified_workflow", "telop_generation_probe"),
+        "mcp_verified_workflow",
+        None,
+        first,
+        project_ready=True,
+        timeline_ready=True,
+    )
+
+
 __all__ = [
     "audio_track_steps",
     "import_steps",
     "prepare_step",
     "subtitle_step",
+    "telop_step",
     "video_steps",
 ]

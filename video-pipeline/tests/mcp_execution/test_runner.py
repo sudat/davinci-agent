@@ -314,6 +314,7 @@ ACTUAL_PREPARE: dict[str, object] = {
 ACTUAL_IMPORT: dict[str, object] = {"source_id": "src-cam-a"}
 ACTUAL_PLACE: dict[str, object] = {
     "item_id": "itm-1",
+    "track_index": 1,
     "source_span": {"start_frame": 0, "end_frame": 90},
     "record_span": {"start_frame": 0, "end_frame": 90},
 }

@@ -64,12 +64,14 @@ class LiveSessionContext:
     #: render uses it to refuse reusing a prior render that predates the
     #: current timeline state (render currency, Task 8).
     timeline_mutated: bool = False
-    #: Session-scoped BOUNDED per-track scan snapshots (one per track type)
+    #: Session-scoped BOUNDED per-(track type, track index) scan snapshots
     #: reused by placement reconciliation: the whole-timeline
     #: source_range_report walk stopped completing within 900 s on the
     #: fully-built representative timeline, so placement reconciles through
     #: get_items_in_track + targeted per-item source-frame readback instead.
-    #: Cleared by every content mutation; never trusted across sessions.
+    #: Keyed "track_type:track_index" so a track-2 overlay never dedupes
+    #: against a same-span track-1 base. Cleared by every content mutation;
+    #: never trusted across sessions.
     placement_scan: dict[str, TrackItemsResult] = field(default_factory=dict)
 
     def mark_timeline_mutated(self) -> None:
