@@ -32,6 +32,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Final
 
+from services.creative_plan.presentation_intents import load_default_profile
 from services.mcp_execution.live_handlers.common import (
     LiveAdapterError,
     LiveAdapterUnsupportedError,
@@ -52,17 +53,23 @@ from services.mcp_execution.live_handlers.subtitle_style import (
 )
 from services.mcp_execution.plan_payloads import SubtitleParams
 
-#: Style-profile -> bound Text+ presentation. The payload's style reference
-#: (``style_profile_id``) resolves through this table only; an unknown
-#: profile is a typed refusal, never a silent default. Font values must be
-#: concrete resolvable weight names — see the module docstring.
-_PROFILE_INPUTS: Final[Mapping[str, StyleBinding]] = {
-    "subtitle-style-default": StyleBinding(
-        font="Hiragino Sans W3",
-        size=0.04,
-        center=(0.5, 0.14),
-    ),
-}
+#: The style profile id (``SubtitleStyleProfileV1.profile_id`` default) whose
+#: Text+ presentation comes from the channel presentation profile's
+#: ``subtitle_style`` appearance fields (WBS-0 externalization — values
+#: byte-identical to the former inline table). Any other id is a typed
+#: refusal, never a silent default. Font values must be concrete resolvable
+#: weight names — see the module docstring.
+_SUBTITLE_STYLE_PROFILE_ID: Final = "subtitle-style-default"
+
+
+def _resolve_style_binding(style_profile_id: str) -> StyleBinding:
+    """Bind a style profile id through the channel presentation profile."""
+    if style_profile_id != _SUBTITLE_STYLE_PROFILE_ID:
+        raise LiveAdapterUnsupportedError(
+            "style-profile-unsupported", f"no Text+ mapping for {style_profile_id!r}"
+        )
+    style = load_default_profile().subtitle_style
+    return StyleBinding(font=style.font, size=style.size_screen_ratio, center=style.center)
 
 
 def apply_subtitles(
@@ -74,11 +81,7 @@ def apply_subtitles(
         raise LiveAdapterUnsupportedError(
             "subtitle-path-not-native", f"selected_path {p.selected_path!r}"
         )
-    style = _PROFILE_INPUTS.get(p.style_profile_id)
-    if style is None:
-        raise LiveAdapterUnsupportedError(
-            "style-profile-unsupported", f"no Text+ mapping for {p.style_profile_id!r}"
-        )
+    style = _resolve_style_binding(p.style_profile_id)
     if ctx.timeline_start is None or ctx.current_timeline_name is None:
         raise LiveAdapterError("timeline-not-prepared", "prepare first")
     main_name = ctx.current_timeline_name

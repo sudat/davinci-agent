@@ -9,7 +9,10 @@ intent.
 ``ChannelPresentationProfile`` models EVERY PRD 10.6 field (allowed recipe
 families + density caps per-kind/global, title/lower-third choices, subtitle
 style, transition preferences, punch-in range, audio policy + target ranges,
-color policy, intro/outro rules, brand assets + license evidence). The
+color policy, intro/outro rules, brand assets + license evidence), plus the
+WBS-0 style containers: the subtitle card appearance fields on
+``subtitle_style`` and the ``telop_style`` tree (values byte-identical to the
+theme_text/chapter_card calculators). The
 shipped default (config/production-kit/presentation-profile-default.json)
 carries conservative caps; no v4.2 channel profile existed to extend, and
 services/config loaders are untouched.
@@ -84,6 +87,8 @@ ALL_KINDS: tuple[PresentationIntentKind, ...] = (
 _Frames = Annotated[int, Field(gt=0, strict=True)]
 _NonEmpty = Annotated[str, Field(min_length=1, strict=True)]
 RecipeRef = _NonEmpty
+_Channel8 = Annotated[int, Field(ge=0, le=255, strict=True)]
+_ScreenAxis = Annotated[float, Field(ge=0.0, le=1.0, strict=True)]
 
 
 # ------------------------------------------------------------ per-kind params
@@ -275,9 +280,110 @@ class TitleChoices(StrictModel):
 
 
 class SubtitleStyle(StrictModel):
+    """Planning knobs plus the card-bound Text+ appearance (WBS-0 move).
+
+    ``font`` / ``size_screen_ratio`` / ``center`` are the appearance values
+    the native cue handler binds; until WBS-0 they lived only as inline
+    constants inside that handler module.
+    """
+
     recipe_id: RecipeRef
     max_line_length_chars: int = Field(gt=0, strict=True)
     font_size_px: int = Field(gt=0, strict=True)
+    font: _NonEmpty
+    size_screen_ratio: float = Field(gt=0.0, lt=1.0, strict=True)
+    center: Annotated[tuple[_ScreenAxis, _ScreenAxis], BeforeValidator(to_tuple)]
+
+
+class TelopBand(StrictModel):
+    """Translucent band behind telop text: fill, alpha, padding."""
+
+    fill: Annotated[tuple[_Channel8, _Channel8, _Channel8], BeforeValidator(to_tuple)]
+    alpha: _Channel8
+    pad_x: int = Field(ge=0, strict=True)
+    pad_y: int = Field(ge=0, strict=True)
+
+
+class TelopOutline(StrictModel):
+    """Stroke around telop glyphs: color, width as a font-size ratio, floor."""
+
+    color: Annotated[tuple[_Channel8, _Channel8, _Channel8], BeforeValidator(to_tuple)]
+    width_ratio: float = Field(gt=0.0, lt=1.0, strict=True)
+    min_px: int = Field(ge=0, strict=True)
+
+
+class TelopOpeningBox(StrictModel):
+    """Opening telop layout rectangle: left edge, width, vertical centering."""
+
+    x: int = Field(ge=0, strict=True)
+    w: int = Field(gt=0, strict=True)
+    center_v: bool
+
+
+class TelopPersistentBox(StrictModel):
+    """Persistent telop layout rectangle: pinned top-left, fixed width."""
+
+    x: int = Field(ge=0, strict=True)
+    y: int = Field(ge=0, strict=True)
+    w: int = Field(gt=0, strict=True)
+
+
+class TelopOpeningStyle(StrictModel):
+    """Opening (large) telop: font-size ladder, box, band, outline."""
+
+    size_px_base: int = Field(gt=0, strict=True)
+    size_px_min: int = Field(gt=0, strict=True)
+    box: TelopOpeningBox
+    band: TelopBand
+    outline: TelopOutline
+
+    @model_validator(mode="after")
+    def require_min_not_above_base(self) -> TelopOpeningStyle:
+        if self.size_px_min > self.size_px_base:
+            raise PydanticCustomError(
+                "telop_size_ladder_inverted", "size_px_min must be <= size_px_base"
+            )
+        return self
+
+
+class TelopPersistentStyle(StrictModel):
+    """Persistent (top-left) telop: font-size ladder, box, band, outline."""
+
+    size_px_base: int = Field(gt=0, strict=True)
+    size_px_min: int = Field(gt=0, strict=True)
+    box: TelopPersistentBox
+    band: TelopBand
+    outline: TelopOutline
+
+    @model_validator(mode="after")
+    def require_min_not_above_base(self) -> TelopPersistentStyle:
+        if self.size_px_min > self.size_px_base:
+            raise PydanticCustomError(
+                "telop_size_ladder_inverted", "size_px_min must be <= size_px_base"
+            )
+        return self
+
+
+class TelopChapterStyle(StrictModel):
+    """Chapter card: one centered line on a full-black canvas, nothing else."""
+
+    size_px: int = Field(gt=0, strict=True)
+    background: Literal["black-full"]
+
+
+class TelopStyle(StrictModel):
+    """Channel telop appearance (DESIGN telop-nested §4.2).
+
+    Values mirror the calculators that stay authoritative for rendering —
+    ``theme_text.py`` (opening/persistent) and ``chapter_card.py`` — so the
+    profile externalizes style without changing a single rendered pixel.
+    """
+
+    recipe_id: RecipeRef
+    font: _NonEmpty
+    opening: TelopOpeningStyle
+    persistent: TelopPersistentStyle
+    chapter: TelopChapterStyle
 
 
 class TransitionPreferences(StrictModel):
@@ -338,6 +444,7 @@ class ChannelPresentationProfile(ResolveFreeModel):
     density: DensityLimits
     title_choices: TitleChoices
     subtitle_style: SubtitleStyle
+    telop_style: TelopStyle
     transition_preferences: TransitionPreferences
     punch_in_range: PunchInRange
     audio_policy: AudioPolicy
@@ -488,8 +595,10 @@ def attach_presentation_intents(
 
 
 _DEFAULT_PROFILE_PATH = (
-    Path(__file__).resolve().parents[2] / "config" / "production-kit" /
-    "presentation-profile-default.json"
+    Path(__file__).resolve().parents[2]
+    / "config"
+    / "production-kit"
+    / "presentation-profile-default.json"
 )
 
 
@@ -528,6 +637,14 @@ __all__ = [
     "SfxPolicy",
     "SimpleDissolveParams",
     "SubtitleStyle",
+    "TelopBand",
+    "TelopChapterStyle",
+    "TelopOpeningBox",
+    "TelopOpeningStyle",
+    "TelopOutline",
+    "TelopPersistentBox",
+    "TelopPersistentStyle",
+    "TelopStyle",
     "TitleChoices",
     "TransitionPreferences",
     "attach_presentation_intents",

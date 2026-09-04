@@ -20,6 +20,7 @@ presentation_intent_refs set; the source IR stays untouched.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from types import FunctionType
@@ -47,6 +48,14 @@ from services.creative_plan.presentation_intents import (
     PunchInRange,
     SfxPolicy,
     SubtitleStyle,
+    TelopBand,
+    TelopChapterStyle,
+    TelopOpeningBox,
+    TelopOpeningStyle,
+    TelopOutline,
+    TelopPersistentBox,
+    TelopPersistentStyle,
+    TelopStyle,
     TitleChoices,
     TransitionPreferences,
     attach_presentation_intents,
@@ -55,6 +64,8 @@ from services.creative_plan.presentation_intents import (
     validate_against_profile,
 )
 from services.policy.check_scope import scan_config_tree
+from services.presentation import chapter_card
+from services.presentation import theme_text as tt
 
 IR_JSON = """
 {
@@ -142,7 +153,31 @@ def _profile(*, per_kind_cap: float = 3.0, global_per_minute: float = 12.0):
             lower_third="title/lower-third",
         ),
         subtitle_style=SubtitleStyle(
-            recipe_id="subtitle/default", max_line_length_chars=32, font_size_px=24
+            recipe_id="subtitle/default",
+            max_line_length_chars=32,
+            font_size_px=24,
+            font="Hiragino Sans W3",
+            size_screen_ratio=0.04,
+            center=(0.5, 0.14),
+        ),
+        telop_style=TelopStyle(
+            recipe_id="telop/default",
+            font="Hiragino Sans W6",
+            opening=TelopOpeningStyle(
+                size_px_base=97,
+                size_px_min=64,
+                box=TelopOpeningBox(x=96, w=1632, center_v=True),
+                band=TelopBand(fill=(10, 10, 10), alpha=140, pad_x=23, pad_y=19),
+                outline=TelopOutline(color=(16, 16, 16), width_ratio=0.04, min_px=2),
+            ),
+            persistent=TelopPersistentStyle(
+                size_px_base=43,
+                size_px_min=27,
+                box=TelopPersistentBox(x=48, y=27, w=624),
+                band=TelopBand(fill=(10, 10, 10), alpha=140, pad_x=15, pad_y=12),
+                outline=TelopOutline(color=(16, 16, 16), width_ratio=0.04, min_px=2),
+            ),
+            chapter=TelopChapterStyle(size_px=97, background="black-full"),
         ),
         transition_preferences=TransitionPreferences(
             preferred_order=("dissolve", "motion", "hard_cut"), max_duration_frames=30
@@ -356,3 +391,126 @@ def test_attach_rejects_duplicate_intent_ids():
     second = _intent("sfx_accent", ordinal=0)
     with pytest.raises(ValueError, match="unique"):
         attach_presentation_intents(ir, [first, second])
+
+
+# ------------------------------- WBS-0 telop/subtitle style externalized values
+#
+# The profile is now the style container (DESIGN telop-nested §4.2), but the
+# calculator stays theme_text.py / chapter_card.py. These locks pin the
+# profile fields byte-identical to those code constants so moving the values
+# can never drift from the renderer that still consumes them.
+
+
+def test_default_profile_subtitle_style_locks_live_card_appearance():
+    # Given: the shipped default profile
+    # When: reading the subtitle appearance fields
+    # Then: they equal the constants the native cue handler bound inline
+    #       before WBS-0 (subtitle.py _PROFILE_INPUTS, byte-identical move)
+    style = load_default_profile().subtitle_style
+    assert style.font == "Hiragino Sans W3"
+    assert style.size_screen_ratio == 0.04
+    assert style.center == (0.5, 0.14)
+
+
+def test_default_profile_telop_style_opening_mirrors_theme_text():
+    # Given: the shipped default profile and theme_text.py's opening box
+    # When: comparing every opening telop field
+    # Then: sizes/box/band match the constants exactly; outline matches the
+    #       render-time derivation (half of _stroke_for's 8% ratio, min 2 —
+    #       theme_text.py render_theme_text: stroke = max(2, stroke_width//2),
+    #       stroke_fill=(16,16,16,255))
+    opening = load_default_profile().telop_style.opening
+    assert opening.size_px_base == tt._OPEN_BASE == 97
+    assert opening.size_px_min == tt._OPEN_MIN == 64
+    assert opening.box.x == tt._OPEN_X == 96
+    assert opening.box.w == tt._OPEN_W == 1632
+    assert opening.box.center_v is True
+    assert opening.band.fill == tt._BAND_FILL[:3] == (10, 10, 10)
+    assert opening.band.alpha == tt._BAND_FILL[3] == 140
+    assert opening.band.pad_x == tt._BAND_PADDING["opening"][0] == 23
+    assert opening.band.pad_y == tt._BAND_PADDING["opening"][1] == 19
+    assert opening.outline.color == (16, 16, 16)
+    assert opening.outline.width_ratio == 0.04
+    assert opening.outline.min_px == 2
+
+
+def test_default_profile_telop_style_persistent_mirrors_theme_text():
+    # Given: the shipped default profile and theme_text.py's persistent box
+    # When: comparing every persistent telop field
+    # Then: sizes/box/band match the constants exactly; outline identical to
+    #       the opening derivation
+    persistent = load_default_profile().telop_style.persistent
+    assert persistent.size_px_base == tt._PERS_BASE == 43
+    assert persistent.size_px_min == tt._PERS_MIN == 27
+    assert persistent.box.x == tt._PERS_X == 48
+    assert persistent.box.y == tt._PERS_Y == 27
+    assert persistent.box.w == tt._PERS_W == 624
+    assert persistent.band.fill == tt._BAND_FILL[:3] == (10, 10, 10)
+    assert persistent.band.alpha == tt._BAND_FILL[3] == 140
+    assert persistent.band.pad_x == tt._BAND_PADDING["persistent"][0] == 15
+    assert persistent.band.pad_y == tt._BAND_PADDING["persistent"][1] == 12
+    assert persistent.outline.color == (16, 16, 16)
+    assert persistent.outline.width_ratio == 0.04
+    assert persistent.outline.min_px == 2
+
+
+def test_default_profile_telop_style_chapter_mirrors_chapter_card():
+    # Given: the shipped default profile and chapter_card.py's approved card
+    # When: comparing the chapter telop fields
+    # Then: size equals FONT_SIZE_PX and the background stays the pure black
+    #       full canvas (chapter_card renders Image.new "RGB" fill (0,0,0))
+    chapter = load_default_profile().telop_style.chapter
+    assert chapter.size_px == chapter_card.FONT_SIZE_PX == 97
+    assert chapter.background == "black-full"
+
+
+def test_default_profile_telop_style_identity_fields():
+    telop = load_default_profile().telop_style
+    assert telop.recipe_id == "telop/default"
+    # DESIGN §3/§7: bind a concrete resolvable weight name, never a bare
+    # family name (subtitle readback lesson).
+    assert telop.font == "Hiragino Sans W6"
+
+
+def test_default_profile_style_fields_round_trip_through_json():
+    # Given: the shipped default profile (nested tuples in center/fill/color)
+    # When: serializing to JSON and re-validating
+    # Then: every telop/subtitle style field survives byte-identically
+    profile = load_default_profile()
+    again = ChannelPresentationProfile.model_validate_json(profile.model_dump_json())
+    assert again == profile
+    assert again.telop_style == profile.telop_style
+    assert again.subtitle_style == profile.subtitle_style
+
+
+def test_channel_profile_without_telop_style_refused_no_silent_default():
+    # Given: the shipped default payload minus the telop_style block
+    # When: validating as a channel presentation profile
+    # Then: strict rejection — a missing style container never falls back
+    payload = json.loads(pi._DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
+    del payload["telop_style"]
+    with pytest.raises(ValidationError, match="telop_style"):
+        ChannelPresentationProfile.model_validate(payload)
+
+
+def test_channel_profile_without_subtitle_appearance_refused():
+    # Given: the shipped default payload minus one subtitle appearance field
+    # When: validating as a channel presentation profile
+    # Then: strict rejection — appearance values are required, not defaulted
+    payload = json.loads(pi._DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
+    del payload["subtitle_style"]["size_screen_ratio"]
+    with pytest.raises(ValidationError, match="size_screen_ratio"):
+        ChannelPresentationProfile.model_validate(payload)
+
+
+def test_telop_style_rejects_inverted_size_ladder_and_unknown_background():
+    # Given: a valid telop_style payload
+    # When: inverting the size ladder, or naming an unknown chapter background
+    # Then: typed validation rejections (no silent clamping)
+    payload = json.loads(pi._DEFAULT_PROFILE_PATH.read_text())["telop_style"]
+    inverted = {**payload, "opening": {**payload["opening"], "size_px_min": 999}}
+    with pytest.raises(ValidationError, match="size_px_min"):
+        pi.TelopStyle.model_validate(inverted)
+    unknown_bg = {**payload, "chapter": {**payload["chapter"], "background": "white"}}
+    with pytest.raises(ValidationError, match=r"black-full|background"):
+        pi.TelopStyle.model_validate(unknown_bg)

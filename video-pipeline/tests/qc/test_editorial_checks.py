@@ -69,6 +69,14 @@ from services.creative_plan.presentation_intents import (
     SfxAccentParams,
     SfxPolicy,
     SubtitleStyle,
+    TelopBand,
+    TelopChapterStyle,
+    TelopOpeningBox,
+    TelopOpeningStyle,
+    TelopOutline,
+    TelopPersistentBox,
+    TelopPersistentStyle,
+    TelopStyle,
     TitleChoices,
     TransitionPreferences,
 )
@@ -341,7 +349,31 @@ def _presentation_profile(*, cap: float = 10.0) -> ChannelPresentationProfile:
             lower_third="title/lower-third",
         ),
         subtitle_style=SubtitleStyle(
-            recipe_id="subtitle/default", max_line_length_chars=13, font_size_px=42
+            recipe_id="subtitle/default",
+            max_line_length_chars=13,
+            font_size_px=42,
+            font="Hiragino Sans W3",
+            size_screen_ratio=0.04,
+            center=(0.5, 0.14),
+        ),
+        telop_style=TelopStyle(
+            recipe_id="telop/default",
+            font="Hiragino Sans W6",
+            opening=TelopOpeningStyle(
+                size_px_base=97,
+                size_px_min=64,
+                box=TelopOpeningBox(x=96, w=1632, center_v=True),
+                band=TelopBand(fill=(10, 10, 10), alpha=140, pad_x=23, pad_y=19),
+                outline=TelopOutline(color=(16, 16, 16), width_ratio=0.04, min_px=2),
+            ),
+            persistent=TelopPersistentStyle(
+                size_px_base=43,
+                size_px_min=27,
+                box=TelopPersistentBox(x=48, y=27, w=624),
+                band=TelopBand(fill=(10, 10, 10), alpha=140, pad_x=15, pad_y=12),
+                outline=TelopOutline(color=(16, 16, 16), width_ratio=0.04, min_px=2),
+            ),
+            chapter=TelopChapterStyle(size_px=97, background="black-full"),
         ),
         transition_preferences=TransitionPreferences(
             preferred_order=("dissolve", "hard_cut"),
