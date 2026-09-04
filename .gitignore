@@ -17,3 +17,7 @@ cockpit/test-results/
 cockpit/.e2e/
 cockpit/next-env.d.ts
 cockpit/tsconfig.tsbuildinfo
+.mcp.json
+.opencode/
+.playwright-mcp/
+/*.log
