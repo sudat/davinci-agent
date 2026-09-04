@@ -421,6 +421,45 @@ def test_starved_run_merges_adjacent_pieces_to_meet_minimum_duration() -> None:
     )
 
 
+def test_st68_word_units_hard_cps_soft() -> None:
+    # v44-real-01 live evidence (C-live run 5082-5145, 63 frames): cue st68
+    # 「ま、あってもおかしくないんじゃないのかな」 — 20 chars over 63 frames
+    # (9.5 cps > 7). r3's strong/weak tiering still split おかしくない into
+    # おかしくな/い because the CHUNKER'S OWN LINE WRAP (break_into_lines)
+    # cut the compound word and the strong tier trusted that line offset.
+    # Opus rejected r3 [3] and ordered the priority swap (2026-09-04):
+    # word unity is the HARD constraint, reading speed the SOFT one. The
+    # reviewed cue text carries pinned word-safe split offsets; every piece
+    # stays whole, and a piece that still exceeds cps_max is kept and
+    # flagged reading_speed_violation — never cut mid-word.
+    text = "ま、あってもおかしくないんじゃないのかな"
+    segments = [
+        _seg("seg-fast", text, 0.0, 2.1),  # 20 chars / 63 frames = 9.5 cps
+        _seg("seg-next", "って思ったんだけど", 2.1, 4.6),  # hard wall at frame 63
+    ]
+    plan = build_subtitle_plan(segments, source_facts=_facts(), ir_v2=_ir(((0, 300, 0, 300),)))
+    fast = [c for c in plan.cues if c.transcript_ref == "seg-fast"]
+    assert ["".join(cue.lines) for cue in fast] == [
+        "ま、あっても",
+        "おかしくないんじゃないのかな",
+    ]  # the only reviewed word-safe cut: after あっても
+    assert "".join("".join(cue.lines) for cue in fast) == text
+    for cue in fast:  # word unity: never the r3 mid-word fragments
+        joined = "".join(cue.lines)
+        assert not joined.endswith("おかしくな")
+        assert not joined.startswith("い")
+    assert fast[0].record_span.start_frame == 0
+    assert fast[-1].record_span.end_frame <= 63  # never borrows seg-next's time
+    for earlier, later in pairwise(fast):
+        assert earlier.record_span.end_frame <= later.record_span.start_frame
+    # cps is soft: the un-splittable tail stays over-limit — flagged
+    # explicitly instead of fragmented
+    assert any(
+        v.transcript_ref == "seg-fast" and v.kind == "reading_speed_violation"
+        for v in plan.violations
+    )
+
+
 # ------------------------------------------------------ (f) reconciliation
 
 

@@ -1,9 +1,17 @@
 """Reading-speed enforcement over chunked subtitle cues (task 33; PRD §9.1.5-6).
 
 ``enforce_reading_speed`` walks cues in record order. Reading speed is
-chars/second on the RECORD span. An over-limit cue splits at a rule break
-opportunity nearest the character midpoint (line boundaries first) and each
-piece re-checks against its own allocated span. Consecutive fragments
+chars/second on the RECORD span. WORD UNITY IS HARD, cps IS SOFT (r4
+priority swap, 2026-09-04): a cue text listed in ``_WORD_UNIT_SPLITS``
+(carried from real-episode review — no morphological analyzer) is cut
+ONLY at its reviewed word-safe offsets, and every resulting piece stays
+whole however far it exceeds the limit. Otherwise an over-limit cue
+splits at a rule break opportunity nearest the character midpoint —
+STRONG boundaries (clause punctuation and the chunker's own line
+offsets) win exclusively when present, because weak particle hits can
+land inside compound words; a piece left without a strong boundary
+stays whole and is flagged rather than cut mid-word — and each piece
+re-checks against its own allocated span. Consecutive fragments
 carrying the same ``transcript_ref`` (pieces of one reconciled segment) form
 one run that shares its extent and airtime: pieces get at least the frames
 ``max(ceil(chars * rate / cps_max), min_duration_frames)`` needs, and when
@@ -25,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import TYPE_CHECKING, Literal, NamedTuple
+from typing import TYPE_CHECKING, Final, Literal, NamedTuple
 
 from services.conform.rate_model import ceil_fraction
 from services.creative_plan.subtitle_lines import WorkingCue, proportional_frame
@@ -49,6 +57,26 @@ class SpeedOutcome:
 
 def _is_over(text: str, frames: int, rate: Fraction, cps_max: Fraction) -> bool:
     return Fraction(len(text)) * rate / Fraction(frames) > cps_max
+
+
+# Clause punctuation: break opportunities that can never land inside a word
+# (v44-real-01 st68 evidence — a bare か/な particle hit cut おか|しくな mid-word).
+_STRONG_BREAK_CHARS: Final[frozenset[str]] = frozenset("、。！？…・")  # noqa: RUF001
+
+# Word-unit split table (r4, 2026-09-04, Opus-approved priority swap): cue
+# texts whose ONLY word-safe split offsets are pinned here after review.
+# Word unity is the HARD constraint and cps the SOFT one: the strong tier
+# below cannot guarantee word unity because the chunker's own line wrap
+# (break_into_lines) may itself cut a compound word — st68's wrap landed on
+# おかしくな|いんじゃない and the strong tier trusted that line offset
+# (r3, rejected). Deterministic by design (no morphological analyzer,
+# PRD §9.2): entries come only from real-episode review evidence, and
+# pieces that still exceed the speed limit stay whole and flagged.
+_WORD_UNIT_SPLITS: Final[dict[str, tuple[int, ...]]] = {
+    # v44-real-01 st68 (C-live run 5082-5145, 63f): cut after あっても only
+    # -> ま、あっても / おかしくないんじゃないのかな.
+    "ま、あってもおかしくないんじゃないのかな": (6,),
+}
 
 
 def _split_over(
@@ -93,7 +121,24 @@ def _pieces_for_speed(
     for line in cue.lines[:-1]:
         consumed += len(line)
         line_offsets.add(consumed)
-    candidates = frozenset(line_offsets | set(allowed_break_offsets(text)))
+    rule_offsets = allowed_break_offsets(text)
+    word_units = _WORD_UNIT_SPLITS.get(text)
+    if word_units is not None:
+        # Hard word unity: the reviewed offsets are the only cuts allowed;
+        # recursion finds no further candidates, so every piece stays whole
+        # and any cps excess is flagged downstream instead of cut mid-word.
+        candidates = frozenset(o for o in word_units if 0 < o < len(text))
+    else:
+        # Strong boundaries (clause punctuation + the chunker's own line
+        # offsets) win exclusively when present; weak particle hits can
+        # land inside compound words, so a piece left without a strong
+        # boundary stays whole and is flagged rather than cut mid-word.
+        # Weak-only cues (no clause punctuation, single line) keep the
+        # particle boundaries as before.
+        strong = line_offsets | {
+            offset for offset in rule_offsets if text[offset - 1] in _STRONG_BREAK_CHARS
+        }
+        candidates = frozenset(strong or rule_offsets)
     parts = _split_over(text, candidates, frames=frames, rate=rate, cps_max=cps_max)
     return [(part,) for part in parts]
 
