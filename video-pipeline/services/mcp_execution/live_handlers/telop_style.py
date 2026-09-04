@@ -16,6 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, NamedTuple
 
+from PIL import Image, ImageDraw, ImageFont
+
 from services.mcp_execution.live_handlers.common import (
     LiveAdapterError,
     LiveAdapterUnsupportedError,
@@ -28,7 +30,11 @@ from services.presentation.theme_text import (
 )
 
 if TYPE_CHECKING:
-    from services.creative_plan.presentation_intents import TelopOutline, TelopStyle
+    from services.creative_plan.presentation_intents import (
+        TelopBand,
+        TelopOutline,
+        TelopStyle,
+    )
 
 #: The deliverable canvas (``theme_text.py`` owns the same numbers; the
 #: profile's boxes/pads are pixels on this canvas). Band geometry and
@@ -75,6 +81,15 @@ _FONT_FILES: Final[dict[str, Path]] = {
     "Hiragino Sans W6": Path("/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc"),
 }
 
+#: Direct inner-Text-tool glyph-FILL color inputs (shading element 1; the
+#: outline element carries the ``*2`` suffix — see the tracked template's
+#: ``Red2``-class inputs — so element 1 is the ``Red1``-class pair).
+#: LIVE-VERIFIED on the D-sample disposable project 2026-09-04: the
+#: Red1/Green1/Blue1/Alpha1 dark write value-reads back AND renders dark
+#: glyphs on the white band (stills/probe-telop-darkfill.png — the
+#: unsuffixed ``Red``-class prefix remains the baked-background clear).
+_TEXT_FILL_INPUTS: Final[tuple[str, str, str, str]] = ("Red1", "Green1", "Blue1", "Alpha1")
+
 
 class TelopCardBinding(NamedTuple):
     """One telop card resolved to its committed Template inputs."""
@@ -84,6 +99,11 @@ class TelopCardBinding(NamedTuple):
     size: float
     text_pos: tuple[float, float]
     inputs: dict[str, object]
+    #: EXTRA direct writes on the inner Text tool, merged over the proven
+    #: white-removal prefix (``_TEXT_BACKGROUND_CLEAR`` in ``telop_card``):
+    #: the D persistent layer's dark glyph fill rides this path because the
+    #: group route exposes no published fill input. ``None`` = prefix only.
+    text_tool_inputs: dict[str, object] | None = None
 
 
 class TelopCardReadback(NamedTuple):
@@ -143,6 +163,30 @@ def _outline_inputs(size_px: int, outline: TelopOutline) -> dict[str, object]:
     }
 
 
+def _text_fill_inputs(color: tuple[int, int, int]) -> dict[str, object]:
+    """D persistent-L1 dark glyphs: direct fill write on the inner Text
+    tool (input names pending the D-sample live pin — see
+    ``_TEXT_FILL_INPUTS``)."""
+    return {
+        _TEXT_FILL_INPUTS[0]: _wire(color[0] / 255),
+        _TEXT_FILL_INPUTS[1]: _wire(color[1] / 255),
+        _TEXT_FILL_INPUTS[2]: _wire(color[2] / 255),
+        _TEXT_FILL_INPUTS[3]: 1.0,
+    }
+
+
+def _band_rect(
+    bounds: tuple[int, int, int, int], band: TelopBand
+) -> tuple[int, int, int, int]:
+    left, top, right, bottom = bounds
+    return (
+        max(0, left - band.pad_x),
+        max(0, top - band.pad_y),
+        min(_CANVAS_W, right + band.pad_x),
+        min(_CANVAS_H, bottom + band.pad_y),
+    )
+
+
 def _center(bounds: tuple[int, int, int, int]) -> tuple[float, float]:
     left, top, right, bottom = bounds
     return ((left + right) / 2, (top + bottom) / 2)
@@ -158,12 +202,7 @@ def _fitted_binding(kind: str, text: str, style: TelopStyle) -> TelopCardBinding
         fit = fit_theme_text(text, variant=variant, font_path=_font_file(style.font))
     except ThemeTextError as error:
         raise LiveAdapterError("telop-text-unfittable", str(error)) from error
-    left, top, right, bottom = fit.bounds
-    band = appearance.band
-    band_left = max(0, left - band.pad_x)
-    band_top = max(0, top - band.pad_y)
-    band_right = min(_CANVAS_W, right + band.pad_x)
-    band_bottom = min(_CANVAS_H, bottom + band.pad_y)
+    band_left, band_top, band_right, band_bottom = _band_rect(fit.bounds, appearance.band)
     text_x, text_y = _center(fit.bounds)
     band_x, band_y = _center((band_left, band_top, band_right, band_bottom))
     styled = "\n".join(fit.lines)
@@ -177,6 +216,99 @@ def _fitted_binding(kind: str, text: str, style: TelopStyle) -> TelopCardBinding
         "TextPos": [pos_x, pos_y],
         "CharacterSpacing": _CHARACTER_SPACING,
         **_outline_inputs(fit.font_size, outline),
+        "BandR": _wire(appearance.band.fill[0] / 255),
+        "BandG": _wire(appearance.band.fill[1] / 255),
+        "BandB": _wire(appearance.band.fill[2] / 255),
+        "BandAlpha": _wire(appearance.band.alpha / 255),
+        "BandWidth": _wire((band_right - band_left) / _CANVAS_W),
+        "BandHeight": _wire((band_bottom - band_top) / _CANVAS_H),
+        "BandPos": [_wire(band_x / _CANVAS_W), _fusion_y(band_y / _CANVAS_H)],
+    }
+    # D: only the persistent L1 card inverts to dark glyphs on the white
+    # band; the opening card keeps the baked white fill untouched.
+    text_tool = (
+        _text_fill_inputs(style.persistent.text_color) if kind == "persistent" else None
+    )
+    return TelopCardBinding(
+        styled_text=styled,
+        font=style.font,
+        size=wire_size,
+        text_pos=(pos_x, pos_y),
+        inputs=inputs,
+        text_tool_inputs=text_tool,
+    )
+
+
+def persistent_band_rect(text: str, style: TelopStyle) -> tuple[int, int, int, int]:
+    """The persistent (L1) card's band rectangle on the canvas — the anchor
+    the second layer hangs below (same fit + band math as the L1 binding)."""
+    try:
+        fit = fit_theme_text(
+            text, variant="persistent", font_path=_font_file(style.font)
+        )
+    except ThemeTextError as error:
+        raise LiveAdapterError("telop-text-unfittable", str(error)) from error
+    return _band_rect(fit.bounds, style.persistent.band)
+
+
+def _second_layer_single_line(
+    text: str, font_path: Path, base_px: int, min_px: int, max_width_px: int
+) -> tuple[int, tuple[int, int]]:
+    """Fit one line at the largest ladder size whose measured width fits
+    ``max_width_px`` (DESIGN D §5: the chapter name never wraps — an
+    unfittable text refuses typed, the fit-calculator convention)."""
+    probe = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    for size in range(base_px, min_px - 1, -1):
+        try:
+            font = ImageFont.truetype(str(font_path), size)
+        except OSError as error:
+            raise LiveAdapterError(
+                "telop-font-file-unresolved", f"cannot load font at {size}: {error}"
+            ) from error
+        raw = probe.textbbox((0, 0), text, font=font)
+        width, height = int(raw[2]) - int(raw[0]), int(raw[3]) - int(raw[1])
+        if width <= max_width_px:
+            return size, (width, height)
+    raise LiveAdapterError(
+        "telop-text-unfittable",
+        f"text does not fit the second layer at lower bound {min_px}: {text[:30]!r}",
+    )
+
+
+def _persistent_second_binding(
+    text: str, style: TelopStyle, anchor_band: tuple[int, int, int, int]
+) -> TelopCardBinding:
+    """The chapter-name second layer (DESIGN D §5): dark band + white
+    glyphs, anchored ``indent_right_px`` right of and ``offset_below_px``
+    below the persistent L1 band (0 = flush touching, the approved start).
+    Same wire conventions as every fitted card — 1536.7 size divisor,
+    character spacing 1.0, bottom-up Y, canvas-normalized geometry."""
+    second = style.persistent_second
+    band = second.band
+    font_path = _font_file(style.font)
+    max_width = style.persistent.box.w - second.indent_right_px
+    size_px, (text_w, text_h) = _second_layer_single_line(
+        text, font_path, second.size_px_base, second.size_px_min, max_width
+    )
+    band_left = min(_CANVAS_W, anchor_band[0] + second.indent_right_px)
+    band_top = min(_CANVAS_H, anchor_band[3] + second.offset_below_px)
+    text_left = band_left + band.pad_x
+    text_top = band_top + band.pad_y
+    text_right = min(_CANVAS_W, text_left + text_w)
+    text_bottom = min(_CANVAS_H, text_top + text_h)
+    band_right = min(_CANVAS_W, text_right + band.pad_x)
+    band_bottom = min(_CANVAS_H, text_bottom + band.pad_y)
+    text_x, text_y = _center((text_left, text_top, text_right, text_bottom))
+    band_x, band_y = _center((band_left, band_top, band_right, band_bottom))
+    wire_size = _wire(size_px / _TEMPLATE_SIZE_UNIT_PX)
+    pos_x, pos_y = _wire(text_x / _CANVAS_W), _fusion_y(text_y / _CANVAS_H)
+    inputs: dict[str, object] = {
+        "StyledText": text,
+        "Font": style.font,
+        "Size": wire_size,
+        "TextPos": [pos_x, pos_y],
+        "CharacterSpacing": _CHARACTER_SPACING,
+        "OutlineEnabled": 0,
         "BandR": _wire(band.fill[0] / 255),
         "BandG": _wire(band.fill[1] / 255),
         "BandB": _wire(band.fill[2] / 255),
@@ -186,7 +318,7 @@ def _fitted_binding(kind: str, text: str, style: TelopStyle) -> TelopCardBinding
         "BandPos": [_wire(band_x / _CANVAS_W), _fusion_y(band_y / _CANVAS_H)],
     }
     return TelopCardBinding(
-        styled_text=styled,
+        styled_text=text,
         font=style.font,
         size=wire_size,
         text_pos=(pos_x, pos_y),
@@ -217,11 +349,29 @@ def _chapter_binding(text: str, size_px: int, font: str) -> TelopCardBinding:
     )
 
 
-def resolve_telop_binding(kind: str, text: str, style: TelopStyle) -> TelopCardBinding:
-    """Resolve one card's Template inputs from the profile telop style."""
+def resolve_telop_binding(
+    kind: str,
+    text: str,
+    style: TelopStyle,
+    anchor_band: tuple[int, int, int, int] | None = None,
+) -> TelopCardBinding:
+    """Resolve one card's Template inputs from the profile telop style.
+
+    ``persistent_second`` requires ``anchor_band`` — the persistent (L1)
+    card's band rect (``persistent_band_rect``); a missing anchor is a
+    typed refusal, never a guessed position.
+    """
     match kind:
         case "opening" | "persistent":
             return _fitted_binding(kind, text, style)
+        case "persistent_second":
+            if anchor_band is None:
+                raise LiveAdapterUnsupportedError(
+                    "telop-second-layer-anchor-missing",
+                    "persistent_second requires the persistent card's band"
+                    " rect anchor (place a persistent card in the same set)",
+                )
+            return _persistent_second_binding(text, style, anchor_band)
         case "chapter":
             return _chapter_binding(text, style.chapter.size_px, style.font)
         case _:
@@ -265,6 +415,7 @@ def verify_telop_card(
 __all__ = [
     "TelopCardBinding",
     "TelopCardReadback",
+    "persistent_band_rect",
     "resolve_telop_binding",
     "verify_telop_card",
 ]

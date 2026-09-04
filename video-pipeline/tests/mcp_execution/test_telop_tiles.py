@@ -80,6 +80,26 @@ def test_total_tile_count_matches_the_design_estimate() -> None:
     assert len(tile_spans((90, 7837), (CHAPTER_GAP,), TELOP_TILE_FRAMES)) == 53
 
 
+def test_second_layer_span_tiling_starts_after_the_chapter_card() -> None:
+    # Given: the D second-layer span [1677,7837) (DESIGN D §5/OQ-2: the
+    #        chapter name shows only AFTER the chapter card ends) with the
+    #        same chapter gap passed in
+    # When: the tiles are computed at the measured 150-frame length
+    # Then: exactly the 42 run-2 tiles — the second layer shares run 2's
+    #       boundaries (identical computation, one track higher)
+    spans = tile_spans((1677, 7837), (CHAPTER_GAP,), TELOP_TILE_FRAMES)
+    reference = tile_spans((90, 7837), (CHAPTER_GAP,), TELOP_TILE_FRAMES)[len(RUN1) :]
+    assert spans == reference
+    assert len(spans) == RUN2_COUNT
+    assert spans[:2] == RUN2_HEAD
+    assert spans[-2:] == RUN2_TAIL
+    # And: nothing lands at or before the chapter card's end
+    assert spans[0][0] == 1677
+    for start, end in spans:
+        assert start >= CHAPTER_GAP[1]
+        assert end <= 7837
+
+
 def test_no_gap_tiles_the_whole_span() -> None:
     # Given: a persistent span with no chapter card
     # When: the tiles are computed

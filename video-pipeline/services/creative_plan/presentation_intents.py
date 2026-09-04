@@ -279,12 +279,30 @@ class TitleChoices(StrictModel):
     lower_third: RecipeRef
 
 
+class SubtitleShadowStyle(StrictModel):
+    """Drop shadow behind subtitle glyphs (DESIGN D: Text+ element 3).
+
+    Semantic values only — the Text+ wire input names live in the subtitle
+    style-binding module. ``offset_x/y`` are Fusion-frame fractions
+    (bottom-up Y: a screen-down shadow offset is a NEGATIVE ``offset_y``).
+    """
+
+    enabled: bool
+    color: Annotated[tuple[_Channel8, _Channel8, _Channel8], BeforeValidator(to_tuple)]
+    alpha: _Channel8
+    softness: float = Field(ge=0.0, le=1.0, strict=True)
+    offset_x: float = Field(ge=-1.0, le=1.0, strict=True)
+    offset_y: float = Field(ge=-1.0, le=1.0, strict=True)
+
+
 class SubtitleStyle(StrictModel):
     """Planning knobs plus the card-bound Text+ appearance (WBS-0 move).
 
-    ``font`` / ``size_screen_ratio`` / ``center`` are the appearance values
-    the native cue handler binds; until WBS-0 they lived only as inline
-    constants inside that handler module.
+    ``font`` / ``size_screen_ratio`` / ``center`` / ``shadow`` are the
+    appearance values the native cue handler binds; until WBS-0 they lived
+    only as inline constants inside that handler module. D values (DESIGN
+    telop-nested §5): size 0.055, one-weight-bolder font, shadow on,
+    center unchanged.
     """
 
     recipe_id: RecipeRef
@@ -293,6 +311,7 @@ class SubtitleStyle(StrictModel):
     font: _NonEmpty
     size_screen_ratio: float = Field(gt=0.0, lt=1.0, strict=True)
     center: Annotated[tuple[_ScreenAxis, _ScreenAxis], BeforeValidator(to_tuple)]
+    shadow: SubtitleShadowStyle
 
 
 class TelopBand(StrictModel):
@@ -347,16 +366,48 @@ class TelopOpeningStyle(StrictModel):
 
 
 class TelopPersistentStyle(StrictModel):
-    """Persistent (top-left) telop: font-size ladder, box, band, outline."""
+    """Persistent (top-left) telop: font-size ladder, box, band, outline.
+
+    D revision (DESIGN telop-nested §5): the band flips to white with an
+    adjusted opacity and the text color to dark — layout/size fields still
+    mirror ``theme_text.py`` (the fit calculator), only the colors diverge.
+    """
 
     size_px_base: int = Field(gt=0, strict=True)
     size_px_min: int = Field(gt=0, strict=True)
     box: TelopPersistentBox
     band: TelopBand
     outline: TelopOutline
+    text_color: Annotated[tuple[_Channel8, _Channel8, _Channel8], BeforeValidator(to_tuple)]
 
     @model_validator(mode="after")
     def require_min_not_above_base(self) -> TelopPersistentStyle:
+        if self.size_px_min > self.size_px_base:
+            raise PydanticCustomError(
+                "telop_size_ladder_inverted", "size_px_min must be <= size_px_base"
+            )
+        return self
+
+
+class TelopPersistentSecondStyle(StrictModel):
+    """Second persistent layer: the small chapter-name card (DESIGN D §5).
+
+    Anchored to the persistent (L1) band: band top touches L1's band
+    bottom plus ``offset_below_px`` (0 = flush, the approved starting
+    value), band left sits ``indent_right_px`` right of L1's band left.
+    Size ladder and font follow the persistent conventions (same font,
+    same wire divisor); single line — an unfittable text refuses typed.
+    """
+
+    size_px_base: int = Field(gt=0, strict=True)
+    size_px_min: int = Field(gt=0, strict=True)
+    band: TelopBand
+    text_color: Annotated[tuple[_Channel8, _Channel8, _Channel8], BeforeValidator(to_tuple)]
+    indent_right_px: int = Field(ge=0, strict=True)
+    offset_below_px: int = Field(ge=0, strict=True)
+
+    @model_validator(mode="after")
+    def require_min_not_above_base(self) -> TelopPersistentSecondStyle:
         if self.size_px_min > self.size_px_base:
             raise PydanticCustomError(
                 "telop_size_ladder_inverted", "size_px_min must be <= size_px_base"
@@ -372,17 +423,19 @@ class TelopChapterStyle(StrictModel):
 
 
 class TelopStyle(StrictModel):
-    """Channel telop appearance (DESIGN telop-nested §4.2).
+    """Channel telop appearance (DESIGN telop-nested §4.2 + D §5).
 
-    Values mirror the calculators that stay authoritative for rendering —
-    ``theme_text.py`` (opening/persistent) and ``chapter_card.py`` — so the
-    profile externalizes style without changing a single rendered pixel.
+    Layout/size values mirror the calculators that stay authoritative for
+    rendering — ``theme_text.py`` (opening/persistent) and
+    ``chapter_card.py`` — while D color values (persistent white band +
+    dark text, the persistent_second block) are profile-owned from here on.
     """
 
     recipe_id: RecipeRef
     font: _NonEmpty
     opening: TelopOpeningStyle
     persistent: TelopPersistentStyle
+    persistent_second: TelopPersistentSecondStyle
     chapter: TelopChapterStyle
 
 
@@ -636,6 +689,7 @@ __all__ = [
     "SfxAccentParams",
     "SfxPolicy",
     "SimpleDissolveParams",
+    "SubtitleShadowStyle",
     "SubtitleStyle",
     "TelopBand",
     "TelopChapterStyle",
@@ -643,6 +697,7 @@ __all__ = [
     "TelopOpeningStyle",
     "TelopOutline",
     "TelopPersistentBox",
+    "TelopPersistentSecondStyle",
     "TelopPersistentStyle",
     "TelopStyle",
     "TitleChoices",

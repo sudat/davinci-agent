@@ -180,6 +180,9 @@ def _make_prepared_adapter() -> tuple[LiveMcpAdapter, ScriptedTransport]:
             ("project_manager", "load"): [{"success": False}],
             ("project_manager", "create"): [{"name": TIMELINE_NAME, "success": True}],
             ("project_settings", "set_setting"): [{"success": True}],
+            ("project_settings", "get_setting"): [
+                {"settings": "smart", "success": True}
+            ],
             ("media_pool", "create_timeline"): [
                 {"name": TIMELINE_NAME, "id": "tl-main", "success": True}
             ],
@@ -212,7 +215,12 @@ def _make_prepared_adapter() -> tuple[LiveMcpAdapter, ScriptedTransport]:
 
 @pytest.fixture
 def stub_binding(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _resolve(kind: str, text: str, style: object) -> TelopCardBinding:
+    def _resolve(
+        kind: str,
+        text: str,
+        style: object,
+        anchor_band: object = None,
+    ) -> TelopCardBinding:
         return TelopCardBinding(
             styled_text="スタブテロップ",
             font="Hiragino Sans W6",
@@ -431,6 +439,123 @@ def test_telop_appends_batch_one_call_per_contiguous_tile_run(stub_binding: None
         start = cast("int", clip["record_frame"]) - TIMELINE_START
         end = start + cast("int", clip["end_frame"])
         assert not (start < CHAPTER_GAP[1] and CHAPTER_GAP[0] < end) or (start == CHAPTER_GAP[0])
+
+
+def _telop_params_with_second_layer() -> dict[str, object]:
+    """The D four-card set: the C three cards plus the chapter-name second
+    layer [1677,7837) (DESIGN D §5)."""
+    params = _telop_params()
+    cards = cast("list[dict[str, object]]", params["cards"])
+    cards.append(
+        {
+            "card_id": "telop-persistent-second",
+            "kind": "persistent_second",
+            "text": "どこにもないカメラバッグ",
+            "record_span": {"start_frame": 1677, "end_frame": 7837},
+        }
+    )
+    return params
+
+
+def _second_layer_abs_spans() -> list[tuple[int, int]]:
+    return [
+        (TIMELINE_START + s, TIMELINE_START + e)
+        for s, e in tile_spans((1677, 7837), (CHAPTER_GAP,), 150)
+    ]
+
+
+def test_telop_second_layer_places_tiles_on_v4(stub_binding: None) -> None:
+    # Given: the D four-card set on a 2-track timeline (V1 + V2 subtitle)
+    # When: applying telop natively
+    # Then: V3 carries the C three cards' spans; V4 carries exactly the 42
+    #       second-layer tiles; the ensure adds TWO tracks (V3 then V4,
+    #       one per track loop pass) and each track gets its own snapshot
+    #       plus ONE fresh verification scan
+    adapter, transport = _make_prepared_adapter()
+    v3_spans = _expected_abs_spans()
+    v4_spans = _second_layer_abs_spans()
+    transport._script[("timeline", "set_current")] = [{"success": True}] * 19
+    transport._script[("timeline", "get_track_count")] = [
+        {"count": 2, "success": True},  # V3 ensure pass
+        {"count": 3, "success": True},  # V4 ensure pass
+    ]
+    transport._script[("timeline", "add_track")] = [{"success": True}] * 2
+    transport._script[("timeline", "get_items_in_track")] = [
+        _rows([]),  # V3 snapshot (fresh build)
+        _rows(v3_spans),  # V3 fresh verification
+        _rows([]),  # V4 snapshot
+        _rows(v4_spans),  # V4 fresh verification
+    ]
+    transport._script[("media_pool", "create_timeline")] = [
+        {"name": f"{TIMELINE_NAME}-telop-{cid}", "id": f"tl-{cid}", "success": True}
+        for cid in (
+            "telop-opening",
+            "telop-persistent",
+            "telop-chapter",
+            "telop-persistent-second",
+        )
+    ]
+    transport._script[("timeline", "insert_fusion_title")] = [{"success": True}] * 4
+    transport._script[("fusion_comp", "safe_set_inputs")] = [
+        _prefix_response(),
+        _set_inputs_response(),
+    ] * 4
+    transport._script[("fusion_comp", "get_text_plus")] = [
+        {"tool_name": "Template", "input_name": "StyledText", "text": "スタブテロップ"}
+    ] * 8
+    transport._script[("fusion_comp", "get_input")] = _GET_TRIO * 8
+    transport._script[("timeline", "get_media_pool_item")] = [
+        {"name": f"{TIMELINE_NAME}-telop-{cid}", "id": f"mpi-{cid}"}
+        for cid in (
+            "telop-opening",
+            "telop-persistent",
+            "telop-chapter",
+            "telop-persistent-second",
+        )
+    ]
+    transport._script[("media_pool", "append_to_timeline")] = [
+        {"count": 1, "items": [], "success": True, "verification_status": "readback_verified"},
+        {"count": 11, "items": [], "success": True, "verification_status": "readback_verified"},
+        {"count": 42, "items": [], "success": True, "verification_status": "readback_verified"},
+        {"count": 1, "items": [], "success": True, "verification_status": "readback_verified"},
+        {"count": 42, "items": [], "success": True, "verification_status": "readback_verified"},
+    ]
+
+    result = cast(
+        "dict[str, object]",
+        adapter("telop_generation_probe", "apply_telop", _telop_params_with_second_layer()),
+    )
+
+    cards = cast("list[dict[str, object]]", result.get("cards"))
+    assert [card["card_id"] for card in cards] == [
+        "telop-opening",
+        "telop-persistent",
+        "telop-chapter",
+        "telop-persistent-second",
+    ]
+    assert cards[-1]["track_index"] == 4
+    assert all(card["track_index"] == 3 for card in cards[:3])
+    # one add per ensure pass: V3 then V4
+    assert _actions(transport, "add_track") == [
+        ("timeline", "add_track", {"track_type": "video"})
+    ] * 2
+    # appends: opening(1), persistent run1(11), persistent run2(42),
+    # chapter(1) on V3; then the second layer's 42-tile run on V4
+    appends = _actions(transport, "append_to_timeline")
+    assert [len(_clip_infos(call)) for call in appends] == [1, 11, 42, 1, 42]
+    v4_clips = _clip_infos(appends[-1])
+    assert all(clip["track_index"] == 4 for clip in v4_clips)
+    placed_v4 = [
+        (
+            cast("int", clip["record_frame"]),
+            cast("int", clip["record_frame"]) + cast("int", clip["end_frame"]),
+        )
+        for clip in v4_clips
+    ]
+    assert placed_v4 == v4_spans
+    # two verification scans per track: snapshots (3, 4) then fresh (3, 4)
+    scans = _actions(transport, "get_items_in_track")
+    assert [scan[2]["track_index"] for scan in scans] == [3, 3, 4, 4]
 
 
 def test_telop_rerun_all_existing_verifies_without_mutating(stub_binding: None) -> None:

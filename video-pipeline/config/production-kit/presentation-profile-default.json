@@ -34,9 +34,17 @@
     "recipe_id": "subtitle/default",
     "max_line_length_chars": 32,
     "font_size_px": 24,
-    "font": "Hiragino Sans W3",
-    "size_screen_ratio": 0.04,
-    "center": [0.5, 0.14]
+    "font": "Hiragino Sans W5",
+    "size_screen_ratio": 0.055,
+    "center": [0.5, 0.14],
+    "shadow": {
+      "enabled": true,
+      "color": [0, 0, 0],
+      "alpha": 204,
+      "softness": 0.005,
+      "offset_x": 0.025,
+      "offset_y": -0.04
+    }
   },
   "telop_style": {
     "recipe_id": "telop/default",
@@ -52,8 +60,17 @@
       "size_px_base": 43,
       "size_px_min": 27,
       "box": {"x": 48, "y": 27, "w": 624},
-      "band": {"fill": [10, 10, 10], "alpha": 140, "pad_x": 15, "pad_y": 12},
-      "outline": {"color": [16, 16, 16], "width_ratio": 0.04, "min_px": 2}
+      "band": {"fill": [255, 255, 255], "alpha": 230, "pad_x": 15, "pad_y": 12},
+      "outline": {"color": [16, 16, 16], "width_ratio": 0.04, "min_px": 2},
+      "text_color": [10, 10, 10]
+    },
+    "persistent_second": {
+      "size_px_base": 36,
+      "size_px_min": 20,
+      "band": {"fill": [10, 10, 10], "alpha": 255, "pad_x": 15, "pad_y": 10},
+      "text_color": [255, 255, 255],
+      "indent_right_px": 24,
+      "offset_below_px": 0
     },
     "chapter": {"size_px": 97, "background": "black-full"}
   },

@@ -157,10 +157,12 @@ class SubtitleParams(StrictModel):
         return self
 
 
-#: The committed telop card kinds (DESIGN telop-nested §1.1): opening is
-#: the large intro card, persistent the top-left always-on card (tiled),
-#: chapter the full-black chapter card whose span is also the tile gap.
-TelopKind = Literal["opening", "persistent", "chapter"]
+#: The committed telop card kinds (DESIGN telop-nested §1.1 + D §5): opening
+#: is the large intro card, persistent the top-left always-on card (tiled),
+#: chapter the full-black chapter card whose span is also the tile gap,
+#: persistent_second the D chapter-name layer on V4 (tiled, anchored below
+#: the persistent card's band).
+TelopKind = Literal["opening", "persistent", "persistent_second", "chapter"]
 
 
 class TelopCardPayload(StrictModel):

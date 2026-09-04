@@ -52,6 +52,11 @@ if TYPE_CHECKING:
 #: The telop track (second track above primary; subtitle cues own V2).
 TELOP_TRACK_INDEX: Final = 3
 
+#: The second persistent layer's track (DESIGN D §5 注1: the V3 persistent
+#: tiles fill the whole span, so the chapter-name layer rides V4 through
+#: the same nested-card mechanism — one track index, no new machinery).
+TELOP_SECOND_TRACK_INDEX: Final = 4
+
 #: The inner Text+ tool inside the tracked band template's Template
 #: group. The template ships this tool's background RGBA baked to
 #: opaque white and exposes NO published Template input for it — the
@@ -94,13 +99,14 @@ def telop_card_name(timeline_name: str, card_id: str) -> str:
     return f"{timeline_name}-telop-{card_id}"
 
 
-def ensure_telop_track(ctx: LiveSessionContext) -> None:
-    """Ensure the telop track exists (V3; the V2 ensure's multi-add form)."""
+def ensure_telop_track(ctx: LiveSessionContext, up_to: int = TELOP_TRACK_INDEX) -> None:
+    """Ensure video tracks exist up to ``up_to`` (V3 default; the V4 form
+    covers the second persistent layer — the V2 ensure's multi-add form)."""
     count = TrackCountResult.model_validate(
         ctx.transport("timeline", "get_track_count", {"track_type": "video"})
     )
     require_ok(count, "get-track-count")
-    for _ in range(max(0, TELOP_TRACK_INDEX - (count.count or 0))):
+    for _ in range(max(0, up_to - (count.count or 0))):
         require_ok(
             McpActionOutcome.model_validate(
                 ctx.transport("timeline", "add_track", {"track_type": "video"})
@@ -110,7 +116,10 @@ def ensure_telop_track(ctx: LiveSessionContext) -> None:
 
 
 def append_telop_spans(
-    ctx: LiveSessionContext, clip_id: str, spans: Sequence[tuple[int, int]]
+    ctx: LiveSessionContext,
+    clip_id: str,
+    spans: Sequence[tuple[int, int]],
+    track_index: int = TELOP_TRACK_INDEX,
 ) -> int:
     """Place absolute half-open spans of one card: one batched append per
     contiguous run (WBS-1 check-d). Returns the placed clip count."""
@@ -130,7 +139,7 @@ def append_telop_spans(
                                 "end_frame": end - start,
                                 "record_frame": start,
                                 "record_frame_mode": "absolute",
-                                "track_index": TELOP_TRACK_INDEX,
+                                "track_index": track_index,
                             }
                             for start, end in run
                         ]
@@ -145,13 +154,17 @@ def append_telop_spans(
 
 def create_telop_card(ctx: LiveSessionContext, card_name: str, binding: TelopCardBinding) -> str:
     """Create one card timeline holding the band title with the bound
-    inputs — the white-removal direct prefix on the inner Text tool
-    first, then the published group inputs; returns the card's media
+    inputs — the white-removal direct prefix on the inner Text tool first
+    (plus any binding-carried direct fill writes, D persistent L1), then
+    the published group inputs; returns the card's media
     pool item id (subtitle ``create_cue`` mechanics, template name and
     input set swapped)."""
     main_name = ctx.current_timeline_name
     if main_name is None:
         raise LiveAdapterError("timeline-not-prepared", "prepare first")
+    prefix: dict[str, object] = dict(_TEXT_BACKGROUND_CLEAR)
+    if binding.text_tool_inputs:
+        prefix.update(dict(binding.text_tool_inputs))
     card = TimelineResult.model_validate(
         ctx.transport("media_pool", "create_timeline", {"name": card_name})
     )
@@ -171,13 +184,13 @@ def create_telop_card(ctx: LiveSessionContext, card_name: str, binding: TelopCar
                 {
                     **card_scope(),
                     "tool_name": TEXT_TOOL,
-                    "inputs": dict(_TEXT_BACKGROUND_CLEAR),
+                    "inputs": prefix,
                     "readback": True,
                 },
             )
         )
         require_ok(cleared, "clear-text-background")
-        for axis, value in _TEXT_BACKGROUND_CLEAR.items():
+        for axis, value in prefix.items():
             row = cleared.results.get(axis)
             if row is None or not row.success or row.value != value:
                 raise LiveAdapterError(
@@ -257,6 +270,7 @@ def read_telop_card(ctx: LiveSessionContext, card_name: str) -> TelopCardReadbac
 
 
 __all__ = [
+    "TELOP_SECOND_TRACK_INDEX",
     "TELOP_TEMPLATE",
     "TELOP_TEMPLATE_ASSET",
     "TELOP_TEMPLATE_SHA256",

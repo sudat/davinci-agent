@@ -29,6 +29,7 @@ from services.mcp_execution.live_handlers.common import (
     require_ok,
 )
 from services.mcp_execution.live_handlers.subtitle_style import (
+    SHADOW_ENABLE_INPUT,
     CardReadback,
     StyleBinding,
     verify_card_style,
@@ -175,6 +176,7 @@ def read_card(ctx: LiveSessionContext, card_name: str) -> CardReadback:
             font=fusion_input(ctx, "Font").value,
             size=fusion_input(ctx, "Size").value,
             center=fusion_input(ctx, "Center").value,
+            shadow_enabled=fusion_input(ctx, SHADOW_ENABLE_INPUT).value,
         )
     finally:
         set_current(ctx, main_name, "set-current-main")
@@ -237,6 +239,7 @@ def create_cue(
             font=fusion_input(ctx, "Font").value,
             size=fusion_input(ctx, "Size").value,
             center=fusion_input(ctx, "Center").value,
+            shadow_enabled=fusion_input(ctx, SHADOW_ENABLE_INPUT).value,
         )
         verify_card_style(f"card {card_name}", placed_style, style)
         mpi = MediaPoolItemResult.model_validate(

@@ -47,6 +47,7 @@ from services.creative_plan.presentation_intents import (
     ProfileRangeViolationError,
     PunchInRange,
     SfxPolicy,
+    SubtitleShadowStyle,
     SubtitleStyle,
     TelopBand,
     TelopChapterStyle,
@@ -54,6 +55,7 @@ from services.creative_plan.presentation_intents import (
     TelopOpeningStyle,
     TelopOutline,
     TelopPersistentBox,
+    TelopPersistentSecondStyle,
     TelopPersistentStyle,
     TelopStyle,
     TitleChoices,
@@ -159,6 +161,14 @@ def _profile(*, per_kind_cap: float = 3.0, global_per_minute: float = 12.0):
             font="Hiragino Sans W3",
             size_screen_ratio=0.04,
             center=(0.5, 0.14),
+            shadow=SubtitleShadowStyle(
+                enabled=False,
+                color=(0, 0, 0),
+                alpha=204,
+                softness=0.005,
+                offset_x=0.004,
+                offset_y=-0.004,
+            ),
         ),
         telop_style=TelopStyle(
             recipe_id="telop/default",
@@ -176,6 +186,15 @@ def _profile(*, per_kind_cap: float = 3.0, global_per_minute: float = 12.0):
                 box=TelopPersistentBox(x=48, y=27, w=624),
                 band=TelopBand(fill=(10, 10, 10), alpha=140, pad_x=15, pad_y=12),
                 outline=TelopOutline(color=(16, 16, 16), width_ratio=0.04, min_px=2),
+                text_color=(255, 255, 255),
+            ),
+            persistent_second=TelopPersistentSecondStyle(
+                size_px_base=30,
+                size_px_min=20,
+                band=TelopBand(fill=(10, 10, 10), alpha=140, pad_x=15, pad_y=10),
+                text_color=(255, 255, 255),
+                indent_right_px=24,
+                offset_below_px=0,
             ),
             chapter=TelopChapterStyle(size_px=97, background="black-full"),
         ),
@@ -404,12 +423,20 @@ def test_attach_rejects_duplicate_intent_ids():
 def test_default_profile_subtitle_style_locks_live_card_appearance():
     # Given: the shipped default profile
     # When: reading the subtitle appearance fields
-    # Then: they equal the constants the native cue handler bound inline
-    #       before WBS-0 (subtitle.py _PROFILE_INPUTS, byte-identical move)
+    # Then: the D values (DESIGN telop-nested §5, r3 revision) — center
+    #       unchanged, size 0.055, shadow on, font one weight bolder (W4 →
+    #       W5, LIVE-VERIFIED on the r3 disposable probe 2026-09-04); the
+    #       offset is the measured ≈6px-down-right class.
     style = load_default_profile().subtitle_style
-    assert style.font == "Hiragino Sans W3"
-    assert style.size_screen_ratio == 0.04
+    assert style.font == "Hiragino Sans W5"
+    assert style.size_screen_ratio == 0.055
     assert style.center == (0.5, 0.14)
+    assert style.shadow.enabled is True
+    assert style.shadow.color == (0, 0, 0)
+    assert style.shadow.alpha == 204
+    assert style.shadow.softness == 0.005
+    assert style.shadow.offset_x == 0.025
+    assert style.shadow.offset_y == -0.04
 
 
 def test_default_profile_telop_style_opening_mirrors_theme_text():
@@ -437,21 +464,65 @@ def test_default_profile_telop_style_opening_mirrors_theme_text():
 def test_default_profile_telop_style_persistent_mirrors_theme_text():
     # Given: the shipped default profile and theme_text.py's persistent box
     # When: comparing every persistent telop field
-    # Then: sizes/box/band match the constants exactly; outline identical to
-    #       the opening derivation
+    # Then: layout/sizes/box still mirror the calculator constants exactly
+    #       (the fit geometry is D-unchanged), while the D colors are
+    #       profile-owned: white band at the adjusted opacity + dark text
+    #       (the deliberate D divergence from the C-era calculator mirror)
     persistent = load_default_profile().telop_style.persistent
     assert persistent.size_px_base == tt._PERS_BASE == 43
     assert persistent.size_px_min == tt._PERS_MIN == 27
     assert persistent.box.x == tt._PERS_X == 48
     assert persistent.box.y == tt._PERS_Y == 27
     assert persistent.box.w == tt._PERS_W == 624
-    assert persistent.band.fill == tt._BAND_FILL[:3] == (10, 10, 10)
-    assert persistent.band.alpha == tt._BAND_FILL[3] == 140
     assert persistent.band.pad_x == tt._BAND_PADDING["persistent"][0] == 15
     assert persistent.band.pad_y == tt._BAND_PADDING["persistent"][1] == 12
+    assert persistent.band.fill == (255, 255, 255)
+    assert persistent.band.alpha == 230
+    assert persistent.text_color == (10, 10, 10)
     assert persistent.outline.color == (16, 16, 16)
     assert persistent.outline.width_ratio == 0.04
     assert persistent.outline.min_px == 2
+
+
+def test_default_profile_telop_style_persistent_second_locks_d_block():
+    # Given: the shipped default profile
+    # When: reading the persistent_second block
+    # Then: the D values — fully-opaque dark band (alpha 255: the D-sample
+    #       dark-footage measurement showed alpha 140 leaves a 6.0 same-site
+    #       luma delta, below the ~10 readability bar — sol-d-sample-r2
+    #       cause report §6), white glyphs, right indent 24px, offset 0
+    #       (flush below the L1 band, DESIGN D 注2) — gate-tunable once,
+    #       never silently defaulted
+    second = load_default_profile().telop_style.persistent_second
+    assert second.size_px_base == 36
+    assert second.size_px_min == 20
+    assert second.band.fill == (10, 10, 10)
+    assert second.band.alpha == 255
+    assert second.band.pad_x == 15
+    assert second.band.pad_y == 10
+    assert second.text_color == (255, 255, 255)
+    assert second.indent_right_px == 24
+    assert second.offset_below_px == 0
+
+
+def test_channel_profile_without_persistent_second_refused_no_silent_default():
+    # Given: the shipped default payload minus the persistent_second block
+    # When: validating as a channel presentation profile
+    # Then: strict rejection — the D second layer is required, not defaulted
+    payload = json.loads(pi._DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
+    del payload["telop_style"]["persistent_second"]
+    with pytest.raises(ValidationError, match="persistent_second"):
+        ChannelPresentationProfile.model_validate(payload)
+
+
+def test_channel_profile_without_subtitle_shadow_refused():
+    # Given: the shipped default payload minus the shadow block
+    # When: validating as a channel presentation profile
+    # Then: strict rejection — the shadow container never silently drops
+    payload = json.loads(pi._DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
+    del payload["subtitle_style"]["shadow"]
+    with pytest.raises(ValidationError, match="shadow"):
+        ChannelPresentationProfile.model_validate(payload)
 
 
 def test_default_profile_telop_style_chapter_mirrors_chapter_card():

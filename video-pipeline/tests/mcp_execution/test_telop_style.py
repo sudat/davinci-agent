@@ -24,6 +24,7 @@ from services.mcp_execution.live_handlers.telop_style import (
     _TEMPLATE_SIZE_UNIT_PX,
     TelopCardBinding,
     TelopCardReadback,
+    persistent_band_rect,
     resolve_telop_binding,
     verify_telop_card,
 )
@@ -42,7 +43,9 @@ requires_w6 = pytest.mark.skipif(not W6_TTC.is_file(), reason="system Hiragino W
 def test_persistent_binding_reproduces_the_measured_wire_values() -> None:
     # Given: the profile telop_style and the measured episode title
     # When: resolving the persistent card binding
-    # Then: the 19 published inputs equal the probe-verified wire values
+    # Then: geometry/typography inputs equal the probe-verified wire values
+    #       (C-era locks unchanged), and the D color inputs come from the
+    #       profile: white band 230/255 + the dark glyph-fill direct write
     binding = resolve_telop_binding("persistent", EPISODE_TITLE, load_default_profile().telop_style)
     assert set(binding.inputs) == {
         "StyledText",
@@ -91,15 +94,111 @@ def test_persistent_binding_reproduces_the_measured_wire_values() -> None:
     assert binding.inputs["OutlineG"] == 0.0627
     assert binding.inputs["OutlineB"] == 0.0627
     assert binding.inputs["OutlineA"] == 1.0
-    # band: fill (10,10,10) alpha 140; rect [33,15,677,131] → 644 x 116 px
-    assert binding.inputs["BandR"] == 0.0392  # 10/255
-    assert binding.inputs["BandG"] == 0.0392
-    assert binding.inputs["BandB"] == 0.0392
-    assert binding.inputs["BandAlpha"] == 0.549  # 140/255
+    # D (DESIGN telop-nested §5): band flips dark→white at the adjusted
+    # opacity, and the glyph fill flips white→dark as a DIRECT inner-Text
+    # write (the group route exposes no fill input). Band rect is the
+    # measured C-era geometry — layout unchanged by design.
+    assert binding.inputs["BandR"] == 1.0  # 255/255 white
+    assert binding.inputs["BandG"] == 1.0
+    assert binding.inputs["BandB"] == 1.0
+    assert binding.inputs["BandAlpha"] == 0.902  # 230/255 adjusted opacity
     assert binding.inputs["BandWidth"] == 0.3354  # 644/1920
     assert binding.inputs["BandHeight"] == 0.1074  # 116/1080
     assert binding.inputs["BandPos"] == [0.1849, 0.9324]
     assert binding.text_pos == (0.1849, 0.9324)
+    # D dark glyphs: element-1 fill inputs at (10,10,10), opaque — input
+    # NAMES pending the D-sample live pin (placeholder lock, see module)
+    assert binding.text_tool_inputs == {
+        "Red1": 0.0392,
+        "Green1": 0.0392,
+        "Blue1": 0.0392,
+        "Alpha1": 1.0,
+    }
+
+
+@requires_w6
+def test_persistent_second_binding_anchors_below_the_persistent_band() -> None:
+    # Given: the profile telop_style, the L1 anchor, and the chapter name
+    # When: resolving the persistent_second card binding
+    # Then: the band hugs the L1 band's bottom edge (offset 0 = flush),
+    #       sits indent_right_px right of the L1 band's left edge, carries
+    #       the dark semi-transparent band with outline OFF and NO glyph
+    #       fill write (white stays baked), and every wire convention
+    #       matches the fitted cards (1536.7 divisor, CS 1.0, Y flip)
+    profile = load_default_profile()
+    style = profile.telop_style
+    anchor = persistent_band_rect(EPISODE_TITLE, style)
+    assert anchor == (33, 15, 677, 131)  # the measured L1 band rect
+    binding = resolve_telop_binding(
+        "persistent_second", "どこにもないカメラバッグ", style, anchor_band=anchor
+    )
+    second = style.persistent_second
+    assert binding.inputs["StyledText"] == "どこにもないカメラバッグ"
+    assert binding.inputs["Font"] == "Hiragino Sans W6"
+    # single line fitted at the ladder's base size (fits the L1 box width)
+    assert binding.inputs["Size"] == round(second.size_px_base / _TEMPLATE_SIZE_UNIT_PX, 4)
+    assert binding.inputs["CharacterSpacing"] == 1.0
+    assert binding.inputs["OutlineEnabled"] == 0
+    assert binding.text_tool_inputs is None
+    assert binding.inputs["BandR"] == 0.0392
+    assert binding.inputs["BandG"] == 0.0392
+    assert binding.inputs["BandB"] == 0.0392
+    assert binding.inputs["BandAlpha"] == 1.0  # 255/255: fully-opaque dark band
+    # geometry: band left = 33+24 = 57; band top = 131 (flush below L1)
+    band_left_px = anchor[0] + second.indent_right_px
+    band_top_px = anchor[3] + second.offset_below_px
+    band_w_px = round(cast("float", binding.inputs["BandWidth"]) * 1920)
+    band_h_px = round(cast("float", binding.inputs["BandHeight"]) * 1080)
+    assert band_left_px == 57
+    assert band_top_px == 131
+    assert band_w_px > 0
+    assert band_h_px > second.size_px_base
+    text_pos = binding.inputs["TextPos"]
+    band_pos = binding.inputs["BandPos"]
+    assert isinstance(text_pos, list)
+    assert isinstance(band_pos, list)
+    # bottom-up Y convention: a band at rows 131..181 maps above 0.83
+    assert text_pos[1] == round(1 - (band_top_px + band_h_px / 2) / 1080, 4)
+    assert band_pos[1] == text_pos[1]
+    assert 0.8 < cast("float", band_pos[1]) < 0.93
+
+
+def test_persistent_second_without_anchor_refuses_typed() -> None:
+    # Given: a second-layer card resolved with no persistent anchor
+    # When: resolving the binding
+    # Then: typed refusal — the position is never guessed
+    with pytest.raises(LiveAdapterUnsupportedError) as excinfo:
+        resolve_telop_binding(
+            "persistent_second", "どこにもないカメラバッグ", load_default_profile().telop_style
+        )
+    assert excinfo.value.code == "telop-second-layer-anchor-missing"
+
+
+@requires_w6
+def test_persistent_second_unfittable_text_refuses_typed() -> None:
+    # Given: a second-layer text too wide for the persistent box at the
+    #        ladder's lower bound
+    # When: resolving the binding
+    # Then: typed telop-text-unfittable — the second layer never wraps
+    style = load_default_profile().telop_style
+    anchor = persistent_band_rect(EPISODE_TITLE, style)
+    with pytest.raises(LiveAdapterError) as excinfo:
+        resolve_telop_binding(
+            "persistent_second", "狭い" * 40, style, anchor_band=anchor
+        )
+    assert excinfo.value.code == "telop-text-unfittable"
+
+
+@requires_w6
+def test_opening_binding_carries_no_glyph_fill_write() -> None:
+    # Given: the D profile (persistent inverted to dark-on-white)
+    # When: resolving the opening binding
+    # Then: NO direct Text-tool fill write rides the card — the opening
+    #       card is untouched by design (DESIGN D §02 変更3)
+    binding = resolve_telop_binding("opening", EPISODE_TITLE, load_default_profile().telop_style)
+    assert binding.text_tool_inputs is None
+    assert binding.inputs["BandR"] == 0.0392  # opening band stays C-dark
+    assert binding.inputs["BandAlpha"] == 0.549
 
 
 @requires_w6

@@ -85,6 +85,7 @@ TIMELINE_START = 108000  # probe-reported 01:00:00:00 @30fps
 
 PROBE_CREATE_PROJECT = {"name": TIMELINE_NAME, "success": True}
 PROBE_SET_FPS = {"success": True}
+PROBE_GET_PERF_CACHE = {"settings": "smart", "success": True}
 PROBE_CREATE_TIMELINE = {
     "name": TIMELINE_NAME,
     "id": "92c8eb30-d8dd-497e-bf65-53ed681bc133",
@@ -317,6 +318,7 @@ def _make_prepared_adapter(
         ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
         ("project_manager", "create"): [dict(PROBE_CREATE_PROJECT)],
         ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+        ("project_settings", "get_setting"): [dict(PROBE_GET_PERF_CACHE)],
         ("media_pool", "create_timeline"): [dict(PROBE_CREATE_TIMELINE)],
         ("timeline", "set_current"): [dict(PROBE_SET_CURRENT)],
         ("timeline", "get_current"): [dict(PROBE_GET_CURRENT)],
@@ -343,6 +345,7 @@ def test_prepare_project_maps_to_real_tool_sequence_and_readback() -> None:
             ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
             ("project_manager", "create"): [dict(PROBE_CREATE_PROJECT)],
             ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+            ("project_settings", "get_setting"): [dict(PROBE_GET_PERF_CACHE)],
             ("media_pool", "create_timeline"): [dict(PROBE_CREATE_TIMELINE)],
             ("timeline", "set_current"): [dict(PROBE_SET_CURRENT)],
             ("timeline", "get_current"): [dict(PROBE_GET_CURRENT)],
@@ -358,10 +361,20 @@ def test_prepare_project_maps_to_real_tool_sequence_and_readback() -> None:
     second_params = transport.calls[2][2]
     assert second_params["name"] == "timelineFrameRate"
     assert second_params["value"] == "30"
-    assert transport.calls[3] == ("media_pool", "create_timeline", {"name": TIMELINE_NAME})
-    assert transport.calls[4] == ("timeline", "set_current", {"name": TIMELINE_NAME})
-    assert transport.calls[5][0] == "timeline"
-    assert transport.calls[5][1] == "get_current"
+    # DESIGN §11: the fresh project also pins perfRenderCacheMode=smart,
+    # write + readback-verified (loud typed failure when refused).
+    assert transport.calls[3][0] == "project_settings"
+    assert transport.calls[3][1] == "set_setting"
+    assert transport.calls[3][2] == {"name": "perfRenderCacheMode", "value": "smart"}
+    assert transport.calls[4] == (
+        "project_settings",
+        "get_setting",
+        {"name": "perfRenderCacheMode"},
+    )
+    assert transport.calls[5] == ("media_pool", "create_timeline", {"name": TIMELINE_NAME})
+    assert transport.calls[6] == ("timeline", "set_current", {"name": TIMELINE_NAME})
+    assert transport.calls[7][0] == "timeline"
+    assert transport.calls[7][1] == "get_current"
     assert all(tool != "prepare_project" for tool, _, _ in transport.calls)
     expected = ProjectReadback(kind="project", project_name=TIMELINE_NAME, timeline_frame_rate="30")
     verification = verify_readback(expected, result)
@@ -792,6 +805,7 @@ def test_prepare_load_missing_project_falls_back_to_create_sequence() -> None:
             ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
             ("project_manager", "create"): [dict(PROBE_CREATE_PROJECT)],
             ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+            ("project_settings", "get_setting"): [dict(PROBE_GET_PERF_CACHE)],
             ("media_pool", "create_timeline"): [dict(PROBE_CREATE_TIMELINE)],
             ("timeline", "set_current"): [dict(PROBE_SET_CURRENT)],
             ("timeline", "get_current"): [dict(PROBE_GET_CURRENT)],
@@ -805,10 +819,38 @@ def test_prepare_load_missing_project_falls_back_to_create_sequence() -> None:
         ("project_manager", "load"),
         ("project_manager", "create"),
         ("project_settings", "set_setting"),
+        ("project_settings", "set_setting"),
+        ("project_settings", "get_setting"),
         ("media_pool", "create_timeline"),
         ("timeline", "set_current"),
         ("timeline", "get_current"),
     ]
+
+
+def test_prepare_refused_perf_cache_mode_is_a_loud_typed_failure() -> None:
+    # Given: a fresh project whose perfRenderCacheMode write reads back
+    #        anything other than "smart" (DESIGN §11: never silent)
+    # When: preparing the project
+    # Then: typed perf-cache-mode-refused — the create path never proceeds
+    #       to timeline construction with caching silently unpinned
+    transport = ScriptedTransport(
+        {
+            ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
+            ("project_manager", "create"): [dict(PROBE_CREATE_PROJECT)],
+            ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+            ("project_settings", "get_setting"): [
+                {"settings": "none", "success": True}
+            ],
+        }
+    )
+    adapter = LiveMcpAdapter(transport, media_paths={})
+    with pytest.raises(LiveAdapterError) as excinfo:
+        adapter("prepare_project", "prepare_project", _prepare_params())
+    assert excinfo.value.code == "perf-cache-mode-refused"
+    # And: no timeline was created after the refused pin
+    assert ("media_pool", "create_timeline") not in {
+        (tool, action) for tool, action, _ in transport.calls
+    }
 
 
 def test_prepare_load_malformed_response_stays_loud() -> None:
@@ -1589,6 +1631,7 @@ def test_no_raw_call_uses_logical_name_across_happy_flow() -> None:
             ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
             ("project_manager", "create"): [dict(PROBE_CREATE_PROJECT)],
             ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+            ("project_settings", "get_setting"): [dict(PROBE_GET_PERF_CACHE)],
             ("media_pool", "create_timeline"): [dict(PROBE_CREATE_TIMELINE)],
             ("timeline", "set_current"): [dict(PROBE_SET_CURRENT)],
             ("timeline", "get_current"): [dict(PROBE_GET_CURRENT)],
@@ -1764,9 +1807,16 @@ PROBE_SUB_SET_INPUTS_1 = {
     "tool_name": "Template",
     "results": {
         "StyledText": {"success": True, "value": CUE1_TEXT},
-        "Font": {"success": True, "value": "Hiragino Sans W3"},
-        "Size": {"success": True, "value": 0.04},
+        "Font": {"success": True, "value": "Hiragino Sans W5"},
+        "Size": {"success": True, "value": 0.055},
         "Center": {"success": True, "value": {"1": 0.5, "2": 0.14}},
+        "Enabled3": {"success": True, "value": 1},
+        "Red3": {"success": True, "value": 0.0},
+        "Green3": {"success": True, "value": 0.0},
+        "Blue3": {"success": True, "value": 0.0},
+        "Alpha3": {"success": True, "value": 0.8},
+        "Softness3": {"success": True, "value": 0.005},
+        "Offset3": {"success": True, "value": {"1": 0.025, "2": -0.04, "3": 0.0}},
     },
 }
 PROBE_SUB_SET_INPUTS_2 = {
@@ -1774,9 +1824,16 @@ PROBE_SUB_SET_INPUTS_2 = {
     "tool_name": "Template",
     "results": {
         "StyledText": {"success": True, "value": CUE2_TEXT},
-        "Font": {"success": True, "value": "Hiragino Sans W3"},
-        "Size": {"success": True, "value": 0.04},
+        "Font": {"success": True, "value": "Hiragino Sans W5"},
+        "Size": {"success": True, "value": 0.055},
         "Center": {"success": True, "value": {"1": 0.5, "2": 0.14}},
+        "Enabled3": {"success": True, "value": 1},
+        "Red3": {"success": True, "value": 0.0},
+        "Green3": {"success": True, "value": 0.0},
+        "Blue3": {"success": True, "value": 0.0},
+        "Alpha3": {"success": True, "value": 0.8},
+        "Softness3": {"success": True, "value": 0.005},
+        "Offset3": {"success": True, "value": {"1": 0.025, "2": -0.04, "3": 0.0}},
     },
 }
 PROBE_SUB_TEXT_1 = {
@@ -1791,8 +1848,9 @@ PROBE_SUB_TEXT_2 = {
 }
 PROBE_SUB_MPI_1 = {"name": CARD1_NAME, "id": "mpi-card-1"}
 PROBE_SUB_MPI_2 = {"name": CARD2_NAME, "id": "mpi-card-2"}
-PROBE_SUB_FONT_GET = {"value": "Hiragino Sans W3"}
-PROBE_SUB_SIZE_GET = {"value": 0.04}
+PROBE_SUB_FONT_GET = {"value": "Hiragino Sans W5"}
+PROBE_SUB_SIZE_GET = {"value": 0.055}
+PROBE_SUB_SHADOW_GET = {"value": 1}
 #: Live-observed Center readback shape (Resolve 21.0.4.5): points carry a
 #: third axis; the binding's domain is the bound (x, y) axes only.
 PROBE_SUB_CENTER_GET = {"value": {"1": 0.5, "2": 0.14, "3": 0.0}}
@@ -1857,15 +1915,19 @@ def _script_subtitle_creation(
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
     ]
     transport._script[("timeline", "get_media_pool_item")] = [
         dict(PROBE_SUB_MPI_1),
@@ -2082,6 +2144,7 @@ def test_measured_baseline_eight_surfaces_live_and_eight_refused_before_dispatch
             ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
             ("project_manager", "create"): [dict(PROBE_CREATE_PROJECT)],
             ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+            ("project_settings", "get_setting"): [dict(PROBE_GET_PERF_CACHE)],
             ("media_pool", "create_timeline"): [dict(PROBE_CREATE_TIMELINE)],
             ("timeline", "set_current"): [dict(PROBE_SET_CURRENT)],
             ("timeline", "get_current"): [dict(PROBE_GET_CURRENT)],
@@ -2210,29 +2273,27 @@ def test_exact_subtitle_mutation_creates_committed_cues_natively() -> None:
     assert styled_inputs[0]["StyledText"] == CUE1_TEXT
     assert styled_inputs[1]["StyledText"] == CUE2_TEXT
     assert all(call[2]["tool_name"] == "Template" for call in styled)
-    assert all(inputs["Font"] == "Hiragino Sans W3" for inputs in styled_inputs)
+    assert all(inputs["Font"] == "Hiragino Sans W5" for inputs in styled_inputs)
+    # D shadow inputs ride every cue write (element-3 wire set); the
+    # offset is the POINT input (live-verified: OffsetX/Y3 are phantoms)
+    assert all(inputs["Enabled3"] == 1 for inputs in styled_inputs)
+    assert all(inputs["Softness3"] == 0.005 for inputs in styled_inputs)
+    assert all(inputs["Offset3"] == [0.025, -0.04] for inputs in styled_inputs)
     # The style binding is observable from independent readback, not just the
     # request: each cue row carries the read-back font, size, and center.
     rows = cast("list[dict[str, object]]", cues)
     style_rows = [cast("dict[str, object]", row.get("style")) for row in rows]
-    assert all(row.get("font") == "Hiragino Sans W3" for row in style_rows)
-    assert all(row.get("size") == 0.04 for row in style_rows)
+    assert all(row.get("font") == "Hiragino Sans W5" for row in style_rows)
+    assert all(row.get("size") == 0.055 for row in style_rows)
     assert all(row.get("center") == [0.5, 0.14] for row in style_rows)
     get_inputs = [call for call in transport.calls if call[1] == "get_input"]
+    # per card readback: Font, Size, Center, Enabled3 (the D shadow axis)
     assert [call[2]["input_name"] for call in get_inputs] == [
         "Font",
         "Size",
         "Center",
-        "Font",
-        "Size",
-        "Center",
-        "Font",
-        "Size",
-        "Center",
-        "Font",
-        "Size",
-        "Center",
-    ]
+        "Enabled3",
+    ] * 4
 
 
 def test_subtitle_rerun_detects_identical_cues_and_creates_no_duplicates() -> None:
@@ -2256,9 +2317,11 @@ def test_subtitle_rerun_detects_identical_cues_and_creates_no_duplicates() -> No
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
     ]
 
     result = adapter("subtitle_generation_probe", "apply_subtitles", _subtitle_params())
@@ -2279,18 +2342,16 @@ def test_subtitle_rerun_detects_identical_cues_and_creates_no_duplicates() -> No
     style_rows = [
         cast("dict[str, object]", row.get("style")) for row in cast("list[dict[str, object]]", cues)
     ]
-    assert all(row.get("font") == "Hiragino Sans W3" for row in style_rows)
-    assert all(row.get("size") == 0.04 for row in style_rows)
+    assert all(row.get("font") == "Hiragino Sans W5" for row in style_rows)
+    assert all(row.get("size") == 0.055 for row in style_rows)
     assert all(row.get("center") == [0.5, 0.14] for row in style_rows)
     rerun_get_inputs = [call for call in transport.calls if call[1] == "get_input"]
     assert [call[2]["input_name"] for call in rerun_get_inputs] == [
         "Font",
         "Size",
         "Center",
-        "Font",
-        "Size",
-        "Center",
-    ]
+        "Enabled3",
+    ] * 2
 
 
 def test_all_existing_subtitle_rerun_scans_the_overlay_track_once() -> None:
@@ -2338,9 +2399,11 @@ def _rerun_all_existing_script(transport: ScriptedTransport, *, switches: int) -
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
     ]
 
 
@@ -2511,6 +2574,7 @@ def test_subtitle_size_drift_on_rerun_is_a_typed_failure() -> None:
         dict(PROBE_SUB_FONT_GET),
         dict(PROBE_SUB_SIZE_GET_DRIFTED),
         dict(PROBE_SUB_CENTER_GET),
+        dict(PROBE_SUB_SHADOW_GET),
     ]
 
     with pytest.raises(LiveAdapterError) as excinfo:
@@ -3276,6 +3340,7 @@ def _drx_script(
         ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
         ("project_manager", "create"): [dict(PROBE_CREATE_PROJECT)],
         ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+        ("project_settings", "get_setting"): [dict(PROBE_GET_PERF_CACHE)],
         ("media_pool", "create_timeline"): [dict(PROBE_CREATE_TIMELINE)],
         ("timeline", "set_current"): [dict(PROBE_SET_CURRENT)],
         ("timeline", "get_current"): [dict(PROBE_GET_CURRENT)],
@@ -4460,6 +4525,7 @@ def test_prepare_records_project_and_timeline_identity_from_readback_on_create()
             ("project_manager", "load"): [dict(PROBE_LOAD_MISSING)],
             ("project_manager", "create"): [{"name": "ep-readback-project", "success": True}],
             ("project_settings", "set_setting"): [dict(PROBE_SET_FPS)],
+            ("project_settings", "get_setting"): [dict(PROBE_GET_PERF_CACHE)],
             ("media_pool", "create_timeline"): [dict(PROBE_CREATE_TIMELINE)],
             ("timeline", "set_current"): [dict(PROBE_SET_CURRENT)],
             ("timeline", "get_current"): [dict(_READBACK_TIMELINE)],

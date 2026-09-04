@@ -49,6 +49,7 @@ from services.mcp_execution.live_handlers.subtitle_card import (
 )
 from services.mcp_execution.live_handlers.subtitle_style import (
     StyleBinding,
+    shadow_wire_inputs,
     verify_card_style,
 )
 from services.mcp_execution.plan_payloads import SubtitleParams
@@ -58,7 +59,11 @@ from services.mcp_execution.plan_payloads import SubtitleParams
 #: ``subtitle_style`` appearance fields (WBS-0 externalization — values
 #: byte-identical to the former inline table). Any other id is a typed
 #: refusal, never a silent default. Font values must be concrete resolvable
-#: weight names — see the module docstring.
+#: weight names — see the module docstring. The D font weight
+#: ("Hiragino Sans W5", one step bolder than the r1 W4) is LIVE-VERIFIED on
+#: the r3 disposable project 2026-09-04: readback resolves (Style
+#: "Semibold"), and the rendered glyphs match the PIL W5 ground truth at
+#: 0.9198 column-profile correlation — best match against W4/W6, no tofu.
 _SUBTITLE_STYLE_PROFILE_ID: Final = "subtitle-style-default"
 
 
@@ -69,7 +74,16 @@ def _resolve_style_binding(style_profile_id: str) -> StyleBinding:
             "style-profile-unsupported", f"no Text+ mapping for {style_profile_id!r}"
         )
     style = load_default_profile().subtitle_style
-    return StyleBinding(font=style.font, size=style.size_screen_ratio, center=style.center)
+    shadow_enabled, shadow_inputs = (
+        shadow_wire_inputs(style.shadow) if style.shadow.enabled else (0, {})
+    )
+    return StyleBinding(
+        font=style.font,
+        size=style.size_screen_ratio,
+        center=style.center,
+        shadow_enabled=shadow_enabled,
+        shadow_inputs=shadow_inputs,
+    )
 
 
 def apply_subtitles(
