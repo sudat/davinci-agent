@@ -38,6 +38,7 @@ from services.compile.record_placement import (
     allocate_track,
     cue_pieces,
 )
+from services.compile.span_merge import merge_contiguous
 from services.compile.subtitle_cues import build_cue_item
 from services.contracts.primitives import (
     ArtifactRef,
@@ -175,12 +176,13 @@ def compile_production(  # noqa: PLR0913 (signature fixed by the Todo-44 contrac
     *,
     artifact_id: str,
     styling: StylingInputs | None = None,
+    merge_placements: bool = False,
 ) -> CompileProductionResult:
     """Deterministically compile the plan + transcript into the production IR."""
 
     resolve_plan_anchors(plan, geometry)
     resolved = resolve_transcript_cues(transcript, geometry)
-    placements = _placements(plan)
+    placements = merge_contiguous(_placements(plan)) if merge_placements else _placements(plan)
     video = allocate_track("video", (p for p in placements if p.track_kind == "video"))
     audio = allocate_track("audio", (p for p in placements if p.track_kind == "audio"))
 

@@ -119,7 +119,8 @@ def compile_ir(  # noqa: PLR0913 (compile wiring over the committed plan)
         audio_sample_rate=48000,
     )
     return compile_production(
-        plan, geometry, cue_source, policy, artifact_id=f"timeline-ir-{episode_id}"
+        plan, geometry, cue_source, policy, artifact_id=f"timeline-ir-{episode_id}",
+        merge_placements=True,
     )
 
 
