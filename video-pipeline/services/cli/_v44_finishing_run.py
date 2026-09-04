@@ -228,6 +228,23 @@ def cmd_run(args) -> int:  # type: ignore[no-untyped-def]  # noqa: ANN001, C901,
         plans.audio_plan,
         finishing_dir / "editorial-qc-report.json",
     )
+    from services.cli._v44_domain_evidence import (  # noqa: PLC0415
+        load_episode_domain_evidence,
+        probe_geometry,
+    )
+
+    domain_evidence = load_episode_domain_evidence(
+        args.episode_root,
+        protocol_path=args.episode_protocol,
+        episode_id=ctx.episode_id,
+        ir_graphics_items=sum(
+            len(track.items)
+            for track in ir_v2.video_tracks
+            if track.role in ("still", "graphic")
+        ),
+        mezzanine_geometry=probe_geometry(ctx.mezzanine, load_tools().ffprobe),
+        cue_count=len(ir_v2.subtitle_cues),
+    )
     inputs = ReportInputs(
         episode_id=ctx.episode_id,
         head_version=ctx.head_version,
@@ -257,6 +274,7 @@ def cmd_run(args) -> int:  # type: ignore[no-untyped-def]  # noqa: ANN001, C901,
             f"mcp lineage: {mcp_lineage()}",
             "single-writer: manual CLI run — ensure no cockpit runner is active",
         ),
+        evidence=domain_evidence,
     )
     quality, gate = domain_report(inputs)
     report = assemble_report(inputs, quality, gate)

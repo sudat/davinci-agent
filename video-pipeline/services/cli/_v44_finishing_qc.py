@@ -15,6 +15,10 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import ValidationError
 
+from services.cli._v44_domain_evidence import (
+    EpisodeDomainEvidence,
+    derive_domain_facts,
+)
 from services.cli._v44_finishing_report import (
     FinishingEditorialQcBlockV1,
     FinishingKitSelectionV1,
@@ -108,38 +112,30 @@ def editorial_qc(
     )
 
 
-def quality_facts(
+def quality_facts(  # noqa: PLR0913 (the report's measured inputs; mirrors ReportInputs)
     episode_id: str,
     head_version: int,
     cue_count: int,
     run_report: McpExecutionRunReportV1 | None,
     *,
     qc_verdict_passed: bool,
+    evidence: EpisodeDomainEvidence | None = None,
 ) -> QualityFactsV1:
-    delivery_passed = (
-        run_report is not None and run_report.outcome == "completed" and qc_verdict_passed
-    )
-    evidence = (
-        f"review-store head v{head_version}: committed edit plan + IR",
-        f"committed subtitle cues: {cue_count}",
-    )
-    return QualityFactsV1(
+    """§12.2 derivation from episode evidence (deterministic slice 1).
+
+    ``evidence`` absent means the caller had no episode root in scope; the
+    derivation then records honestly that no episode evidence was read —
+    never a fabricated "requested/not requested" judgment.
+    """
+    bundle = evidence if evidence is not None else EpisodeDomainEvidence(
+        episode_id=episode_id, cue_count=cue_count)
+    return derive_domain_facts(
+        bundle,
         episode_id=episode_id,
-        has_dialogue=cue_count > 0,
-        editorial_blocking_defect=False,
-        editorial_evidence=evidence,
-        framing_motion_intended=False,
-        graphics_intended=False,
-        delivery_qc_passed=delivery_passed,
-        delivery_qc_evidence=(
-            (
-                f"mcp-execution-run-report-v1: outcome={run_report.outcome}",
-                "qc-report-v1: verdict=passed",
-            )
-            if delivery_passed
-            and run_report is not None  # narrowed for the type checker
-            else ()
-        ),
+        head_version=head_version,
+        cue_count=cue_count,
+        run_report=run_report,
+        qc_verdict_passed=qc_verdict_passed,
     )
 
 
@@ -167,6 +163,7 @@ class ReportInputs:
     execution_report: ExecutionFactsV1
     notes: tuple[str, ...]
     native_render: NativeRenderBlockV1 | None = None
+    evidence: EpisodeDomainEvidence | None = None
 
 
 def domain_report(inputs: ReportInputs) -> tuple[QualityDomainReportV1, QualityGateResult]:
@@ -177,6 +174,7 @@ def domain_report(inputs: ReportInputs) -> tuple[QualityDomainReportV1, QualityG
             inputs.cue_count,
             inputs.run_report,
             qc_verdict_passed=inputs.qc_block.verdict == "passed",
+            evidence=inputs.evidence,
         ),
         plans=QualityPlansV1(
             subtitle_plan=inputs.plans.subtitle_plan,
@@ -227,6 +225,14 @@ def assemble_report(
             entry.domain: entry.justification
             for entry in quality.domains
             if entry.justification is not None
+        },
+        domain_proposed={
+            entry.domain: entry.proposed for entry in quality.domains if entry.proposed
+        },
+        domain_proposal_basis={
+            entry.domain: list(entry.proposal_basis)
+            for entry in quality.domains
+            if entry.proposal_basis
         },
         blocked_domains=gate.blocked_domains,
         surfaced_manual_items=gate.surfaced_manual_items,

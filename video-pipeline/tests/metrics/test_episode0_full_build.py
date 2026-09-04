@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 from services.cli.episode0 import main
+from services.creative_plan.quality_domains import QualityDomainReportV1
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.mcp_client.errors import McpClientError
 from services.metrics.episode0_gate_v43_3 import (
@@ -220,6 +221,32 @@ def test_full_build_flags_restored_after_success(
     text = (backends).read_text(encoding="utf-8")
     assert '"legacy_direct"' in text
     assert '"phase1_v1"' in text
+
+
+# ------------------------------- (a2) §12.2 committed-evidence derivation
+
+
+def test_committed_graphics_derives_applied_not_blocked_or_skipped(
+    workspace: _FullBuildWorkspace, backends: Path
+) -> None:
+    """Given: the synthetic build's IR carries a committed graphic item whose
+    ``place_title`` step EXECUTES (run report: completed); Then: §12.2 derives
+    graphics_presentation ``applied`` citing that committed execution — never
+    a blocked proposal for work the build itself committed, and never a bare
+    not-needed skip. framing_motion (no intents, no executed transforms)
+    stays honestly not-needed."""
+
+    _successful_run(workspace, backends)
+    quality = QualityDomainReportV1.model_validate(
+        json.loads((workspace.run_dir / "quality-domain-report.json").read_bytes())
+    )
+    graphics = quality.domain_entry("graphics_presentation")
+    assert graphics.status == "applied"
+    assert graphics.proposed is False
+    assert any("place_title" in ref for ref in graphics.evidence_refs)
+    framing = quality.domain_entry("framing_motion")
+    assert framing.status == "intentionally_not_needed"
+    assert framing.proposed is False
 
 
 # ------------------------------------------- (b) blocked-domain gate probe

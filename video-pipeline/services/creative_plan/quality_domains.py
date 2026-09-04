@@ -41,7 +41,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BeforeValidator, model_validator
+from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from services.contracts.primitives import Identifier, StrictModel, to_tuple
@@ -102,6 +102,20 @@ _OUTCOME_STATUS: dict[DomainExecutionOutcome, QualityDomainStatus] = {
 _StrTuple = Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
 
 
+class DomainNotNeededDecisionV1(StrictModel):
+    """One operator decision that a domain is not needed for this episode.
+
+    The §12.2 episode evidence for ``intentionally_not_needed``: a
+    runtime record (chapter-title-proposal precedent) carrying the
+    operator's own justification — never a bare absence of a request.
+    """
+
+    domain: QualityDomainName
+    decision: Literal["not_needed"]
+    justification: str = Field(min_length=1, strict=True)
+    decided_by: str = Field(default="operator", min_length=1, strict=True)
+
+
 class QualityDomainError(ValueError):
     """Typed refusal from the domain-report builder (never silent)."""
 
@@ -115,12 +129,20 @@ class QualityDomainError(ValueError):
 
 
 class QualityDomainEntryV1(StrictModel):
-    """One domain's explicit status — evidence when applied, else justified."""
+    """One domain's explicit status — evidence when applied, else justified.
+
+    ``proposed`` marks a domain whose episode evidence says treatment is
+    needed but no committed plan exists yet (§12.2: blocked until the
+    operator acts — a proposal, never an auto-apply); ``proposal_basis``
+    carries the citing evidence lines.
+    """
 
     domain: QualityDomainName
     status: QualityDomainStatus
     evidence_refs: _StrTuple = ()
     justification: str | None = None
+    proposed: bool = Field(default=False, strict=True)
+    proposal_basis: _StrTuple = ()
 
     @model_validator(mode="after")
     def require_status_contract(self) -> QualityDomainEntryV1:
@@ -190,8 +212,13 @@ class QualityFactsV1(StrictModel):
     editorial_evidence: _StrTuple = ()
     framing_motion_intended: bool
     framing_motion_evidence: _StrTuple = ()
+    framing_motion_committed_evidence: _StrTuple = ()
     graphics_intended: bool
     graphics_evidence: _StrTuple = ()
+    graphics_committed_evidence: _StrTuple = ()
+    operator_not_needed: Annotated[
+        tuple[DomainNotNeededDecisionV1, ...], BeforeValidator(to_tuple)
+    ] = ()
     delivery_qc_passed: bool
     delivery_qc_evidence: _StrTuple = ()
 
@@ -316,6 +343,57 @@ def _plan_driven_entry(
             return _applied(domain, plan_evidence)
 
 
+def _evidence_driven_entry(
+    domain: QualityDomainName,
+    *,
+    intended: bool,
+    evidence: tuple[str, ...],
+    committed: tuple[str, ...],
+    override: DomainNotNeededDecisionV1 | None,
+) -> QualityDomainEntryV1:
+    """The §12.2 semantics: not-needed only on episode evidence, a needed
+    domain without a committed plan is a surfaced PROPOSAL (blocked), and
+    an operator decision overrides evidence of need."""
+    label = domain.replace("_", " ")
+    if override is not None:
+        return QualityDomainEntryV1(
+            domain=domain,
+            status="intentionally_not_needed",
+            justification=f"operator decision ({override.decided_by}): {override.justification}",
+        )
+    if intended:
+        if not evidence:
+            raise QualityDomainError(
+                "missing-evidence",
+                f"{domain} is intended by the episode facts but carries no evidence",
+            )
+        if committed:
+            return _applied(domain, committed)
+        return QualityDomainEntryV1(
+            domain=domain,
+            status="blocked",
+            justification=(
+                f"episode evidence proposes {label} treatment but no committed plan "
+                "exists (operator action required; proposal only, never auto-applied)"
+            ),
+            proposed=True,
+            proposal_basis=evidence,
+        )
+    justification = (
+        "; ".join(evidence)
+        if evidence
+        else f"no episode evidence of {label} need was recorded"
+    )
+    return _with_status(domain, "intentionally_not_needed", justification)
+
+
+def _operator_override(
+    facts: QualityFactsV1, domain: QualityDomainName
+) -> DomainNotNeededDecisionV1 | None:
+    return next(
+        (row for row in facts.operator_not_needed if row.domain == domain), None)
+
+
 def build_domain_report(
     facts: QualityFactsV1,
     *,
@@ -385,19 +463,19 @@ def build_domain_report(
             "no explicit color finishing plan exists (correction/match/look "
             "result or a justified no-op is required)",
         ),
-        _applied("framing_motion", framing_evidence)
-        if facts.framing_motion_intended
-        else _with_status(
+        _evidence_driven_entry(
             "framing_motion",
-            "intentionally_not_needed",
-            "no framing/motion treatment requested for this episode",
+            intended=facts.framing_motion_intended,
+            evidence=framing_evidence,
+            committed=facts.framing_motion_committed_evidence,
+            override=_operator_override(facts, "framing_motion"),
         ),
-        _applied("graphics_presentation", graphics_evidence)
-        if facts.graphics_intended
-        else _with_status(
+        _evidence_driven_entry(
             "graphics_presentation",
-            "intentionally_not_needed",
-            "no graphics/presentation treatment requested for this episode",
+            intended=facts.graphics_intended,
+            evidence=graphics_evidence,
+            committed=facts.graphics_committed_evidence,
+            override=_operator_override(facts, "graphics_presentation"),
         ),
         _applied("delivery_qc", facts.delivery_qc_evidence)
         if facts.delivery_qc_passed
@@ -463,6 +541,7 @@ __all__ = [
     "QUALITY_DOMAINS",
     "DomainExecutionOutcome",
     "DomainExecutionV1",
+    "DomainNotNeededDecisionV1",
     "ExecutionFactsV1",
     "QualityDomainEntryV1",
     "QualityDomainError",

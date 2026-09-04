@@ -1636,6 +1636,26 @@ def _run_full_build_stages(
     )
 
 
+def _committed_step_evidence(
+    run_report: McpExecutionRunReportV1, domain: QualityDomainName
+) -> tuple[str, ...]:
+    """§12.2 committed evidence for the evidence-driven domains: completed
+    execution-plan steps for the domain's actions. Empty when the domain's
+    work never executed — an intended domain then stays a blocked proposal."""
+    actions = _DOMAIN_ACTIONS[domain]
+    completed = sum(
+        1 for s in run_report.steps if s.action in actions and s.status == "completed"
+    )
+    if completed == 0:
+        return ()
+    return (
+        (
+            f"mcp-execution-run-report-v1: {completed} completed "
+            f"{'+'.join(sorted(actions))} steps"
+        ),
+    )
+
+
 def _quality_facts(
     editorial: _EditorialOutcome,
     intents: tuple[PresentationIntentV2, ...],
@@ -1654,8 +1674,14 @@ def _quality_facts(
         ),
         framing_motion_intended=bool(intents),
         framing_motion_evidence=tuple(f"presentation-intent: {i.intent_id}" for i in intents),
+        framing_motion_committed_evidence=_committed_step_evidence(
+            run_report, "framing_motion"
+        ),
         graphics_intended=graphic_items > 0,
         graphics_evidence=(f"timeline-ir-v2: {graphic_items} graphic/still items",),
+        graphics_committed_evidence=_committed_step_evidence(
+            run_report, "graphics_presentation"
+        ),
         delivery_qc_passed=run_report.outcome == "completed",
         delivery_qc_evidence=(
             f"mcp-execution-run-report-v1: outcome={run_report.outcome}",

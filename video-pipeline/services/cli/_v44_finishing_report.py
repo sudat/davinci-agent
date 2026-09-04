@@ -153,6 +153,8 @@ class FinishingRunReportV1(StrictModel):
     fallback_rung_count: int | None = Field(default=None, ge=0, strict=True)
     domain_statuses: dict[str, str]
     domain_justifications: dict[str, str]
+    domain_proposed: dict[str, bool] = Field(default_factory=dict)
+    domain_proposal_basis: dict[str, list[str]] = Field(default_factory=dict)
     blocked_domains: _StrTuple = ()
     surfaced_manual_items: _StrTuple = ()
     gate_decision: Literal["pass", "reject"]

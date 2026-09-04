@@ -52,6 +52,8 @@ class _FinishingRead(BaseModel):
     run_id: str = Field(min_length=1, strict=True)
     domain_statuses: dict[str, str]
     domain_justifications: dict[str, str]
+    domain_proposed: dict[str, bool] = Field(default_factory=dict)
+    domain_proposal_basis: dict[str, list[str]] = Field(default_factory=dict)
     blocked_domains: _StrTuple = ()
 
 
@@ -96,6 +98,8 @@ class FinishingStatusOps(WorkspaceContext):
                     "status": status,
                     "justification": justification if justification is not None else None,
                     "blocked": domain in blocked_set,
+                    "proposed": read.domain_proposed.get(domain, False),
+                    "proposal_basis": read.domain_proposal_basis.get(domain, []),
                 }
             )
         return {

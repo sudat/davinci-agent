@@ -125,8 +125,10 @@ _BASE_FACTS = QualityFactsV1(
     editorial_evidence=("editorial checkpoint clear",),
     framing_motion_intended=True,
     framing_motion_evidence=("framing/motion intent ops recorded",),
+    framing_motion_committed_evidence=("framing/motion ops committed",),
     graphics_intended=True,
     graphics_evidence=("graphics presentation ops recorded",),
+    graphics_committed_evidence=("graphics presentation ops committed",),
     delivery_qc_passed=True,
     delivery_qc_evidence=("final qc report passed",),
 )

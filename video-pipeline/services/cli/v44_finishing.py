@@ -97,6 +97,11 @@ def _parser() -> argparse.ArgumentParser:
         "--qc-policy", type=Path, default=None, help="resolved QC policy JSON"
     )
     run_parser.add_argument(
+        "--episode-protocol", type=Path, default=None,
+        help="v44 episode protocol JSON (title evidence) when episode.json is "
+        "the chain manifest",
+    )
+    run_parser.add_argument(
         "--render", type=Path, default=None,
         help="QC target override (the live Resolve render); default: final preview",
     )

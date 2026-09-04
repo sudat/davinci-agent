@@ -188,6 +188,22 @@ def _workspace(tmp_path: Path, mezzanine: Path, record: KitSelectionRecordV1) ->
         run_dir / "review-bundle.json",
     )
     atomic_write(episode_root / "kit-selections.json", canonical_model_bytes(record))
+    # The fixture's honest operator framing decision (§12.2 not-needed path):
+    # 320x180 fixture media under the plan's 1080p render pin would otherwise
+    # surface a framing PROPOSAL (blocked) — the fixture operator accepts the
+    # renderer canvas upscale instead.
+    runtime_dir = episode_root / "runtime"
+    runtime_dir.mkdir(exist_ok=True)
+    (runtime_dir / "domain-decisions.json").write_text(json.dumps({
+        "schema_version": "v44-domain-decisions-v1",
+        "episode_id": EPISODE_ID,
+        "decisions": [{
+            "domain": "framing_motion",
+            "decision": "not_needed",
+            "justification": "fixture media: renderer canvas upscale accepted",
+            "decided_by": "operator",
+        }],
+    }, ensure_ascii=False))
     return episode_root
 
 
