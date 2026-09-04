@@ -97,6 +97,19 @@ SURFACE_OPERATION_BINDINGS: Final[Mapping[str, frozenset[str]]] = {
         "timeline.insert_fusion_title",
         "timeline.set_current",
     )),
+    "telop_generation_probe": frozenset((
+        "fusion_comp.get_input",
+        "fusion_comp.get_text_plus",
+        "fusion_comp.safe_set_inputs",
+        "media_pool.append_to_timeline",
+        "media_pool.create_timeline",
+        "timeline.add_track",
+        "timeline.get_items_in_track",
+        "timeline.get_media_pool_item",
+        "timeline.get_track_count",
+        "timeline.insert_fusion_title",
+        "timeline.set_current",
+    )),
 }
 
 OPS_READ_OPERATION_BINDINGS: Final[Mapping[str, str]] = {

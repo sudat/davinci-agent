@@ -94,6 +94,7 @@ _ACTION_KIND: Final[dict[str, str]] = {
     **dict.fromkeys(
         (
             "apply_subtitles",
+            "apply_telop",
             "apply_voice_isolation",
             "apply_audio_op",
             "apply_audio_stage",

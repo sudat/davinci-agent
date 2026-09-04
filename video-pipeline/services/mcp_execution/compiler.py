@@ -36,6 +36,7 @@ from services.mcp_execution.placement_steps import (
     import_steps,
     prepare_step,
     subtitle_step,
+    telop_step,
     video_steps,
 )
 from services.mcp_execution.plan_models import (
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from services.creative_plan.ir_models_v2 import TimelineIrV2
     from services.creative_plan.presentation_intents import PresentationIntentV2
     from services.creative_plan.subtitle_models import SubtitlePlanV1
+    from services.mcp_execution.plan_payloads import TelopCardPayload
     from services.production_kit.recipe_select import RecipeSelection
 
 _MATRIX_PATH: Final[Path] = (
@@ -84,12 +86,15 @@ def compile_execution_plan(  # noqa: PLR0913 (task-mandated compiler signature)
     presentation_intents: Sequence[PresentationIntentV2],
     kit_selections: Mapping[str, RecipeSelection],
     capability_statuses: Mapping[str, str] | None = None,
+    telop_cards: Sequence[TelopCardPayload] = (),
 ) -> McpExecutionPlanV1:
     """Compile IR v2 + the four committed plans into a deterministic plan.
 
     ``capability_statuses`` overrides the real mcp-fit matrix rows for
     hermetic tests (status values only; fallback rungs then default to the
-    direct scripting gap adapter).
+    direct scripting gap adapter). ``telop_cards`` carries the committed
+    native-telop cards (DESIGN telop-nested WBS-3); empty (the default)
+    emits no telop leg, so pre-telop plans compile byte-identically.
     """
     episode = ir_v2.episode_id
     for artifact, label in (
@@ -138,6 +143,8 @@ def compile_execution_plan(  # noqa: PLR0913 (task-mandated compiler signature)
     steps.extend(video_steps(ir_v2, caps))
     steps.extend(audio_track_steps(ir_v2, caps))
     steps.append(subtitle_step(subtitle_plan, caps))
+    if telop_cards:
+        steps.append(telop_step(telop_cards))
     steps.extend(
         effect_steps(
             ir_v2,

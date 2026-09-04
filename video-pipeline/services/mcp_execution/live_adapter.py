@@ -35,6 +35,7 @@ SUPPORTED_SURFACES: Final[frozenset[ToolSurface]] = frozenset(
         "append_to_timeline",
         "set_voice_isolation_state",
         "subtitle_generation_probe",
+        "telop_generation_probe",
         "safe_set_audio_properties",
         "render_boundary_report",
         "safe_apply_drx",

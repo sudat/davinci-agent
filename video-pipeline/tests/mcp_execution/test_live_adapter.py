@@ -240,6 +240,36 @@ def _place_audio_params(  # noqa: PLR0913
     }
 
 
+def _place_overlay_params(  # noqa: PLR0913
+    *,
+    item_id: str = "ovl-001",
+    source_id: str = "src-001",
+    src_start: int = 10,
+    src_end: int = 70,
+    rec_start: int = 0,
+    rec_end: int = 60,
+    track_role: str = "still",
+    track_index: int | None = None,
+) -> dict[str, object]:
+    params: dict[str, object] = {
+        "action": "place_overlay",
+        "item_id": item_id,
+        "source": {
+            "source_id": source_id,
+            "span": {
+                "start_frame": src_start,
+                "end_frame": src_end,
+                "rate": {"num": 30, "den": 1},
+            },
+        },
+        "record_span": {"start_frame": rec_start, "end_frame": rec_end},
+        "track_role": track_role,
+    }
+    if track_index is not None:
+        params["track_index"] = track_index
+    return params
+
+
 def _voice_params() -> dict[str, object]:
     return {
         "action": "apply_voice_isolation",
@@ -550,6 +580,113 @@ def test_session_mutation_invalidates_the_placement_snapshot() -> None:
 
     scan_calls = [c for c in transport.calls if c[1] == "get_items_in_track"]
     assert len(scan_calls) == 2
+
+
+def test_overlay_over_base_places_track_two_at_the_same_record_span() -> None:
+    """The measured v44-real-01 blocker: an external transparent overlay must
+    stack OVER a same-span base clip on video track 2. The base's verified
+    placement on track 1 must never satisfy the overlay's presence check
+    (dedupe is scoped to track type + track index), and an idempotent rerun
+    of the overlay places nothing twice."""
+    adapter, transport = _make_prepared_adapter()
+    transport._script[("media_pool", "safe_import_media")] = [dict(PROBE_IMPORT)]
+    adapter("safe_import_media", "import_media", _import_params("src-001"))
+    transport.calls.clear()
+    span = _IDEMPOTENT_SPANS[0]
+    # scan order: V1 pre (empty), V1 post (base row), V2 pre (empty), V2 post
+    transport._script[("timeline", "get_items_in_track")] = [
+        dict(_track_listing([])),
+        dict(_track_listing(_rows_for(_IDEMPOTENT_SPANS[:1]))),
+        dict(_track_listing([])),
+        dict(_track_listing(_rows_for(_IDEMPOTENT_SPANS[:1]))),
+    ]
+    transport._script[("timeline_item", "get_source_start_frame")] = [
+        _frame(10),
+        _frame(10),
+        _frame(10),
+    ]
+    transport._script[("timeline_item", "get_source_end_frame")] = [
+        _frame(70),
+        _frame(70),
+        _frame(70),
+    ]
+    transport._script[("media_pool", "append_to_timeline")] = [dict(PROBE_APPEND)]
+
+    adapter("append_to_timeline", "place_clip", _placement_params(*span))
+    overlay_request = _place_overlay_params(
+        item_id="ovl-001",
+        src_start=span[1][0],
+        src_end=span[1][1],
+        rec_start=span[2][0],
+        rec_end=span[2][1],
+        track_index=2,
+    )
+    result = cast(
+        "dict[str, object]",
+        adapter("append_to_timeline", "place_overlay", overlay_request),
+    )
+    rerun = cast(
+        "dict[str, object]",
+        adapter("append_to_timeline", "place_overlay", overlay_request),
+    )
+
+    assert len(_append_calls(transport)) == 2
+    overlay_append = _get_clip_infos(_append_calls(transport)[1])[0]
+    assert overlay_append["track_index"] == 2
+    assert result["track_index"] == 2
+    assert rerun["track_index"] == 2
+    scans = [c for c in transport.calls if c[1] == "get_items_in_track"]
+    assert [c[2]["track_index"] for c in scans] == [1, 1, 2, 2]
+    expected = PlacementReadback(
+        kind="placement",
+        item_id="ovl-001",
+        source_span=_source_span(span[1][0], span[1][1]),
+        record_span=_record_span(span[2][0], span[2][1]),
+        track_index=2,
+    )
+    assert verify_readback(expected, result).matched
+
+
+def test_legacy_overlay_request_defaults_to_track_one() -> None:
+    """Stored plans predate track_index: a place_overlay without it parses,
+    places on track 1, and its default-1 readback still verifies."""
+    adapter, transport = _make_prepared_adapter()
+    transport._script[("media_pool", "safe_import_media")] = [dict(PROBE_IMPORT)]
+    adapter("safe_import_media", "import_media", _import_params("src-001"))
+    transport.calls.clear()
+    span = _IDEMPOTENT_SPANS[0]
+    transport._script[("timeline", "get_items_in_track")] = [
+        dict(_track_listing(_rows_for(_IDEMPOTENT_SPANS[:1])))
+    ]
+    transport._script[("timeline_item", "get_source_start_frame")] = [_frame(span[1][0])]
+    transport._script[("timeline_item", "get_source_end_frame")] = [_frame(span[1][1])]
+
+    result = cast(
+        "dict[str, object]",
+        adapter(
+            "append_to_timeline",
+            "place_overlay",
+            _place_overlay_params(
+                item_id="ovl-001",
+                src_start=span[1][0],
+                src_end=span[1][1],
+                rec_start=span[2][0],
+                rec_end=span[2][1],
+            ),
+        ),
+    )
+
+    assert _append_calls(transport) == []
+    assert result["track_index"] == 1
+    scans = [c for c in transport.calls if c[1] == "get_items_in_track"]
+    assert all(c[2]["track_index"] == 1 for c in scans)
+    expected = PlacementReadback(
+        kind="placement",
+        item_id="ovl-001",
+        source_span=_source_span(span[1][0], span[1][1]),
+        record_span=_record_span(span[2][0], span[2][1]),
+    )
+    assert verify_readback(expected, result).matched
 
 
 # ---- Task 5 repair 9: the bounded placement readback carries its own
@@ -1927,15 +2064,16 @@ def _measured_adapter(transport: ScriptedTransport, render_dir: Path) -> LiveMcp
 
 
 def test_measured_baseline_eight_surfaces_live_and_eight_refused_before_dispatch() -> None:
-    """Given the 17-surface product vocabulary, the live adapter dispatches
-    exactly 10 surfaces to the pinned MCP (subtitle wired by Task 4; the
+    """Given the 18-surface product vocabulary, the live adapter dispatches
+    exactly 11 surfaces to the pinned MCP (subtitle wired by Task 4; the
     audio preset/level and loudness-QC surfaces by Task 5; the DRX color
     surface by Task 6; the native render lifecycle by Task 7; the
-    orientation transform by the Gate V44-2 fix) and refuses the other 7
+    orientation transform by the Gate V44-2 fix; the telop nested-card
+    surface by telop-nested WBS-2) and refuses the other 7
     typed, before any raw transport call."""
 
     all_surfaces: set[str] = set(get_args(ToolSurface))
-    assert len(all_surfaces) == 17
+    assert len(all_surfaces) == 18
     refused = set(KNOWN_NOT_LIVE_SURFACES)
     assert len(refused) == 7
 

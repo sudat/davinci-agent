@@ -19,6 +19,7 @@ from services.mcp_execution.live_handlers import (
     placement,
     render,
     subtitle,
+    telop,
     transform,
 )
 from services.mcp_execution.live_handlers.common import LiveSessionContext
@@ -34,6 +35,7 @@ HANDLERS: Final[Mapping[str, HandlerFn]] = {
     "append_to_timeline": placement.append_to_timeline,
     "set_voice_isolation_state": audio.set_voice_isolation_state,
     "subtitle_generation_probe": subtitle.apply_subtitles,
+    "telop_generation_probe": telop.apply_telop,
     "safe_set_audio_properties": audio.apply_dialogue_preset,
     "render_boundary_report": audio.measure_audio_stage,
     "safe_apply_drx": color.apply_drx_grade,
