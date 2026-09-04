@@ -1712,3 +1712,55 @@ It is to turn the broad v4.3 implementation into a proven, comfortable productio
 v1関数は凍結保存(クローズ済みspikeの再現性)、凍結証拠は
 `tests/capabilities/test_v44_frozen_evidence.py`が指紋固定する。
 以後の system_asr 測定は v2 で行うこと。
+
+### 2026-09-03: frozen placement seam unlocked for overlay-over-base (stage 1 of the approved-content Resolve migration)
+
+実測ブロッカー(v44-real-01、2026-09-03): LiveMcpAdapterの`place_overlay`は
+track_index=1固定だったため、同一record spanにbase動画(V1)と外部透過オーバーレイを
+重ねられず、実エピソードのオーバーレイ配置が型付き拒否されていた
+(読み取り専用検証の記録: `private/runtime/__fvp_test__persistent_theme_20260903-010610/`)。
+最小変更として `PlaceOverlayParams`/`PlacementReadback` に `track_index`(既定1、
+格納済み計画はそのまま解釈)を追加し、配置・検証・readback比較・冪等キーを
+(track_type, track_index)スコープに変更した。`placement_steps.video_steps`は
+オーバーレイ系配置を明示的にトラック2へ出力する(Timeline IR／編集計画に
+Resolveトラック番号は入れない。エミッタ側定数のみ)。品質ドメイン
+graphics_presentation の intentionally_not_needed による抑制は上流(IR構成)のまま
+変更なし。製品経路へのV2トラック自動生成は本ステージでは行わない
+(使い捨て検証プロジェクトは従来どおりAddTrackしてよい)。
+検証: RED→GREENテスト(compiler/live_adapter)、tests/mcp_execution 265 passed、
+tests/presentation + quality_domains 167 passed、tests/cli 356 passed、ruff・
+basedpyright全面クリーン。
+
+### 2026-09-03: migration acceptance criterion追加(1行)
+
+承認済みコンテンツの移行完了条件: 納品プロジェクトはオフラインメディアゼロで
+開き、耐久的なメディア配置のみを参照すること(edit-source.mov喪失事故後の
+Opus/suda要件)。
+
+### 2026-09-03: 初回 direct_resolve AHT 実測 10.0分（bootstrap・条件付き）
+
+最初の direct_resolve フェーズの Active Human Time 実測を記録する:
+**10.0分**(suda申告「10分くらい」、確認済み値。phase=direct_resolve、
+bootstrap期間中のラベル付き)。30分目標を大きく下回る数値である。
+
+ただし本記録は「30分目標の達成」とは読まないこと。以下の条件がこの数値に
+必ず随伴する:
+
+1. **代表性は保証されない**: sudaは当該素材が「簡単な動画」であったと述べており、
+   この程度に単純な動画が今後どの頻度で発生するかは不明である。
+2. **10分は効率化の結果ではなくスキル天井で打ち切られた10分**: sudaは自身の
+   DaVinciスキルが低いこと、Sairaチャンネル水準の見た目を達成する方法が
+   わからないことを述べており、その先の作業は試みられていない。
+   「合理化された10分」ではなく「スキル天井で終了した10分」である。
+
+マイルストーン文脈: 納品Resolveプロジェクト `v44-real-01-deliverable` を
+オペレーターが受理(2026-09-03、「OK、問題なし」)。これは**編集可能な納品物としての
+受理**であり、公開可否(publishability)の判定ではない。
+
+### 2026-09-03: 常設受入条件 — 納品物はsudaさんがResolveで編集できること
+
+恒久的な受入条件を記録する(Opus/suda合意、2026-09-03): **今後のすべての納品物は
+sudaさんがDaVinci Resolve上で編集可能でなければならない**。ベイク済み(焼き込み)
+・フラット化された出力はデフォルトで受入不合格とする。例外はsudaさんの明示的な
+承認が必要。退避経路(fallback-tier)を下る場合は、編集可能性がどこで失われるかを
+必ずフラグすること。
