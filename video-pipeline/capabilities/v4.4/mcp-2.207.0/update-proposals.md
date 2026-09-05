@@ -10,6 +10,15 @@
 > 旧コードのまま**。切替完了の定義は「次回セッション起動時に v2.207.0 が実際に走る
 > こと」までを含む。ディスクを差し替えただけで完了と誤解しないこと。
 
+> **次回 pin 更新時のチェックリスト（2026-09-05、CU統合テストでの実害発見より）**:
+> probe は生呼び出しだけでなく、**製品モデルで parse するところまで通すこと**。
+> strict モデル（extra禁止）は**追加フィールドでも落ちる**。v2.207.0 の
+> `get_items_in_track` が item に `kind` を追加し、製品 `TrackItemsResult` が拒否、
+> 02_apply 型 scan が壊れた経路を含んだまま main に入った——22 probes が緑だったのは
+> その経路を製品モデルで parse していなかったため（生MCP呼び出しが通ることと製品
+> コードが結果を受け取れることは別）。従来キーの「削除」だけでなく「追加」も
+> strict 検証器を壊す方向として測ること。
+
 対象: `video-pipeline/config/toolchains/davinci-resolve-mcp.pin.json`（以下「pin」）、
 `video-pipeline/capabilities/mcp-coverage/`（inventory / dispositions / manifest）、
 `video-pipeline/services/toolchain/mcp_fit.py`。
