@@ -1,0 +1,46 @@
+{
+ "checked_against": {
+  "pin_commit": "132e134d3aa25d3d0df6bdf38f051bd29d128211",
+  "v2.207.0_commit": "5a1db6776fbe76098a706a41811ca787dfbd9990"
+ },
+ "dispositions_rows": {
+  "checked": 1001,
+  "orphaned_operation_ids": []
+ },
+ "new_operations_needing_disposition_rows": [
+  "knowledge.capabilities",
+  "knowledge.get",
+  "knowledge.search",
+  "knowledge.topics",
+  "media_analysis.grade_loop",
+  "media_analysis.grade_loop_capabilities",
+  "media_analysis.measure_loudness",
+  "media_analysis.mix_plan",
+  "media_analysis.mix_plan_capabilities",
+  "media_pool.capture_media_template",
+  "media_pool.get_clip_marks",
+  "media_pool_item_markers.get_name",
+  "render.verify_output",
+  "resolve_control.begin_execution",
+  "resolve_control.clear_executions",
+  "resolve_control.end_execution",
+  "resolve_control.export_execution_report",
+  "resolve_control.get_execution",
+  "resolve_control.get_execution_trace",
+  "resolve_control.list_recent_executions",
+  "timeline.author_offline",
+  "timeline.get_clips_linked",
+  "timeline.get_title_text",
+  "timeline.offline_fallback_capabilities",
+  "timeline.ripple_insert"
+ ],
+ "ops_read_operation_bindings": {
+  "checked": 11,
+  "would_fail_closed": []
+ },
+ "schema_version": "mcp-fail-closed-impact-v1",
+ "surface_operation_bindings": {
+  "checked": 66,
+  "would_fail_closed": []
+ }
+}

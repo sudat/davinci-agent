@@ -1,0 +1,2291 @@
+{
+ "advanced_tools": {
+  "audio": [
+   "convert",
+   "split",
+   "trim"
+  ],
+  "audio_plan": [
+   "analyze_coverage",
+   "check_loudness",
+   "list_templates",
+   "select_template",
+   "track_plan"
+  ],
+  "capabilities": [],
+  "color_trace": [
+   "plan"
+  ],
+  "conform": [
+   "analyze_media",
+   "build_manifest",
+   "fix_reverse_clip",
+   "list_targets",
+   "oracle_derive",
+   "parse_geometry",
+   "qc",
+   "relink_scalefix",
+   "repair_ladder",
+   "report",
+   "snapshot",
+   "verify"
+  ],
+  "deliverable": [
+   "conform_completeness",
+   "deliverable_qc",
+   "expand_deliverable",
+   "loudness_qc",
+   "re_delivery_diff",
+   "reframe_blanking_check",
+   "render_manifest",
+   "spec_from_authored"
+  ],
+  "drp": [
+   "add_media_clip",
+   "assemble_timeline",
+   "create_empty_project",
+   "delete_clip",
+   "diff",
+   "extract_group_grades",
+   "extract_lut_refs",
+   "extract_node_graphs",
+   "inject_grades",
+   "list_nested",
+   "move_clip",
+   "place_fusion_title",
+   "place_generator",
+   "place_transition",
+   "read_nested",
+   "read_nested_titles",
+   "relink_media",
+   "repoint_media",
+   "ripple_timeline",
+   "set_nested_title_text",
+   "split_clip",
+   "trim_clip",
+   "trim_clip_head"
+  ],
+  "drt": [
+   "assemble",
+   "assemble_from_interchange",
+   "assemble_project",
+   "author",
+   "downgrade",
+   "extract_from_drp",
+   "inject_into_drp",
+   "list_sequences",
+   "parse",
+   "validate"
+  ],
+  "drx": [
+   "author_look",
+   "black_balance",
+   "carry_look",
+   "cdl_io",
+   "contrast_normalize",
+   "export_cdl",
+   "extract_frames",
+   "gamut_legal",
+   "generate",
+   "generate_from_request",
+   "grade_transfer",
+   "intent_tags",
+   "level_clips",
+   "lut_apply",
+   "match_to_reference",
+   "merge",
+   "parse",
+   "relayout",
+   "saturation_match",
+   "scope_read",
+   "shot_match",
+   "skin_match",
+   "tone_curve_transfer",
+   "verify_grade",
+   "white_balance_match"
+  ],
+  "editorial": [
+   "conform_manifest",
+   "convert_to_interchange",
+   "list_sequences",
+   "marker_roundtrip",
+   "parse_interchange",
+   "turnover_changelist",
+   "verify_roundtrip"
+  ],
+  "fairlight": [
+   "backup",
+   "expand_buses",
+   "export_template",
+   "import_template",
+   "read_buses_from_blob",
+   "read_buses_from_db",
+   "restore"
+  ],
+  "fusion": [
+   "generate",
+   "generate_from_template",
+   "list_templates",
+   "to_api_calls"
+  ],
+  "media": [
+   "ingest_verify",
+   "media_inventory",
+   "project_hygiene",
+   "reel_normalize",
+   "relink_manifest",
+   "rename_plan",
+   "sync",
+   "turnover_package"
+  ],
+  "offline_ref": [
+   "clear",
+   "get",
+   "link_in_project",
+   "list_in_project",
+   "set",
+   "unlink_in_project"
+  ],
+  "pipeline": [
+   "ancestry",
+   "approve_gate",
+   "catalog",
+   "compile",
+   "drift",
+   "execute_stage",
+   "get_entity",
+   "get_run",
+   "list_entities",
+   "list_runs",
+   "mark_applied",
+   "plan",
+   "provenance",
+   "readback"
+  ],
+  "project_db": [
+   "list_clips",
+   "list_folders",
+   "list_subtitle_styles",
+   "relayout_node_graphs",
+   "rename_folder",
+   "set_clip_marks",
+   "set_folder_color",
+   "set_subtitle_style"
+  ],
+  "project_read": [
+   "audit",
+   "diff",
+   "introspect",
+   "query",
+   "report",
+   "tables",
+   "timeline_clips"
+  ],
+  "provenance": [
+   "cdl_diff",
+   "cdl_export",
+   "episode_report",
+   "gallery_lineage",
+   "grade_provenance",
+   "revision_tracking"
+  ]
+ },
+ "captured_offline": true,
+ "commit": "5a1db6776fbe76098a706a41811ca787dfbd9990",
+ "compound_tools": [
+  {
+   "actions": [
+    "get_clips",
+    "get_name",
+    "get_post_clip_graph",
+    "get_pre_clip_graph",
+    "list",
+    "set_name"
+   ],
+   "name": "color_group",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "install",
+    "list",
+    "list_templates",
+    "path",
+    "read",
+    "remove",
+    "template",
+    "validate"
+   ],
+   "name": "dctl",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "conform_lint",
+    "execute_selects",
+    "execute_silence_ripple",
+    "execute_swap",
+    "execute_tighten",
+    "first_impression",
+    "generate_captions",
+    "get_plan",
+    "journal",
+    "list_plans",
+    "plan_beat_cuts",
+    "plan_broll",
+    "plan_dead_space_markers",
+    "plan_prebalance",
+    "plan_reference_match",
+    "plan_report",
+    "plan_selects",
+    "plan_silence_ripple",
+    "plan_string_out",
+    "plan_swap",
+    "plan_tighten",
+    "plan_transcript_tighten",
+    "plan_turnover",
+    "propose_structure",
+    "rank_takes",
+    "rule_of_six_audit",
+    "search_spoken_content",
+    "setup_sheet",
+    "sound_density_audit",
+    "split_edit_audit"
+   ],
+   "name": "edit_engine",
+   "safety": "write"
+  },
+  {
+   "actions": [
+    "analyze_for_intellisearch",
+    "analyze_for_slate",
+    "clear_audio_classification",
+    "clear_transcription",
+    "export",
+    "get_clips",
+    "get_name",
+    "get_subfolders",
+    "get_unique_id",
+    "is_stale",
+    "perform_audio_classification",
+    "remove_motion_blur",
+    "transcribe_audio"
+   ],
+   "name": "folder",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "install",
+    "list",
+    "list_templates",
+    "path",
+    "read",
+    "remove",
+    "template",
+    "validate"
+   ],
+   "name": "fuse_plugin",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "add_fusion_mask",
+    "add_keyframe",
+    "add_tool",
+    "auto_arrange",
+    "bulk_set_expressions",
+    "bulk_set_inputs",
+    "connect",
+    "copy_tool",
+    "delete_keyframe",
+    "delete_tool",
+    "disconnect",
+    "end_undo",
+    "find_tool",
+    "fusion_boundary_report",
+    "fusion_graph_capabilities",
+    "get_attrs",
+    "get_comp_info",
+    "get_frame_range",
+    "get_input",
+    "get_inputs",
+    "get_keyframes",
+    "get_outputs",
+    "get_position",
+    "get_text_plus",
+    "get_tool_list",
+    "group_settings_export",
+    "group_settings_load",
+    "group_settings_splice_inputs",
+    "probe_fusion_comp",
+    "probe_fusion_tool",
+    "probe_group_published_inputs",
+    "render",
+    "safe_add_tool",
+    "safe_connect_tools",
+    "safe_set_inputs",
+    "set_attrs",
+    "set_frame_range",
+    "set_input",
+    "set_position",
+    "set_text_plus",
+    "start_undo"
+   ],
+   "name": "fusion_comp",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "create_power_grade_album",
+    "create_still_album",
+    "get_album_name",
+    "get_current_album",
+    "get_power_grade_albums",
+    "get_still_albums",
+    "set_album_name",
+    "set_current_album"
+   ],
+   "name": "gallery",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "delete_stills",
+    "export_stills",
+    "get_label",
+    "get_stills",
+    "grab_and_export",
+    "import_stills",
+    "set_label"
+   ],
+   "name": "gallery_stills",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "action_help",
+    "apply_arri_cdl_lut",
+    "apply_grade_from_drx",
+    "get_lut",
+    "get_node_cache",
+    "get_node_label",
+    "get_num_nodes",
+    "get_tools_in_node",
+    "reset_all_grades",
+    "set_lut",
+    "set_node_cache",
+    "set_node_enabled"
+   ],
+   "name": "graph",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "capabilities",
+    "get",
+    "search",
+    "topics"
+   ],
+   "name": "knowledge",
+   "safety": "write"
+  },
+  {
+   "actions": [
+    "delete",
+    "export",
+    "import_preset",
+    "list",
+    "load",
+    "save",
+    "update"
+   ],
+   "name": "layout_presets",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "add_sync_event_markers",
+    "analyze_bin",
+    "analyze_clip",
+    "analyze_file",
+    "analyze_project",
+    "analyze_sequence",
+    "analyze_timeline",
+    "assess_grade",
+    "backfill_words",
+    "batch_job_status",
+    "build_embeddings",
+    "build_index",
+    "cancel_batch_job",
+    "capabilities",
+    "cleanup_artifacts",
+    "commit_bin_summary",
+    "commit_entities",
+    "commit_shot_relationships",
+    "commit_shot_vision",
+    "commit_story_beats",
+    "commit_vision",
+    "coverage_report",
+    "cut_candidates",
+    "db_ingest",
+    "db_status",
+    "deepen",
+    "detect_entities",
+    "detect_shot_relationships",
+    "detect_sync_events",
+    "find_similar",
+    "get_ai_governance",
+    "get_caps",
+    "get_field_history",
+    "get_panel_state",
+    "get_report",
+    "get_resolve_ai_usage",
+    "get_usage",
+    "grade_loop",
+    "grade_loop_capabilities",
+    "image_qc_capabilities",
+    "index_status",
+    "install_guidance",
+    "list_batch_jobs",
+    "list_corrections",
+    "list_entities",
+    "list_shot_relationships",
+    "list_story_beats",
+    "measure_loudness",
+    "mix_plan",
+    "mix_plan_capabilities",
+    "plan",
+    "plan_story_beats",
+    "prepare_bin_briefing",
+    "publish_clip_metadata",
+    "query_index",
+    "rebuild_index",
+    "recheck_capabilities",
+    "resolve_output_root",
+    "resume_batch_job",
+    "revert_field",
+    "review_timeline_markers",
+    "run_batch_job_slice",
+    "session_start_context",
+    "set_ai_governance",
+    "set_caps_preset",
+    "set_panel_state",
+    "start_batch_job",
+    "strata_query",
+    "strata_run",
+    "strata_status",
+    "summarize",
+    "take_diff",
+    "timeline_strata",
+    "update_clip_field",
+    "update_shot_field",
+    "vision_pending_sweep"
+   ],
+   "name": "media_analysis",
+   "safety": "external_write"
+  },
+  {
+   "actions": [
+    "add_subfolder",
+    "append_to_timeline",
+    "auto_sync_audio",
+    "capture_media_template",
+    "check_proxy_media_compatibility",
+    "clear_clip_marks",
+    "copy_clip_annotations",
+    "copy_metadata",
+    "create_stereo_clip",
+    "create_timeline",
+    "create_timeline_from_clips",
+    "delete_clip_mattes",
+    "delete_clips",
+    "delete_folders",
+    "delete_timelines",
+    "export_metadata",
+    "get_clip_marks",
+    "get_clip_mattes",
+    "get_current_folder",
+    "get_root_folder",
+    "get_selected",
+    "get_timeline_mattes",
+    "get_unique_id",
+    "import_folder",
+    "import_media",
+    "import_timeline",
+    "ingest_capabilities",
+    "link_full_resolution_checked",
+    "link_proxy_checked",
+    "media_pool_boundary_report",
+    "metadata_field_inventory",
+    "move_clips",
+    "move_folders",
+    "normalize_metadata",
+    "organize_clips",
+    "probe_clip_properties",
+    "probe_ingest_item",
+    "probe_media_pool",
+    "refresh",
+    "relink",
+    "safe_import_folder",
+    "safe_import_media",
+    "safe_import_sequence",
+    "safe_relink",
+    "safe_unlink",
+    "set_clip_marks",
+    "set_current_folder",
+    "set_selected",
+    "setup_multicam_timeline",
+    "unlink"
+   ],
+   "name": "media_pool",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "analyze_for_intellisearch",
+    "analyze_for_slate",
+    "clear_audio_classification",
+    "clear_clip_color",
+    "clear_mark_in_out",
+    "clear_transcription",
+    "extract_frames",
+    "get_audio_mapping",
+    "get_clip_color",
+    "get_clip_property",
+    "get_mark_in_out",
+    "get_media_id",
+    "get_metadata",
+    "get_name",
+    "get_third_party_metadata",
+    "get_timeline",
+    "get_transcription",
+    "get_unique_id",
+    "link_full_resolution_media",
+    "link_proxy",
+    "monitor_growing_file",
+    "open_in_viewer",
+    "perform_audio_classification",
+    "remove_motion_blur",
+    "replace_clip",
+    "replace_clip_preserve_sub_clip",
+    "set_clip_color",
+    "set_clip_property",
+    "set_mark_in_out",
+    "set_metadata",
+    "set_name",
+    "set_third_party_metadata",
+    "transcribe_audio",
+    "unlink_proxy"
+   ],
+   "name": "media_pool_item",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "add",
+    "add_flag",
+    "clear_flags",
+    "delete_at_frame",
+    "delete_by_color",
+    "delete_by_custom_data",
+    "get_all",
+    "get_by_custom_data",
+    "get_custom_data",
+    "get_flags",
+    "get_name",
+    "link_full_resolution_media",
+    "monitor_growing_file",
+    "replace_clip_preserve_sub_clip",
+    "set_name",
+    "update_custom_data"
+   ],
+   "name": "media_pool_item_markers",
+   "safety": "write"
+  },
+  {
+   "actions": [
+    "add_clip_mattes",
+    "add_timeline_mattes",
+    "get_files",
+    "get_subfolders",
+    "get_volumes",
+    "import_to_pool",
+    "reveal"
+   ],
+   "name": "media_storage",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "apply_spec",
+    "archive",
+    "close",
+    "create",
+    "database_capabilities",
+    "delete",
+    "diff_to_spec",
+    "export_project",
+    "get_current",
+    "import_project",
+    "lint",
+    "list",
+    "list_attributes",
+    "load",
+    "plan_spec",
+    "preset_lifecycle_probe",
+    "probe_project_lifecycle",
+    "probe_project_settings",
+    "project_boundary_report",
+    "project_capabilities",
+    "project_settings_snapshot",
+    "restore",
+    "safe_project_archive",
+    "safe_project_create",
+    "safe_project_delete",
+    "safe_project_export",
+    "safe_project_import",
+    "safe_project_restore",
+    "safe_set_current_database",
+    "safe_set_project_settings",
+    "save"
+   ],
+   "name": "project_manager",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "create",
+    "import_project",
+    "load",
+    "restore"
+   ],
+   "name": "project_manager_cloud",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "get_current",
+    "list",
+    "set_current"
+   ],
+   "name": "project_manager_database",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "create",
+    "delete",
+    "get_current",
+    "goto_parent",
+    "goto_root",
+    "list",
+    "open"
+   ],
+   "name": "project_manager_folders",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "add_color_group",
+    "apply_fairlight_preset",
+    "delete_color_group",
+    "export_frame_as_still",
+    "generate_speech",
+    "get_color_groups",
+    "get_gallery",
+    "get_name",
+    "get_presets",
+    "get_setting",
+    "get_unique_id",
+    "insert_audio",
+    "load_burnin_preset",
+    "project_summary",
+    "refresh_luts",
+    "reset_intellisearch_analysis",
+    "set_name",
+    "set_preset",
+    "set_setting"
+   ],
+   "name": "project_settings",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "add_job",
+    "delete_all_jobs",
+    "delete_job",
+    "delete_preset",
+    "export_render_boundary_report",
+    "get_codecs",
+    "get_format_and_codec",
+    "get_formats",
+    "get_job_status",
+    "get_mode",
+    "get_resolutions",
+    "get_settings",
+    "is_rendering",
+    "list_delivery_targets",
+    "list_jobs",
+    "list_loudness_standards",
+    "list_presets",
+    "load_preset",
+    "prepare_delivery_job",
+    "prepare_render_job",
+    "probe_render_matrix",
+    "probe_render_settings",
+    "quick_export",
+    "quick_export_capabilities",
+    "quick_export_presets",
+    "render_capabilities",
+    "render_job_lifecycle_probe",
+    "resolve_delivery_target",
+    "safe_quick_export",
+    "safe_set_render_settings",
+    "save_preset",
+    "set_format_and_codec",
+    "set_mode",
+    "set_settings",
+    "start",
+    "stop",
+    "validate_render_settings",
+    "verify_output"
+   ],
+   "name": "render",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "delete_burnin",
+    "export_burnin",
+    "export_render",
+    "import_burnin",
+    "import_render",
+    "list_burnin"
+   ],
+   "name": "render_presets",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "api_truth",
+    "begin_execution",
+    "check_version_support",
+    "clear_executions",
+    "clear_mcp_update_preferences",
+    "close_control_panel",
+    "control_panel_status",
+    "delete_user_preferences_preset",
+    "disable_background_tasks_for_current_session",
+    "end_execution",
+    "export_execution_report",
+    "export_user_preferences_preset",
+    "get_execution",
+    "get_execution_trace",
+    "get_fairlight_presets",
+    "get_keyframe_mode",
+    "get_page",
+    "get_version",
+    "ignore_mcp_update",
+    "import_user_preferences_preset",
+    "job_status",
+    "launch",
+    "list_jobs",
+    "list_recent_executions",
+    "list_user_preferences_presets",
+    "load_user_preferences_preset",
+    "mcp_update_status",
+    "open_control_panel",
+    "open_page",
+    "quit",
+    "restore_state",
+    "runtime_mode",
+    "save_state",
+    "save_user_preferences_preset",
+    "set_high_priority",
+    "set_keyframe_mode",
+    "set_mcp_update_policy",
+    "snooze_mcp_update",
+    "verification_stats"
+   ],
+   "name": "resolve_control",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "categories",
+    "execute",
+    "extension_boundary_report",
+    "extension_capabilities",
+    "install",
+    "list",
+    "list_templates",
+    "path",
+    "probe_dctl_lifecycle",
+    "probe_fuse_lifecycle",
+    "probe_script_lifecycle",
+    "read",
+    "refresh_or_restart_required",
+    "remove",
+    "run_inline",
+    "safe_install_extension",
+    "safe_remove_extension",
+    "template",
+    "validate"
+   ],
+   "name": "script_plugin",
+   "safety": "external_destructive"
+  },
+  {
+   "actions": [
+    "clear_defaults",
+    "get_defaults",
+    "schema",
+    "set_defaults"
+   ],
+   "name": "setup",
+   "safety": "write"
+  },
+  {
+   "actions": [
+    "action_help",
+    "add_track",
+    "apply_cuts",
+    "apply_look_to_items",
+    "audio_capabilities",
+    "audio_mapping_report",
+    "audio_mix_capability_report",
+    "author_offline",
+    "build_relink_plan",
+    "bulk_set_item_properties",
+    "bulk_set_title_text",
+    "clear_mark_in_out",
+    "clip_where",
+    "compare_timelines",
+    "conform_boundary_report",
+    "conform_capabilities",
+    "convert_to_stereo",
+    "copy_clips",
+    "copy_range",
+    "create_compound_clip",
+    "create_fusion_clip",
+    "create_variant_from_ranges",
+    "delete_clips",
+    "delete_track",
+    "detect_gaps_overlaps",
+    "detect_missing_media",
+    "duplicate",
+    "duplicate_clips",
+    "duplicate_range",
+    "edit_kernel_capabilities",
+    "export",
+    "export_timeline_checked",
+    "extract_source_frame_ranges",
+    "fairlight_boundary_report",
+    "get_clips_linked",
+    "get_current",
+    "get_end_frame",
+    "get_items",
+    "get_items_in_track",
+    "get_mark_in_out",
+    "get_media_pool_item",
+    "get_name",
+    "get_node_graph",
+    "get_setting",
+    "get_start_frame",
+    "get_start_timecode",
+    "get_title_text",
+    "get_track_count",
+    "get_track_enabled",
+    "get_track_locked",
+    "get_track_name",
+    "get_track_sub_type",
+    "get_transcript",
+    "get_unique_id",
+    "get_voice_isolation_state",
+    "import_from_drp",
+    "import_into_timeline",
+    "import_timeline_checked",
+    "insert_fusion_composition",
+    "insert_fusion_generator",
+    "insert_fusion_title",
+    "insert_generator",
+    "insert_ofx_generator",
+    "insert_title",
+    "lift_range",
+    "list",
+    "marker_thumbnail_review",
+    "move_clips",
+    "offline_fallback_capabilities",
+    "overwrite_range",
+    "probe_audio_item",
+    "probe_audio_track",
+    "probe_edit_kernel_item",
+    "probe_interchange_roundtrip",
+    "probe_timeline_structure",
+    "propose_cuts",
+    "ripple_insert",
+    "safe_auto_sync_audio",
+    "safe_set_audio_properties",
+    "set_clips_linked",
+    "set_current",
+    "set_mark_in_out",
+    "set_name",
+    "set_setting",
+    "set_start_timecode",
+    "set_title_text",
+    "set_track_enable",
+    "set_track_lock",
+    "set_track_name",
+    "set_voice_isolation_state",
+    "source_range_report",
+    "story_spine_report",
+    "subtitle_generation_probe",
+    "thumbnail_contact_sheet",
+    "title_property_scan",
+    "transcription_capabilities",
+    "voice_isolation_capabilities"
+   ],
+   "name": "timeline",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "analyze_dolby_vision",
+    "create_subtitles",
+    "detect_scene_cuts",
+    "grab_all_stills",
+    "grab_still"
+   ],
+   "name": "timeline_ai",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "capabilities",
+    "capture"
+   ],
+   "name": "timeline_frame",
+   "safety": "write"
+  },
+  {
+   "actions": [
+    "add_keyframe",
+    "delete_keyframe",
+    "get_audio",
+    "get_clip_enabled",
+    "get_composite",
+    "get_crop",
+    "get_duration",
+    "get_end",
+    "get_keyframes",
+    "get_left_offset",
+    "get_linked_items",
+    "get_media_pool_item",
+    "get_name",
+    "get_property",
+    "get_retime",
+    "get_right_offset",
+    "get_source_audio_mapping",
+    "get_source_end_frame",
+    "get_source_end_time",
+    "get_source_start_frame",
+    "get_source_start_time",
+    "get_start",
+    "get_stereo_convergence",
+    "get_stereo_left_window",
+    "get_stereo_right_window",
+    "get_track_type_and_index",
+    "get_transform",
+    "get_unique_id",
+    "get_voice_isolation_state",
+    "load_burnin_preset",
+    "modify_keyframe",
+    "set_audio",
+    "set_clip_enabled",
+    "set_composite",
+    "set_crop",
+    "set_keyframe_interpolation",
+    "set_name",
+    "set_property",
+    "set_retime",
+    "set_transform",
+    "set_voice_isolation_state",
+    "update_sidecar"
+   ],
+   "name": "timeline_item",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "action_help",
+    "add_version",
+    "assign_color_group",
+    "bulk_match_to_hero",
+    "color_group_capabilities",
+    "copy_grades",
+    "create_magic_mask",
+    "delete_version",
+    "export_lut",
+    "gallery_capabilities",
+    "get_color_cache",
+    "get_color_group",
+    "get_current_version",
+    "get_fusion_cache",
+    "get_node_graph",
+    "get_version_names",
+    "grade_boundary_report",
+    "grade_capabilities",
+    "grade_evidence_base",
+    "grade_version_restore",
+    "grade_version_snapshot",
+    "load_version",
+    "probe_grade_item",
+    "probe_node_graph",
+    "propose_grade",
+    "regenerate_magic_mask",
+    "remove_from_color_group",
+    "rename_version",
+    "reset_all_node_colors",
+    "safe_apply_drx",
+    "safe_copy_grade",
+    "safe_export_lut",
+    "safe_set_cdl",
+    "set_cdl",
+    "set_color_cache",
+    "set_fusion_cache",
+    "smart_reframe",
+    "stabilize"
+   ],
+   "name": "timeline_item_color",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "add_comp",
+    "delete_comp",
+    "export_comp",
+    "get_cache_enabled",
+    "get_comp_by_index",
+    "get_comp_by_name",
+    "get_comp_count",
+    "get_comp_names",
+    "import_comp",
+    "load_comp",
+    "rename_comp",
+    "set_cache"
+   ],
+   "name": "timeline_item_fusion",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "add",
+    "add_flag",
+    "clear_clip_color",
+    "clear_flags",
+    "delete_at_frame",
+    "delete_by_color",
+    "delete_by_custom_data",
+    "get_all",
+    "get_by_custom_data",
+    "get_clip_color",
+    "get_custom_data",
+    "get_flags",
+    "set_clip_color",
+    "update_custom_data"
+   ],
+   "name": "timeline_item_markers",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "add",
+    "delete",
+    "finalize",
+    "get_by_index",
+    "get_count",
+    "get_selected_index",
+    "select"
+   ],
+   "name": "timeline_item_takes",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "add",
+    "annotation_boundary_report",
+    "annotation_capabilities",
+    "clear_annotations_by_scope",
+    "copy_annotations",
+    "delete_at_frame",
+    "delete_by_color",
+    "delete_by_custom_data",
+    "export_review_report",
+    "get_all",
+    "get_by_custom_data",
+    "get_current_timecode",
+    "get_current_video_item",
+    "get_custom_data",
+    "get_thumbnail",
+    "get_thumbnail_image",
+    "move_annotations",
+    "normalize_marker_payload",
+    "probe_annotations",
+    "set_current_timecode",
+    "sync_marker_custom_data",
+    "update_custom_data"
+   ],
+   "name": "timeline_markers",
+   "safety": "destructive"
+  },
+  {
+   "actions": [
+    "archive_current",
+    "begin_run",
+    "diff_timelines",
+    "diff_versions",
+    "end_run",
+    "get_history",
+    "list_runs",
+    "list_versions",
+    "media_pool_changes",
+    "prune",
+    "registry",
+    "rollback"
+   ],
+   "name": "timeline_versioning",
+   "safety": "destructive"
+  }
+ ],
+ "confirm_token_actions": [
+  "edit_engine.execute_selects",
+  "edit_engine.execute_silence_ripple",
+  "edit_engine.execute_swap",
+  "edit_engine.execute_tighten",
+  "folder.remove_motion_blur",
+  "graph.apply_grade_from_drx",
+  "graph.reset_all_grades",
+  "media_pool.delete_clips",
+  "media_pool.delete_folders",
+  "media_pool.delete_timelines",
+  "media_pool_item.remove_motion_blur",
+  "project_settings.generate_speech",
+  "timeline.apply_cuts",
+  "timeline.delete_track",
+  "timeline.ripple_insert"
+ ],
+ "duplicate_actions": [
+  "fusion_comp.bulk_set_expressions"
+ ],
+ "granular_modules": {
+  "folder": [
+   "clear_folder_transcription",
+   "export_folder",
+   "folder_analyze_for_intellisearch",
+   "folder_analyze_for_slate",
+   "folder_clear_audio_classification",
+   "folder_clear_transcription",
+   "folder_export",
+   "folder_perform_audio_classification",
+   "folder_remove_motion_blur",
+   "folder_transcribe_audio",
+   "get_folder_clip_list",
+   "get_folder_is_stale",
+   "get_folder_subfolder_list",
+   "get_folder_unique_id",
+   "transcribe_folder_audio"
+  ],
+  "gallery": [
+   "create_gallery_power_grade_album",
+   "create_gallery_still_album",
+   "delete_stills_from_album",
+   "export_stills_from_album",
+   "get_album_stills",
+   "get_current_still_album",
+   "get_gallery_album_name",
+   "get_gallery_power_grade_albums",
+   "get_gallery_still_albums",
+   "get_still_label",
+   "import_stills_to_album",
+   "set_current_still_album",
+   "set_gallery_album_name",
+   "set_still_label"
+  ],
+  "graph": [
+   "get_color_group_clips",
+   "get_color_group_post_clip_node_graph",
+   "get_color_group_pre_clip_node_graph",
+   "graph_apply_arri_cdl_lut",
+   "graph_apply_grade_from_drx",
+   "graph_get_lut",
+   "graph_get_node_cache_mode",
+   "graph_get_node_label",
+   "graph_get_num_nodes",
+   "graph_get_tools_in_node",
+   "graph_reset_all_grades",
+   "graph_set_lut",
+   "graph_set_node_cache_mode",
+   "graph_set_node_enabled"
+  ],
+  "media_pool": [
+   "add_subfolder",
+   "append_to_timeline",
+   "auto_sync_audio",
+   "create_stereo_clip",
+   "delete_clip_mattes",
+   "delete_media_pool_clips",
+   "delete_media_pool_folders",
+   "delete_timelines_by_id",
+   "export_media_pool_metadata",
+   "get_clip_matte_list",
+   "get_media_pool_unique_id",
+   "get_selected_clips",
+   "get_timeline_matte_list",
+   "import_folder_from_file",
+   "import_media",
+   "import_timeline_from_file",
+   "move_clips_to_folder",
+   "move_media_pool_folders",
+   "refresh_media_pool_folders",
+   "set_current_media_pool_folder",
+   "set_selected_clip",
+   "setup_multicam_timeline"
+  ],
+  "media_pool_item": [
+   "add_clip_flag",
+   "add_clip_marker",
+   "analyze_clip_for_intellisearch",
+   "analyze_clip_for_slate",
+   "clear_clip_audio_classification",
+   "clear_clip_color",
+   "clear_clip_flags",
+   "clear_clip_mark_in_out",
+   "clear_clip_transcription",
+   "clear_transcription",
+   "delete_clip_marker_at_frame",
+   "delete_clip_marker_by_custom_data",
+   "delete_clip_markers_by_color",
+   "get_clip_audio_mapping",
+   "get_clip_color",
+   "get_clip_flag_list",
+   "get_clip_mark_in_out",
+   "get_clip_marker_by_custom_data",
+   "get_clip_marker_custom_data",
+   "get_clip_markers",
+   "get_clip_media_id",
+   "get_clip_metadata",
+   "get_clip_property",
+   "get_clip_third_party_metadata",
+   "get_clip_timeline",
+   "get_clip_unique_id_by_name",
+   "link_clip_full_resolution_media",
+   "link_clip_proxy_media",
+   "link_proxy_media",
+   "monitor_clip_growing_file",
+   "perform_clip_audio_classification",
+   "remove_clip_motion_blur",
+   "replace_clip",
+   "replace_media_pool_clip",
+   "replace_media_pool_clip_preserve_sub_clip",
+   "set_clip_color",
+   "set_clip_mark_in_out",
+   "set_clip_metadata",
+   "set_clip_property",
+   "set_clip_third_party_metadata",
+   "set_media_pool_clip_name",
+   "transcribe_audio",
+   "transcribe_clip_audio",
+   "unlink_clip_proxy_media",
+   "unlink_proxy_media",
+   "update_clip_marker_custom_data"
+  ],
+  "media_storage": [
+   "add_clip_mattes_to_media_pool",
+   "add_items_to_media_pool_from_storage",
+   "add_timeline_mattes_to_media_pool",
+   "get_media_storage_files",
+   "get_media_storage_subfolders",
+   "get_mounted_volumes",
+   "reveal_in_media_storage"
+  ],
+  "project": [
+   "add_color_group",
+   "add_render_job",
+   "apply_fairlight_preset_to_current_timeline",
+   "archive_project",
+   "close_project",
+   "create_cloud_project_tool",
+   "create_project",
+   "create_project_folder",
+   "delete_color_group",
+   "delete_project",
+   "delete_project_folder",
+   "delete_render_job",
+   "delete_render_preset",
+   "export_current_frame_as_still",
+   "export_project_to_file",
+   "generate_speech",
+   "get_color_groups_list",
+   "get_current_database",
+   "get_current_project_folder",
+   "get_current_render_format_and_codec",
+   "get_current_render_mode",
+   "get_database_list",
+   "get_project_attributes_in_current_folder",
+   "get_project_folder_list",
+   "get_project_preset_list",
+   "get_project_unique_id",
+   "get_quick_export_render_presets",
+   "get_render_codecs",
+   "get_render_formats",
+   "get_render_job_list",
+   "get_render_job_status",
+   "get_render_resolutions",
+   "get_timeline_by_index",
+   "goto_parent_project_folder",
+   "goto_root_project_folder",
+   "import_cloud_project_tool",
+   "import_project_from_file",
+   "insert_audio_to_current_track",
+   "is_rendering_in_progress",
+   "load_burn_in_preset",
+   "load_cloud_project",
+   "load_cloud_project_tool",
+   "load_render_preset",
+   "open_project",
+   "open_project_folder",
+   "refresh_lut_list",
+   "rename_color_group",
+   "render_with_quick_export",
+   "restore_cloud_project_tool",
+   "restore_project",
+   "save_as_new_render_preset",
+   "save_project",
+   "set_cache_mode",
+   "set_cache_path",
+   "set_color_science_mode_tool",
+   "set_color_space_tool",
+   "set_current_database",
+   "set_current_render_format_and_codec",
+   "set_current_render_mode",
+   "set_optimized_media_mode",
+   "set_project_name",
+   "set_project_preset",
+   "set_project_property_tool",
+   "set_project_setting",
+   "set_proxy_mode",
+   "set_proxy_quality",
+   "set_render_settings",
+   "set_superscale_settings_tool",
+   "set_timeline_format_tool",
+   "start_rendering_jobs",
+   "stop_rendering"
+  ],
+  "resolve_control": [
+   "delete_burn_in_preset",
+   "delete_layout_preset_tool",
+   "delete_user_preferences_preset",
+   "disable_background_tasks_for_current_session",
+   "export_burn_in_preset",
+   "export_layout_preset_tool",
+   "export_render_preset",
+   "export_user_preferences_preset",
+   "get_burn_in_preset_list",
+   "get_fairlight_presets",
+   "get_fusion_object",
+   "get_keyframe_mode",
+   "get_layout_preset_list",
+   "get_resolve_version_fields",
+   "get_user_preferences_preset_list",
+   "import_burn_in_preset",
+   "import_layout_preset_tool",
+   "import_render_preset",
+   "import_user_preferences_preset",
+   "inspect_custom_object",
+   "load_layout_preset_tool",
+   "load_user_preferences_preset",
+   "object_help",
+   "open_app_preferences",
+   "open_settings",
+   "quit_app",
+   "quit_resolve",
+   "restart_app",
+   "save_layout_preset_tool",
+   "save_user_preferences_preset",
+   "set_keyframe_mode",
+   "switch_page",
+   "update_layout_preset"
+  ],
+  "timeline": [
+   "create_timeline",
+   "create_timeline_from_clips",
+   "get_selected_timeline_items",
+   "list_timelines_tool",
+   "set_current_timeline",
+   "set_timeline_setting",
+   "timeline_add_marker",
+   "timeline_add_track",
+   "timeline_analyze_dolby_vision",
+   "timeline_clear_mark_in_out",
+   "timeline_convert_to_stereo",
+   "timeline_create_compound_clip",
+   "timeline_create_fusion_clip",
+   "timeline_create_subtitles_from_audio",
+   "timeline_delete_clips",
+   "timeline_delete_marker_at_frame",
+   "timeline_delete_marker_by_custom_data",
+   "timeline_delete_markers_by_color",
+   "timeline_delete_track",
+   "timeline_detect_scene_cuts",
+   "timeline_duplicate",
+   "timeline_export",
+   "timeline_get_current_clip_thumbnail",
+   "timeline_get_current_timecode",
+   "timeline_get_current_video_item",
+   "timeline_get_is_track_enabled",
+   "timeline_get_is_track_locked",
+   "timeline_get_mark_in_out",
+   "timeline_get_marker_by_custom_data",
+   "timeline_get_marker_custom_data",
+   "timeline_get_markers",
+   "timeline_get_media_pool_item",
+   "timeline_get_node_graph",
+   "timeline_get_track_name",
+   "timeline_get_track_sub_type",
+   "timeline_get_unique_id",
+   "timeline_get_voice_isolation_state",
+   "timeline_grab_all_stills",
+   "timeline_grab_still",
+   "timeline_import_into",
+   "timeline_insert_fusion_composition",
+   "timeline_insert_fusion_generator",
+   "timeline_insert_fusion_title",
+   "timeline_insert_generator",
+   "timeline_insert_ofx_generator",
+   "timeline_insert_title",
+   "timeline_set_clips_linked",
+   "timeline_set_current_timecode",
+   "timeline_set_mark_in_out",
+   "timeline_set_name",
+   "timeline_set_start_timecode",
+   "timeline_set_track_enable",
+   "timeline_set_track_lock",
+   "timeline_set_track_name",
+   "timeline_set_voice_isolation_state",
+   "timeline_update_marker_custom_data"
+  ],
+  "timeline_item": [
+   "add_keyframe",
+   "delete_keyframe",
+   "enable_keyframes",
+   "get_fusion_comp_by_name",
+   "modify_keyframe",
+   "set_keyframe_interpolation",
+   "set_timeline_item_audio",
+   "set_timeline_item_composite",
+   "set_timeline_item_crop",
+   "set_timeline_item_retime",
+   "set_timeline_item_stabilization",
+   "set_timeline_item_transform",
+   "ti_add_flag",
+   "ti_add_fusion_comp",
+   "ti_add_marker",
+   "ti_add_take",
+   "ti_add_version",
+   "ti_assign_to_color_group",
+   "ti_clear_clip_color",
+   "ti_clear_flags",
+   "ti_copy_grades",
+   "ti_create_magic_mask",
+   "ti_delete_fusion_comp",
+   "ti_delete_marker_at_frame",
+   "ti_delete_marker_by_custom_data",
+   "ti_delete_markers_by_color",
+   "ti_delete_take",
+   "ti_delete_version",
+   "ti_export_fusion_comp",
+   "ti_export_lut",
+   "ti_finalize_take",
+   "ti_get_cache_status",
+   "ti_get_clip_color",
+   "ti_get_color_group",
+   "ti_get_current_version",
+   "ti_get_flag_list",
+   "ti_get_fusion_comp_info",
+   "ti_get_info",
+   "ti_get_linked_items",
+   "ti_get_marker_by_custom_data",
+   "ti_get_marker_custom_data",
+   "ti_get_markers",
+   "ti_get_media_pool_item",
+   "ti_get_node_graph",
+   "ti_get_property",
+   "ti_get_source_audio_channel_mapping",
+   "ti_get_source_start_time",
+   "ti_get_stereo_convergence_values",
+   "ti_get_stereo_floating_window_params",
+   "ti_get_takes_info",
+   "ti_get_track_type_and_index",
+   "ti_get_version_name_list",
+   "ti_get_voice_isolation_state",
+   "ti_import_fusion_comp",
+   "ti_load_burn_in_preset",
+   "ti_load_fusion_comp",
+   "ti_load_version",
+   "ti_regenerate_magic_mask",
+   "ti_remove_from_color_group",
+   "ti_rename_fusion_comp",
+   "ti_rename_version",
+   "ti_reset_all_node_colors",
+   "ti_select_take",
+   "ti_set_cdl",
+   "ti_set_clip_color",
+   "ti_set_clip_enabled",
+   "ti_set_color_output_cache",
+   "ti_set_fusion_output_cache",
+   "ti_set_name",
+   "ti_set_property",
+   "ti_set_voice_isolation_state",
+   "ti_smart_reframe",
+   "ti_stabilize",
+   "ti_update_marker_custom_data",
+   "ti_update_sidecar"
+  ]
+ },
+ "kernel_catalog": {
+  "rows": [
+   {
+    "action": "fusion_boundary_report",
+    "kernel": "Fusion composition",
+    "tool": "fusion_comp"
+   },
+   {
+    "action": "fusion_graph_capabilities",
+    "kernel": "Fusion composition",
+    "tool": "fusion_comp"
+   },
+   {
+    "action": "probe_fusion_comp",
+    "kernel": "Fusion composition",
+    "tool": "fusion_comp"
+   },
+   {
+    "action": "probe_fusion_tool",
+    "kernel": "Fusion composition",
+    "tool": "fusion_comp"
+   },
+   {
+    "action": "safe_add_tool",
+    "kernel": "Fusion composition",
+    "tool": "fusion_comp"
+   },
+   {
+    "action": "safe_connect_tools",
+    "kernel": "Fusion composition",
+    "tool": "fusion_comp"
+   },
+   {
+    "action": "safe_set_inputs",
+    "kernel": "Fusion composition",
+    "tool": "fusion_comp"
+   },
+   {
+    "action": "add_sync_event_markers",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "analyze_bin",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "analyze_clip",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "analyze_file",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "analyze_project",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "batch_job_status",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "build_index",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "cancel_batch_job",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "capabilities",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "cleanup_artifacts",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "detect_sync_events",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "get_report",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "index_status",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "install_guidance",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "list_batch_jobs",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "plan",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "publish_clip_metadata",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "query_index",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "resolve_output_root",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "resume_batch_job",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "review_timeline_markers",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "run_batch_job_slice",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "start_batch_job",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "summarize",
+    "kernel": "Media analysis",
+    "tool": "media_analysis"
+   },
+   {
+    "action": "clear_clip_marks",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "copy_clip_annotations",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "copy_metadata",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "ingest_capabilities",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "link_full_resolution_checked",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "link_proxy_checked",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "media_pool_boundary_report",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "metadata_field_inventory",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "normalize_metadata",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "organize_clips",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "probe_clip_properties",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "probe_ingest_item",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "probe_media_pool",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "safe_import_folder",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "safe_import_media",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "safe_import_sequence",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "safe_relink",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "safe_unlink",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "set_clip_marks",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "setup_multicam_timeline",
+    "kernel": "Media Pool / ingest",
+    "tool": "media_pool"
+   },
+   {
+    "action": "database_capabilities",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "preset_lifecycle_probe",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "probe_project_lifecycle",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "probe_project_settings",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "project_boundary_report",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "project_capabilities",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "project_settings_snapshot",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_project_archive",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_project_create",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_project_delete",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_project_export",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_project_import",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_project_restore",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_set_current_database",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "safe_set_project_settings",
+    "kernel": "Project lifecycle",
+    "tool": "project_manager"
+   },
+   {
+    "action": "export_render_boundary_report",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "prepare_render_job",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "probe_render_matrix",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "probe_render_settings",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "quick_export_capabilities",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "render_capabilities",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "render_job_lifecycle_probe",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "safe_quick_export",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "safe_set_render_settings",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "validate_render_settings",
+    "kernel": "Render / Deliver",
+    "tool": "render"
+   },
+   {
+    "action": "extension_boundary_report",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "extension_capabilities",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "probe_dctl_lifecycle",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "probe_fuse_lifecycle",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "probe_script_lifecycle",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "refresh_or_restart_required",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "safe_install_extension",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "safe_remove_extension",
+    "kernel": "Extension authoring",
+    "tool": "script_plugin"
+   },
+   {
+    "action": "apply_look_to_items",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "audio_capabilities",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "audio_mapping_report",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "audio_mix_capability_report",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "build_relink_plan",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "bulk_set_item_properties",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "bulk_set_title_text",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "compare_timelines",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "conform_boundary_report",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "conform_capabilities",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "copy_clips",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "copy_range",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "create_variant_from_ranges",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "detect_gaps_overlaps",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "detect_missing_media",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "duplicate_clips",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "duplicate_range",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "edit_kernel_capabilities",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "export_timeline_checked",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "fairlight_boundary_report",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "import_timeline_checked",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "lift_range",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "marker_thumbnail_review",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "move_clips",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "overwrite_range",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "probe_audio_item",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "probe_audio_track",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "probe_edit_kernel_item",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "probe_interchange_roundtrip",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "probe_timeline_structure",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "safe_auto_sync_audio",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "safe_set_audio_properties",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "set_title_text",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "source_range_report",
+    "kernel": "Conform / interchange",
+    "tool": "timeline"
+   },
+   {
+    "action": "story_spine_report",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "subtitle_generation_probe",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "thumbnail_contact_sheet",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "title_property_scan",
+    "kernel": "Timeline edit",
+    "tool": "timeline"
+   },
+   {
+    "action": "transcription_capabilities",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "voice_isolation_capabilities",
+    "kernel": "Audio / Fairlight",
+    "tool": "timeline"
+   },
+   {
+    "action": "color_group_capabilities",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "gallery_capabilities",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "grade_boundary_report",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "grade_capabilities",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "grade_version_restore",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "grade_version_snapshot",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "probe_grade_item",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "probe_node_graph",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "safe_apply_drx",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "safe_copy_grade",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "safe_export_lut",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "safe_set_cdl",
+    "kernel": "Color / Grade",
+    "tool": "timeline_item_color"
+   },
+   {
+    "action": "annotation_boundary_report",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "annotation_capabilities",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "clear_annotations_by_scope",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "copy_annotations",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "export_review_report",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "move_annotations",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "normalize_marker_payload",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "probe_annotations",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   },
+   {
+    "action": "sync_marker_custom_data",
+    "kernel": "Review annotations",
+    "tool": "timeline_markers"
+   }
+  ],
+  "stated_actions": 136,
+  "stated_tools": 9
+ },
+ "method": "offline static parse of the git worktree checkout at tag v2.207.0 (services.toolchain.mcp_vendor_surface.parse_vendor_surface; advanced Node surface from name:/if (action ===)/case extraction over resolve-advanced/server/tools/*.mjs). No server spawn, no live tools/list \u2014 schema hashes and handshake identity land with the phase-2 inventory rebuild.",
+ "provider_version": "2.207.0",
+ "schema_version": "mcp-vendor-surface-v1",
+ "tag": "v2.207.0"
+}

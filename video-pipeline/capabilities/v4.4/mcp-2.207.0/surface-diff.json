@@ -1,0 +1,129 @@
+{
+ "advanced": {
+  "action_diffs": {
+   "drt": {
+    "added": [
+     "assemble",
+     "assemble_from_interchange",
+     "assemble_project"
+    ],
+    "removed": []
+   },
+   "editorial": {
+    "added": [
+     "verify_roundtrip"
+    ],
+    "removed": []
+   }
+  },
+  "counts": {
+   "new": 18,
+   "old": 18
+  },
+  "tools_added": [],
+  "tools_removed": []
+ },
+ "baseline": {
+  "method": "offline static parse: services.toolchain.mcp_vendor_server.parse_server + mcp_vendor_surface.parse_vendor_surface over both checkouts (the new one via git worktree, original untouched); compound input params from AST signatures of @mcp.tool functions in src/server.py; advanced surface (Node, davinci-resolve-advanced-mcp) from name:/if (action === '...')/case '...': extraction over resolve-advanced/server/tools/*.mjs",
+  "new": {
+   "commit": "5a1db6776fbe76098a706a41811ca787dfbd9990",
+   "provider_version": "2.207.0",
+   "tag": "v2.207.0"
+  },
+  "old": {
+   "commit": "132e134d3aa25d3d0df6bdf38f051bd29d128211",
+   "provider_version": "2.98.3",
+   "tag": "v2.98.3"
+  }
+ },
+ "compound": {
+  "action_diffs": {
+   "media_analysis": {
+    "added": [
+     "grade_loop",
+     "grade_loop_capabilities",
+     "measure_loudness",
+     "mix_plan",
+     "mix_plan_capabilities"
+    ],
+    "removed": []
+   },
+   "media_pool": {
+    "added": [
+     "capture_media_template",
+     "get_clip_marks"
+    ],
+    "removed": []
+   },
+   "media_pool_item_markers": {
+    "added": [
+     "get_name"
+    ],
+    "removed": []
+   },
+   "render": {
+    "added": [
+     "verify_output"
+    ],
+    "removed": []
+   },
+   "resolve_control": {
+    "added": [
+     "begin_execution",
+     "clear_executions",
+     "end_execution",
+     "export_execution_report",
+     "get_execution",
+     "get_execution_trace",
+     "list_recent_executions"
+    ],
+    "removed": []
+   },
+   "timeline": {
+    "added": [
+     "author_offline",
+     "get_clips_linked",
+     "get_title_text",
+     "offline_fallback_capabilities",
+     "ripple_insert"
+    ],
+    "removed": []
+   }
+  },
+  "arg_diffs": {},
+  "confirm_token_diff": {
+   "added": [
+    "timeline.ripple_insert"
+   ],
+   "removed": []
+  },
+  "counts": {
+   "new_actions": 748,
+   "new_tools": 36,
+   "old_actions": 723,
+   "old_tools": 35
+  },
+  "likely_renames": [],
+  "safety_class_changes": {},
+  "tools_added": [
+   "knowledge"
+  ],
+  "tools_removed": []
+ },
+ "granular": {
+  "counts": {
+   "new": 353,
+   "old": 353
+  },
+  "module_tool_diffs": {},
+  "modules_added": [],
+  "modules_removed": [],
+  "tools_added": [],
+  "tools_removed": []
+ },
+ "kernel_catalog": {
+  "added": [],
+  "removed": []
+ },
+ "schema_version": "mcp-surface-diff-v1"
+}

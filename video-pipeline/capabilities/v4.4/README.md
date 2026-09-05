@@ -9,6 +9,9 @@ capabilities/v4.4/
   baseline/
     baseline.json          # T2 freeze: baseline_commit_sha=c37247e..., pytest 2995 passed / ruff+pyright clean / mcp-fit sha / backends / v43 gate evidence
     manifest.json          # manifest-v1 (path+size+sha256, sorted, compact canonical JSON)
+    mcp-2.207.0/           # MCP v2.207.0 オフライン表面 baseline（vendor-surface.json + manifest.json、Phase 1）
+  mcp-2.207.0/             # MCP v2.98.3→v2.207.0 差分分析（Phase 1、オフライン）:
+                           #   surface-diff.json/.md, fail-closed-impact.json, update-proposals.md, manifest.json
   product-proof/
     v44-0/BLOCKED.json     # Gate V44-0 BLOCKED (operator-needed)
     consolidated.json      # ProductProofReportV1 run_kind=v44-consolidated（本統合作成物）
