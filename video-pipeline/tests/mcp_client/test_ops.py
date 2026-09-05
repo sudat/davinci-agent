@@ -411,3 +411,53 @@ def test_fairlight_ambiguous_indexed_mapping_shapes_fail_loud(
     )
     with pytest.raises(ValidationError):
         drifted.fairlight_presets()
+
+
+# ---------------------------------------------------------------------------
+# Measured live 2026-09-05 (pin v2.207.0, sol-cu-integration evidence):
+# get_items_in_track items now carry a ``kind`` field — "transition" observed
+# on a Cross Dissolve readback; values beyond that unknown. TrackItemsResult
+# accepts it (pin-following); other unknown fields stay extra=forbidden.
+# ---------------------------------------------------------------------------
+
+_KIND_WIRE: Mapping[tuple[str, str], object] = {
+    ("timeline", "get_items_in_track"): {
+        "items": [
+            {
+                "name": "クロスディゾルブ",
+                "id": "item-trans-1",
+                "start": 108135,
+                "end": 108165,
+                "duration": 30,
+                "kind": "transition",
+            },
+            {
+                "name": "edit-source.mov",
+                "id": "item-clip-1",
+                "start": 108000,
+                "end": 108150,
+                "duration": 150,
+            },
+        ]
+    }
+}
+
+
+def test_items_in_track_parses_measured_kind_present_and_absent() -> None:
+    items = _wire_ops(_KIND_WIRE).get_items_in_track("video", 1)
+    assert items.ok is True
+    assert len(items.items) == 2
+    assert items.items[0].kind == "transition"  # measured live value
+    assert items.items[1].kind is None  # items without kind keep parsing
+
+
+def test_items_in_track_still_forbids_other_unknown_fields() -> None:
+    drifted = _wire_ops(
+        {
+            ("timeline", "get_items_in_track"): {
+                "items": [{"name": "x", "id": "y", "bogus": 1}]
+            }
+        }
+    )
+    with pytest.raises(ValidationError):
+        drifted.get_items_in_track("video", 1)

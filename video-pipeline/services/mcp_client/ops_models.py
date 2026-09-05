@@ -338,13 +338,20 @@ class TrackCountResult(McpActionOutcome):
 
 
 class TrackItemRow(StrictModel):
-    """One ``timeline {get_items_in_track}`` item row (absolute frames)."""
+    """One ``timeline {get_items_in_track}`` item row (absolute frames).
+
+    ``kind`` appeared on items measured live 2026-09-05 (pin v2.207.0,
+    sol-cu-integration evidence): observed value ``"transition"`` on a
+    transition item; the vocabulary beyond that is unknown (not yet
+    measured) — the raw string is accepted and never interpreted here.
+    """
 
     name: str | None = None
     id: str | None = None
     start: int | None = None
     end: int | None = None
     duration: int | None = None
+    kind: str | None = Field(default=None)
 
 
 class TrackItemsResult(McpActionOutcome):
