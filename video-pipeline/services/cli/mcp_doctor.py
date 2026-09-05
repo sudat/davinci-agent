@@ -2,8 +2,9 @@
 
 Every check is an explicit typed section (never silently downgraded to ok):
 pin, clone, HEAD SHA, venv, entry point, ffmpeg, stdio server liveness,
-Resolve reachability, advanced binary, update-check policy. JSON to stdout;
-an unreachable Resolve prints the remedy hint to stderr and exits nonzero.
+Resolve reachability, advanced binary, Node runtime, update-check policy.
+JSON to stdout; an unreachable Resolve prints the remedy hint to stderr and
+exits nonzero.
 """
 
 from __future__ import annotations
@@ -17,6 +18,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
+from services.cli.mcp_doctor_node import (
+    NodeLookup,
+    check_node,
+    default_node_lookup,
+)
 from services.cli.mcp_doctor_probe import probe_server
 from services.cli.mcp_doctor_report import (
     DoctorPaths,
@@ -32,8 +38,7 @@ REPORT_SCHEMA: Final = "mcp-doctor-v1"
 GIT_TIMEOUT_SECONDS: Final = 10.0
 VERSION_TIMEOUT_SECONDS: Final = 10.0
 RESOLVE_REMEDY_HINT: Final = (
-    "DaVinci Resolve: Preferences > General > External scripting using = Local, "
-    "and launch Resolve"
+    "DaVinci Resolve: Preferences > General > External scripting using = Local, and launch Resolve"
 )
 
 _FFmpegLookup = Callable[[], str | None]
@@ -182,10 +187,15 @@ def _check_tool_surface(paths: DoctorPaths, pin: McpPin | None) -> DoctorSection
 
 
 def run_doctor(
-    paths: DoctorPaths, *, probe_timeout: float = 10.0, ffmpeg_lookup: _FFmpegLookup | None = None
+    paths: DoctorPaths,
+    *,
+    probe_timeout: float = 10.0,
+    ffmpeg_lookup: _FFmpegLookup | None = None,
+    node_lookup: NodeLookup | None = None,
 ) -> DoctorReport:
     """Run every check and return the typed report (never a silent downgrade)."""
     lookup: _FFmpegLookup = ffmpeg_lookup or (lambda: shutil.which("ffmpeg"))
+    nodes: NodeLookup = node_lookup or default_node_lookup
     pin_section, pin = _check_pin(paths)
     sections = (
         pin_section,
@@ -197,6 +207,7 @@ def run_doctor(
         *probe_server(paths, pin, probe_timeout),
         _check_tool_surface(paths, pin),
         _check_advanced(paths, pin),
+        check_node(nodes),
         _check_update_state(paths, pin),
     )
     ok = all(section.status == "ok" for section in sections)
@@ -208,9 +219,7 @@ def run_doctor(
 def main(argv: list[str] | None = None) -> int:
     video_pipeline_root = Path(__file__).resolve().parents[2]
     default_clone = video_pipeline_root.parent / "private" / "vendor" / "davinci-resolve-mcp"
-    default_pin = (
-        video_pipeline_root / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
-    )
+    default_pin = video_pipeline_root / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
     parser = argparse.ArgumentParser(prog="mcp-doctor", description=__doc__)
     parser.add_argument("--clone", type=Path, default=default_clone)
     parser.add_argument("--pin", type=Path, default=default_pin)

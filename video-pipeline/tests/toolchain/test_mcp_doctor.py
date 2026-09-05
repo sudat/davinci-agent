@@ -18,6 +18,7 @@ import pytest
 
 from services.cli.mcp_doctor import DoctorPaths, run_doctor
 from services.cli.mcp_doctor import main as doctor_main
+from services.cli.mcp_doctor_node import parse_node_version
 from services.release.manifest import build_manifest, manifest_bytes
 from services.toolchain.mcp_coverage import schema_sha256
 from services.toolchain.mcp_pin import McpPinError, load_mcp_pin
@@ -190,6 +191,10 @@ def _found_ffmpeg() -> str | None:
     return "/opt/homebrew/bin/ffmpeg"
 
 
+def _found_node() -> str | None:
+    return "v24.19.0\n"
+
+
 def test_pin_loader_accepts_the_fixture_payload(tmp_path: Path) -> None:
     pin_path = tmp_path / "pin.json"
     pin_path.write_text(json.dumps(_pin_payload(commit=PINNED_SHA, venv_python="/x/y")), "utf-8")
@@ -210,7 +215,7 @@ def test_pin_loader_rejects_enabled_update_check(tmp_path: Path) -> None:
 
 def test_happy_path_fixture_all_sections_ok(tmp_path: Path) -> None:
     paths = _happy_fixture(tmp_path)
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     assert report.ok is True
     assert report.exit_code == 0
     codes = {section.check: section.code for section in report.sections}
@@ -220,7 +225,7 @@ def test_happy_path_fixture_all_sections_ok(tmp_path: Path) -> None:
 
 def test_sha_mismatch_detected_and_nonzero(tmp_path: Path) -> None:
     paths = _happy_fixture(tmp_path, commit=OTHER_SHA)
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     assert report.ok is False
     assert report.exit_code != 0
     section = _section(json.loads(report.to_json()), "head_sha")
@@ -235,7 +240,7 @@ def test_venv_missing_detected(tmp_path: Path) -> None:
     payload = json.loads(pin_path.read_text("utf-8"))
     payload["venv_python"] = str(clone / "venv" / "bin" / "python")
     pin_path.write_text(json.dumps(payload), "utf-8")
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     assert report.ok is False
     section = _section(json.loads(report.to_json()), "venv_python")
     assert section["code"] == "venv-missing"
@@ -246,7 +251,7 @@ def test_venv_equal_to_repo_venv_reports_overlap(tmp_path: Path) -> None:
     payload = json.loads(paths.pin_path.read_text("utf-8"))
     payload["venv_python"] = str(paths.repo_venv_python)
     paths.pin_path.write_text(json.dumps(payload), "utf-8")
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     section = _section(json.loads(report.to_json()), "venv_python")
     assert section["status"] == "fail"
     assert section["code"] == "venv-overlaps-repo-venv"
@@ -259,7 +264,8 @@ def test_venv_sharing_base_binary_but_distinct_roots_is_ok(tmp_path: Path) -> No
     repo_link.symlink_to(Path(sys.executable).resolve())
     paths = _happy_fixture(tmp_path)
     report = run_doctor(
-        DoctorPaths(
+        node_lookup=_found_node,
+        paths=DoctorPaths(
             clone_dir=paths.clone_dir, pin_path=paths.pin_path, repo_venv_python=repo_link
         ),
         ffmpeg_lookup=_found_ffmpeg,
@@ -276,7 +282,7 @@ def test_clone_absent_reports_clone_failed(tmp_path: Path) -> None:
         pin_path=paths.pin_path,
         repo_venv_python=paths.repo_venv_python,
     )
-    report = run_doctor(absent_paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(absent_paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     assert report.ok is False
     assert report.exit_code != 0
     section = _section(json.loads(report.to_json()), "clone_exists")
@@ -288,7 +294,7 @@ def test_entry_point_missing_detected(tmp_path: Path) -> None:
     payload = json.loads(paths.pin_path.read_text("utf-8"))
     payload["server_entry_point"] = "src/nope.py"
     paths.pin_path.write_text(json.dumps(payload), "utf-8")
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     assert report.ok is False
     section = _section(json.loads(report.to_json()), "server_entry_point")
     assert section["code"] == "entry-point-missing"
@@ -299,7 +305,7 @@ def test_invalid_pin_reports_pin_invalid(tmp_path: Path) -> None:
     payload = json.loads(paths.pin_path.read_text("utf-8"))
     del payload["repo_python"]
     paths.pin_path.write_text(json.dumps(payload), "utf-8")
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     assert report.ok is False
     section = _section(json.loads(report.to_json()), "pin_json")
     assert section["code"] == "pin-invalid"
@@ -331,7 +337,7 @@ def test_main_emits_json_report_and_remedy_hint_on_unreachable_resolve(tmp_path,
 
 def test_tool_surface_section_ok_on_consistent_artifacts(tmp_path: Path) -> None:
     paths = _happy_fixture(tmp_path)
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     section = _section(json.loads(report.to_json()), "tool_surface")
     assert section["status"] == "ok"
     assert section["code"] == "ok"
@@ -347,7 +353,7 @@ def test_tool_surface_fails_typed_on_stale_dispositions_seal(tmp_path: Path) -> 
     )
     manifest = paths.coverage_dir / "manifest.json"
     manifest.write_bytes(manifest_bytes(build_manifest(paths.coverage_dir)))
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     section = _section(json.loads(report.to_json()), "tool_surface")
     assert section["status"] == "fail"
     assert section["code"] == "surface-inventory-hash-stale"
@@ -356,7 +362,7 @@ def test_tool_surface_fails_typed_on_stale_dispositions_seal(tmp_path: Path) -> 
 def test_tool_surface_fails_typed_on_missing_inventory(tmp_path: Path) -> None:
     paths = _happy_fixture(tmp_path)
     (paths.coverage_dir / "inventory.json").unlink()
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     section = _section(json.loads(report.to_json()), "tool_surface")
     assert section["status"] == "fail"
     assert section["code"] == "surface-inventory-missing"
@@ -371,7 +377,7 @@ def test_tool_surface_reports_drift_on_wrong_checkout(tmp_path: Path) -> None:
         schemas={tool: schema_sha256({"type": "object"}) for tool in DOCTOR_TOOLS},
         actions=DOCTOR_TOOLS,
     )
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     parsed = json.loads(report.to_json())
     assert _section(parsed, "head_sha")["code"] == "sha-mismatch"
     section = _section(parsed, "tool_surface")
@@ -390,8 +396,80 @@ def test_tool_surface_reports_action_drift_on_edited_vendor_source(tmp_path: Pat
         ),
         encoding="utf-8",
     )
-    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
     section = _section(json.loads(report.to_json()), "tool_surface")
     assert section["status"] == "fail"
     assert section["code"] == "mcp-tool-surface-drift"
     assert "action-added=[resolve_control.restart_app]" in section["detail"]
+
+
+# ─── Node runtime check (advanced server needs Node >= 20.9) ─────────────────
+
+
+def test_parse_node_version_accepts_shapes() -> None:
+    assert parse_node_version("v24.19.0\n") == (24, 19, 0)
+    assert parse_node_version("20.9.0") == (20, 9, 0)
+    assert parse_node_version("v20.9.0-nightly20260901") == (20, 9, 0)
+
+
+def test_parse_node_version_rejects_garbage() -> None:
+    assert parse_node_version("") is None
+    assert parse_node_version("not-a-version") is None
+    assert parse_node_version("v20.9") is None
+    assert parse_node_version("v20.x.0") is None
+
+
+def test_node_version_section_ok_on_current_machine_shape(tmp_path: Path) -> None:
+    paths = _happy_fixture(tmp_path)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=_found_node)
+    parsed = json.loads(report.to_json())
+    assert _section(parsed, "node_version") == {
+        "check": "node_version",
+        "status": "ok",
+        "code": "ok",
+        "detail": "node v24.19.0 satisfies >= 20.9",
+    }
+    assert report.ok is True
+
+
+def test_node_version_boundary_exactly_20_9_is_ok(tmp_path: Path) -> None:
+    paths = _happy_fixture(tmp_path)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=lambda: "v20.9.0\n")
+    assert report.ok is True
+    assert _section(json.loads(report.to_json()), "node_version")["status"] == "ok"
+
+
+def test_node_version_one_patch_below_minimum_fails(tmp_path: Path) -> None:
+    paths = _happy_fixture(tmp_path)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=lambda: "v20.8.1\n")
+    assert report.ok is False
+    assert report.exit_code != 0
+    section = _section(json.loads(report.to_json()), "node_version")
+    assert section["code"] == "node-version-too-old"
+    assert "20.8.1" in section["detail"]
+    assert "20.9" in section["detail"]
+
+
+def test_node_version_major_below_minimum_fails(tmp_path: Path) -> None:
+    paths = _happy_fixture(tmp_path)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=lambda: "v18.17.0\n")
+    section = _section(json.loads(report.to_json()), "node_version")
+    assert section["status"] == "fail"
+    assert section["code"] == "node-version-too-old"
+
+
+def test_node_missing_fails_with_requirement_named(tmp_path: Path) -> None:
+    paths = _happy_fixture(tmp_path)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=lambda: None)
+    section = _section(json.loads(report.to_json()), "node_version")
+    assert section["status"] == "fail"
+    assert section["code"] == "node-missing"
+    assert ">= 20.9" in section["detail"]
+
+
+def test_node_version_unreadable_output_fails_typed(tmp_path: Path) -> None:
+    paths = _happy_fixture(tmp_path)
+    report = run_doctor(paths, ffmpeg_lookup=_found_ffmpeg, node_lookup=lambda: "unexpected")
+    section = _section(json.loads(report.to_json()), "node_version")
+    assert section["status"] == "fail"
+    assert section["code"] == "node-version-unreadable"
