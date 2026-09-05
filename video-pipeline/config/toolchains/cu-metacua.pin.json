@@ -1,0 +1,6 @@
+{
+  "schema_version": "cu-pin-v1",
+  "binary_path": "/Users/stc/bin/metacua-go",
+  "default_timeout_s": 3600,
+  "session_lookup_limit": 8
+}
