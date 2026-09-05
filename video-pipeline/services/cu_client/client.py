@@ -27,15 +27,23 @@ recorded as a plain unverified ("didn't look") — they are different
 facts.
 
 Unfinished classification (step-exhaustion refinement): after selecting
-OUR session record, ``finish=False`` means the agent stopped ITSELF
-without completing (step exhaustion or gave up) — possibly with
-``exit_code=0``, which NEVER implies success (``verified`` is set ONLY by
-the verify callable). Such runs carry an ``unfinished:`` note. The three
-words never merge: ``interrupted`` (WE killed the run) vs ``unfinished``
-(the CU agent stopped itself) vs plain ``unverified`` (nobody looked).
-``finish`` field semantics are confirmed by live measurement later
-(実測で確定); the stub tests define our parsing contract here — actual
-field values are confirmed in the live smoke, not by this code.
+OUR session record, an unfinished ``finish`` value means the agent stopped
+ITSELF without completing — possibly with ``exit_code=0``, which NEVER
+implies success (``verified`` is set ONLY by the verify callable). Such
+runs carry an ``unfinished:`` note. The three words never merge:
+``interrupted`` (WE killed the run) vs ``unfinished`` (the CU agent
+stopped itself) vs plain ``unverified`` (nobody looked).
+
+``finish`` semantics MEASURED live 2026-09-05 (sol-cu-integration
+evidence): ``sessions`` records are per-LLM-call, newest-first, and
+``finish`` is a STRING with vocabulary ``"tool_use" | "stop" |
+"refusal" | "max_tokens"`` (vendor llm.py). The NEWEST record's
+``finish`` is the completion signal (the exact-goal match hits it first
+in newest-first order): ``"stop"`` = the agent declared the goal done
+(no note); ``"tool_use"`` / ``"refusal"`` / ``"max_tokens"`` = it
+stopped unfinished (``unfinished:`` note); ``None`` or an unknown
+string = no classification note — unknown values are data, recorded
+verbatim, never dropped.
 
 Trace impermanence (refinement 4): ``trace_dir`` points under
 ``~/.metacua/traces/<goal_id>/``, OUTSIDE this repo. Traces are external
@@ -48,7 +56,7 @@ cannot guarantee.
 # (__init__/models/errors/client), so the lease window + goal runner live
 # together here; the lines above the 250 ceiling are the design-mandated
 # docstrings (§1.1 discipline, timeout design, unfinished classification,
-# trace impermanence) — pure code is 235 lines.
+# trace impermanence) — pure code is 237 lines.
 
 from __future__ import annotations
 
@@ -92,6 +100,8 @@ _UNFINISHED_NOTE: Final = (
     "unfinished: agent stopped before completing (steps exhausted or gave up);"
     " external state may be partially changed"
 )
+#: Measured vocabulary (vendor llm.py; "stop" = declared done, the rest = stopped unfinished).
+_UNFINISHED_FINISH_VALUES: Final = frozenset({"tool_use", "refusal", "max_tokens"})
 CU_WINDOW_RESOURCE: Final = stage_resource("cu-window", "metacua-goal")
 """Default lease resource; production callers pass their own stage_resource()."""
 
@@ -128,9 +138,10 @@ def _record_goal_id(record: dict[str, object]) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _record_finish(record: dict[str, object]) -> bool | None:
+def _record_finish(record: dict[str, object]) -> str | None:
+    """Raw vendor ``finish`` string, verbatim (unknown values are data)."""
     value = record.get("finish")
-    return value if isinstance(value, bool) else None
+    return value if isinstance(value, str) else None
 
 
 def _record_trace_dir(record: dict[str, object]) -> Path | None:
@@ -267,10 +278,13 @@ class CuClient:
         and "the state ended up correct" are separate facts — the note
         keeps the interruption, ``verified`` keeps the state.
 
-        Classification (step-exhaustion refinement): ``finish=False``
-        marks the run ``unfinished:`` regardless of ``exit_code`` (the
-        agent may exit 0 after giving up; exit_code NEVER implies
-        success).
+        Classification (step-exhaustion refinement): an unfinished
+        ``finish`` value (``"tool_use"`` / ``"refusal"`` / ``"max_tokens"``;
+        MEASURED 2026-09-05) marks the run ``unfinished:`` regardless of
+        ``exit_code`` (the agent may exit 0 after giving up; exit_code NEVER
+        implies success). ``"stop"`` is the agent's declared-done signal
+        (no note); ``None`` or an unknown string carries no classification
+        note either — the raw value is still recorded verbatim.
         """
         timeout = self._pin.default_timeout_s if timeout_s is None else timeout_s
         if timeout <= 0:
@@ -307,7 +321,7 @@ class CuClient:
                 " external GUI state may be mid-operation"
             )
         else:
-            note = _UNFINISHED_NOTE if finish is False else None
+            note = _UNFINISHED_NOTE if finish in _UNFINISHED_FINISH_VALUES else None
         result = CuResult(
             goal=goal,
             exit_code=None if timed_out else proc.returncode,

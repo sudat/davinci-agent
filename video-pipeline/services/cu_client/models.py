@@ -42,6 +42,16 @@ class CuResult(StrictModel):
     artifact — no copy mechanism exists by design (size), so nothing here
     implies durability we cannot guarantee.
 
+    ``finish`` is the NEWEST session record's raw vendor string (MEASURED
+    live 2026-09-05, sol-cu-integration evidence: records are per-LLM-call
+    and newest-first; the newest record's ``finish`` is the completion
+    signal). Vocabulary (vendor llm.py): ``"stop"`` (observed live for
+    completed runs — the agent declared the goal done), ``"tool_use"``
+    (observed live for step-exhausted runs — the agent wanted to keep
+    going), ``"refusal"`` / ``"max_tokens"`` (from the vendor source, not
+    yet observed live). Unknown strings are data: recorded verbatim, never
+    dropped.
+
     ``verified`` follows the observation contract: ``unverified`` means we
     did not look (未観測) — it is never a success claim; ``verified`` only
     after the caller's verifier said True; ``failed_verification`` when the
@@ -57,7 +67,7 @@ class CuResult(StrictModel):
     goal: str
     exit_code: int | None
     goal_id: str | None = None
-    finish: bool | None = None
+    finish: str | None = None
     trace_dir: Path | None = None
     stdout_tail: str
     stderr_tail: str

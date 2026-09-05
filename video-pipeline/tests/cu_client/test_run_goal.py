@@ -4,7 +4,9 @@ Covers: launch refusals (missing / non-executable binary, bad pin config),
 the happy path, exact-goal session selection among concurrent manual
 sessions, trace-collection failures, the timeout kill of the process group
 with the recorded interruption note, the caller-verifier observation
-contract, output-tail truncation, and extra_flags pass-through.
+contract, output-tail truncation, extra_flags pass-through, and the
+MEASURED string ``finish`` vocabulary ("stop" / "tool_use" / "refusal" /
+"max_tokens" / unknown / absent — sol-cu-integration 2026-09-05).
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ def _pin(
 
 def test_nonexistent_binary_path_refuses_launch(tmp_path: Path) -> None:
     missing = tmp_path / "nowhere" / "metacua-go"
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish=True)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish="stop")])
     pin_path.write_text(
         json.dumps(
             {
@@ -50,7 +52,7 @@ def test_nonexistent_binary_path_refuses_launch(tmp_path: Path) -> None:
 def test_non_executable_binary_refuses_launch(tmp_path: Path) -> None:
     binary = tmp_path / "metacua-stub-noexec"
     pin_path = _pin(
-        tmp_path, [session_record(GOAL, "g-1", finish=True)], binary_path=binary
+        tmp_path, [session_record(GOAL, "g-1", finish="stop")], binary_path=binary
     )
     binary.chmod(0o644)
     with pytest.raises(CuLaunchError, match="not executable"):
@@ -61,14 +63,14 @@ def test_happy_path_populates_result_fields(tmp_path: Path) -> None:
     trace_dir = tmp_path / "traces" / "g-ours"
     pin_path = _pin(
         tmp_path,
-        [session_record(GOAL, "g-ours", finish=True, trace_dir=trace_dir)],
+        [session_record(GOAL, "g-ours", finish="stop", trace_dir=trace_dir)],
     )
     result = CuClient(pin_path=pin_path).run_goal(GOAL)
     assert isinstance(result, CuResult)
     assert result.goal == GOAL
     assert result.exit_code == 0
     assert result.goal_id == "g-ours"
-    assert result.finish is True
+    assert result.finish == "stop"
     assert result.trace_dir == trace_dir
     assert "stub-agent goal: " + GOAL in result.stdout_tail
     assert result.elapsed_seconds >= 0
@@ -79,31 +81,31 @@ def test_happy_path_populates_result_fields(tmp_path: Path) -> None:
 def test_concurrent_manual_session_first_still_selects_our_goal(tmp_path: Path) -> None:
     # Refinement 3: suda's concurrent manual session is the NEWEST record;
     # our lease only serializes OUR side, so the exact goal match decides.
-    manual = session_record("suda is manually clicking in the GUI", "g-manual", finish=True)
-    ours = session_record(GOAL, "g-ours", finish=False, trace_dir=tmp_path / "t-ours")
+    manual = session_record("suda is manually clicking in the GUI", "g-manual", finish="stop")
+    ours = session_record(GOAL, "g-ours", finish="tool_use", trace_dir=tmp_path / "t-ours")
     pin_path = _pin(tmp_path, [manual, ours])
     result = CuClient(pin_path=pin_path).run_goal(GOAL)
     assert result.goal_id == "g-ours"
-    assert result.finish is False
+    assert result.finish == "tool_use"
     assert result.trace_dir == tmp_path / "t-ours"
 
 
 def test_extra_flags_are_passed_through_verbatim(tmp_path: Path) -> None:
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish=True)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish="stop")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL, extra_flags=("--allow-bash",))
     assert "--allow-bash" in result.stdout_tail
 
 
 def test_sessions_without_matching_goal_refuses_trace(tmp_path: Path) -> None:
     pin_path = _pin(
-        tmp_path, [session_record("suda clicked something manually", "g-man", finish=True)]
+        tmp_path, [session_record("suda clicked something manually", "g-man", finish="stop")]
     )
     with pytest.raises(CuTraceCollectionError, match="exact goal match"):
         CuClient(pin_path=pin_path).run_goal(GOAL)
 
 
 def test_invalid_sessions_json_refuses_trace(tmp_path: Path) -> None:
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish=True)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish="stop")])
     (tmp_path / "stub-sessions.json").write_text("not json at all", encoding="utf-8")
     with pytest.raises(CuTraceCollectionError, match="not valid JSON"):
         CuClient(pin_path=pin_path).run_goal(GOAL)
@@ -113,7 +115,7 @@ def test_timeout_kills_process_group_and_records_interruption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("STUB_AGENT_SLEEP", "30")
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-slow", finish=False)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-slow", finish="tool_use")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL, timeout_s=1.0)
     assert result.exit_code is None
     assert result.verified == "unverified"
@@ -128,7 +130,7 @@ def test_timeout_kills_process_group_and_records_interruption(
 
 
 def test_verify_contract_observation_states(tmp_path: Path) -> None:
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish=True)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish="stop")])
     client = CuClient(pin_path=pin_path)
 
     unverified = client.run_goal(GOAL)  # verify=None -> 未観測, never success
@@ -153,14 +155,14 @@ def test_verify_contract_observation_states(tmp_path: Path) -> None:
     assert "readback saw no marker" in raised.verification_note
 
 
-def test_unfinished_finish_false_exit_zero_is_never_read_as_success(
+def test_unfinished_tool_use_finish_exit_zero_is_never_read_as_success(
     tmp_path: Path,
 ) -> None:
     # Step exhaustion may exit 0; exit_code alone NEVER implies success.
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish="tool_use")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL)
     assert result.exit_code == 0
-    assert result.finish is False
+    assert result.finish == "tool_use"
     assert result.verified == "unverified"
     assert result.verification_note is not None
     assert result.verification_note.startswith("unfinished:")
@@ -171,7 +173,7 @@ def test_unfinished_run_with_passing_verify_keeps_unfinished_note(
     tmp_path: Path,
 ) -> None:
     # Partial change may still satisfy verify; honesty over cleanliness.
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish="tool_use")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL, verify=lambda _r: True)
     assert result.verified == "verified"
     assert result.verification_note is not None
@@ -181,7 +183,7 @@ def test_unfinished_run_with_passing_verify_keeps_unfinished_note(
 def test_unfinished_run_with_failing_verify_combines_both_facts(
     tmp_path: Path,
 ) -> None:
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish="tool_use")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL, verify=lambda _r: False)
     assert result.verified == "failed_verification"
     assert result.verification_note is not None
@@ -193,14 +195,14 @@ def test_unfinished_run_with_failing_verify_combines_both_facts(
 def test_finished_run_with_failing_verify_has_outcome_note_only(
     tmp_path: Path,
 ) -> None:
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-done", finish=True)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-done", finish="stop")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL, verify=lambda _r: False)
     assert result.verified == "failed_verification"
     assert result.verification_note == "verify returned False"
 
 
 def test_finish_field_absent_gets_no_classification_note(tmp_path: Path) -> None:
-    record = session_record(GOAL, "g-unknown", finish=True)
+    record = session_record(GOAL, "g-unknown", finish="stop")
     del record["finish"]
     pin_path = _pin(tmp_path, [record])
     result = CuClient(pin_path=pin_path).run_goal(GOAL)
@@ -209,11 +211,43 @@ def test_finish_field_absent_gets_no_classification_note(tmp_path: Path) -> None
     assert result.verification_note is None
 
 
+def test_stop_finish_means_declared_done_no_note(tmp_path: Path) -> None:
+    # MEASURED 2026-09-05: "stop" on the newest record = agent declared done.
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-done", finish="stop")])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL)
+    assert result.finish == "stop"
+    assert result.verified == "unverified"
+    assert result.verification_note is None
+
+
+def test_unknown_finish_string_recorded_verbatim_no_classification_note(
+    tmp_path: Path,
+) -> None:
+    # Unknown vocabulary is data, not an error: recorded verbatim, no note.
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-weird", finish="weird")])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL)
+    assert result.finish == "weird"
+    assert result.verified == "unverified"
+    assert result.verification_note is None
+
+
+@pytest.mark.parametrize("finish_value", ["tool_use", "refusal", "max_tokens"])
+def test_unfinished_finish_vocabulary_carries_unfinished_note(
+    tmp_path: Path, finish_value: str
+) -> None:
+    # "tool_use" observed live; "refusal"/"max_tokens" from vendor llm.py.
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish=finish_value)])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL)
+    assert result.finish == finish_value
+    assert result.verification_note is not None
+    assert result.verification_note.startswith("unfinished:")
+
+
 def test_timeout_with_passing_verify_records_both_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("STUB_AGENT_SLEEP", "30")
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-slow", finish=False)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-slow", finish="tool_use")])
     calls: list[str] = []
 
     def _verify(_result: CuResult) -> bool:
@@ -231,7 +265,7 @@ def test_timeout_with_failing_verify_combines_interrupted_and_outcome(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("STUB_AGENT_SLEEP", "30")
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-slow", finish=False)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-slow", finish="tool_use")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL, timeout_s=0.5, verify=lambda _r: False)
     assert result.verified == "failed_verification"
     assert result.verification_note is not None
@@ -244,7 +278,7 @@ def test_output_tails_truncated_sensibly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("STUB_STDOUT_PAD", "20000")
-    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish=True)])
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-1", finish="stop")])
     result = CuClient(pin_path=pin_path).run_goal(GOAL)
     assert len(result.stdout_tail) == 4000
     assert result.stdout_tail.endswith("\n")

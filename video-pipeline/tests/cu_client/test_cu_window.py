@@ -29,12 +29,12 @@ GOAL = "stabilize the hero clip"
 
 
 def _client(tmp_path: Path) -> CuClient:
-    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-win", finish=True)])
+    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-win", finish="stop")])
     return CuClient(pin_path=pin_path)
 
 
 def test_window_unfinished_run_is_verified_and_combines_notes(tmp_path: Path) -> None:
-    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-exhausted", finish="tool_use")])
     store = RecordingLeaseStore()
     result = cu_window(
         store=store,
@@ -55,7 +55,7 @@ def test_window_interrupted_run_still_verifies_after_reacquire(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("STUB_AGENT_SLEEP", "30")
-    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-slow", finish=False)])
+    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-slow", finish="tool_use")])
     store = RecordingLeaseStore()
     result = cu_window(
         store=store,

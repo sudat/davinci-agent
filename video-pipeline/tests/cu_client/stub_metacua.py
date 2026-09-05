@@ -83,9 +83,14 @@ def install_stub(
 
 
 def session_record(
-    goal: str, goal_id: str, *, finish: bool, trace_dir: Path | None = None
+    goal: str, goal_id: str, *, finish: str | None, trace_dir: Path | None = None
 ) -> dict[str, object]:
-    """One metacua-go ``sessions`` record as consumed by the client."""
+    """One metacua-go ``sessions`` record as consumed by the client.
+
+    ``finish`` is the raw vendor string (MEASURED 2026-09-05: vocabulary
+    ``"tool_use" | "stop" | "refusal" | "max_tokens"``; stub fixtures use
+    string values — the bool shape was never seen live).
+    """
     return {
         "goal": goal,
         "goal_id": goal_id,
