@@ -53,7 +53,7 @@ from services.contracts.primitives import Identifier, StrictModel, to_tuple
 from services.toolchain.mcp_fit import load_mcp_fit
 
 DEFAULT_MCP_FIT_PATH = (
-    Path(__file__).resolve().parents[2] / "capabilities" / "v4.3" / "mcp-fit.json"
+    Path(__file__).resolve().parents[2] / "capabilities" / "v4.4" / "mcp-fit.json"
 )
 
 AudioStageName = Literal[

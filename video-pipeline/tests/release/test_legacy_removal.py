@@ -29,7 +29,7 @@ from services.toolchain.mcp_fit import load_mcp_fit
 
 HEX = "a" * 64
 ADAPTER = "resolve-adapter-package"
-REAL_FIT = Path("capabilities/v4.3/mcp-fit.json")
+REAL_FIT = Path("capabilities/v4.4/mcp-fit.json")
 REAL_LEDGER = "capabilities/v4.3/runs/probes/ledger"
 
 

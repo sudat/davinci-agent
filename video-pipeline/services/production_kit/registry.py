@@ -15,7 +15,7 @@ DEFAULT_KIT_PATH: Path = (
     Path(__file__).resolve().parents[2] / "config" / "production-kit" / "channel-kit-v1.json"
 )
 DEFAULT_MCP_FIT_PATH: Path = (
-    Path(__file__).resolve().parents[2] / "capabilities" / "v4.3" / "mcp-fit.json"
+    Path(__file__).resolve().parents[2] / "capabilities" / "v4.4" / "mcp-fit.json"
 )
 
 EXPECTED_COUNT: Final[int] = EXPECTED_RECIPE_COUNT

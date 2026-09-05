@@ -46,10 +46,10 @@ def _mcp_fit_sha256(repo_root: Path) -> str:
     # Prefer foundation helper for byte-stability; CLI may subprocess per spec.
     # Use sha256_file for determinism, verify via shasum in evidence transcript.
     pipeline_root = repo_root / "video-pipeline"
-    target = pipeline_root / "capabilities" / "v4.3" / "mcp-fit.json"
+    target = pipeline_root / "capabilities" / "v4.4" / "mcp-fit.json"
     if not target.is_file():
         # Fallback when running from video-pipeline cwd.
-        target = Path("capabilities/v4.3/mcp-fit.json").resolve()
+        target = Path("capabilities/v4.4/mcp-fit.json").resolve()
     return sha256_file(target)
 
 

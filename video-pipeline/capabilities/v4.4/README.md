@@ -12,6 +12,9 @@ capabilities/v4.4/
     mcp-2.207.0/           # MCP v2.207.0 オフライン表面 baseline（vendor-surface.json + manifest.json、Phase 1）
   mcp-2.207.0/             # MCP v2.98.3→v2.207.0 差分分析（Phase 1、オフライン）:
                            #   surface-diff.json/.md, fail-closed-impact.json, update-proposals.md, manifest.json
+  mcp-fit.json             # 現行 capability 行列（mcp-fit-v1、MCP v2.207.0 実測 2026-09-05、22 行）
+  runs/                    # v2.207.0 実測ラン（Phase 2、2026-09-05）:
+                           #   probes/（22 capability ログ + ledger）、mcp-capability-snapshot.json、manifest.json
   product-proof/
     v44-0/BLOCKED.json     # Gate V44-0 BLOCKED (operator-needed)
     consolidated.json      # ProductProofReportV1 run_kind=v44-consolidated（本統合作成物）

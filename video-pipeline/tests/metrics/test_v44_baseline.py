@@ -133,5 +133,5 @@ def test_cli_write_round_trip(tmp_path: Path) -> None:
     assert loaded.pytest_summary.tail == "2993 passed"
     assert loaded.ruff_result == "All checks passed!"
     assert loaded.mcp_fit_sha256 == sha256_file(
-        video_pipeline / "capabilities" / "v4.3" / "mcp-fit.json"
+        video_pipeline / "capabilities" / "v4.4" / "mcp-fit.json"
     )

@@ -41,7 +41,14 @@ def _to_float(value: object) -> object:
 
 
 def _parse_payload(tool: str, payload: object) -> dict[str, object]:
-    """Boundary parse: accept a decoded object or raw JSON text."""
+    """Boundary parse: accept a decoded object or raw JSON text.
+
+    The vendor's v2.207.0+ ``dual`` result envelope rides under the reserved
+    ``_operation`` key (payload untouched, envelope additive — see the pinned
+    ``src/utils/operation_result``). It is transport metadata, not domain
+    data, so it is dropped here at the single boundary every normalized
+    payload crosses; strict models stay strict about domain keys.
+    """
     if isinstance(payload, str):
         try:
             parsed: object = json.loads(payload)
@@ -50,7 +57,7 @@ def _parse_payload(tool: str, payload: object) -> dict[str, object]:
         payload = parsed
     if not isinstance(payload, Mapping):
         raise NormalizationError(tool, "payload must be a JSON object")
-    return dict(payload)
+    return {key: value for key, value in dict(payload).items() if key != "_operation"}
 
 
 def _describe_validation_error(exc: ValidationError) -> str:

@@ -158,7 +158,7 @@ def test_binding_accepted_only_rejects_not_accepted() -> None:
     )
     # Live Gate V43-0 statuses (task 11) vary per capability, so the rejection
     # case is forced on a doctored copy instead of the real matrix bytes.
-    mcp_fit_path = Path(__file__).resolve().parents[2] / "capabilities" / "v4.3" / "mcp-fit.json"
+    mcp_fit_path = Path(__file__).resolve().parents[2] / "capabilities" / "v4.4" / "mcp-fit.json"
     mcp_fit = json.loads(mcp_fit_path.read_text(encoding="utf-8"))
     rejected_fit = copy.deepcopy(mcp_fit)
     for row in rejected_fit["capabilities"]:

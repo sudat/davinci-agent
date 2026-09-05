@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from services.production_kit.recipe_select import RecipeSelection
 
 _MATRIX_PATH: Final[Path] = (
-    Path(__file__).resolve().parents[2] / "capabilities" / "v4.3" / "mcp-fit.json"
+    Path(__file__).resolve().parents[2] / "capabilities" / "v4.4" / "mcp-fit.json"
 )
 
 _VALID_STATUSES: Final[frozenset[str]] = frozenset(

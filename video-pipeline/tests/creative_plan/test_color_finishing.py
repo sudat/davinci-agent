@@ -263,7 +263,7 @@ def test_preferred_path_follows_matrix_status(
 
 
 def test_real_matrix_rows_prefer_mcp_live_grading() -> None:
-    # capabilities/v4.3/mcp-fit.json: color-grade-preset-drx accepted,
+    # capabilities/v4.4/mcp-fit.json: color-grade-preset-drx accepted,
     # advanced-delivery-qc accepted -> the preferred path is live grading.
     plan = build_color_plan(
         _facts(look_configured=True),

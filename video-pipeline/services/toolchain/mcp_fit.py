@@ -1,6 +1,6 @@
 """MCP Capability Fit matrix offline validator (task 4).
 
-Validates ``capabilities/v4.3/mcp-fit.json`` without live probing.
+Validates ``capabilities/v4.4/mcp-fit.json`` without live probing.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from typing import Any, Final
 
 EXPECTED_SCHEMA_VERSION: Final = "mcp-fit-v1"
 EXPECTED_PROVIDER: Final = "davinci-resolve-mcp"
-EXPECTED_PROVIDER_VERSION: Final = "2.98.3"
-EXPECTED_RESOLVE_BUILD: Final = "21.0.4"
+EXPECTED_PROVIDER_VERSION: Final = "2.207.0"
+EXPECTED_RESOLVE_BUILD: Final = "21.0.4.5"
 EXPECTED_ROW_COUNT: Final = 22
 
 VALID_STATUSES: Final[frozenset[str]] = frozenset(

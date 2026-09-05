@@ -1,6 +1,6 @@
 """Strict models and drift-guard constants for the pinned MCP inventory.
 
-The expected counts (35 compound tools / 353 granular tools / 136 guarded
+The expected counts (36 compound tools / 353 granular tools / 136 guarded
 kernel actions) are DRIFT GUARDS tied to the current pin — a mismatch is a
 typed :class:`McpCoverageDriftError` and is never resolved by editing these
 constants. All tuples are canonically sorted by the builder so serialized
@@ -16,7 +16,7 @@ from pydantic import Field
 from services.contracts.primitives import Sha256, StrictModel
 
 INVENTORY_SCHEMA: Final = "mcp-inventory-v1"
-EXPECTED_COMPOUND_TOOLS: Final = 35
+EXPECTED_COMPOUND_TOOLS: Final = 36
 EXPECTED_GRANULAR_TOOLS: Final = 353
 EXPECTED_KERNEL_ACTIONS: Final = 136
 

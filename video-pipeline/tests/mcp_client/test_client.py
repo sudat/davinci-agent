@@ -43,7 +43,7 @@ def test_launch_initialize_returns_typed_server_info() -> None:
     with _client() as client:
         identity = client.connect()
         assert identity.name == "DaVinciResolveMCP"
-        assert identity.version == "1.29.0"
+        assert identity.version == "1.29.1"
         assert client.get_server_info() == identity
 
 
@@ -64,7 +64,7 @@ def test_resolve_get_version_round_trips_typed_payload() -> None:
     assert report.product == "DaVinci Resolve Studio"
     assert report.version == (21, 0, 4, 5, "")
     assert report.version_string == "21.0.4.5"
-    assert report.mcp.version == "2.98.3"
+    assert report.mcp.version == "2.207.0"
 
 
 def test_slow_tool_times_out_with_typed_error_and_bounded_wall_clock() -> None:

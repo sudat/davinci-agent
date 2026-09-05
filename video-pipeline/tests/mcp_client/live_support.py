@@ -11,7 +11,7 @@ server and a live Resolve.  The module provides:
 - :func:`run_probe` — one capability probe: bounded, evidence-logged, never
   aborting the batch (a failing capability records ``status=failed`` and
   the batch continues).
-- :func:`write_matrix_and_snapshot` — fills ``capabilities/v4.3/mcp-fit.json``
+- :func:`write_matrix_and_snapshot` — fills ``capabilities/v4.4/mcp-fit.json``
   and emits the ``mcp-capability-snapshot-v1`` artifact whose hash verifies
   against the final matrix bytes.
 """
@@ -41,11 +41,11 @@ from services.toolchain.mcp_pin import load_mcp_pin
 
 VIDEO_PIPELINE_ROOT: Final = Path(__file__).resolve().parents[2]
 PIN_PATH: Final = VIDEO_PIPELINE_ROOT / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
-V43_RUNS_DIR: Final = VIDEO_PIPELINE_ROOT / "capabilities" / "v4.3" / "runs"
-PROBES_DIR: Final = V43_RUNS_DIR / "probes"
+V44_RUNS_DIR: Final = VIDEO_PIPELINE_ROOT / "capabilities" / "v4.4" / "runs"
+PROBES_DIR: Final = V44_RUNS_DIR / "probes"
 LEDGER_DIR: Final = PROBES_DIR / "ledger"
-MCP_FIT_PATH: Final = VIDEO_PIPELINE_ROOT / "capabilities" / "v4.3" / "mcp-fit.json"
-SNAPSHOT_PATH: Final = V43_RUNS_DIR / "mcp-capability-snapshot.json"
+MCP_FIT_PATH: Final = VIDEO_PIPELINE_ROOT / "capabilities" / "v4.4" / "mcp-fit.json"
+SNAPSHOT_PATH: Final = V44_RUNS_DIR / "mcp-capability-snapshot.json"
 
 
 def canonical_json_bytes(payload: object) -> bytes:
@@ -472,7 +472,7 @@ __all__ = [
     "MCP_FIT_PATH",
     "PROBES_DIR",
     "SNAPSHOT_PATH",
-    "V43_RUNS_DIR",
+    "V44_RUNS_DIR",
     "VIDEO_PIPELINE_ROOT",
     "LiveSession",
     "canonical_json_bytes",

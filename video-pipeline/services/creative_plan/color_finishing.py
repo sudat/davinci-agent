@@ -21,7 +21,7 @@ no-ops, so hand-built or LLM-proposed plans are held to the same
 contract the builder satisfies.
 
 Preferred path (pure function of the mcp-fit color rows' statuses —
-``capabilities/v4.3/mcp-fit.json`` rows ``color-grade-preset-drx`` and
+``capabilities/v4.4/mcp-fit.json`` rows ``color-grade-preset-drx`` and
 ``advanced-delivery-qc``):
 
     color-grade-preset-drx accepted            -> mcp_live_grading

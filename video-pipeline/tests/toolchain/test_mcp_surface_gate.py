@@ -75,7 +75,7 @@ def _baseline(
     pin_commit: str | None = None,
     clone_tools: dict[str, tuple[str, ...]] | None = None,
     schemas: dict[str, str] | None = None,
-    version: str = "2.98.3",
+    version: str = "2.207.0",
 ) -> _Baseline:
     """One consistent baseline: clone + git HEAD + artifact triple + pin.
 
@@ -276,7 +276,7 @@ def test_provider_version_change_is_drift(tmp_path: Path) -> None:
     baseline = _baseline(tmp_path, version="9.9.9")
     with pytest.raises(McpToolSurfaceDriftError) as excinfo:
         baseline.surface.validate_static()
-    assert excinfo.value.findings["provider-version"] == ("9.9.9", "2.98.3")
+    assert excinfo.value.findings["provider-version"] == ("9.9.9", "2.207.0")
 
 
 def test_added_removed_tool_and_changed_schema_are_drift(tmp_path: Path) -> None:

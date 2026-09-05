@@ -13,7 +13,7 @@ LEGACY_REFERENCE_COUNTS: Final[tuple[tuple[str, int], ...]] = (
     ("cockpit/tests/e2e/gate-v43-4a-checklist.ts", 1),
     ("docs/prd/PRD_v4.4.md", 1),
     ("docs/system-overview.html", 1),
-    ("video-pipeline/capabilities/mcp-coverage/dispositions.json", 927),
+    ("video-pipeline/capabilities/mcp-coverage/dispositions.json", 952),
     (
         "video-pipeline/capabilities/v4.3/runs/gate-v43-1/backend-transition.json",
         2,

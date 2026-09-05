@@ -47,7 +47,7 @@ class ConformanceGuardRegistryV1(StrictModel):
             )
         return self
 
-DEFAULT_MCP_FIT: Final = Path("capabilities/v4.3/mcp-fit.json")
+DEFAULT_MCP_FIT: Final = Path("capabilities/v4.4/mcp-fit.json")
 DEFAULT_LEDGER_DIR: Final = Path("capabilities/v4.3/runs/probes/ledger")
 
 _TABLE_HEADER: Final = (

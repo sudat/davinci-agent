@@ -92,6 +92,9 @@ READ_ACTION_EXCEPTIONS: Final[frozenset[str]] = frozenset(
         "take_diff", "summarize", "conform_lint", "rule_of_six_audit",
         "sound_density_audit", "split_edit_audit", "first_impression",
         "setup_sheet", "rank_takes", "cut_candidates",
+        # knowledge tool (v2.207.0, src/server.py:31327): read-only guide
+        # queries — bare verb forms the prefix regex cannot see.
+        "topics", "get", "search",
     )
 )
 #: …or end in one of these reviewed read-only suffixes.

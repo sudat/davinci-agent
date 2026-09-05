@@ -57,7 +57,7 @@ RECORDED_FIXTURES: Final = (
     DEEP_SHOT_ANALYSIS_RECORDED,
 )
 
-# The pinned compound server (davinci-resolve-mcp 2.98.3) tools/list roster,
+# The pinned compound server (davinci-resolve-mcp 2.207.0) tools/list roster,
 # recorded live by the task-11 recorder.  A roster change means a server
 # version change: re-record and update this tuple together with the pin.
 PINNED_SERVER_TOOLS: Final = (
@@ -158,7 +158,7 @@ def test_server_info_fixture_round_trips() -> None:
     payload = _load_fixture(SERVER_INFO)
     identity = normalize_server_info(payload)
     assert identity.name == "DaVinciResolveMCP"
-    assert identity.version == "1.29.0"
+    assert identity.version == "1.29.1"
     _assert_round_trip(normalize_server_info, payload, identity)
 
 
@@ -183,10 +183,23 @@ def test_resolve_version_fixture_matches_live_evidence_shape() -> None:
     assert report.version_string == "21.0.4.5"
     assert report.build.known_gates == 41
     assert report.build.unavailable_on_this_build == ()
-    assert report.mcp.version == "2.98.3"
+    assert report.mcp.version == "2.207.0"
     assert report.mcp.update.update_mode == "never"
     assert report.mcp.update_decision.action == "none"
     _assert_round_trip(normalize_resolve_version, payload, report)
+
+
+def test_dual_envelope_operation_key_is_stripped_at_the_boundary() -> None:
+    """v2.207.0 `dual` mode adds `_operation` to every payload; strict models
+    must not see it (measured live 2026-09-05: get_version carries it)."""
+    payload = _load_fixture(RESOLVE_VERSION)
+    enveloped = {**payload, "_operation": {
+        "status": "success", "operation": "resolve_control.get_version",
+        "execution_id": "exec_probe000000",
+    }}
+    report = normalize_resolve_version(enveloped)
+    assert report.mcp.version == "2.207.0"
+    assert normalize_resolve_version(payload) == report
 
 
 def test_media_analysis_standard_fixture_round_trips() -> None:

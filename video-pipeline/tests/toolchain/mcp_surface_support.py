@@ -29,7 +29,7 @@ from services.toolchain.mcp_coverage_models import (
     PinFacts,
 )
 
-MINI_PROVIDER_VERSION = "2.98.3"
+MINI_PROVIDER_VERSION = "2.207.0"
 OTHER_SHA = "1111111111111111111111111111111111111111"
 
 _SERVER_TEMPLATE = """\
@@ -153,7 +153,7 @@ def mini_inventory(
             server_mode="compound",
             advanced_enabled=False,
             handshake_name="DaVinciResolveMCP",
-            handshake_version="1.29.0",
+            handshake_version="1.29.1",
         ),
         counts=InventoryCounts(
             compound_tools=len(actions), granular_tools=1, kernel_actions=1

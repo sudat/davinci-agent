@@ -27,7 +27,7 @@ from tests.toolchain.mcp_surface_support import (
     write_coverage_pair,
 )
 
-PINNED_SHA = "132e134d3aa25d3d0df6bdf38f051bd29d128211"
+PINNED_SHA = "5a1db6776fbe76098a706a41811ca787dfbd9990"
 OTHER_SHA = "1111111111111111111111111111111111111111"
 DOCTOR_TOOLS: dict[str, tuple[str, ...]] = {
     "resolve_control": ("get_version", "delete_everything"),

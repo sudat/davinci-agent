@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 SUBTITLE_CAPABILITY: Final = "subtitle-capability"
-_MATRIX_PATH: Final = Path(__file__).resolve().parents[2] / "capabilities" / "v4.3" / "mcp-fit.json"
+_MATRIX_PATH: Final = Path(__file__).resolve().parents[2] / "capabilities" / "v4.4" / "mcp-fit.json"
 
 
 class SubtitlePlanError(ValueError):

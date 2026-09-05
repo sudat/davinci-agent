@@ -60,7 +60,7 @@ DOMAIN_ACTIONS: Final[Mapping[str, frozenset[str]]] = {
 }
 KIT_SELECTIONS_NAME: Final = "kit-selections.json"
 MATRIX_PATH: Final = (
-    Path(__file__).resolve().parents[2] / "capabilities" / "v4.3" / "mcp-fit.json"
+    Path(__file__).resolve().parents[2] / "capabilities" / "v4.4" / "mcp-fit.json"
 )
 PROPER_NOUNS_NAME: Final = "proper-nouns.json"
 

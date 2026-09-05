@@ -2,7 +2,7 @@
 
 Marked ``mcp_live``: runs ONLY under ``-m mcp_live`` with the pinned server
 and a live Resolve.  Drives the 22 capability probes of
-``capabilities/v4.3/mcp-fit.json`` THROUGH the typed ops surface, records
+``capabilities/v4.4/mcp-fit.json`` THROUGH the typed ops surface, records
 per-probe evidence logs + the call ledger, fills the matrix, emits the
 ``mcp-capability-snapshot-v1`` artifact, then runs the base-cut parity
 (legacy vs mcp) and the execution_backend flag transitions.
@@ -641,7 +641,7 @@ def test_live_capability_probes_fill_matrix_and_snapshot(
     assert len(logs) == EXPECTED_ROW_COUNT
     snapshot_path = write_matrix_and_snapshot(
         logs,
-        provider_version="2.98.3",
+        provider_version="2.207.0",
         pin_commit=json.loads(PIN_PATH.read_bytes())["commit"],
         server_mode="compound",
         resolve_build=live.resolve_version_string,

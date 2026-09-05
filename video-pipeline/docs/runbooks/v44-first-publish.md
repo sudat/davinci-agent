@@ -202,23 +202,24 @@ EP="../private/reference-episodes/v44-real-01"
 - **系譜（lineage）**: レポートの `director_model_id`（本番モデル）と
   `analysis_provider`（ピン留め whisper）が期待どおりか。
 
-## 3. ブロックされたとき（6つの失敗MCP機能とフォールバック）
+## 3. ブロックされたとき（失敗MCP機能とフォールバック）
 
-`capabilities/v4.3/mcp-fit.json`（歴史的証拠・不変）で status=failed の機能は、
-コンパイラが自動的にフォールバック段（fallback rung）へ経路変更する。**自前で
-ネイティブ化しないこと**（計画の禁止事項）。失敗が今回のエピソードを実際にブロック
-する場合のみ、文書化して最小限の修正を検討する。
+`capabilities/v4.4/mcp-fit.json`（現行、MCP v2.207.0 実測 2026-09-05）で
+status=failed の機能は、コンパイラが自動的にフォールバック段（fallback rung）へ
+経路変更する。**自前でネイティブ化しないこと**（計画の禁止事項）。失敗が今回の
+エピソードを実際にブロックする場合のみ、文書化して最小限の修正を検討する。
+（v2.98.3 時代の記録は `capabilities/v4.3/mcp-fit.json`（歴史的証拠・不変）。
+v2.207.0 へのアップグレードで title-text-plus が failed → accepted になった。）
 
 | 機能 (capability) | 状態 | フォールバック | 実運用上の意味 |
 |---|---|---|---|
-| title-text-plus | failed | template_external | タイトル文字変更はテンプレート/外部経路 |
 | transition-path | failed | template_external | トランジション追加は公開APIに不存在 |
 | audio-property-operation | failed | legacy_direct | 音声プロパティ直接操作は不可 |
 | bgm-track-ducking | failed | legacy_direct | Fairlight ダッキング制御なし |
 | edit-engine-selects | failed | manual | セレクト候補抽出は手動 |
 | alternate-shot-similarity | failed | manual | 類似ショット埋め込みは手動 |
 
-上の表は不変の mcp-fit.json から機械的に検証できる（表が歴史的証拠からズレたら
+上の表は現行の mcp-fit.json から機械的に検証できる（表が実測記録からズレたら
 この検証が exit 1 になる）:
 
 ```bash
@@ -228,7 +229,6 @@ from pathlib import Path
 from services.toolchain.mcp_fit import load_mcp_fit
 
 EXPECTED = {
-    "title-text-plus": "template_external",
     "transition-path": "template_external",
     "audio-property-operation": "legacy_direct",
     "bgm-track-ducking": "legacy_direct",
@@ -237,7 +237,7 @@ EXPECTED = {
 }
 rows = {
     row["capability"]: (row["status"], row.get("fallback", "legacy_direct"))
-    for row in load_mcp_fit(Path("capabilities/v4.3/mcp-fit.json"))["capabilities"]
+    for row in load_mcp_fit(Path("capabilities/v4.4/mcp-fit.json"))["capabilities"]
 }
 failed = {cap: fallback for cap, (status, fallback) in rows.items() if status == "failed"}
 assert failed == EXPECTED, f"failed-capability drift: {failed}"
@@ -274,4 +274,5 @@ QC passed が揃わなければ `passed` を発行しない（捏造防止は構
 - 実行計画: `docs/prd/implementation-plan-v4.4.md`
 - ハーネス: `video-pipeline/services/cli/v44_finishing.py`（run / record-publishability / record-time）
 - 品質ドメイン契約: `video-pipeline/services/creative_plan/quality_domains.py`
-- 失敗機能の記録: `video-pipeline/capabilities/v4.3/mcp-fit.json`
+- 失敗機能の記録: `video-pipeline/capabilities/v4.4/mcp-fit.json`（現行）/
+  `video-pipeline/capabilities/v4.3/mcp-fit.json`（v2.98.3 歴史）

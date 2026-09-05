@@ -20,7 +20,7 @@ from services.toolchain.mcp_fit import (
 )
 
 VIDEO_PIPELINE = Path(__file__).resolve().parents[2]
-MCP_FIT = VIDEO_PIPELINE / "capabilities" / "v4.3" / "mcp-fit.json"
+MCP_FIT = VIDEO_PIPELINE / "capabilities" / "v4.4" / "mcp-fit.json"
 
 
 def _load_real() -> dict[str, object]:

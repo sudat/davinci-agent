@@ -25,7 +25,7 @@ import sys
 import time
 
 SERVER_NAME = os.environ.get("FAKE_MCP_SERVER_NAME", "DaVinciResolveMCP")
-SERVER_VERSION = os.environ.get("FAKE_MCP_SERVER_VERSION", "1.29.0")
+SERVER_VERSION = os.environ.get("FAKE_MCP_SERVER_VERSION", "1.29.1")
 TOOL_DELAY_SECONDS = float(os.environ.get("FAKE_MCP_DELAY_SECONDS", "0"))
 
 CANNED_TOOLS = [
@@ -51,10 +51,10 @@ VERSION_PAYLOAD = {
         "note": "fake server canned payload",
     },
     "mcp": {
-        "version": "2.98.3",
+        "version": "2.207.0",
         "update": {
             "status": "disabled",
-            "current_version": "2.98.3",
+            "current_version": "2.207.0",
             "update_mode": "never",
             "checked_at": 1787374787.160726,
         },

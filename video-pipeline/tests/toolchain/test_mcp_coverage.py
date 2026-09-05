@@ -77,7 +77,7 @@ from services.toolchain.mcp_vendor_surface import (
     parse_vendor_surface,
 )
 
-COMMIT = "132e134d3aa25d3d0df6bdf38f051bd29d128211"
+COMMIT = "5a1db6776fbe76098a706a41811ca787dfbd9990"
 OTHER_SHA = "1111111111111111111111111111111111111111"
 
 SERVER_TEMPLATE = """\
@@ -177,7 +177,7 @@ def _write_vendor_tree(
     *,
     compound_tools: int = EXPECTED_COMPOUND_TOOLS,
     granular_tools: int = EXPECTED_GRANULAR_TOOLS,
-    provider_version: str = "2.98.3",
+    provider_version: str = "2.207.0",
     kernel_readme: str | None = None,
 ) -> Path:
     clone = tmp_path / "clone"
@@ -242,11 +242,11 @@ def _live_tools(
 def _pin_facts() -> PinFacts:
     return PinFacts(
         commit=COMMIT,
-        provider_version="2.98.3",
+        provider_version="2.207.0",
         server_mode="compound",
         advanced_enabled=True,
         handshake_name="DaVinciResolveMCP",
-        handshake_version="1.29.0",
+        handshake_version="1.29.1",
     )
 
 
@@ -258,7 +258,7 @@ def _build(tmp_path: Path, live: tuple[LiveTool, ...] | None = None, **kwargs: A
 def test_vendor_surface_parses_fixture_completely(tmp_path: Path) -> None:
     surface = _surface(tmp_path)
     assert len(surface.compound_tools) == EXPECTED_COMPOUND_TOOLS
-    assert surface.provider_version == "2.98.3"
+    assert surface.provider_version == "2.207.0"
     by_name = {tool.name: tool for tool in surface.compound_tools}
     assert by_name["t0"].actions == ("direct0", "direct1")
     assert by_name["t1"].actions == ("a", "b", "s1", "s2")
@@ -512,7 +512,7 @@ def test_committed_inventory_exists_and_matches_drift_guards() -> None:
         "kernel_actions": EXPECTED_KERNEL_ACTIONS,
     }
     assert payload["pin"]["commit"] == COMMIT
-    assert payload["pin"]["provider_version"] == "2.98.3"
+    assert payload["pin"]["provider_version"] == "2.207.0"
     assert payload["pin"]["server_mode"] == "compound"
 
 
@@ -578,11 +578,11 @@ def _mini_inventory(*extras: OperationRow) -> McpInventoryV1:
         schema_version=INVENTORY_SCHEMA,
         pin=PinFacts(
             commit=COMMIT,
-            provider_version="2.98.3",
+            provider_version="2.207.0",
             server_mode="compound",
             advanced_enabled=True,
             handshake_name="DaVinciResolveMCP",
-            handshake_version="1.29.0",
+            handshake_version="1.29.1",
         ),
         counts=InventoryCounts(compound_tools=5, granular_tools=2, kernel_actions=0),
         compound_tools=tools,
@@ -1173,13 +1173,13 @@ def test_committed_dispositions_validate_in_rollout_mode() -> None:
     if not REAL_DISPOSITIONS.is_file():  # pragma: no cover - generation ran first
         pytest.skip("dispositions not generated yet")
     report = validate_dispositions_files(REAL_INVENTORY, REAL_DISPOSITIONS)
-    assert report.total_operations == 1001
+    assert report.total_operations == 1026
     assert report.mapped == REAL_MAPPED
-    assert report.deferred == 1001 - REAL_MAPPED
-    assert report.coverage == REAL_MAPPED / 1001
+    assert report.deferred == 1026 - REAL_MAPPED
+    assert report.coverage == REAL_MAPPED / 1026
     assert report.unmapped == 0
     assert report.refused_vendor_supported == 0
-    assert len(report.deferred_by_domain) == 36
+    assert len(report.deferred_by_domain) == 37
     assert "project" in report.deferred_by_domain
     assert sum(report.deferred_by_domain.values()) == report.deferred
     assert set(report.deferred_by_category) == {
@@ -1193,7 +1193,7 @@ def test_strict_mode_fails_today_because_deferred_rows_remain() -> None:
     with pytest.raises(DispositionsParityError) as excinfo:
         validate_dispositions_files(REAL_INVENTORY, REAL_DISPOSITIONS, strict=True)
     assert excinfo.value.code == "parity-deferred-remaining"
-    assert str(1001 - REAL_MAPPED) in excinfo.value.detail
+    assert str(1026 - REAL_MAPPED) in excinfo.value.detail
     assert "timeline" in excinfo.value.detail
 
 

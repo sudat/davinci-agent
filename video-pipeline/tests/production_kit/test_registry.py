@@ -86,7 +86,7 @@ def test_accepted_only_with_not_accepted_status_rejected(tmp_path: Path) -> None
     # The real matrix carries live Gate V43-0 statuses (task 11), so the
     # rejection path is proven against a doctored copy forcing not_available.
     mcp_fit = json.loads(
-        (VIDEO_PIPELINE / "capabilities" / "v4.3" / "mcp-fit.json").read_text(encoding="utf-8")
+        (VIDEO_PIPELINE / "capabilities" / "v4.4" / "mcp-fit.json").read_text(encoding="utf-8")
     )
     for row in mcp_fit["capabilities"]:
         if row["capability"] == capability:
