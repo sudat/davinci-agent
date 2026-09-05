@@ -1,5 +1,15 @@
 # v2.207.0 切替提案（Phase 2 用 — ピンはまだ切り替えていない）
 
+> **実行記録（2026-09-05 追記）**: 本書の手順は Phase 2 で実行済み（commit `bd8ed39`、
+> live 検証込み）。ただし**「ディスクの切り替え」と「実プロセスの切替」は別物**:
+> P1 の worktree 昇格後も、**切替前に起動していた MCP サーバ・プロセスは旧コード
+> (v2.98.3) を載せたまま動き続ける**（Python は import 済みモジュールをキャッシュする
+> ため）。製品クライアント（`McpClient.from_pin`）は接続ごとに新規プロセスを起動する
+> ため即座に v2.207.0 を実行するが、**セッション起動時に張られた MCP 接続
+> （`.mcp.json` 由来の長寿命プロセスを含む）はサーバ再起動＝セッション再起動まで
+> 旧コードのまま**。切替完了の定義は「次回セッション起動時に v2.207.0 が実際に走る
+> こと」までを含む。ディスクを差し替えただけで完了と誤解しないこと。
+
 対象: `video-pipeline/config/toolchains/davinci-resolve-mcp.pin.json`（以下「pin」）、
 `video-pipeline/capabilities/mcp-coverage/`（inventory / dispositions / manifest）、
 `video-pipeline/services/toolchain/mcp_fit.py`。
