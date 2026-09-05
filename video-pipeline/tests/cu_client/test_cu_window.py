@@ -47,7 +47,28 @@ def test_window_unfinished_run_is_verified_and_combines_notes(tmp_path: Path) ->
     assert result.verification_note is not None
     assert "unfinished:" in result.verification_note
     assert result.verification_note.endswith("verify returned False")
-    # Unfinished runs are verified (only timeout-interrupted runs skip it).
+    # Unfinished runs are verified after reacquire, like every other run.
+    assert store.calls == ["renew_lease", "release_lease", "acquire_lease"]
+
+
+def test_window_interrupted_run_still_verifies_after_reacquire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STUB_AGENT_SLEEP", "30")
+    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-slow", finish=False)])
+    store = RecordingLeaseStore()
+    result = cu_window(
+        store=store,
+        holder="h",
+        goal=GOAL,
+        timeout_s=0.5,
+        verify=lambda _r: True,
+        client=CuClient(pin_path=pin_path),
+    )
+    assert result.exit_code is None
+    assert result.verified == "verified"
+    assert result.verification_note is not None
+    assert result.verification_note.startswith("interrupted:")
     assert store.calls == ["renew_lease", "release_lease", "acquire_lease"]
 
 

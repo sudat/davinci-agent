@@ -13,24 +13,26 @@ S05/S06/S07/S09 etc.); it is NOT a precedent for other abstraction layers,
 and carries no app restrictions or step limits by suda's explicit
 instruction.
 
-Timeout design (refinement 2): a timeout kills the agent's whole process
-group (``start_new_session=True`` + ``os.killpg`` SIGKILL) and then STILL
-collects the session trace (the ``sessions`` lookup spawns its own
-short-lived process, unaffected by the kill), returning a ``CuResult`` with
-``exit_code=None``, ``verified="unverified"``, and a verification note
-recording the interruption. The fact "may have interrupted mid-operation"
-must never be recorded as a plain unverified ("didn't look") — they are
-different facts.
+Timeout design (refinement 2, clarified 2026-09-05 10:04Z): a timeout
+kills the agent's whole process group (``start_new_session=True`` +
+``os.killpg`` SIGKILL) and then STILL collects the session trace (the
+``sessions`` lookup spawns its own short-lived process, unaffected by
+the kill), returning a ``CuResult`` with ``exit_code=None`` and a
+``verification_note`` recording the interruption. Verification runs
+even on interrupted runs — "we interrupted it" and "the state ended up
+correct" are separate facts that can coexist; the note keeps the
+interruption while ``verified`` keeps the state (both recorded is
+correct). The fact "may have interrupted mid-operation" must never be
+recorded as a plain unverified ("didn't look") — they are different
+facts.
 
 Unfinished classification (step-exhaustion refinement): after selecting
 OUR session record, ``finish=False`` means the agent stopped ITSELF
 without completing (step exhaustion or gave up) — possibly with
 ``exit_code=0``, which NEVER implies success (``verified`` is set ONLY by
-the verify callable). Such runs carry an ``unfinished:`` note, and verify
-still runs on them — step exhaustion is exactly the case where the CU
-agent says nothing and verify is the only judgment tool. The three words
-never merge: ``interrupted`` (WE killed the run) vs ``unfinished`` (the
-CU agent stopped itself) vs plain ``unverified`` (nobody looked).
+the verify callable). Such runs carry an ``unfinished:`` note. The three
+words never merge: ``interrupted`` (WE killed the run) vs ``unfinished``
+(the CU agent stopped itself) vs plain ``unverified`` (nobody looked).
 ``finish`` field semantics are confirmed by live measurement later
 (実測で確定); the stub tests define our parsing contract here — actual
 field values are confirmed in the live smoke, not by this code.
@@ -46,7 +48,7 @@ cannot guarantee.
 # (__init__/models/errors/client), so the lease window + goal runner live
 # together here; the lines above the 250 ceiling are the design-mandated
 # docstrings (§1.1 discipline, timeout design, unfinished classification,
-# trace impermanence) — pure code is 242 lines.
+# trace impermanence) — pure code is 235 lines.
 
 from __future__ import annotations
 
@@ -189,9 +191,10 @@ def _combine_notes(classification: str | None, outcome: str) -> str:
 def _apply_verification(result: CuResult, verify: CuVerifier | None) -> CuResult:
     """Observation contract: 未観測 unless the verifier proves otherwise.
 
-    A pre-existing classification note (``unfinished:``) is never lost:
-    failure outcomes append to it with ``" | "`` instead of overwriting,
-    and a passing verify keeps it (honesty over cleanliness).
+    A pre-existing classification note (``interrupted:`` /
+    ``unfinished:``) is never lost: failure outcomes append to it with
+    ``" | "`` instead of overwriting, and a passing verify keeps it
+    (honesty over cleanliness).
     """
     if verify is None:
         return result
@@ -215,11 +218,6 @@ def _apply_verification(result: CuResult, verify: CuVerifier | None) -> CuResult
             "verification_note": _combine_notes(base_note, "verify returned False"),
         }
     )
-
-
-def _was_interrupted(result: CuResult) -> bool:
-    note = result.verification_note
-    return note is not None and note.startswith(_INTERRUPTED_NOTE_PREFIX)
 
 
 class CuClient:
@@ -265,14 +263,14 @@ class CuClient:
 
         On timeout the agent's process GROUP is SIGKILLed, the trace is
         still collected, and the returned ``CuResult`` records the
-        interruption — verify is NOT run in that case (external GUI state
-        may be mid-operation, so a readback would mislead).
+        interruption. Verification runs even then: "we interrupted it"
+        and "the state ended up correct" are separate facts — the note
+        keeps the interruption, ``verified`` keeps the state.
 
         Classification (step-exhaustion refinement): ``finish=False``
         marks the run ``unfinished:`` regardless of ``exit_code`` (the
         agent may exit 0 after giving up; exit_code NEVER implies
-        success), and verify STILL runs on unfinished runs — the
-        interrupted-only rule does not extend to them.
+        success).
         """
         timeout = self._pin.default_timeout_s if timeout_s is None else timeout_s
         if timeout <= 0:
@@ -322,8 +320,6 @@ class CuClient:
             verified="unverified",
             verification_note=note,
         )
-        if timed_out:
-            return result
         return _apply_verification(result, verify)
 
 
@@ -355,9 +351,9 @@ def cu_window(  # noqa: PLR0913 (the handoff contract's knobs are the signature)
     so no orphaned nobody-holds-the-lock state remains; if another holder
     took the lease meanwhile, that is a typed CuLeaseError (fail fast —
     never wait). Verification runs only AFTER the reacquire, reading back
-    under OUR lease, sharing run_goal's note-combining helper; an
-    interrupted (timeout) run keeps its interruption note and skips
-    verification, while an unfinished run IS verified.
+    under OUR lease, sharing run_goal's note-combining helper — for
+    interrupted and unfinished runs alike, the classification note
+    coexists with the verification outcome instead of being replaced.
     """
     runner = client if client is not None else CuClient()
     now = int(time.time())
@@ -383,8 +379,6 @@ def cu_window(  # noqa: PLR0913 (the handoff contract's knobs are the signature)
                 ttl_seconds=ttl_seconds,
             ),
         )
-    if _was_interrupted(result):
-        return result
     return _apply_verification(result, verify)
 
 

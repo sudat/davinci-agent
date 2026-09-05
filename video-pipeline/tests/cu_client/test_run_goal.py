@@ -209,7 +209,7 @@ def test_finish_field_absent_gets_no_classification_note(tmp_path: Path) -> None
     assert result.verification_note is None
 
 
-def test_timeout_skips_verify_entirely(
+def test_timeout_with_passing_verify_records_both_facts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("STUB_AGENT_SLEEP", "30")
@@ -221,10 +221,23 @@ def test_timeout_skips_verify_entirely(
         return True
 
     result = CuClient(pin_path=pin_path).run_goal(GOAL, timeout_s=0.5, verify=_verify)
-    assert calls == []  # mid-operation state must not be read back as proof
-    assert result.verified == "unverified"
+    assert calls == ["verify"]  # interrupted AND verified are separate, coexisting facts
+    assert result.verified == "verified"
     assert result.verification_note is not None
     assert result.verification_note.startswith("interrupted:")
+
+
+def test_timeout_with_failing_verify_combines_interrupted_and_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STUB_AGENT_SLEEP", "30")
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-slow", finish=False)])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL, timeout_s=0.5, verify=lambda _r: False)
+    assert result.verified == "failed_verification"
+    assert result.verification_note is not None
+    assert result.verification_note.startswith("interrupted:")
+    assert "unfinished" not in result.verification_note  # timeout owns the wording
+    assert result.verification_note.endswith("verify returned False")
 
 
 def test_output_tails_truncated_sensibly(
