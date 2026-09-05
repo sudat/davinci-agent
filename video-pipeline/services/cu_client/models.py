@@ -45,7 +45,13 @@ class CuResult(StrictModel):
     ``verified`` follows the observation contract: ``unverified`` means we
     did not look (未観測) — it is never a success claim; ``verified`` only
     after the caller's verifier said True; ``failed_verification`` when the
-    verifier said False or raised (``verification_note`` carries why).
+    verifier said False or raised. ``verification_note`` carries the
+    classification vocabulary with three distinct words that never merge:
+    ``interrupted:`` (WE killed the run at timeout), ``unfinished:`` (the
+    agent stopped itself without completing — step exhaustion; possible
+    even with exit_code 0), and plain ``unverified`` (nobody looked).
+    Classification facts are never overwritten by verification outcomes —
+    they combine with ``" | "``.
     """
 
     goal: str

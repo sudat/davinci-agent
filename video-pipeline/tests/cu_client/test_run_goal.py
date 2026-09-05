@@ -121,6 +121,7 @@ def test_timeout_kills_process_group_and_records_interruption(
     assert "interrupted:" in result.verification_note
     assert "timeout" in result.verification_note
     assert "mid-operation" in result.verification_note
+    assert "unfinished" not in result.verification_note  # we killed it — that word is reserved
     assert 0.9 <= result.elapsed_seconds < 15
     assert result.goal_id == "g-slow"  # trace still collected after the kill
     # Reaching these asserts in ~1s while the stub slept 30s proves the kill.
@@ -150,6 +151,62 @@ def test_verify_contract_observation_states(tmp_path: Path) -> None:
     assert raised.verification_note is not None
     assert "RuntimeError" in raised.verification_note
     assert "readback saw no marker" in raised.verification_note
+
+
+def test_unfinished_finish_false_exit_zero_is_never_read_as_success(
+    tmp_path: Path,
+) -> None:
+    # Step exhaustion may exit 0; exit_code alone NEVER implies success.
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL)
+    assert result.exit_code == 0
+    assert result.finish is False
+    assert result.verified == "unverified"
+    assert result.verification_note is not None
+    assert result.verification_note.startswith("unfinished:")
+    assert "steps exhausted" in result.verification_note
+
+
+def test_unfinished_run_with_passing_verify_keeps_unfinished_note(
+    tmp_path: Path,
+) -> None:
+    # Partial change may still satisfy verify; honesty over cleanliness.
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL, verify=lambda _r: True)
+    assert result.verified == "verified"
+    assert result.verification_note is not None
+    assert "unfinished" in result.verification_note
+
+
+def test_unfinished_run_with_failing_verify_combines_both_facts(
+    tmp_path: Path,
+) -> None:
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL, verify=lambda _r: False)
+    assert result.verified == "failed_verification"
+    assert result.verification_note is not None
+    assert "unfinished:" in result.verification_note
+    assert " | " in result.verification_note
+    assert result.verification_note.endswith("verify returned False")
+
+
+def test_finished_run_with_failing_verify_has_outcome_note_only(
+    tmp_path: Path,
+) -> None:
+    pin_path = _pin(tmp_path, [session_record(GOAL, "g-done", finish=True)])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL, verify=lambda _r: False)
+    assert result.verified == "failed_verification"
+    assert result.verification_note == "verify returned False"
+
+
+def test_finish_field_absent_gets_no_classification_note(tmp_path: Path) -> None:
+    record = session_record(GOAL, "g-unknown", finish=True)
+    del record["finish"]
+    pin_path = _pin(tmp_path, [record])
+    result = CuClient(pin_path=pin_path).run_goal(GOAL)
+    assert result.finish is None
+    assert result.verified == "unverified"
+    assert result.verification_note is None
 
 
 def test_timeout_skips_verify_entirely(

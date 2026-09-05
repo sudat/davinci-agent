@@ -33,6 +33,24 @@ def _client(tmp_path: Path) -> CuClient:
     return CuClient(pin_path=pin_path)
 
 
+def test_window_unfinished_run_is_verified_and_combines_notes(tmp_path: Path) -> None:
+    pin_path = install_stub(tmp_path, [session_record(GOAL, "g-exhausted", finish=False)])
+    store = RecordingLeaseStore()
+    result = cu_window(
+        store=store,
+        holder="h",
+        goal=GOAL,
+        verify=lambda _r: False,
+        client=CuClient(pin_path=pin_path),
+    )
+    assert result.verified == "failed_verification"
+    assert result.verification_note is not None
+    assert "unfinished:" in result.verification_note
+    assert result.verification_note.endswith("verify returned False")
+    # Unfinished runs are verified (only timeout-interrupted runs skip it).
+    assert store.calls == ["renew_lease", "release_lease", "acquire_lease"]
+
+
 def test_window_order_renew_release_run_acquire_then_verify(tmp_path: Path) -> None:
     store = RecordingLeaseStore()
     store.calls.clear()

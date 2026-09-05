@@ -22,6 +22,19 @@ recording the interruption. The fact "may have interrupted mid-operation"
 must never be recorded as a plain unverified ("didn't look") — they are
 different facts.
 
+Unfinished classification (step-exhaustion refinement): after selecting
+OUR session record, ``finish=False`` means the agent stopped ITSELF
+without completing (step exhaustion or gave up) — possibly with
+``exit_code=0``, which NEVER implies success (``verified`` is set ONLY by
+the verify callable). Such runs carry an ``unfinished:`` note, and verify
+still runs on them — step exhaustion is exactly the case where the CU
+agent says nothing and verify is the only judgment tool. The three words
+never merge: ``interrupted`` (WE killed the run) vs ``unfinished`` (the
+CU agent stopped itself) vs plain ``unverified`` (nobody looked).
+``finish`` field semantics are confirmed by live measurement later
+(実測で確定); the stub tests define our parsing contract here — actual
+field values are confirmed in the live smoke, not by this code.
+
 Trace impermanence (refinement 4): ``trace_dir`` points under
 ``~/.metacua/traces/<goal_id>/``, OUTSIDE this repo. Traces are external
 mutable state that may disappear; they are NOT captured artifacts and no
@@ -32,8 +45,8 @@ cannot guarantee.
 # SIZE_OK: the approved design fixes this package at exactly four files
 # (__init__/models/errors/client), so the lease window + goal runner live
 # together here; the lines above the 250 ceiling are the design-mandated
-# docstrings (§1.1 discipline, timeout design, trace impermanence) — pure
-# code is 231 lines.
+# docstrings (§1.1 discipline, timeout design, unfinished classification,
+# trace impermanence) — pure code is 242 lines.
 
 from __future__ import annotations
 
@@ -73,6 +86,10 @@ type CuVerifier = Callable[[CuResult], bool]
 _TRACE_TAIL_CHARACTERS: Final = 4000
 _SESSIONS_LOOKUP_TIMEOUT_SECONDS: Final = 60.0
 _INTERRUPTED_NOTE_PREFIX: Final = "interrupted:"
+_UNFINISHED_NOTE: Final = (
+    "unfinished: agent stopped before completing (steps exhausted or gave up);"
+    " external state may be partially changed"
+)
 CU_WINDOW_RESOURCE: Final = stage_resource("cu-window", "metacua-goal")
 """Default lease resource; production callers pass their own stage_resource()."""
 
@@ -162,17 +179,32 @@ def _select_session_record(
     )
 
 
+def _combine_notes(classification: str | None, outcome: str) -> str:
+    """Append a verification outcome to a classification note without losing either."""
+    if classification is None:
+        return outcome
+    return f"{classification} | {outcome}"
+
+
 def _apply_verification(result: CuResult, verify: CuVerifier | None) -> CuResult:
-    """Observation contract: 未観測 unless the verifier proves otherwise."""
+    """Observation contract: 未観測 unless the verifier proves otherwise.
+
+    A pre-existing classification note (``unfinished:``) is never lost:
+    failure outcomes append to it with ``" | "`` instead of overwriting,
+    and a passing verify keeps it (honesty over cleanliness).
+    """
     if verify is None:
         return result
+    base_note = result.verification_note
     try:
         passed = verify(result)
     except Exception as exc:  # noqa: BLE001 (contract: a raising verifier is a failed verification, not an abort)
         return result.model_copy(
             update={
                 "verified": "failed_verification",
-                "verification_note": f"verify raised {type(exc).__name__}: {exc}",
+                "verification_note": _combine_notes(
+                    base_note, f"verify raised {type(exc).__name__}: {exc}"
+                ),
             }
         )
     if passed:
@@ -180,7 +212,7 @@ def _apply_verification(result: CuResult, verify: CuVerifier | None) -> CuResult
     return result.model_copy(
         update={
             "verified": "failed_verification",
-            "verification_note": "verify returned False",
+            "verification_note": _combine_notes(base_note, "verify returned False"),
         }
     )
 
@@ -235,6 +267,12 @@ class CuClient:
         still collected, and the returned ``CuResult`` records the
         interruption — verify is NOT run in that case (external GUI state
         may be mid-operation, so a readback would mislead).
+
+        Classification (step-exhaustion refinement): ``finish=False``
+        marks the run ``unfinished:`` regardless of ``exit_code`` (the
+        agent may exit 0 after giving up; exit_code NEVER implies
+        success), and verify STILL runs on unfinished runs — the
+        interrupted-only rule does not extend to them.
         """
         timeout = self._pin.default_timeout_s if timeout_s is None else timeout_s
         if timeout <= 0:
@@ -262,22 +300,27 @@ class CuClient:
         elapsed = time.monotonic() - started
 
         record = _select_session_record(binary, self._pin.session_lookup_limit, goal)
+        finish = _record_finish(record)
+        if timed_out:
+            # Timeout owns the wording: the kill, not the agent's own stop,
+            # is the observed fact (the agent had not stopped when we killed).
+            note: str | None = (
+                f"{_INTERRUPTED_NOTE_PREFIX} killed by timeout after {elapsed:.1f}s;"
+                " external GUI state may be mid-operation"
+            )
+        else:
+            note = _UNFINISHED_NOTE if finish is False else None
         result = CuResult(
             goal=goal,
             exit_code=None if timed_out else proc.returncode,
             goal_id=_record_goal_id(record),
-            finish=_record_finish(record),
+            finish=finish,
             trace_dir=_record_trace_dir(record),
             stdout_tail=_tail(stdout),
             stderr_tail=_tail(stderr),
             elapsed_seconds=elapsed,
             verified="unverified",
-            verification_note=(
-                f"{_INTERRUPTED_NOTE_PREFIX} killed by timeout after {elapsed:.1f}s;"
-                " external GUI state may be mid-operation"
-                if timed_out
-                else None
-            ),
+            verification_note=note,
         )
         if timed_out:
             return result
@@ -312,8 +355,9 @@ def cu_window(  # noqa: PLR0913 (the handoff contract's knobs are the signature)
     so no orphaned nobody-holds-the-lock state remains; if another holder
     took the lease meanwhile, that is a typed CuLeaseError (fail fast —
     never wait). Verification runs only AFTER the reacquire, reading back
-    under OUR lease; an interrupted (timeout) run keeps its interruption
-    note and skips verification.
+    under OUR lease, sharing run_goal's note-combining helper; an
+    interrupted (timeout) run keeps its interruption note and skips
+    verification, while an unfinished run IS verified.
     """
     runner = client if client is not None else CuClient()
     now = int(time.time())
