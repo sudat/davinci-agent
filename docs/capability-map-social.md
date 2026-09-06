@@ -66,7 +66,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | T10 | Transitionを開いているTimelineで追加・変更 | 同上（既存Timelineへの追加） | 未検証 | 未検証（API経路の到達不能はv4.3 transition-path probeで実測 failed。CU経路は未試行。Phase-0指示では proven とされるが対応evidence path未確認 — Phase-2で証拠確定要） |
 | T11 | 既存Transitionの検出・QC・削除 | 既存遷移の確認・除去 | 未検証 | 未検証 |
 | T12 | 一定速度Retime | スロー・倍速（速度演出の基本） | 検証済みC / 検証済みI | C: `private/runtime/sol-input-mech-20260906/summary_report.txt`（item6_run5b_VERIFIED_WORKFLOW_SUCCESS: 25%をverified-button workflow＋render cadence SSIMで確認）。I: 同（item6_run1b: .drt経由50%をrender cadenceで確認。ただし変更ボタン押下の帰属補正 CORRECTION_item6_run1b_attribution あり） |
-| T13 | Reverse | 逆再生演出 | 危険(.drt)/未検証 | .drt経路: `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。再現確認は費用対効果から未実施）。GUI経路: 2026-09-07 C-route試行15steps（T13_REVERSE_TOGGLED / T13_REVERSE_CHECKED_CLICK — speed dialogのreverse checkboxをverified pressで押下）したが読み戻し確定に至らず未検証（journal 04:14:10） |
+| T13 | Reverse | 逆再生演出 | 危険(.drt)/未検証 | .drt経路: `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。再現確認は費用対効果から未実施）。GUI経路: 2026-09-07 両ラウンドで到達点更新も未達成。第1ラウンド（15steps）: speed dialogのreverse checkboxをverified pressで押下したがAX読取はval=0のまま（journal 04:14:10）。第2ラウンド（4th agent）: Inspector/速度ダイアログの逆再生checkboxをAXPressで**val=1まで到達・確認**（初）→「変更」押下でダイアログは閉じるがrenderは一切不変（5記録点を全ソースフレーム照合してマッピング導出: src≈1.25×kの125%順方向のまま、RetimeProcess=0のまま）＝checked状態はclipの再生方向にコミットされず未検証維持。逆再生の読み戻しはduration/source extentが判定不能（既存125%clipと混同注意）で、render順序照合が唯一の確定手段（journal 05:05-05:35） |
 | T14 | 可変Speed Ramp | スピードランプ演出 | 未検証 | 未検証（freezeは同Sm2TimeMap系でsuspended。crash-tolerant宣言なしに再開しないこと — summary_report.txt RECORD_reverse_crash_verbatim） |
 | T15 | 既存clipのRetime対話編集 | ramp・easingの手直し | 未検証 | 未検証（CU route。T12の25%はダイアログ値の確定でありCurve/easing編集ではない） |
 | T16 | Stabilize / Smart Reframe | 手ブレ・縦型reframe | 検証済みA | 未検証 |
@@ -95,7 +95,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | S02 | Titleを指定track・frameへ配置 | V2/V3への正確な重ね置き | 検証済みI | 未検証（vendor trap: Insert系はtrackIndexを持たず常にV1 — issue #74） |
 | S03 | 自動字幕生成 | 字幕起こしの起点 | 検証済みA | timeline_ai.create_subtitles（background=true＋job poll）で字幕トラック0→1・実素材日本語音声から3キュー生成を確認。同期呼び出しは5連続失敗（2026-09-06）— background実行が実レシピ。追加音声は文字起こし範囲外だった点に注意 |
 | S04 | SRTからNative字幕付き新規DRT | 字幕付きTimeline再構築 | 検証済みI | 未検証 |
-| S05 | SRTを開いているTimelineへImport | 既存Timelineへの字幕追加 | C経路未試行 | 未検証（CU route。API経路なし） |
+| S05 | SRTを開いているTimelineへImport | 既存Timelineへの字幕追加 | 検証済みC | 2026-09-07 C-route 2段: File>読み込み>字幕…（メニューAX chain press）でSRTはMedia Poolへ字幕メディアとして入る（Type=字幕・Duration 00:00:08:00 読戻し）→ プール行右クリック「選択した字幕を挿入…」で開いているTimelineへ新規字幕トラック付きでキュー挿入（subtitle track 1→2、get_transcript 3→6キュー、テキスト3/3完全一致）。配置には実測クセ（開始+10fオフセット・尺0.8x＝24fps基準とみられる近似、順序・本文は保持）。GUI経路は全行程クラッシュなし＝API経路BAN（safe_import_media+SRTクラッシュ）はAPI固有の危険と確定。実装ノート: 挿入/オーバーライト系メニューはソースビュワー対象でプール選択に効かない、字幕メディアはソースビュワーに読み込めない（ダブルクリック不発）、type-text/pasteはIMEがASCIIを全角化する（AX setValueで回避可）、プール右クリックメニューはAX読取可 |
 | S06 | Native字幕1件の本文修正 | 誤字修正 | 検証済みC | matrix summary.md #12（AI locate移動のみ＋IME保護＋Direct入力→get_transcript「指揮らい」→"MATRIX-EDIT-OK"読戻し。他キュー不変） |
 | S07 | Native字幕1件の開始・終了・分割・結合 | 語を切らない分割（style-vocab A節の硬制約）・word-by-word字幕の部品 | 検証済みI | 未検証（CU route） |
 | S08 | Subtitle track全体のstyle | 全字幕のfont/サイズ一括変更 | 未検証 | 未検証（Advanced project_db。Resolve完全終了必須） |
