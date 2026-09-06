@@ -12,6 +12,7 @@ kill-path honesty, restore-on-failed-switch policy).
 
 from __future__ import annotations
 
+from services.cu_client.ascii_entry import type_ascii
 from services.cu_client.client import (
     CU_WINDOW_RESOURCE,
     DEFAULT_CU_PIN_PATH,
@@ -24,22 +25,37 @@ from services.cu_client.errors import (
     CuLaunchError,
     CuLeaseError,
     CuTraceCollectionError,
+    GuiOccupiedError,
     ImeError,
     ImeReadError,
     ImeRestoreError,
     ImeSelectError,
+    PreflightError,
+    ReadbackUndefinedError,
 )
+from services.cu_client.gui_marker import DEFAULT_MARKER_PATH, GuiMarker
 from services.cu_client.ime import (
     ENGLISH_SOURCE_ID,
     current_input_source,
     english_typing,
 )
+from services.cu_client.live_coords import resolve_center
 from services.cu_client.models import CuPin, CuResult
+from services.cu_client.preflight import (
+    PreflightActions,
+    PreflightReport,
+    PreflightSpec,
+    SelectionSpec,
+    run_preflight,
+)
+from services.cu_client.readbacks import READBACKS, ReadbackSpec, readback_for
 
 __all__ = [
     "CU_WINDOW_RESOURCE",
     "DEFAULT_CU_PIN_PATH",
+    "DEFAULT_MARKER_PATH",
     "ENGLISH_SOURCE_ID",
+    "READBACKS",
     "CuClient",
     "CuClientError",
     "CuLaunchError",
@@ -48,11 +64,24 @@ __all__ = [
     "CuResult",
     "CuTraceCollectionError",
     "CuVerifier",
+    "GuiMarker",
+    "GuiOccupiedError",
     "ImeError",
     "ImeReadError",
     "ImeRestoreError",
     "ImeSelectError",
+    "PreflightActions",
+    "PreflightError",
+    "PreflightReport",
+    "PreflightSpec",
+    "ReadbackSpec",
+    "ReadbackUndefinedError",
+    "SelectionSpec",
     "cu_window",
     "current_input_source",
     "english_typing",
+    "readback_for",
+    "resolve_center",
+    "run_preflight",
+    "type_ascii",
 ]

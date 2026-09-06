@@ -52,6 +52,16 @@ class CuLeaseError(CuClientError):
     """
 
 
+class PreflightError(CuClientError):
+    """A pre-GUI-operation state correction failed (safeguard A).
+
+    Raised when ``run_preflight`` corrected a wrong page or a missing
+    clip selection but the post-correction re-read still shows the wrong
+    state. "Fixed" is observed, never assumed — a failed correction is a
+    fact to surface, not a quiet pass.
+    """
+
+
 class ImeError(CuClientError):
     """Base for the paired input-source (IME) switch/restore failures (``ime``)."""
 
@@ -83,13 +93,32 @@ class ImeRestoreError(ImeError):
     """
 
 
+class GuiOccupiedError(CuClientError):
+    """A screen operation was refused: the exclusion marker is held (D).
+
+    Carries the current holder inside the message — the caller journals
+    it and stops, never waits on another agent's or suda's Mac session.
+    """
+
+
+class ReadbackUndefinedError(CuClientError):
+    """A verdict was requested for an operation with no readback row (E).
+
+    The per-operation table is explicit, not a pattern matcher: add a
+    measured row first instead of guessing where the verdict lives.
+    """
+
+
 __all__ = [
     "CuClientError",
     "CuLaunchError",
     "CuLeaseError",
     "CuTraceCollectionError",
+    "GuiOccupiedError",
     "ImeError",
     "ImeReadError",
     "ImeRestoreError",
     "ImeSelectError",
+    "PreflightError",
+    "ReadbackUndefinedError",
 ]
