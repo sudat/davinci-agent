@@ -66,7 +66,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | T10 | Transitionを開いているTimelineで追加・変更 | 同上（既存Timelineへの追加） | 未検証 | 未検証（API経路の到達不能はv4.3 transition-path probeで実測 failed。CU経路は未試行。Phase-0指示では proven とされるが対応evidence path未確認 — Phase-2で証拠確定要） |
 | T11 | 既存Transitionの検出・QC・削除 | 既存遷移の確認・除去 | 未検証 | 未検証 |
 | T12 | 一定速度Retime | スロー・倍速（速度演出の基本） | 検証済みC / 検証済みI | C: `private/runtime/sol-input-mech-20260906/summary_report.txt`（item6_run5b_VERIFIED_WORKFLOW_SUCCESS: 25%をverified-button workflow＋render cadence SSIMで確認）。I: 同（item6_run1b: .drt経由50%をrender cadenceで確認。ただし変更ボタン押下の帰属補正 CORRECTION_item6_run1b_attribution あり） |
-| T13 | Reverse | 逆再生演出 | 危険 | `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。ガイドの実証は19.1.3.7ベースで21系未成立。再現確認は費用対効果から未実施） |
+| T13 | Reverse | 逆再生演出 | 危険(.drt)/C経路未試行 | `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。ガイドの実証は19.1.3.7ベースで21系未成立。再現確認は費用対効果から未実施） |
 | T14 | 可変Speed Ramp | スピードランプ演出 | 未検証 | 未検証（freezeは同Sm2TimeMap系でsuspended。crash-tolerant宣言なしに再開しないこと — summary_report.txt RECORD_reverse_crash_verbatim） |
 | T15 | 既存clipのRetime対話編集 | ramp・easingの手直し | 未検証 | 未検証（CU route。T12の25%はダイアログ値の確定でありCurve/easing編集ではない） |
 | T16 | Stabilize / Smart Reframe | 手ブレ・縦型reframe | 検証済みA | 未検証 |
@@ -83,7 +83,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | F05 | Fusion parameter・animation | RPG風地点表示の速い出入り（style ③）等 | C経路未試行 | 未検証（入れ子カード機構は実装済みだがアニメーションは一度も作っていない — style-vocabulary.md B③） |
 | F06 | Edit ResolveFX/OpenFXをclipへ追加 | glitch等の質感エフェクト付与 | C経路未試行 | 未検証（CU route。Fusion置換可の場合のみF04） |
 | F07 | Edit FXのInspector parameter調整 | 同上の調整 | C経路未試行 | 未検証（CU route） |
-| F08 | OFX Generator挿入 | 独立Generator clip | 不可 | 未検証 |
+| F08 | OFX Generator挿入 | 独立Generator clip | C経路未試行 | 未検証 |
 | F09 | Color node内OFXをoffline編集 | Color内エフェクトの構造編集 | 未検証 | 未検証 |
 | F10 | Magic Mask | 背景差替え（wishlist #4）・被写体分離（style ①モノクロ演出） | 不可 | 未検証（subject clickはHITL必須。MCPはclick生成不能） |
 
@@ -122,12 +122,12 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 |---|---|---|---|---|
 | U01 | Audio構造・mapping・level調査 | mix前の測定 | 検証済みA | 未検証 |
 | U02 | Voice Isolation | 声の分離 | 検証済みA | matrix summary.md #10（{false,0}→{true,70}読戻し）＋mcp-fit voice-isolation accepted |
-| U03 | Fairlight Preset適用 | 定型mix再適用 | 不可 | 未検証（Resolve 20.2.2+ version-gated — vendor resolve-audio skill） |
+| U03 | Fairlight Preset適用 | 定型mix再適用 | 未検証 | 未検証（Resolve 20.2.2+ version-gated — vendor resolve-audio skill） |
 | U04 | Clip/Track Volume・Pan個別調整 | 音量調整（-6dB等） | 検証済みC | summary_report.txt item7_REMEASURED（Inspector volume field→render -6.000000dB exact。keyboard routeはinert確定） |
 | U05 | EQ/Compressor/Automation/FairlightFX | **エコー**（style ①強調セリフの音声側）・声変調 | 未検証 | 未検証（CU route。MCP手段の有無自体未確認 — style-vocab B①） |
-| U06 | AI Audio Assistant | one-click mix | 不可 | 未検証（どのbuildでもscript不可 — vendor issue #128） |
+| U06 | AI Audio Assistant | one-click mix | C経路未試行 | 未検証（どのbuildでもscript不可 — vendor issue #128） |
 | U08 | BGM ducking計画・offline試聴mix | 声に合わせたBGM計画 | 検証済みI | 未検証（v4.3 bgm-track-ducking probe failed: scripting APIにducking面なし） |
-| U09 | BGM ducking実施・微調整・音楽sync | 声に合わせたBGM・音楽同期カット | 不可 | 未検証（CU route。automation/sidechain書込のAPI手段なし） |
+| U09 | BGM ducking実施・微調整・音楽sync | 声に合わせたBGM・音楽同期カット | C経路未試行 | 未検証（CU route。automation/sidechain書込のAPI手段なし） |
 | U10 | Audio fileのsplit/trim/convert | SFXタイミング用offline加工 | 検証済みI | 未検証 |
 | U11 | Loudness/True Peak/LRA納品QC | 納品 loudness 測定 | 検証済みI | 未検証 |
 
