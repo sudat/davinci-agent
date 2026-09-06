@@ -66,7 +66,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | T10 | Transitionを開いているTimelineで追加・変更 | 同上（既存Timelineへの追加） | 未検証 | 未検証（API経路の到達不能はv4.3 transition-path probeで実測 failed。CU経路は未試行。Phase-0指示では proven とされるが対応evidence path未確認 — Phase-2で証拠確定要） |
 | T11 | 既存Transitionの検出・QC・削除 | 既存遷移の確認・除去 | 未検証 | 未検証 |
 | T12 | 一定速度Retime | スロー・倍速（速度演出の基本） | 検証済みC / 検証済みI | C: `private/runtime/sol-input-mech-20260906/summary_report.txt`（item6_run5b_VERIFIED_WORKFLOW_SUCCESS: 25%をverified-button workflow＋render cadence SSIMで確認）。I: 同（item6_run1b: .drt経由50%をrender cadenceで確認。ただし変更ボタン押下の帰属補正 CORRECTION_item6_run1b_attribution あり） |
-| T13 | Reverse | 逆再生演出 | 危険(.drt)/C経路未試行 | `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。ガイドの実証は19.1.3.7ベースで21系未成立。再現確認は費用対効果から未実施） |
+| T13 | Reverse | 逆再生演出 | 危険(.drt)/未検証 | .drt経路: `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。再現確認は費用対効果から未実施）。GUI経路: 2026-09-07 C-route試行15steps（T13_REVERSE_TOGGLED / T13_REVERSE_CHECKED_CLICK — speed dialogのreverse checkboxをverified pressで押下）したが読み戻し確定に至らず未検証（journal 04:14:10） |
 | T14 | 可変Speed Ramp | スピードランプ演出 | 未検証 | 未検証（freezeは同Sm2TimeMap系でsuspended。crash-tolerant宣言なしに再開しないこと — summary_report.txt RECORD_reverse_crash_verbatim） |
 | T15 | 既存clipのRetime対話編集 | ramp・easingの手直し | 未検証 | 未検証（CU route。T12の25%はダイアログ値の確定でありCurve/easing編集ではない） |
 | T16 | Stabilize / Smart Reframe | 手ブレ・縦型reframe | 検証済みA | 未検証 |
@@ -111,7 +111,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | C03 | Gallery Still・LUT Export | look保存・持越し | 検証済みA | 未検証 |
 | C04 | Primaries/Curvesを画を見ながら調整 | lift等（強調区間の背景モノクロ/黒 — style ①複合演出の映像側） | 検証済みC | summary_report.txt item11_REMEASURED（Color page lift数値field→画素diff 2073597/2073600変化・平均輝度35.48→57.42。matrix午前の0画素は座標miss artifactと確定） |
 | C05 | Primaries/Curves/Node treeをoffline authoring | 決定済みgradeの構造生成 | 検証済みI | C01と同一証拠（generate＋apply実証済み。値スケール校正が残作業） |
-| C06 | Power Window/Qualifier/HDR/Blur/Key | 被写体だけ残し背景モノクロ（style ①）・背景ぼかし（wishlist #4系） | C経路未試行 | 未検証（Advanced DRX codec。calibration未確認） |
+| C06 | Power Window/Qualifier/HDR/Blur/Key | 被写体だけ残し背景モノクロ（style ①）・背景ぼかし（wishlist #4系） | 検証済みC | 2026-09-07 C-route: Color pageでcircle Power Window追加→彩度0のgrade適用、render A/Bで検証（journal 00:32:44）。**実測: gallery stills PNGはgradeの視覚証拠にならない（viewerにgrade出ているのに0px差）— grade証明はrender A/Bのみ** |
 | C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | 検証済みC | ColorページTrackerのウィンドウ追跡はrender A/Bで実証（追従ウィンドウがフレーム毎に実レンダリング内で変位: 純追跡差分 100/99px vs ビット一致ゼロ床、sat再飽和クラスタがmid→endで進行）。注意: 素材がほぼ無彩色のため効果は小さめ、Warperグリッドドラッグは未実証、track開始クリックがsilent-failする例あり（playhead進行で要確認） |
 | C08 | Shot/Skin/WB/Reference match | 複数cutの色統一 | 検証済みI | 未検証 |
 | C09 | Scope/Gamut/Legal QC | 品質測定 | 検証済みI | 未検証 |
@@ -127,7 +127,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | U05 | EQ/Compressor/Automation/FairlightFX | **エコー**（style ①強調セリフの音声側）・声変調 | 未検証 | 未検証（CU route。MCP手段の有無自体未確認 — style-vocab B①） |
 | U06 | AI Audio Assistant | one-click mix | 未検証 | スクリプト経路なし（vendor issue #128のまま再確認）。GUI: Fairlight上にAIアシスタントの直接ボタンは見つからず、タイムライン>AIツール submenu は存在するが合成入力では展開失敗（3回）。人手UIなら到達可能と推定 |
 | U08 | BGM ducking計画・offline試聴mix | 声に合わせたBGM計画 | 検証済みI | 未検証（v4.3 bgm-track-ducking probe failed: scripting APIにducking面なし） |
-| U09 | BGM ducking実施・微調整・音楽sync | 声に合わせたBGM・音楽同期カット | 不可 | API: ducking/sidechain書込actionなし＋音量キーフレーム不可（AddPoint不在、Volume書込も拒否: 2ラウンド実測）→自動ダッキング不可。人手のGUIオートメーション描画は可能（検証は未実施） |
+| U09 | BGM ducking実施・微調整・音楽sync | 声に合わせたBGM・音楽同期カット | C経路未試行 | API: ducking/sidechain書込actionなし＋音量キーフレーム不可（AddPoint不在、Volume書込も拒否: 2ラウンド実測）。**CU Fairlight automation-lane routeは未試行（高コストのため未実施 — 3rd agent journal 04:23:39自身のnote）**。結果レベルはU08 offline plan + ffmpeg mixで代替達成可能（suda review 43729f7と同じ結論）。「実現不可」は誤り |
 | U10 | Audio fileのsplit/trim/convert | SFXタイミング用offline加工 | 検証済みI | 未検証 |
 | U11 | Loudness/True Peak/LRA納品QC | 納品 loudness 測定 | 検証済みI | 未検証 |
 
