@@ -155,6 +155,9 @@ ignore = [
 "services/release/live_media.py" = ["PLR0913", "TRY004"]
 "services/release/live_wiring.py" = ["N802", "B009", "PLR0913", "PLR0915", "C901"]
 "services/mcp_client/execution_runner.py" = ["ANN401", "FBT001", "FBT002", "PLR0913", "SLF001"]
+# Embedded swift snippets are reused VERBATIM from sol-coords-20260906 (proven live);
+# one print line exceeds the length limit and must not be reformatted.
+"services/cu_client/ime.py" = ["E501"]
 "capabilities/v4.4/probes/task7-native-render/**" = ["INP001"]
 
 [tool.ruff.lint.pydocstyle]
