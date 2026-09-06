@@ -7,7 +7,7 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 > 私は新しい動画スタイルを試すときに、ダビンチエージェントのシステム起因で検証が
 > 入ったり止められるのが嫌なの。事前に貴方やsolが検証をすべき
 
-2026-09-07 レビュー（suda指示・10エージェント監査）: 判定修正10件・根拠更新22件・高頻度欠落の新規行27件を追加。新規行はN接頭辞（索引に不在のため）。
+2026-09-07 レビュー（suda指示・10エージェント監査+Fable指摘）: 判定修正10件・根拠更新22件・高頻度欠落の新規行25件（N接頭辞・索引に不在）を追加、索引省略行からQ01/M08の2件を復帰。
 ## 冒頭集計 — 全 102 項目（2026-09-07 レビュー反映後・実測）
 
 | 状態 | 件数 | 意味 |
@@ -41,9 +41,9 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 機能IDは `~/.metacua/DAVINCI_CAPABILITY_INDEX.md` の verbatim。TikTok系での用途は
 3目標スタイル（style-vocabulary.md B節: ①宋世羅-style静的テロップ＋変調 ②TikTok
 縦型太字字幕ズーム多用 ③vlog地点表示）＋ vendor rough-cut ガイドの toolkit を
-filterに derive した。表にない索引行（T18/T19、U07、C10、M02〜M05/M08〜M12、
-A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺の通常
-編集で直接使わないため省略した（省略自体が判断であることを明示する）。
+filterに derive した。表にない索引行（T18/T19、U07、C10、M02〜M05/M09〜M12、
+A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺の通常
+編集で直接使わないため省略した（省略自体が判断であることを明示する。Q01・M08は2026-09-07レビュー+Fable指摘で復帰）。
 
 ### A/M. プロジェクト・素材（縦型の前提＋素材搬入）
 
@@ -54,6 +54,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | M01 | 素材Import | 縦型素材・写真素材（wishlist #3挿入カット）の搬入 | 検証済みA | `video-pipeline/capabilities/v4.3/mcp-fit.json`（import-media: 3 clips＋media-pool ids読戻し、status accepted） |
 | M06 | 既存ProxyのLink/Unlink | 4K縦型の重い素材を軽く扱う | 検証済みA | journal 20:10:48 検証済みA: link_proxy書込+Proxy属性readback（Proxy=1920x1080・Proxy Media Path設定確認）。 |
 | M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | 検証済みC | Media Pool右クリック→「最適化メディアを生成」で実生成を確認（6.8GB・8,467キャッシュファイル、進捗ダイアログもAX読取可）。APIはリンク系のみで生成actionなし＝生成はGUI起動。メニュー項目はAX読めるので自動化可。プロキシー生成も同メニュー系 |
+| M08 | Relink・Replace source clip | メディアオフライン時の再接続・素材差し替え（プロジェクト移動・素材整理で必須の復旧操作） | 未検証 | 索引行M08は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: media_pool.safe_relink / media_pool_item.replace_clip / replace_clip_preserve_sub_clip（索引記載、未試行。file identity曖昧なら停止の注意付き）。TimelineのReplace Editとは別。 |
 
 ### T. Timeline構築・カット・配置・Retime
 
@@ -151,6 +152,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
+| Q01 | Timeline Marker・review annotation | YouTubeチャプター生成（R04のチャプターcheckboxと直結）・レビュー往復・自然言語修正指示の目印 | 未検証 | 索引行Q01は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: timeline_markers.*/timeline_item_markers.*/export_review_report（索引記載、未試行）。Source clip markerはM05。 |
 | Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 未検証 | detect_scene_cutsを2タイムラインで実行しsuccess=True（journal 19:54:20/19:55:06）だが、検出cut数・markerのreadbackなし＝API受理のみ（verification.status=unverified）。検証済みAの要件未達のため格下げ。 |
 | Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | 未検証 | edit_engine.plan_selects 自体は存在するが解析DBが前提。本機はローカルtranscription backendが未導入で解析パイプラインが起動不可（no_auto_install方針）— backend導入後に再挑戦。v4.3のselects probe失敗と同じ所在 |
 
@@ -182,12 +184,10 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | N19 | クリップ端フェードハンドル | BGM/SFX出入りフェード | 未検証 | 同上 |
 | N20 | 波形/タイムコード自動同期 | 別録りwavと映像の同期の必須工程 | 未検証 | 同上 |
 | N21 | 音声ノイズリダクション・Dialogue Leveler | 部屋ノイズ・声量ムラ（U02 Voice Isolationは別機能） | 未検証 | 同上 |
-| N22 | マーカー（timeline/clip・色・notes） | 自然言語修正指示のアンカー——地図全体で0行だった | 未検証 | 2026-09-07レビュー: media管理監査でCRITICAL判定 |
-| N23 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤 | 未検証 | 同上 |
-| N24 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 未検証 | 同上 |
-| N25 | ソースrelink・offline復旧 | M06はproxy linkのみで源素材再接続は別物 | 未検証 | 2026-09-07レビュー: media管理監査 |
-| N26 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 未検証 | 同上 |
-| N27 | In/Out範囲render・VBR/CBR品質・音声format/ch指定・複数timeline一括render | YouTube+TikTok両納品の毎回操作（R行に存在せず） | 未検証 | 2026-09-07レビュー: delivery監査でCRITICAL判定 |
+| N22 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤 | 未検証 | 同上 |
+| N23 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 未検証 | 同上 |
+| N24 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 未検証 | 同上 |
+| N25 | In/Out範囲render・VBR/CBR品質・音声format/ch指定・複数timeline一括render | YouTube+TikTok両納品の毎回操作（R行に存在せず） | 未検証 | 2026-09-07レビュー: delivery監査でCRITICAL判定 |
 ## 縦型（9:16）前提条件ブロック — スタイルではなく出力形式の変更
 
 style-vocabulary.md B②の通り、縦型は「スタイル」ではなく**出力フォーマットの
