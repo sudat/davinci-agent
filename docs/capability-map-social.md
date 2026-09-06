@@ -12,11 +12,11 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 
 | 状態 | 件数 | 意味 |
 |---|---|---|
-| 未検証 | **46** | 一度も試していない（N行27件を含む）。この地図の要点 |
+| 未検証 | **46** | 一度も試していない（N行25件を含む）。この地図の要点 |
 | 検証済みA | 26 | API書込＋読み戻しで検証済み |
 | 検証済みI | 12 | interchange（.drt/.drx）で検証済み |
-| 検証済みC | 8 | 座標＋Directでlive検証済み |
-| 複合状態 | 6 | 1行に2状態併記（T12/T13/S09/S07/C08/C03） |
+| 検証済みC | 5 | 座標＋Directでlive検証済み |
+| 複合状態 | 9 | 1行に2状態併記——束ね機能の部分検証を分割表示（M07/T12/S07/C03/C06/C07/C08） |
 | C経路未試行 | 2 | API/interchange試行済み・GUI操作は未試行 |
 | 不可 | 1 | 到達不能と測定 |
 | 未決定 | 1 | 判断未了 |
@@ -53,7 +53,7 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | A05 | Timeline設定の読替・変更 | 縦型Timelineの tall 解像度設定。前提条件ブロック参照 | 検証済みA | project_settings.set_setting（timelineResolutionWidth/Height→1080x1920、readback OK）→新規タイムラインが縦型を継承→レンダリング出力も1080x1920を確認。**既存タイムラインの解像度は timeline.set_setting で変更不可（success False 実測）— 作成前のプロジェクト設定かGUIで変更** |
 | M01 | 素材Import | 縦型素材・写真素材（wishlist #3挿入カット）の搬入 | 検証済みA | `video-pipeline/capabilities/v4.3/mcp-fit.json`（import-media: 3 clips＋media-pool ids読戻し、status accepted） |
 | M06 | 既存ProxyのLink/Unlink | 4K縦型の重い素材を軽く扱う | 検証済みA | journal 20:10:48 検証済みA: link_proxy書込+Proxy属性readback（Proxy=1920x1080・Proxy Media Path設定確認）。 |
-| M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | 検証済みC | Media Pool右クリック→「最適化メディアを生成」で実生成を確認（6.8GB・8,467キャッシュファイル、進捗ダイアログもAX読取可）。APIはリンク系のみで生成actionなし＝生成はGUI起動。メニュー項目はAX読めるので自動化可。プロキシー生成も同メニュー系 |
+| M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | 検証済みC / 未検証 | **Optimized Media生成=検証済みC**: Media Pool右クリック→「最適化メディアを生成」で6.8GB・8,467キャッシュファイル実生成、進捗ダイアログもAX読取可（journal 03:57:38）。**Proxy生成=未検証**（「同メニュー系」という推定のみ——Fable指摘4で分割併記）。APIはリンク系のみで生成actionなし＝生成はGUI起動 |
 | M08 | Relink・Replace source clip | メディアオフライン時の再接続・素材差し替え（プロジェクト移動・素材整理で必須の復旧操作） | 未検証 | 索引行M08は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: media_pool.safe_relink / media_pool_item.replace_clip / replace_clip_preserve_sub_clip（索引記載、未試行。file identity曖昧なら停止の注意付き）。TimelineのReplace Editとは別。 |
 
 ### T. Timeline構築・カット・配置・Retime
@@ -117,8 +117,8 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | C03 | Gallery Still・LUT Export | look保存・持越し | 検証済みA / 未検証 | Gallery Still取得・書き出しは実証（sweep_still_1.1.1.drx+png生成、journal 20:05:10）。LUT書き出しは失敗実測（lut_exists=false・0 bytes）——LUT Export分は未検証（失敗記録あり）。 |
 | C04 | Primaries/Curvesを画を見ながら調整 | lift等（強調区間の背景モノクロ/黒 — style ①複合演出の映像側） | 検証済みC | summary_report.txt item11_REMEASURED（Color page lift数値field→画素diff 2073597/2073600変化・平均輝度35.48→57.42。matrix午前の0画素は座標miss artifactと確定） |
 | C05 | Primaries/Curves/Node treeをoffline authoring | 決定済みgradeの構造生成 | 検証済みI | C01と同一証拠（generate＋apply実証済み。値スケール校正が残作業） |
-| C06 | Power Window/Qualifier/HDR/Blur/Key | 被写体だけ残し背景モノクロ（style ①）・背景ぼかし（wishlist #4系） | 検証済みC | 2026-09-07 C-route: Color pageでcircle Power Window追加→彩度0のgrade適用、render A/Bで検証（journal 00:32:44）。**実測: gallery stills PNGはgradeの視覚証拠にならない（viewerにgrade出ているのに0px差）— grade証明はrender A/Bのみ** |
-| C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | 検証済みC | ColorページTrackerのウィンドウ追跡はrender A/Bで実証（追従ウィンドウがフレーム毎に実レンダリング内で変位: 純追跡差分 100/99px vs ビット一致ゼロ床、sat再飽和クラスタがmid→endで進行）。注意: 素材がほぼ無彩色のため効果は小さめ、Warperグリッドドラッグは未実証、track開始クリックがsilent-failする例あり（playhead進行で要確認） |
+| C06 | Power Window/Qualifier/HDR/Blur/Key | 被写体だけ残し背景モノクロ（style ①）・背景ぼかし（wishlist #4系） | 検証済みC / 未検証 | **Power Window=検証済みC**: circle Window追加→彩度0 grade、render A/Bで実証（journal 00:32:44）。**Qualifier/HDR/Blur/Key=未検証**——グリーンスクリーン合成（N08）はまさにQualifier/Key側で未試行。本行を実証済みと誤読しないこと（Fable指摘4）。実測: gallery stills PNGはgradeの視覚証拠にならない（0px差）— grade証明はrender A/Bのみ |
+| C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | 検証済みC / 未検証 | **Tracker=検証済みC**: 追従ウィンドウのフレーム毎変位を実renderで実証（純追跡差分100/99px vs ビット一致ゼロ床、sat再飽和クラスタmid→end進行、journal 01:56:11）。**Color Warper=未検証**（グリッドドラッグ未実証——根拠の併記明記はFable指摘4）。track開始クリックがsilent-failする例あり（playhead進行で要確認）。素材がほぼ無彩色のため効果は小さめ |
 | C08 | Shot/Skin/WB/Reference match | 複数cutの色統一 | 検証済みI / 未検証 | offline drx match tools実走（journal 21:29:44）: shot/WB gradeCount=2・drx出力あり。ただしskin_gradeCount=0（肌マッチ生成ゼロ）・match品質のrender検証なし——skin分は未検証。 |
 | C09 | Scope/Gamut/Legal QC | 品質測定 | 検証済みI | journal 20:15:46: signalstats実測（YMIN=11/YMAX=229）。※経路はffmpeg offline測定で.drt/.drx不使用——I定義との適合は要確認（Opus判断待ち）。 |
 
@@ -130,7 +130,7 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | U02 | Voice Isolation | 声の分離 | 検証済みA | matrix summary.md #10（{false,0}→{true,70}読戻し）＋mcp-fit voice-isolation accepted |
 | U03 | Fairlight Preset適用 | 定型mix再適用 | 未検証 | journal 241/252: apply_fairlight_preset 2回失敗実測（preset catalog空が原因と推定）。suda review裁定（503）: 「機能的不能ではなく前提データ不在——人間が1回preset保存すればAPI適用可能」。vendor version-gate引用は副次情報。 |
 | U04 | Clip/Track Volume・Pan個別調整 | 音量調整（-6dB等） | 検証済みC | summary_report.txt item7_REMEASURED（Inspector volume field→render -6.000000dB exact。keyboard routeはinert確定） |
-| U05 | EQ/Compressor/Automation/FairlightFX | **エコー**（style ①強調セリフの音声側）・声変調 | 未検証 | 未検証（CU route。MCP手段の有無自体未確認 — style-vocab B①） |
+| U05 | EQ/Compressor/Automation/FairlightFX | **エコー**（style ①強調セリフの音声側）・声変調 | 未検証 | 未検証（CU route。MCP手段の有無自体未確認 — style-vocab B①）。※束ね行: EQ/Compressor/Automation/FairlightFX——**エコー（style ①強調セリフの音声側）が核心**。部分検証時は検証部分を根拠欄に明記し、行全体を検証済みにしないこと（Fable指摘4） |
 | U06 | AI Audio Assistant | one-click mix | 未検証 | スクリプト経路なし（vendor issue #128のまま再確認）。GUI: Fairlight上にAIアシスタントの直接ボタンは見つからず、タイムライン>AIツール submenu は存在するが合成入力では展開失敗（3回）。人手UIなら到達可能と推定 |
 | U08 | BGM ducking計画・offline試聴mix | 声に合わせたBGM計画 | 未検証 | journal 20:15:47の内容はcapability surface JSONの読み取りのみ——ducking mix計画の実生成なし。v4.3 probe失敗記録（scripting APIにducking面なし）が実態。 |
 | U09 | BGM ducking実施・微調整・音楽sync | 声に合わせたBGM・音楽同期カット | C経路未試行 | API: ducking/sidechain書込actionなし＋音量キーフレーム不可（AddPoint不在、Volume書込も拒否: 2ラウンド実測）。**CU Fairlight automation-lane routeは未試行（高コストのため未実施 — 3rd agent journal 04:23:39自身のnote）**。結果レベルはU08 offline plan + ffmpeg mixで代替達成可能（suda review 43729f7と同じ結論）。「実現不可」は誤り |
