@@ -7,12 +7,12 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 > 私は新しい動画スタイルを試すときに、ダビンチエージェントのシステム起因で検証が
 > 入ったり止められるのが嫌なの。事前に貴方やsolが検証をすべき
 
-2026-09-07 レビュー（suda指示・10エージェント監査+Fable指摘）: 判定修正10件・根拠更新22件・高頻度欠落の新規行25件（N接頭辞・索引に不在）を追加、索引省略行からQ01/M08の2件を復帰。
+2026-09-07 レビュー（suda指示・10エージェント監査+Fable指摘）: 判定修正10件・根拠更新22件・高頻度欠落の新規行30件（N接頭辞・索引に不在。内5件はFable指摘2で追加）を追加、索引省略行からQ01/M08の2件を復帰。
 ## 冒頭集計 — 全 102 項目（2026-09-07 レビュー反映後・実測）
 
 | 状態 | 件数 | 意味 |
 |---|---|---|
-| 未検証 | **46** | 一度も試していない（N行25件を含む）。この地図の要点 |
+| 未検証 | **51** | 一度も試していない（N行30件を含む）。この地図の要点 |
 | 検証済みA | 26 | API書込＋読み戻しで検証済み |
 | 検証済みI | 12 | interchange（.drt/.drx）で検証済み |
 | 検証済みC | 5 | 座標＋Directでlive検証済み |
@@ -20,7 +20,7 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 | C経路未試行 | 2 | API/interchange試行済み・GUI操作は未試行 |
 | 不可 | 1 | 到達不能と測定 |
 | 未決定 | 1 | 判断未了 |
-| **計** | **102** |  |
+| **計** | **107** |  |
 
 状態語彙は固定（言い換え禁止）。「たぶんできる」「should work」は書かない。
 検証済みタグはすべて根拠path付き。根拠なきものは未検証のまま置く。
@@ -83,7 +83,7 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | F01 | Inspector Transform/Crop/Composite | ズーム・位置・回転・クロップ・不透明度（パンチインの基本） | 検証済みA | `private/runtime/sol-matrix-20260906/summary.md`（#1 Zoom 1.0→1.35／#2 Position／#3 Rotation 5.0／#4 Crop 64／#5 Opacity 80、いずれもget_*読戻し）＋mcp-fit.json clip-transform-punch-in probe |
-| F02 | propertyのkeyframe | **スムーズなアニメatedズーム**（Transform zoom静止画はAだが動きはここ） | 検証済みC | 検証済み（2026-09-07 C-route: Inspector ビデオタブのdiamondで86400:1.0→86849:1.5。render A/B: a=baseline同一(PSNR inf)/b=980,942px差分/c=1,217,639px差分の単調プログレッション、視覚確認済み。タブ切替はhover-dwell 1.5s必須（即時click・AXPress・AXSetValは全部不発）。API add_keyframeはNoneType破損、Fusion compは21.0.4でrender inert） |
+| F02 | propertyのkeyframe | **スムーズなアニメatedズーム**（Transform zoom静止画はAだが動きはここ） | 検証済みC | 検証済み（2026-09-07 C-route: Inspector ビデオタブのdiamondで86400:1.0→86849:1.5。render A/B: a=baseline同一(PSNR inf)/b=980,942px差分/c=1,217,639px差分の単調プログレッション、視覚確認済み。タブ切替はhover-dwell 1.5s必須（即時click・AXPress・AXSetValは全部不発）。API add_keyframeはNoneType破損、Fusion compは21.0.4でrender inert）※実証は直線(Linear)のみ——イージングはN26として未検証（Fable指摘2） |
 | F03 | Fusion Comp追加・Import/Export・切替 | Text+/エフェクトの土台 | 検証済みA | mcp-fit.json fusion-template-insertion（insert＋comp count=1読戻し、accepted）＋matrix #8（insert_fusion_title→set_text_plus読戻し） |
 | F04 | Fusion node追加・削除・接続 | モーション系の下地（Blur/Transform/Merge/Mask） | 検証済みA | fusion_comp API（add_comp→add_tool→connect→set_input、スコープは timeline_item={track_type,track_index,item_index} ネスト必須）でBlur構成を作成→render A/Bで実ブラーを確認（全ピクセル差分、平均保存・分散減 = 本物のブラー）。削除・再接続も成功。注意: 2026-09-06には同一API経路でrender失敗（Fusionコンポジション処理エラー）を計測済み — 条件不明だが普遍ではない |
 | F05 | Fusion parameter・animation | RPG風地点表示の速い出入り（style ③）等 | 検証済みA | fusion_comp add_keyframeでXBlurSize 0→40アニメーションを作成、render A/Bで2地点の出力差异（blur0: std25.7 / blur40: std21.4）を確認＝アニメーションはレンダリングに反映される。**要件事項: キーフレーム時刻はコンポローカル時間（クリップ先頭=0）必須。タイムラインレコードフレームを渡すと範囲外で黙って無視される（2026-09-06の「render不反映」計測はこの時間基準違いが原因）** |
@@ -164,7 +164,7 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | N01 | スナッピング on/off | 人間編集の基本トグル（自動化は座標指定のため影響小） | 未検証 | 2026-09-07レビュー: 編集基本監査で完全欠落と判定 |
-| N02 | Ripple delete・ギャップ詰め | 間詰めpacingの最頻出操作（T05/T06が部分対応だが明示行なし） | 未検証 | 同上 |
+| N02 | Ripple delete・ギャップ詰め | 間詰めpacingの最頻出操作（T05/T06が部分対応だが明示行なし） | 未検証 | 同上。journalにproxy unlink(M06)とset_clips_linked API言示の形跡あり——clipリンク解除(detach)自体は未試行（Fable指摘2の追記） |
 | N03 | Linked selection・音声分離(detach) | 音だけ差し替え・詰めの常見ワークフロー | 未検証 | 同上 |
 | N04 | アジャストメントクリップ | 全カット一括ルック（style ①一括モノクロ等） | 未検証 | 2026-09-07レビュー: color監査で完全欠落 |
 | N05 | フリーズフレーム | TikTokズーム演出の部品（T14根拠noteにsuspended言及のみ） | 未検証 | 編集基本監査 |
@@ -187,7 +187,12 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | N22 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤 | 未検証 | 同上 |
 | N23 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 未検証 | 同上 |
 | N24 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 未検証 | 同上 |
-| N25 | In/Out範囲render・VBR/CBR品質・音声format/ch指定・複数timeline一括render | YouTube+TikTok両納品の毎回操作（R行に存在せず） | 未検証 | 2026-09-07レビュー: delivery監査でCRITICAL判定 |
+| N25 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 未検証 | 同上 |
+| N26 | キーフレームのイージング（Ease In/Out/Bezier） | 「スムーズなズーム」等の実務はイージング前提——F02の実証は直線(Linear)のみ | 未検証 | Fable指摘2（2026-09-07）: 索引・地図とも行なし。F02はLinearのみ実証のため未検証部分を本行へ分離 |
+| N27 | .drfxテンプレートパックの導入・使用 | TikTok系エフェクト多用の実態は購入テンプレ運用が大半——導入と適用の両面 | 未検証 | Fable指摘2: 索引・地図とも行なし（N17は内蔵テンプレ適用で別物） |
+| N28 | サムネイル用静止画書き出し | YouTube運用で毎本必要 | 未検証 | Fable指摘2: 行なし。MCPにexport_frame_as_still存在（vendor記載・未試行）。C03はルック保存目的で別物 |
+| N29 | 16:9→9:16背景ぼかしパディング | 縦型転換の定番レシピ | 未検証 | Fable指摘2: V節は解像度設定のみでこのレイアウト操作の行なし |
+| N30 | BGM/SEを指定トラック・指定位置へ配置 | 音声素材のアセンブリ配置（T01は映像・写真の構築） | 未検証 | Fable指摘2: 音声版の行なし |
 ## 縦型（9:16）前提条件ブロック — スタイルではなく出力形式の変更
 
 style-vocabulary.md B②の通り、縦型は「スタイル」ではなく**出力フォーマットの
