@@ -45,10 +45,10 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | A04 | Project設定の読替・変更 | 縦型9:16（解像度・fps）の設定変更。前提条件ブロック参照 | 検証済みA | 未検証（v4.3 project-timeline-creation probeはtimelineFrameRate=30のみ。解像度変更は未試行） |
-| A05 | Timeline設定の読替・変更 | 縦型Timelineの tall 解像度設定。前提条件ブロック参照 | C経路未試行 | 未検証 |
+| A05 | Timeline設定の読替・変更 | 縦型Timelineの tall 解像度設定。前提条件ブロック参照 | 検証済みA | project_settings.set_setting（timelineResolutionWidth/Height→1080x1920、readback OK）→新規タイムラインが縦型を継承→レンダリング出力も1080x1920を確認。**既存タイムラインの解像度は timeline.set_setting で変更不可（success False 実測）— 作成前のプロジェクト設定かGUIで変更** |
 | M01 | 素材Import | 縦型素材・写真素材（wishlist #3挿入カット）の搬入 | 検証済みA | `video-pipeline/capabilities/v4.3/mcp-fit.json`（import-media: 3 clips＋media-pool ids読戻し、status accepted） |
 | M06 | 既存ProxyのLink/Unlink | 4K縦型の重い素材を軽く扱う | 検証済みA | 未検証 |
-| M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | C経路未試行 | 未検証 |
+| M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | 検証済みC | Media Pool右クリック→「最適化メディアを生成」で実生成を確認（6.8GB・8,467キャッシュファイル、進捗ダイアログもAX読取可）。APIはリンク系のみで生成actionなし＝生成はGUI起動。メニュー項目はAX読めるので自動化可。プロキシー生成も同メニュー系 |
 
 ### T. Timeline構築・カット・配置・Retime
 
@@ -77,13 +77,13 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | F01 | Inspector Transform/Crop/Composite | ズーム・位置・回転・クロップ・不透明度（パンチインの基本） | 検証済みA | `private/runtime/sol-matrix-20260906/summary.md`（#1 Zoom 1.0→1.35／#2 Position／#3 Rotation 5.0／#4 Crop 64／#5 Opacity 80、いずれもget_*読戻し）＋mcp-fit.json clip-transform-punch-in probe |
-| F02 | propertyのkeyframe | **スムーズなアニメatedズーム**（Transform zoom静止画はAだが動きはここ） | C経路未試行 | 未検証（TikTok系②の核心なのに未試行 — headline級） |
+| F02 | propertyのkeyframe | **スムーズなアニメatedズーム**（Transform zoom静止画はAだが動きはここ） | 検証済みC | 検証済み（2026-09-07 C-route: Inspector ビデオタブのdiamondで86400:1.0→86849:1.5。render A/B: a=baseline同一(PSNR inf)/b=980,942px差分/c=1,217,639px差分の単調プログレッション、視覚確認済み。タブ切替はhover-dwell 1.5s必須（即時click・AXPress・AXSetValは全部不発）。API add_keyframeはNoneType破損、Fusion compは21.0.4でrender inert） |
 | F03 | Fusion Comp追加・Import/Export・切替 | Text+/エフェクトの土台 | 検証済みA | mcp-fit.json fusion-template-insertion（insert＋comp count=1読戻し、accepted）＋matrix #8（insert_fusion_title→set_text_plus読戻し） |
-| F04 | Fusion node追加・削除・接続 | モーション系の下地（Blur/Transform/Merge/Mask） | C経路未試行 | 未検証（vendor rough-cut trap: MediaOutはMediaInからのpath必須。tool名推測禁止・probe先行） |
-| F05 | Fusion parameter・animation | RPG風地点表示の速い出入り（style ③）等 | C経路未試行 | 未検証（入れ子カード機構は実装済みだがアニメーションは一度も作っていない — style-vocabulary.md B③） |
-| F06 | Edit ResolveFX/OpenFXをclipへ追加 | glitch等の質感エフェクト付与 | C経路未試行 | 未検証（CU route。Fusion置換可の場合のみF04） |
-| F07 | Edit FXのInspector parameter調整 | 同上の調整 | C経路未試行 | 未検証（CU route） |
-| F08 | OFX Generator挿入 | 独立Generator clip | C経路未試行 | 未検証 |
+| F04 | Fusion node追加・削除・接続 | モーション系の下地（Blur/Transform/Merge/Mask） | 検証済みA | fusion_comp API（add_comp→add_tool→connect→set_input、スコープは timeline_item={track_type,track_index,item_index} ネスト必須）でBlur構成を作成→render A/Bで実ブラーを確認（全ピクセル差分、平均保存・分散減 = 本物のブラー）。削除・再接続も成功。注意: 2026-09-06には同一API経路でrender失敗（Fusionコンポジション処理エラー）を計測済み — 条件不明だが普遍ではない |
+| F05 | Fusion parameter・animation | RPG風地点表示の速い出入り（style ③）等 | 検証済みA | fusion_comp add_keyframeでXBlurSize 0→40アニメーションを作成、render A/Bで2地点の出力差异（blur0: std25.7 / blur40: std21.4）を確認＝アニメーションはレンダリングに反映される。**要件事項: キーフレーム時刻はコンポローカル時間（クリップ先頭=0）必須。タイムラインレコードフレームを渡すと範囲外で黙って無視される（2026-09-06の「render不反映」計測はこの時間基準違いが原因）** |
+| F06 | Edit ResolveFX/OpenFXをclipへ追加 | glitch等の質感エフェクト付与 | 未検証 | APIにfx追加actionなし（確認済み）。C経路: エフェクトライブラリを開いてResolveFXドラッグを3方式で試行したが合成イベントではドラッグ&ドロップが登録されず（render A/Bで効果なしを確認）。手動操作は可能と推奨されない理由なし — 人手またはUI自動化の別手段で再挑戦余地あり |
+| F07 | Edit FXのInspector parameter調整 | 同上の調整 | 未検証 | F06に依存（追加できたResolveFXが作業タイムラインに存在せず未検証） |
+| F08 | OFX Generator挿入 | 独立Generator clip | 不可 | 本機にOFX generatorプラグイン未インストール（/Library/OFX・~/Library/OFXとも不在を実測）。API挿入は失敗、ドラッグ対象も存在しない。独立Generatorはnative generator（insert_generator成功済み）で代替可能 |
 | F09 | Color node内OFXをoffline編集 | Color内エフェクトの構造編集 | 未検証 | 未検証 |
 | F10 | Magic Mask | 背景差替え（wishlist #4）・被写体分離（style ①モノクロ演出） | 不可 | 未検証（subject clickはHITL必須。MCPはclick生成不能） |
 
@@ -93,13 +93,13 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 |---|---|---|---|---|
 | S01 | Text+/Fusion Title作成・文字変更 | 常時テロップ2階層（style ①実装済み承認分）・太字字幕の器 | 検証済みA | matrix summary.md #8（null→"マトリクス確認"完全一致）・#9（Size 0.09→0.06／Red1 1.0→0.5読戻し。Font/Size/色input存在確認＋product実績） |
 | S02 | Titleを指定track・frameへ配置 | V2/V3への正確な重ね置き | 検証済みI | 未検証（vendor trap: Insert系はtrackIndexを持たず常にV1 — issue #74） |
-| S03 | 自動字幕生成 | 字幕起こしの起点 | C経路未試行 | 未検証（v4.3 subtitle probeはwould_generate=Trueのみで生成自体未実施。matrix #12でtimeline_ai生成4キューの副産物確認あり — 正式検証として未整理） |
+| S03 | 自動字幕生成 | 字幕起こしの起点 | 検証済みA | timeline_ai.create_subtitles（background=true＋job poll）で字幕トラック0→1・実素材日本語音声から3キュー生成を確認。同期呼び出しは5連続失敗（2026-09-06）— background実行が実レシピ。追加音声は文字起こし範囲外だった点に注意 |
 | S04 | SRTからNative字幕付き新規DRT | 字幕付きTimeline再構築 | 検証済みI | 未検証 |
 | S05 | SRTを開いているTimelineへImport | 既存Timelineへの字幕追加 | C経路未試行 | 未検証（CU route。API経路なし） |
 | S06 | Native字幕1件の本文修正 | 誤字修正 | 検証済みC | matrix summary.md #12（AI locate移動のみ＋IME保護＋Direct入力→get_transcript「指揮らい」→"MATRIX-EDIT-OK"読戻し。他キュー不変） |
 | S07 | Native字幕1件の開始・終了・分割・結合 | 語を切らない分割（style-vocab A節の硬制約）・word-by-word字幕の部品 | 検証済みI | 未検証（CU route） |
 | S08 | Subtitle track全体のstyle | 全字幕のfont/サイズ一括変更 | 未検証 | 未検証（Advanced project_db。Resolve完全終了必須） |
-| S09 | Native字幕ごとのstyle/位置調整 | 1件だけの強調 styling | C経路未試行 | 未検証（CU route） |
+| S09 | Native字幕ごとのstyle/位置調整 | 1件だけの強調 styling | 未検証 | **要記録: 字幕アイテムへのscripting-APIプロパティ書込はResolve 21.0.4.5をハング→クラッシュさせる（3/3再現、読取は安全）**。C経路: キュー選択→キャプションエディタ（キュー毎ナビ・テキスト・「キャプションをカスタマイズ」チェックボックス、ON持続を確認）・スタイル欄（フォント/サイズ/位置）存在まで確認。ただし値変更まで到達せず（サイズ行が画面外・ポップアウト不安定・クリックで選択解除）。なおDeliverレンダリングは字幕を焼き込まない |
 | S10 | 字幕付き納品（Burn-in/embedded/sidecar） | プラットフォーム別字幕納品 | 検証済みA | 未検証 |
 
 ### C. Color・Grade・Scope
@@ -107,12 +107,12 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | C01 | LUT/CDL/DRXを既存clipへ適用 | LUT・film-look・saturation pop適用 | 検証済みI | summary_report.txt CDL_DRX_INTERCHANGE_ROUTE（drx.generate lift→safe_apply_drx→render変化 2073597/2073600画素。**値校正の注意**: drx lift 0.05はGUI lift 0.05の+21.94ではなく原画近傍に着地。vendor CALIBRATION-STATUS/DRX-VALUE-SCALING未校正）＋mcp-fit color-grade-preset-drx accepted |
-| C02 | Grade Copy・Version・Restore | cut間look統一 | C経路未試行 | 未検証 |
+| C02 | Grade Copy・Version・Restore | cut間look統一 | 検証済みA | グレード適用（25万px差分）→別クリップへCopyGrades（29万px差分＝カット間ルック統一）→バージョン保存・復元（identityとgradedを行き来しrender両方向で実証）すべてAPI＋render A/Bで確認。注意: safe_set_cdl/safe_copy_gradeラッパーは一部動作不良（生APIとinline CopyGradesを使用）。バージョンAPIのtypeは文字列でなく整数（0=local） |
 | C03 | Gallery Still・LUT Export | look保存・持越し | 検証済みA | 未検証 |
 | C04 | Primaries/Curvesを画を見ながら調整 | lift等（強調区間の背景モノクロ/黒 — style ①複合演出の映像側） | 検証済みC | summary_report.txt item11_REMEASURED（Color page lift数値field→画素diff 2073597/2073600変化・平均輝度35.48→57.42。matrix午前の0画素は座標miss artifactと確定） |
 | C05 | Primaries/Curves/Node treeをoffline authoring | 決定済みgradeの構造生成 | 検証済みI | C01と同一証拠（generate＋apply実証済み。値スケール校正が残作業） |
 | C06 | Power Window/Qualifier/HDR/Blur/Key | 被写体だけ残し背景モノクロ（style ①）・背景ぼかし（wishlist #4系） | C経路未試行 | 未検証（Advanced DRX codec。calibration未確認） |
-| C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | C経路未試行 | 未検証（CU route・難易度高。style-vocab B③: CUでも自動化困難の可能性 — 「できる」と書かない） |
+| C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | 検証済みC | ColorページTrackerのウィンドウ追跡はrender A/Bで実証（追従ウィンドウがフレーム毎に実レンダリング内で変位: 純追跡差分 100/99px vs ビット一致ゼロ床、sat再飽和クラスタがmid→endで進行）。注意: 素材がほぼ無彩色のため効果は小さめ、Warperグリッドドラッグは未実証、track開始クリックがsilent-failする例あり（playhead進行で要確認） |
 | C08 | Shot/Skin/WB/Reference match | 複数cutの色統一 | 検証済みI | 未検証 |
 | C09 | Scope/Gamut/Legal QC | 品質測定 | 検証済みI | 未検証 |
 
@@ -125,9 +125,9 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | U03 | Fairlight Preset適用 | 定型mix再適用 | 未検証 | 未検証（Resolve 20.2.2+ version-gated — vendor resolve-audio skill） |
 | U04 | Clip/Track Volume・Pan個別調整 | 音量調整（-6dB等） | 検証済みC | summary_report.txt item7_REMEASURED（Inspector volume field→render -6.000000dB exact。keyboard routeはinert確定） |
 | U05 | EQ/Compressor/Automation/FairlightFX | **エコー**（style ①強調セリフの音声側）・声変調 | 未検証 | 未検証（CU route。MCP手段の有無自体未確認 — style-vocab B①） |
-| U06 | AI Audio Assistant | one-click mix | C経路未試行 | 未検証（どのbuildでもscript不可 — vendor issue #128） |
+| U06 | AI Audio Assistant | one-click mix | 未検証 | スクリプト経路なし（vendor issue #128のまま再確認）。GUI: Fairlight上にAIアシスタントの直接ボタンは見つからず、タイムライン>AIツール submenu は存在するが合成入力では展開失敗（3回）。人手UIなら到達可能と推定 |
 | U08 | BGM ducking計画・offline試聴mix | 声に合わせたBGM計画 | 検証済みI | 未検証（v4.3 bgm-track-ducking probe failed: scripting APIにducking面なし） |
-| U09 | BGM ducking実施・微調整・音楽sync | 声に合わせたBGM・音楽同期カット | C経路未試行 | 未検証（CU route。automation/sidechain書込のAPI手段なし） |
+| U09 | BGM ducking実施・微調整・音楽sync | 声に合わせたBGM・音楽同期カット | 不可 | API: ducking/sidechain書込actionなし＋音量キーフレーム不可（AddPoint不在、Volume書込も拒否: 2ラウンド実測）→自動ダッキング不可。人手のGUIオートメーション描画は可能（検証は未実施） |
 | U10 | Audio fileのsplit/trim/convert | SFXタイミング用offline加工 | 検証済みI | 未検証 |
 | U11 | Loudness/True Peak/LRA納品QC | 納品 loudness 測定 | 検証済みI | 未検証 |
 
@@ -138,7 +138,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | R01 | Render設定・Preset・Job準備 | 1080x1920等の設定（縦型は未試行 — 前提条件ブロック参照） | 検証済みA | mcp-fit.json render-configuration（set＋validated echo。GetRenderSettingsは当該buildで不可のためechoが読戻し。1920x1080での実績であり縦型値ではない） |
 | R02 | Render開始・停止・進捗確認 | 書出し実行 | 検証済みA | mcp-fit.json render-job-lifecycle（CompletionPercentage=100＋output存在＋delete） |
 | R03 | Render出力の即時検証 | 生成物のspec検査 | 検証済みA | 未検証（render.verify_output未使用。本日のSSIM/画素diffはad-hoc scriptであり同toolの検証ではない） |
-| R04 | Deliverページ固有設定をGUI操作 | APIにないcheckbox等 | C経路未試行 | 未検証（CU route） |
+| R04 | Deliverページ固有設定をGUI操作 | APIにないcheckbox等 | 未検証 | チェックボックスの所在とAX読取（値・座標）は確認（ネットワーク最適化/チャプター生成/縦型解像度）。ただし合成クリックでは1つもトグルできず（4試行、ボックス領域のピクセル差分0）— 本セッションの自動操作は不調。人手操作は当然可能。なおrender.get_settingsが空dictを返すbuildのため、GUIトグルのAPI読み戻し検証も不可 |
 | R05 | 納品QC・Compliance | 規格照合 | 検証済みI | 未検証（v4.3 advanced-delivery-qcはsurface到達のみ。QC判定自体の検証なし） |
 | R06 | 字幕出力検証 | burn-in/embedded/sidecar確認 | 検証済みA | 未検証 |
 
@@ -147,7 +147,7 @@ A01〜A03/A06/A07、O01〜O04、Q01/Q02/Q04/Q05/Q07/Q08、R07）は縦型・短�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 検証済みA | 未検証 |
-| Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | C経路未試行 | 未検証（v4.3 edit-engine-selects probe failed。planは編集完了ではない） |
+| Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | 未検証 | edit_engine.plan_selects 自体は存在するが解析DBが前提。本機はローカルtranscription backendが未導入で解析パイプラインが起動不可（no_auto_install方針）— backend導入後に再挑戦。v4.3のselects probe失敗と同じ所在 |
 
 ## 縦型（9:16）前提条件ブロック — スタイルではなく出力形式の変更
 
