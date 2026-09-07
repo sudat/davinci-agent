@@ -9,12 +9,12 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 
 2026-09-07 レビュー（suda指示・10エージェント監査+Fable指摘）: 判定修正10件・根拠更新22件・高頻度欠落の新規行30件（N接頭辞・索引に不在。内5件はFable指摘2で追加）を追加、索引省略行からQ01/M08の2件を復帰。
 2026-09-07 vlog/長尺再審（suda指示・8エージェント）: 新規23行（N31〜N53）・索引11行復帰・用途文8行の両対応化。マルチカムは不使用回答で省略維持。
-## 冒頭集計 — 全 141 項目（2026-09-07 QW batch宣言⑰反映後・実測）
+## 冒頭集計 — 全 141 項目（2026-09-07 QW2 batch宣言⑱反映後・実測）
 
 | 状態 | 件数 | 意味 |
 |---|---|---|
-| 未検証 | **76** | 一度も試していない（QW batchで9行が解消）。この地図の要点 |
-| 検証済みA | 34 | API書込＋読み戻しで検証済み（QW batch +8: O01/A01/N46/M02/M04/N48/N53/C10） |
+| 未検証 | **73** | 一度も試していない（QW batchで9行・QW2 batchで3行が解消）。この地図の要点 |
+| 検証済みA | 37 | API書込＋読み戻しで検証済み（QW batch +8: O01/A01/N46/M02/M04/N48/N53/C10、QW2 batch +3: Q01/N23/N45） |
 | 検証済みI | 12 | interchange（.drt/.drx）で検証済み |
 | 検証済みC | 5 | 座標＋Directでlive検証済み |
 | 複合状態 | 10 | 1行に2状態併記——束ね機能の部分検証を分割表示（T12/T13/S09/S07/C03/C08/C06/C07/M07/M05） |
@@ -161,7 +161,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
-| Q01 | Timeline Marker・review annotation | YouTubeチャプター生成（R04のチャプターcheckboxと直結）・レビュー往復・自然言語修正指示の目印 | 未検証 | 索引行Q01は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: timeline_markers.*/timeline_item_markers.*/export_review_report（索引記載、未試行）。Source clip markerはM05。 |
+| Q01 | Timeline Marker・review annotation | YouTubeチャプター生成（R04のチャプターcheckboxと直結）・レビュー往復・自然言語修正指示の目印 | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: timeline_markers full CRUD on disposable croute_450f — add(frame0/Blue/qw2/test/qw2-cd)→get_all完全一致→get_by_custom_data一致→delete_at_frame→get_all空。export_review_report title「Review Annotation Report」3 scopes（timeline/item/pool、annotation 0）。API-only。timeline_item/media_pool_item marker面は未試行（本行のtimeline marker面のみ実証）。 |
 | Q02 | Media解析・文字起こし・shot分析 | トークcontentの核——文字起こしが編集判断・字幕・カット候補の起点 | 未検証 | 索引行Q02復帰（vlog再審最有力）。API面: media_analysis.analyze_*/transcribe_audio（索引記載）。※Q06と同じく本機はtranscription backend未導入の可能性——検証時に確認 |
 | Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 未検証 | detect_scene_cutsを2タイムラインで実行しsuccess=True（journal 19:54:20/19:55:06）だが、検出cut数・markerのreadbackなし＝API受理のみ（verification.status=unverified）。検証済みAの要件未達のため格下げ。 |
 | Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | 未検証 | edit_engine.plan_selects 自体は存在するが解析DBが前提。本機はローカルtranscription backendが未導入で解析パイプラインが起動不可（no_auto_install方針）— backend導入後に再挑戦。v4.3のselects probe失敗と同じ所在 |
@@ -202,7 +202,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N20 | 波形/タイムコード自動同期 | 別録りwavと映像の同期の必須工程 | 未検証 | 同上 |
 | N21 | 音声ノイズリダクション・Dialogue Leveler | 部屋ノイズ・声量ムラ（U02 Voice Isolationは別機能） | 未検証 | 同上 |
 | N22 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤。長尺1本の素材量（複数日・複数カード）で頻度上昇 | 未検証 | 同上 |
-| N23 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 未検証 | 同上 |
+| N23 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: timeline.duplicate(croute_450f→croute_450f_qwdup, id d8b80d9c) list 17→18→delete_timelines（confirm token・preview名一致確認・自作dupのみ削除）→17に復帰。currentをcroute_450fに戻し済み。API-only。 |
 | N24 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 未検証 | 同上 |
 | N25 | In/Out範囲render・VBR/CBR品質（bitrate）・音声format/ch指定・複数timeline一括render | YouTube横型master＋TikTok縦型の両納品で毎回の操作——16:9 masterの品質・コーデック深度を含む（R行に存在せず） | 未検証 | 2026-09-07レビューdelivery監査CRITICAL＋vlog再審で横型master品質を明記。※一時筆誤で行が消滅していたのを復元（N23との重複解消） |
 | N26 | キーフレームのイージング（Ease In/Out/Bezier） | 「スムーズなズーム」等の実務はイージング前提——F02の実証は直線(Linear)のみ | 未検証 | Fable指摘2（2026-09-07）: 索引・地図とも行なし。F02はLinearのみ実証のため未検証部分を本行へ分離 |
@@ -224,7 +224,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N42 | 音声のみ書き出し（timeline→音声ファイル） | ポッドキャスト再利用 | 未検証 | vlog再審: R行は映像形式のみ（低頻度） |
 | N43 | VFR・回転フラグ付き素材の実素材確認（16:9 master文脈） | スマホ4K素材の毎本通る道 | 未検証 | vlog再審: V2は縦型文脈のtrap引用のみ——横型masterで実証ゼロ |
 | N44 | 混在解像度/fpsの1タイムライン扱い | 複数カメラ+スマホ混在のスケーリング | 未検証 | vlog再審: 行なし（N12は色のみ） |
-| N45 | タイムラプス連番画像のimport（StartIndex/EndIndex） | 連写真からの場面作り | 未検証 | vlog再審: M01はclip搬入のみ |
+| N45 | タイムラプス連番画像のimport（StartIndex/EndIndex） | 連写真からの場面作り | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: ffmpeg testsrc 64x64 PNG 30枚（qw_seq_001〜030）→safe_import_sequence dry_run成功→本import成功（qw_seq_[001-030].png, id b49d65fb）。probe: Frames=30/FPS24/Duration 00:00:01:06/Online。disposable poolに残置。API-only。 |
 | N46 | clip尺・タイムコード読取（logging） | 素材確認・selectsの土台 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: probe_clip_propertiesで実値読取（edit-source.mov: 8467f/00:04:42:07/StartTC 19:41:50:04/3840x2160/H.264/FPS30、wav: 00:00:05:08/Wave/48000）。読取専用機能のため読戻し自体が能力の実証（U01先例）。 |
 | N47 | レンズ補正（fisheye・GoPro系） | アクションカム素材 | 未検証 | vlog再審: 行なし（中頻度・使用時のみ） |
 | N48 | .cube LUTファイルの適用 | 市販LUTパック運用の根幹 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: 自作identity .cube（LUT_3D_SIZE 2、private/runtime/sol-safeguards-20260906/qw_identity2.cube）→probe_node_graph(2 nodes)→node1へset_lut→get_lut='MCP/qw_identity2.cube'完全一致（disposable timeline item、API-only）。node2は先行sessionのPower Window grade保持のためnode1を選択。render A/Bはidentityのため省略。 |
