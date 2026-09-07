@@ -63,7 +63,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | M05 | Clip Marker・Flag・Clip Color・Mark In/Out | よい場面を素材側に記すテイク確認・selects範囲指定（Q01の素材側対応） | 検証済みA / 未検証 | journal 2026-09-07 QW batch（宣言⑰）: **Marker・Clip Color・Mark In/Out=検証済みA**（markers.add(frame0/Blue/qw)→get_all完全一致→delete_at_frame、set_clip_color(Orange)→get Orange、set_mark_in_out(0,24)→get audio in=0/out=24→clear。disposable wav clip、API-only）。**Flag=API書込不発と測定**（宣言⑱: add_flagはTrueを返すのにGetFlagsが空のまま——raw API levelでも同一、Orangeは3clipでhard-False。16色paletteにOrange不在も判明。**人間/CUの右クリック経路は未試行**——「API不発」を実現不能と混同しないこと。判定は未検証維持）。 |
 | M06 | 既存ProxyのLink/Unlink | 4K縦型の重い素材を軽く扱う | 検証済みA | journal 20:10:48 検証済みA: link_proxy書込+Proxy属性readback（Proxy=1920x1080・Proxy Media Path設定確認）。 |
 | M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | 検証済みC / 未検証 | **Optimized Media生成=検証済みC**: Media Pool右クリック→「最適化メディアを生成」で6.8GB・8,467キャッシュファイル実生成、進捗ダイアログもAX読取可（journal 03:57:38）。**Proxy生成=未検証**（「同メニュー系」という推定のみ——Fable指摘4で分割併記）。APIはリンク系のみで生成actionなし＝生成はGUI起動 |
-| M08 | Relink・Replace source clip | メディアオフライン時の再接続・素材差し替え（プロジェクト移動・素材整理で必須の復旧操作） | 未検証 | 索引行M08は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: media_pool.safe_relink / media_pool_item.replace_clip / replace_clip_preserve_sub_clip（索引記載、未試行。file identity曖昧なら停止の注意付き）。TimelineのReplace Editとは別。 |
+| M08 | Relink・Replace source clip | メディアオフライン時の再接続・素材差し替え（プロジェクト移動・素材整理で必須の復旧操作） | 検証済みA | journal 2026-09-08T02:10:54 capA batch（suda指示・API-only）: replace_clip(disposable clip, qw4_720p60.mp4)→success・File Path readback完全一致（edit-source.mov→qw4→復帰の往復実証）＋safe_relink dry_run=Trueがplan返答（1clip一致・missing=[]・非変異）。replace_clip_preserve_sub_clipは未試行。TimelineのReplace Editとは別。 |
 | M12 | Media templateを保存・再利用 | offline DRT構築（T02）をrender可能にする前提処理 | 検証済みA | journal 2026-09-07 10:48:28 QW4 batch（宣言㉑）検証済みA: capture_media_template(edit-source.mov)→success（cache 37511352524fd9ef…json・media_ref 461f8e1c・pool_bytes 5689・resolve 21.0.4.5）→file 10,585B・mtime更新・keys 10種確認。前後get_currentとも__fvp_test__sol_croute_20260906完全一致＝内蔵scratch-project往復が正しく復帰。API-only |
 
 ### T. Timeline構築・カット・配置・Retime
@@ -74,17 +74,17 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | T02 | 新規DRT/DRPをoffline authoring | 再構築方式の切断・再配置全般 | 検証済みI | journal 19:47:10 検証済みI: drt.assemble+import実走、authored構成の着地をreadback（fps含む）。 |
 | T03 | Track追加・削除・名前・Lock・Enable | 字幕・テロップ用V2/V3 track確保 | 検証済みA | journal 19:35:59 検証済みA: track 2→3→2追加/削除、名称「sag_telop」設定、lock true・enabled falseを全てreadback。 |
 | T04 | Clip/RangeのCopy・Move・Duplicate | まとめ切り抜き（wishlist #2）の切貼り | 検証済みA | journal 19:46:24 検証済みA（API route: append+delete primitivesによるcopy/move/duplicate配置をreadback）。interchange走行はゼロ——旧I表記は誤り。vendor trap（issue #74）はAPI insert系の別問題。 |
-| T05 | Ripple Insert / Timeline Ripple | 詰め編集・挿入 | 未検証 | ripple_insert API 6ラウンド全失敗、末尾破損landmine実測（tail 360f→288f, journal 19:46:24 未検証）。interchange re-author（T02系）でのripple代替も未走行。旧I表記は誤り。 |
+| T05 | Ripple Insert / Timeline Ripple | 詰め編集・挿入 | 検証済みI | journal 2026-09-08T02:16:04 batch A: interchange authoring route（drt.assemble はMCP経路から到達不可・.drtはbinary zipで手組は過去実測failのためFCPXML使用）。3clip timeline→FCPXML 1.10 export→中clip削除＋ギャップ詰めの手組variant→import success（media 2/2 linked/0 offline）→structure読戻し: 2items完全隣接[172800,172824)+[172824,172848)・2nd item source_start=60（3rd clipのsource維持）。ripple意味論がinterchange往復で成立。N02のripple-deleteも同機構。 | journal 2026-09-08T02:17:39 batch A(drt側・別インスタンス): drt.assemble経路も実走（advanced MCP drt actionはnode経由で到達可）— capA_t05_ripple_30fps.drt 37384B→import success(4/4 linked)→読戻し B.start==A.end==86550 隣接・gap close authored通り。source offset 400→500=決定論的×1.25（T08の600→750と同一FPS_SPACE_CORRECTION）。2経路とも検証済みI。
 | T06 | Overwrite・Lift・Range置換 | 区間差替え | 検証済みA | journal 19:42:05 検証済みA: overwrite/lift実行後のitem配置をreadback。 |
 | T07 | Blade/Razor/Split | ジャンプカット（TikTok系の高頻度技法） | 検証済みI | journal 19:48:09 検証済みI: drt.assembleでsplit構成を実authoring+import、split_record_exact=true / source_halves_distinct=true。※drp.split_clipは未試行。 |
 | T08 | Trim/Slip/Slide/Roll | 間詰め・尺調整 | 検証済みI | journal 19:48:09 検証済みI: drt.assembleでtrim/slip構成を実authoring、rec 100f exact・slip src 600→750の決定論的変換をreadback。 |
-| T09 | Transitionを新規・再構築Timelineへauthoring | wipe/dip/glitch等（cross-dissolve以外全部） | 未検証 | 未検証（vendorはv2.111+/v2.138+でrender検証を主張。vendor api-coverageは参考記録であり我々の検証ではない） |
-| T10 | Transitionを開いているTimelineで追加・変更 | 同上（既存Timelineへの追加） | 未検証 | 未検証（API経路の到達不能はv4.3 transition-path probeで実測 failed。CU経路は未試行。Phase-0指示では proven とされるが対応evidence path未確認 — Phase-2で証拠確定要） |
-| T11 | 既存Transitionの検出・QC・削除 | 既存遷移の確認・除去 | 未検証 | 未検証 |
+| T09 | Transitionを新規・再構築Timelineへauthoring | wipe/dip/glitch等（cross-dissolve以外全部） | 検証済みI（cross-dissolveのみ） | journal 2026-09-08T02:17:37 batch A: FCPXML手組 `<transition name="Cross Dissolve" duration=12/24s>`→import success→structure読戻しで遷移実在確認（クロスディゾルブ item 12fがカット点に出現、clip A source 0-30→0-45に伸長=遷移分消費）。**タイプ忠実性の限界を測定**: name="Dip to Color Dissolve"もimportされるがクロスディゾルブに強制変換読戻し——wipe/dip/glitch等の非cross-dissolveタイプは本経路では型が保持されず未検証のまま。 |
+| T10 | Transitionを開いているTimelineで追加・変更 | 同上（既存Timelineへの追加） | 未検証 | journal 2026-09-08T02:17:37 batch A再確認: timeline toolのfull action列挙（Unknown-actionエラー応答、2.210.0）にtransition追加/変更opは存在しない（insert_generator/title/ofx/fusion等のみ）。v4.3 transition-path probe failedの前回実測と整合。CU経路は未試行（本batchはAPI-only）。 |
+| T11 | 既存Transitionの検出・QC・削除 | 既存遷移の確認・除去 | 検証済みA | journal 2026-09-08T02:17:37 batch A: 検出=probe_timeline_structure/get_itemsが遷移をitemとして露出（クロスディゾルブ・12f・media_pool_item null・kind=generator）。削除=timeline.delete_clips([遷移item id], ripple=false) success→get_items読戻しで2clip無傷・遷移消失（capA_t09b_dip上）。QC（属性読みの詳細）は未検証。 |
 | T12 | 一定速度Retime | スロー・倍速（速度演出の基本） | 検証済みC / 検証済みI | C: `private/runtime/sol-input-mech-20260906/summary_report.txt`（item6_run5b_VERIFIED_WORKFLOW_SUCCESS: 25%をverified-button workflow＋render cadence SSIMで確認）。I: 同（item6_run1b: .drt経由50%をrender cadenceで確認。ただし変更ボタン押下の帰属補正 CORRECTION_item6_run1b_attribution あり） |
 | T13 | Reverse | 逆再生演出 | 危険(.drt)/未検証 | .drt経路: `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。再現確認は費用対効果から未実施）。GUI経路: 2026-09-07 両ラウンドで到達点更新も未達成。第1ラウンド（15steps）: speed dialogのreverse checkboxをverified pressで押下したがAX読取はval=0のまま（journal 04:14:10）。第2ラウンド（4th agent）: Inspector/速度ダイアログの逆再生checkboxをAXPressで**val=1まで到達・確認**（初）→「変更」押下でダイアログは閉じるがrenderは一切不変（5記録点を全ソースフレーム照合してマッピング導出: src≈1.25×kの125%順方向のまま、RetimeProcess=0のまま）＝checked状態はclipの再生方向にコミットされず未検証維持。逆再生の読み戻しはduration/source extentが判定不能（既存125%clipと混同注意）で、render順序照合が唯一の確定手段（journal 05:05-05:35） |
-| T14 | 可変Speed Ramp | スピードランプ演出 | 未検証 | 未検証（freezeは同Sm2TimeMap系でsuspended。crash-tolerant宣言なしに再開しないこと — summary_report.txt RECORD_reverse_crash_verbatim） |
-| T15 | 既存clipのRetime対話編集 | ramp・easingの手直し | 未検証 | 未検証（CU route。T12の25%はダイアログ値の確定でありCurve/easing編集ではない） |
+| T14 | 可変Speed Ramp | スピードランプ演出 | 未検証 | journal 2026-09-08 batch A（2つの具体的否定）: (1) API側に速度・ramp書込経路なし——set_retimeはprocess/motion_estimationのみ、get_property(Speed)=null。(2) interchange側: FCPXML `<time-map>` 50%速度clip（timeline 1s→source 0..2s）をimport→エラーなし但しstructure読戻しでsource 0-30のまま= timeMapは無視されretime不適用。API-only面からは到達不能。freeze suspended note（summary_report.txt RECORD_reverse_crash_verbatim）は変わらず。 |
+| T15 | 既存clipのRetime対話編集 | ramp・easingの手直し | 検証済みA（process・品質設定のみ） | journal 2026-09-08 batch A: set_retime(process/motion_estimation) 書込→get_retime読戻し一致（N11と同証拠）。但しramp・curve・easingの手直しはset_retimeの守備外（速度値書込経路なし、get_property(Speed)=null）——その部分は未検証のまま。CU routeは本batch範囲外。 |
 | T16 | Stabilize / Smart Reframe | 手ブレ・縦型reframe | 検証済みA | journal 2026-09-07 10:24:42 QW3 batch（宣言⑲）検証済みA: stabilize(item success, archive v8)前後で同frame 86500を単.frame mp4 render→ffmpeg 480p gray比較: mean_abs_diff 2.076・max 144・3.58%画素>10lev（before 24047B/after 23660B）。※timeline_frame captureは本機localeで「完了」vs Complete判定不整合のためRENDER_FAILED誤爆（Plan Bの明示render jobで実証）。Smart Reframe自体は未検証 |
 | T17 | Compound / Fusion Clip作成 | 複合演出の1object化 | 検証済みA | journal 19:49:48 検証済みA: Fusion Clip 1作成をitem一覧+spanでreadback（Compound Clipも同様に名称+span readback）。 |
 
@@ -100,7 +100,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | F06 | Edit ResolveFX/OpenFXをclipへ追加 | glitch等の質感エフェクト付与 | 未検証 | APIにfx追加actionなし（確認済み）。C経路: エフェクトライブラリを開いてResolveFXドラッグを3方式で試行したが合成イベントではドラッグ&ドロップが登録されず（render A/Bで効果なしを確認）。手動操作は可能と推奨されない理由なし — 人手またはUI自動化の別手段で再挑戦余地あり |
 | F07 | Edit FXのInspector parameter調整 | 同上の調整 | 未検証 | F06に依存（追加できたResolveFXが作業タイムラインに存在せず未検証） |
 | F08 | OFX Generator挿入 | 独立Generator clip | 不可 | 本機にOFX generatorプラグイン未インストール（/Library/OFX・~/Library/OFXとも不在を実測）。API挿入は失敗、ドラッグ対象も存在しない。独立Generatorはnative generator（insert_generator成功済み）で代替可能 |
-| F09 | Color node内OFXをoffline編集 | Color内エフェクトの構造編集 | 未検証 | 未検証 |
+| F09 | Color node内OFXをoffline編集 | Color内エフェクトの構造編集 | 未検証 | journal 2026-09-08 batch A: offline drx authoring経路がMCP側に到達不可（dctl=FCTL用・group_settings=Fusion .setting用でOFX .drx対象外）——honest stay。 |
 | F10 | Magic Mask | 背景差替え（wishlist #4）・被写体分離（style ①モノクロ演出） | C経路未試行 | API実測: create_magic_mask→needs_hitl=True（subject clickはAPIから生成不能、journal 2step）。Color pageで人間が被写体をクリックする経路は未試行——U06/U09と同型（人間操作前提なら到達可能性が残る）。 |
 
 ### S. Title・Text+・Native Subtitle
@@ -139,7 +139,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 |---|---|---|---|---|
 | U01 | Audio構造・mapping・level調査 | mix前の測定 | 検証済みA | 読取専用機能——audio_mapping_report等で実データ読戻し検証（journal 19:54:23 mapping_report/probe_item/probe_track）。write操作が存在しない機能群のため「write+readback」定義は適用外（読み取り検証済みとして明記）。 |
 | U02 | Voice Isolation | 声の分離 | 検証済みA | matrix summary.md #10（{false,0}→{true,70}読戻し）＋mcp-fit voice-isolation accepted |
-| U03 | Fairlight Preset適用 | 定型mix再適用 | 未検証 | journal 241/252: apply_fairlight_preset 2回失敗実測（preset catalog空が原因と推定）。suda review裁定（503）: 「機能的不能ではなく前提データ不在——人間が1回preset保存すればAPI適用可能」。vendor version-gate引用は副次情報。 |
+| U03 | Fairlight Preset適用 | 定型mix再適用 | 検証済みA（適用応答）・効果readback面なし | journal 2026-09-08T02:23:25 capA再試行: catalogに'dialogue-chain'が存在（前提データ不在が解消）→apply_fairlight_preset success=True（141ms）。suda裁定『preset保存されればAPI適用可』の条件成立。適用効果の独立readback面はAPIに無し（効果確認は未検証のまま）。 |
 | U04 | Clip/Track Volume・Pan個別調整 | 音量調整（-6dB等） | 検証済みC | summary_report.txt item7_REMEASURED（Inspector volume field→render -6.000000dB exact。keyboard routeはinert確定） |
 | U05 | EQ/Compressor/Automation/FairlightFX | **エコー**（style ①強調セリフの音声側）・声変調 | 未検証 | 未検証（CU route。MCP手段の有無自体未確認 — style-vocab B①）。※束ね行: EQ/Compressor/Automation/FairlightFX——**エコー（style ①強調セリフの音声側）が核心**。部分検証時は検証部分を根拠欄に明記し、行全体を検証済みにしないこと（Fable指摘4） |
 | U06 | AI Audio Assistant | one-click mix | 未検証 | スクリプト経路なし（vendor issue #128のまま再確認）。GUI: Fairlight上にAIアシスタントの直接ボタンは見つからず、タイムライン>AIツール submenu は存在するが合成入力では展開失敗（3回）。人手UIなら到達可能と推定 |
@@ -165,9 +165,9 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 |---|---|---|---|---|
 | Q01 | Timeline Marker・review annotation | YouTubeチャプター生成（R04のチャプターcheckboxと直結）・レビュー往復・自然言語修正指示の目印 | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: timeline_markers full CRUD on disposable croute_450f — add(frame0/Blue/qw2/test/qw2-cd)→get_all完全一致→get_by_custom_data一致→delete_at_frame→get_all空。export_review_report title「Review Annotation Report」3 scopes（timeline/item/pool、annotation 0）。API-only。timeline_item/media_pool_item marker面は未試行（本行のtimeline marker面のみ実証）。 |
 | Q02 | Media解析・文字起こし・shot分析 | トークcontentの核——文字起こしが編集判断・字幕・カット候補の起点 | 未検証 | QW3 batch（宣言⑲）10:22:19 環境記録: media_analysis.capabilities()で本機はtranscription backend全滅（whisper_cli/whisper_cpp/mlx_whisper/http_transcriptionいずれもavailable=false・providers=[]）——Q06と同じブロッカーを本機で確定。vision(host_chat_paths)とffmpeg/ffprobeはavailable。analyze実行は未実施のため未検証のまま |
-| Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 未検証 | QW3 batch（宣言⑲）10:21:29 読戻し完結: detect_scene_cuts(background) job d4139ae1 done success=Trueだが、markers get_all前後とも0件でmarker増分ゼロ（単一素材timeline croute_450fでは検出結果がmarkerとして現れない実測）。API受理以上の効果なし＝未検証維持。マルチカット素材での再検証は未済 |
-| Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | 未検証 | edit_engine.plan_selects 自体は存在するが解析DBが前提。本機はローカルtranscription backendが未導入で解析パイプラインが起動不可（no_auto_install方針）— backend導入後に再挑戦。v4.3のselects probe失敗と同じ所在 |
-| Q08 | Grade/mix反復案 | カット間ルック揃え・ラウドネス目標の測定→候補→再測定loop | 未検証 | QW4 batch（宣言㉑）10:49:16: media_analysis grade_loop（clip ad24d461）を最小形で呼出→server側「No module named 'numpy'」verbatimエラーでloop plan不返却。環境記録のみ＝未検証維持（索引記載のgrade_loop/mix_planは自動適用を意味しない） |
+| Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 未検証 | QW3 batch（宣言⑲）10:21:29 読戻し完結: detect_scene_cuts(background) job d4139ae1 done success=Trueだが、markers get_all前後とも0件でmarker増分ゼロ（単一素材timeline croute_450fでは検出結果がmarkerとして現れない実測）。API受理以上の効果なし＝未検証維持。マルチカット素材での再検証は未済。※2026-09-08T02:28:32 capA（2.210.0）: multi-clip timeline（croute_450f 6clip）で再実測——detect 3612ms実行（前回instant no-opから変化・version v11 archivingあり）但しmarkers増分0、成果なしは同一＝未検証維持 |
+| Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | 検証済みA（silence-ripple plan）/ 未検証（selects）/ execute不達 | journal 2026-09-08 batch A: **plan_silence_ripple 実出力成功**（plan 74a553693954: 10 lifts・推定8.0s除去・item毎に較正されたthreshold(-31.97/-34.99/-31.23dB)・36 keep ranges・未較正itemは理由付きskip・qw4は無音声でskip・handle reportも正直に未検証と明示）——波形解析はtranscription backend不要で動作。**plan_selects は解析DB空で不達**（"No analyzed clips in the DB"）。**execute_silence_ripple は組立失敗**（"missing timeline item at index 35"=音声を持たないqw4 video rangeへの音声ミラー不可、部分的variantを残してエラー→variant削除・元timeline無傷）。 |
+| Q08 | Grade/mix反復案 | カット間ルック揃え・ラウドネス目標の測定→候補→再測定loop | 未検証 | QW4 batch（宣言㉑）10:49:16: media_analysis grade_loop（clip ad24d461）を最小形で呼出→server側「No module named 'numpy'」verbatimエラーでloop plan不返却。環境記録のみ＝未検証維持（索引記載のgrade_loop/mix_planは自動適用を意味しない）。**2026-09-08 batch A 再検（2.210.0）**: disposable clip 81a6d3b7で同一verbatim エラー「No module named 'numpy'」——ブロッカー不変。 |
 
 
 ### O. 実行管理（guide参照）
@@ -192,8 +192,8 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N08 | グリーンスクリーンキーイング（Delta/Ultra/3D/Chroma） | 背景差替え（wishlist #4）——F10不可の唯一の現実的代替経路 | 未検証 | 2026-09-07レビュー: color監査でCRITICAL判定 |
 | N09 | 映像ノイズリダクション（temporal/spatial） | 暗所スマホ素材の必須級 | 未検証 | 同上 |
 | N10 | 顔補正/Face Refinement・顔トラッキング | 顔出しクリエイターの定番beauty | 未検証 | 同上 |
-| N11 | Retime品質設定（Optical Flow/Speed Warp） | スローモーション品質（T12/T15は速度値のみで品質モード未扱い）。旅行・アクション素材のスローでも同様 | 未検証 | 同上 |
-| N12 | カラーマネジメント（RCM/ACES） | 素材混在時の色一貫性の土台 | 未検証 | 同上 |
+| N11 | Retime品質設定（Optical Flow/Speed Warp） | スローモーション品質（T12/T15は速度値のみで品質モード未扱い）。旅行・アクション素材のスローでも同様 | 検証済みA | journal 2026-09-08T02:18 batch A: set_retime(process='optical_flow', motion_estimation=2)→get_retime {process:3, motion_estimation:2} 完全一致、2回目me=5→読戻し5。speed_warp文字列は「Invalid process. Use: project, nearest, frame_blend, optical_flow or integer 0-3」で拒否（Speed Warpは本API面に無し）。disposable clip、API-only。 |
+| N12 | カラーマネジメント（RCM/ACES） | 素材混在時の色一貫性の土台 | 検証済みA | journal 2026-09-08T02:21:18 capA（2.210.0再検）: get colorScienceMode=davinciYRGB→set('davinciYRGBColorManaged') success→読戻し一致→revert success。旧buildでの書込拒否（N49の10:49:16実測）は本buildで解消。disposable project、API-only。 |
 | N13 | Text+深度スタイリング（縁取り/グラデ/カーニング/行間） | 太字字幕の生命線——S01は本文+Size+色のみ。長尺テロップ2階層の縁取り/可読性に同型＋ふりがな（ルビ）は未踏査 | 未検証 | 2026-09-07レビュー: titles監査でCRITICAL判定 |
 | N14 | 絵文字/ステッカー/グラフィック素材 | TikTok字幕の頻出装飾（TikTok先行——vlogでは地点ピン/矢印等の軽用に留まる） | 未検証 | 同上 |
 | N15 | テキスト背景プレート（角丸ボックス・色帯） | 読みやすさの要 | 未検証 | 同上 |
@@ -201,17 +201,17 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N17 | Fusionタイトルテンプレート適用 | 既成アニメ付きタイトル（F03/F04は素node構築のみ） | 未検証 | 同上 |
 | N18 | 音声クロスフェード/Jカット/Lカット | 声コンテンツの継ぎ目処理の基本（T09/T10は映像のみ） | 未検証 | 2026-09-07レビュー: audio監査でCRITICAL判定 |
 | N19 | クリップ端フェードハンドル | BGM/SFX出入りフェード | 未検証 | 同上 |
-| N20 | 波形/タイムコード自動同期 | 別録りwavと映像の同期の必須工程 | 未検証 | 同上 |
+| N20 | 波形/タイムコード自動同期 | 別録りwavと映像の同期の必須工程 | 検証済みA（リンク生成）/ 要注意（別ペアではno-op疑い） | 2系統の実測が併存: (1) journal 2026-09-08 batch A: auto_sync_audio([capA_src.mp4(映像のみ), capA_tone.wav(ffmpeg生成2s)])→success＋読戻し「Synced Audio」=capA_tone.wav・pool typeがビデオ→ビデオ+オーディオに反転=同期リンク実生成のreadback。(2) 同日02:27:02別ペア実測: auto_sync_audio(edit-source+speech wav)→success=True但し7ms・poolに新規sync clip出現なし=no-op疑い。link property書込は実在するが「新規sync clip生成」は来ない可能性——整列精度は未計測。運用ではSynced Audio property読戻しで必ず確認すること。 |
 | N21 | 音声ノイズリダクション・Dialogue Leveler | 部屋ノイズ・声量ムラ（U02 Voice Isolationは別機能） | 未検証 | 同上 |
-| N22 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤。長尺1本の素材量（複数日・複数カード）で頻度上昇 | 未検証 | 同上 |
+| N22 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤。長尺1本の素材量（複数日・複数カード）で頻度上昇 | 検証済みA（bin整理・検索）/ flagは既実測のまま | journal 2026-09-08T02:27:43 capA: organize_clips dry_run→move(moved=1)→get_clips(EP_test)読戻し一致→Master復帰。検索: timeline.clip_where(name_contains)match1/1＋folder.get_clips列挙。clip flagはM05のAPI不発実測を引き継ぎ（再検スキップ）。 |
 | N23 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: timeline.duplicate(croute_450f→croute_450f_qwdup, id d8b80d9c) list 17→18→delete_timelines（confirm token・preview名一致確認・自作dupのみ削除）→17に復帰。currentをcroute_450fに戻し済み。API-only。 |
-| N24 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 未検証 | 同上 |
+| N24 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 検証済みI（FCPXML往復・2インスタンス別素材で再現） | journal 2026-09-08 batch A（2実行）: (1) export_timeline_checked(capA_t05b→FCPXML 1.10, 2605B)→import→検証（02:1x台）。(2) 02:31:10 croute_450f対象: export 11666B→import success(media 12/12 linked)→構造比較 video 9/9・audio 3/3 span+name完全一致。注: compare_timelinesはleft明示指定が効かず（name解決で自己比較になる制約）＝直接span突き合わせで実施。 |
 | N25 | In/Out範囲render・VBR/CBR品質（bitrate）・音声format/ch指定・複数timeline一括render | YouTube横型master＋TikTok縦型の両納品で毎回の操作——16:9 masterの品質・コーデック深度を含む（R行に存在せず） | 検証済みA / 未検証 | journal 2026-09-07 10:47:28 QW4 batch（宣言㉑）複合: **検証済みA面**＝prepare_render_job最小形（marks 86401-86473＝72f、target qw4/）でjob_id 1720a71c生成settings_success=true→probe_render_settingsのjob listでJob7読戻し（croute_450f/1920x1080/24fps/86401-86473/qw4_n25c.wav、QW3 N42残置のAudio Only preset継承を確認＝inherited-stateのlive証拠）→delete_job掃除済み。**未検証面**＝FormatWidth/FormatHeight/EncodingProfile=High束はvalidate_render_settings静的validでもlive書込でsuccess=FALSE settings_success=FALSE（job_idなし、相対/絶対dir・timeline内marks両形で再現）。safe_set_render_settings(EncodingProfile=High)もdiff.coerced_or_missing{requested:High,applied:null}で拒否。render実行自体・複数timeline一括・音声ch指定は未試行 |
-| N26 | キーフレームのイージング（Ease In/Out/Bezier） | 「スムーズなズーム」等の実務はイージング前提——F02の実証は直線(Linear)のみ | 未検証 | QW3 batch（宣言⑲）10:22:00: timeline_item get_keyframes('ZoomX')/add_keyframeがサーバ側で「'NoneType' object is not callable」エラー（同一itemのget_transformは成功＝keyframe経路のみ不達）。書込自体が不可のため未検証維持。set_keyframe_interpolation到達前の段で停止 |
+| N26 | キーフレームのイージング（Ease In/Out/Bezier） | 「スムーズなズーム」等の実務はイージング前提——F02の実証は直線(Linear)のみ | 未検証 | QW3 batch（宣言⑲）10:22:00: timeline_item get_keyframes('ZoomX')/add_keyframeがサーバ側で「'NoneType' object is not callable」エラー（同一itemのget_transformは成功＝keyframe経路のみ不達）。書込自体が不可のため未検証維持。set_keyframe_interpolation到達前の段で停止。※2026-09-08T02:22:46 capA（2.210.0再検）: 同一エラー再現（add_keyframe/get_keyframes両方'NoneType' object is not callable）——v2.210.0でも変化なし |
 | N27 | .drfxテンプレートパックの導入・使用 | TikTok系エフェクト多用の実態は購入テンプレ運用が大半——導入と適用の両面。vlogもタイトル/LUTテンプレ運用は同型 | 未検証 | Fable指摘2: 索引・地図とも行なし（N17は内蔵テンプレ適用で別物） |
 | N28 | サムネイル用静止画書き出し | YouTube運用で毎本必要 | 検証済みA | journal 2026-09-07 10:48:12 QW4 batch（宣言㉑）検証済みA: croute_450fでset_current_timecode 01:00:04:04（abs f86500）→open_page color（API）→export_frame_as_still(qw4_still.png) success→open_page edit復帰。file(1)＝PNG 1920x1080 8-bit RGB 6,231,977B・stdlib IHDR読取1920x1080一致（本機にPIL不在のためfile+IHDRで実証）。Fable指摘2の行なし解消・C03（ルック保存）とは別物 |
 | N29 | 16:9→9:16背景ぼかしパディング | 縦型転換の定番レシピ | 未検証 | Fable指摘2: V節は解像度設定のみでこのレイアウト操作の行なし |
-| N30 | BGM/SEを指定トラック・指定位置へ配置 | 音声素材のアセンブリ配置（T01は映像・写真の構築） | 未検証 | Fable指摘2: 音声版の行なし |
+| N30 | BGM/SEを指定トラック・指定位置へ配置 | 音声素材のアセンブリ配置（T01は映像・写真の構築） | 検証済みA | journal 2026-09-08T02:26:25 capA: ffmpeg生成tone(2s)→safe_import→create_timeline_from_clips(positioned: audio track1, record_frame指定)→get_items読戻し [86700,86760) 完全一致。注: v2.210.0でtimeline.append_to_timelineはaction列挙から不在（配置はripple_insert/positioned作成経路）。 |
 | N31 | 地点・店舗情報カードの合成（地名＋地図/映像＋テキストの複合構成） | style ③地点表示の本体・グルメカード | 未検証 | vlog再審2026-09-07: 構成workflow行がゼロ（F05/C07/S01/M01は部品のみ） |
 | N32 | Text+テロップの発話同期（喋りに合わせた出し引き） | style ①静的テロップ2階層の最頻出操作 | 未検証 | vlog再審: S03/S07は字幕トラック側のみ——Text+側の工程行なし |
 | N33 | テロップ読了速度に基づく表示duration規約 | 長尺で文字量→最低表示秒の計算が毎本 | 未検証 | vlog再審: 行も規約もなし（編集判断層を含む） |
@@ -219,9 +219,9 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N35 | エンドカード・エンドスクリーン安全域（末尾UI避け・空き確保） | YouTube毎本 | 未検証 | vlog再審: N07は縦型テロップ用で別物 |
 | N36 | 室内反響除去（de-reverb） | 部屋録り声のクリーン化 | 未検証 | vlog再審: U05「エコー」は演出として足す側で逆方向——行なし |
 | N37 | 環境音・ルームトーン敷き | カット継ぎの聴感自然化 | 未検証 | vlog再審: U08/U09はBGM限定で行なし |
-| N38 | ピッチ保持の速度変更（声） | 早回し・スロー時に声の高さを保つ | 未検証 | vlog再審: T12〜T15/N11は映像側のみ |
+| N38 | ピッチ保持の速度変更（声） | 早回し・スロー時に声の高さを保つ | 未検証 | vlog再審: T12〜T15/N11は映像側のみ。2026-09-08T02:19:35 capA: get_property('RetimingProcess')→null等pitch保持のAPI面不存在を再実測（set/get_retimeにもpitch系フィールド無し。CU/dialog経路は未試行） |
 | N39 | 音声スクラブ・波形編集 | 語頭正確カット | 未検証 | vlog再審: 行なし（U10はファイル加工） |
-| N40 | チャンネル構成の書込（mono→stereo等） | カメラ音声+外部録音の混在処理 | 未検証 | QW4 batch（宣言㉑）10:49:16: probe_audio_item（croute_450f audio A1 item0）でmapping読取＝embedded 2ch・track1 ch[1,2] stereo unmuted・Volume/Pan null・voice_isolation off/0。safe_set_audio_properties(Pan=0)はdry ok→本実行success=FALSE（write=false/readback=null/restore=false、無変異）。書込経路不達のため未検証維持 |
+| N40 | チャンネル構成の書込（mono→stereo等） | カメラ音声+外部録音の混在処理 | 未検証 | QW4 batch（宣言㉑）10:49:16: probe_audio_item（croute_450f audio A1 item0）でmapping読取＝embedded 2ch・track1 ch[1,2] stereo unmuted・Volume/Pan null・voice_isolation off/0。safe_set_audio_properties(Pan=0)はdry ok→本実行success=FALSE（write=false/readback=null/restore=false、無変異）。書込経路不達のため未検証維持。※2026-09-08T02:23:15 capA（2.210.0再検）: 同一結果再現（Pan/Volume write=false x2・SetChannelMapping系method不在・mapping読取は可）。変化なし |
 | N41 | 音楽ビート検出・ビート刻みカット | モンタージュ・切り替えの音楽合わせ | 未検証 | vlog再審: U09に「音楽sync」の語のみ・beat検出行なし |
 | N42 | 音声のみ書き出し（timeline→音声ファイル） | ポッドキャスト再利用 | 検証済みA | journal 2026-09-07 10:30:28 QW3 batch（宣言⑲）検証済みA: prepare_render_job(from_preset="Audio Only", marks 86401-86448)→render→qw3_audio2.wav 577,588B＝ffprobe pcm_s24le/48000Hz/2ch/2.000s。注意: format wavはset_format_and_codecでは拒否（available_codecs={}）・prepare_render_jobでもpresetpin無しだとmp4/H264を黙って継承する——**from_preset="Audio Only"必須**の実測 |
 | N43 | VFR・回転フラグ付き素材の実素材確認（16:9 master文脈） | スマホ4K素材の毎本通る道 | 未検証 | vlog再審: V2は縦型文脈のtrap引用のみ——横型masterで実証ゼロ |
@@ -230,10 +230,10 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N46 | clip尺・タイムコード読取（logging） | 素材確認・selectsの土台 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: probe_clip_propertiesで実値読取（edit-source.mov: 8467f/00:04:42:07/StartTC 19:41:50:04/3840x2160/H.264/FPS30、wav: 00:00:05:08/Wave/48000）。読取専用機能のため読戻し自体が能力の実証（U01先例）。 |
 | N47 | レンズ補正（fisheye・GoPro系） | アクションカム素材 | 未検証 | vlog再審: 行なし（中頻度・使用時のみ） |
 | N48 | .cube LUTファイルの適用 | 市販LUTパック運用の根幹 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: 自作identity .cube（LUT_3D_SIZE 2、private/runtime/sol-safeguards-20260906/qw_identity2.cube）→probe_node_graph(2 nodes)→node1へset_lut→get_lut='MCP/qw_identity2.cube'完全一致（disposable timeline item、API-only）。node2は先行sessionのPower Window grade保持のためnode1を選択。render A/Bはidentityのため省略。 |
-| N49 | log素材のnormalize（Log→709変換） | log撮りカメラ素材の下処理 | 未検証 | QW4 batch（宣言㉑）10:49:16: get_setting colorScienceMode＝davinciYRGB→set_setting(rcm)はbare success=FALSE（既知API制限級）→再読davinciYRGBのまま無変異・revert不要。書込拒否のため未検証維持 |
+| N49 | log素材のnormalize（Log→709変換） | log撮りカメラ素材の下処理 | 未検証 | QW4 batch（宣言㉑）10:49:16: get_setting colorScienceMode＝davinciYRGB→set_setting(rcm)はbare success=FALSE（既知API制限級）→再読davinciYRGBのまま無変異・revert不要。書込拒否のため未検証維持。※2026-09-08T02:21 capA（2.210.0）: colorScienceMode書込は本buildでsuccess+読戻し一致を実測（N12参照）——上記拒否実測は旧build時点のもの |
 | N50 | 昼→夜の見た目統一 | 撮影時間帯が混ざるロケ素材 | 未検証 | vlog再審: C08は同条件マッチで時間帯変化の行なし |
-| N51 | フィルムグレイン付与 | フィルム風ルック仕上げ | 未検証 | vlog再審: N09は逆のノイズ除去——付与側の行なし |
-| N52 | LUT強度ミックス（Key Output Gain等） | LUT当ての強さ調整 | 未検証 | vlog再審: 適用on/offのみで強度行なし |
+| N51 | フィルムグレイン付与 | フィルム風ルック仕上げ | 未検証 | vlog再審: N09は逆のノイズ除去——付与側の行なし。journal 2026-09-08 batch A: ResolveFX/OFX追加API無し（F06 drag-fail依存）を明記。Fusion FilmGrain経路は技術的に存在するが21.0.4 render inert実測のため証明不可=スキップ。drt/drx authoringは到達不可。 |
+| N52 | LUT強度ミックス（Key Output Gain等） | LUT当ての強さ調整 | 未検証 | journal 2026-09-08 batch A: probe_node_graphのmethod全列挙（Get/SetLUT・CDL・DRX適用等11種）にKey Output Gain/LUT-mix系が皆無——強度ミックスのAPI書込経路なし（CDLのslope/gainは別物）。正直な不在として未検証維持。 |
 | N53 | マスター保存形式の選定（ProRes vs H.264等） | 画質・容量・再編集用途の分岐 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: get_formats(22形式)→get_codecs実読取。回答: ProRes一式（422/HQ/LT/Proxy/4444/XQ）はQuickTime(mov)のみ、mp4はH.264/H.265（＋APV YUV422 10-bit）。読取専用機能のため読戻し自体が能力の実証（U01先例）。※sol独立再確認2026-09-07: get_codecs実測で同一結果（mp4のAPV込み）。 |
 ## 縦型（9:16）前提条件ブロック — スタイルではなく出力形式の変更
 
