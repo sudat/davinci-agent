@@ -9,15 +9,15 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 
 2026-09-07 レビュー（suda指示・10エージェント監査+Fable指摘）: 判定修正10件・根拠更新22件・高頻度欠落の新規行30件（N接頭辞・索引に不在。内5件はFable指摘2で追加）を追加、索引省略行からQ01/M08の2件を復帰。
 2026-09-07 vlog/長尺再審（suda指示・8エージェント）: 新規23行（N31〜N53）・索引11行復帰・用途文8行の両対応化。マルチカムは不使用回答で省略維持。
-## 冒頭集計 — 全 141 項目（2026-09-07 レビュー反映後・実測）
+## 冒頭集計 — 全 141 項目（2026-09-07 QW batch宣言⑰反映後・実測）
 
 | 状態 | 件数 | 意味 |
 |---|---|---|
-| 未検証 | **85** | 一度も試していない（N行48件・復帰11行を含む）。この地図の要点 |
-| 検証済みA | 26 | API書込＋読み戻しで検証済み |
+| 未検証 | **76** | 一度も試していない（QW batchで9行が解消）。この地図の要点 |
+| 検証済みA | 34 | API書込＋読み戻しで検証済み（QW batch +8: O01/A01/N46/M02/M04/N48/N53/C10） |
 | 検証済みI | 12 | interchange（.drt/.drx）で検証済み |
 | 検証済みC | 5 | 座標＋Directでlive検証済み |
-| 複合状態 | 9 | 1行に2状態併記——束ね機能の部分検証を分割表示（T12/T13/S09/S07/C03/C08/C06/C07/M07） |
+| 複合状態 | 10 | 1行に2状態併記——束ね機能の部分検証を分割表示（T12/T13/S09/S07/C03/C08/C06/C07/M07/M05） |
 | C経路未試行 | 2 | API/interchange試行済み・GUI操作は未試行 |
 | 不可 | 1 | 到達不能と測定 |
 | 未決定 | 1 | 判断未了 |
@@ -50,15 +50,15 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
-| A01 | 接続・起動。「Resolveへ接続」「Editページを開いて」 | 全作業の入口（毎session） | 未検証 | 索引行A01復帰（vlog再審2026-09-07）。実務で毎session使用だが形式検証（write+readback）としては未整理。API面: resolve_control.launch/runtime_mode/get_page/open_page（索引記載） |
+| A01 | 接続・起動。「Resolveへ接続」「Editページを開いて」 | 全作業の入口（毎session） | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: get_version（Studio 21.0.4.5）→ deliver→edit→color→edit のopen_page往復をget_pageで全段readback一致。API-only（click/CUなし）。旧記述（形式検証未整理）は本実証で解消。 |
 | A02 | Project一覧・作成・Load・Save・Close | エピソード毎projectの作成・保存——制作の背骨 | 未検証 | 索引行A02復帰。API面: project_manager.list/safe_project_create/load/save/close（索引記載）。未保存dialogはCU/ユーザー対応・削除は明示依頼の注意付き |
 | A03 | Project Export・Import・Archive・Restore | 納品後のArchive保存・危険操作前バックアップ（一人作業の保険） | 未検証 | 索引行A03復帰。API面: safe_project_export/import/archive/restore（索引記載） |
 | A04 | Project設定の読替・変更 | 縦型9:16（解像度・fps）の設定変更。前提条件ブロック参照 | 検証済みA | journal 20:05:11 検証済みA: 解像度 1920x1080→1080x1920 書換+readback実証（write+readback）。旧記述（v4.3 probeはfps=30のみ）は陳腐化。 |
 | A05 | Timeline設定の読替・変更 | 縦型Timelineの tall 解像度設定。前提条件ブロック参照 | 検証済みA | project_settings.set_setting（timelineResolutionWidth/Height→1080x1920、readback OK）→新規タイムラインが縦型を継承→レンダリング出力も1080x1920を確認。**既存タイムラインの解像度は timeline.set_setting で変更不可（success False 実測）— 作成前のプロジェクト設定かGUIで変更** |
 | M01 | 素材Import | 縦型素材・写真素材（wishlist #3挿入カット）の搬入 | 検証済みA | `video-pipeline/capabilities/v4.3/mcp-fit.json`（import-media: 3 clips＋media-pool ids読戻し、status accepted） |
-| M02 | Bin作成・移動・整理 | 毎エピソードの素材整理（footage/BGM/GFX分け）——取り込み直後の定型 | 未検証 | 索引行M02復帰（vlog再審）。API面: media_pool.add_subfolder/move_clips/move_folders/organize_clips（索引記載。Smart Bin/Power Bin新規はCU） |
-| M04 | Metadata・Clip Name・Reel Name | clip名の意味付け・解析metadata書き戻し（素材検索の土台） | 未検証 | 索引行M04復帰。API面: get_metadata/set_metadata/set_name/copy_metadata/normalize_metadata（索引記載） |
-| M05 | Clip Marker・Flag・Clip Color・Mark In/Out | よい場面を素材側に記すテイク確認・selects範囲指定（Q01の素材側対応） | 未検証 | 索引行M05復帰。API面: media_pool_item_markers.*/set_clip_color/set_mark_in_out（索引記載） |
+| M02 | Bin作成・移動・整理 | 毎エピソードの素材整理（footage/BGM/GFX分け）——取り込み直後の定型 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: add_subfolder('EP_test')→get_subfolders読戻し→organize_clipsで1clip移動→get_clips読戻し一致（disposable project、API-only）。Smart Bin/Power Bin新規はCUのまま範囲外。 |
+| M04 | Metadata・Clip Name・Reel Name | clip名の意味付け・解析metadata書き戻し（素材検索の土台） | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: set_name→get_name完全一致、set_metadata(Keywords=qw-test)→get_metadata完全一致（disposable clips、API-only）。注意: 字幕clip（srt）はKeywords/Keyword/Descriptionのset_metadataを3回とも拒否（False）——metadata書込はwav clipで実証。 |
+| M05 | Clip Marker・Flag・Clip Color・Mark In/Out | よい場面を素材側に記すテイク確認・selects範囲指定（Q01の素材側対応） | 検証済みA / 未検証 | journal 2026-09-07 QW batch（宣言⑰）: **Marker・Clip Color・Mark In/Out=検証済みA**（markers.add(frame0/Blue/qw)→get_all完全一致→delete_at_frame、set_clip_color(Orange)→get Orange、set_mark_in_out(0,24)→get audio in=0/out=24→clear。disposable wav clip、API-only）。**Flag add/clear=未検証**（未試行——本行を実証済みと誤読しないこと。Fable指摘4の併記規律）。 |
 | M06 | 既存ProxyのLink/Unlink | 4K縦型の重い素材を軽く扱う | 検証済みA | journal 20:10:48 検証済みA: link_proxy書込+Proxy属性readback（Proxy=1920x1080・Proxy Media Path設定確認）。 |
 | M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | 検証済みC / 未検証 | **Optimized Media生成=検証済みC**: Media Pool右クリック→「最適化メディアを生成」で6.8GB・8,467キャッシュファイル実生成、進捗ダイアログもAX読取可（journal 03:57:38）。**Proxy生成=未検証**（「同メニュー系」という推定のみ——Fable指摘4で分割併記）。APIはリンク系のみで生成actionなし＝生成はGUI起動 |
 | M08 | Relink・Replace source clip | メディアオフライン時の再接続・素材差し替え（プロジェクト移動・素材整理で必須の復旧操作） | 未検証 | 索引行M08は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: media_pool.safe_relink / media_pool_item.replace_clip / replace_clip_preserve_sub_clip（索引記載、未試行。file identity曖昧なら停止の注意付き）。TimelineのReplace Editとは別。 |
@@ -129,7 +129,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | 検証済みC / 未検証 | **Tracker=検証済みC**: 追従ウィンドウのフレーム毎変位を実renderで実証（純追跡差分100/99px vs ビット一致ゼロ床、sat再飽和クラスタmid→end進行、journal 01:56:11）。**Color Warper=未検証**（グリッドドラッグ未実証——根拠の併記明記はFable指摘4）。track開始クリックがsilent-failする例あり（playhead進行で要確認）。素材がほぼ無彩色のため効果は小さめ |
 | C08 | Shot/Skin/WB/Reference match | 複数cutの色統一 | 検証済みI / 未検証 | offline drx match tools実走（journal 21:29:44）: shot/WB gradeCount=2・drx出力あり。ただしskin_gradeCount=0（肌マッチ生成ゼロ）・match品質のrender検証なし——skin分は未検証。 |
 | C09 | Scope/Gamut/Legal QC | 品質測定 | 検証済みI | journal 20:15:46: signalstats実測（YMIN=11/YMAX=229）。※経路はffmpeg offline測定で.drt/.drx不使用——I定義との適合は要確認（Opus判断待ち）。 |
-| C10 | Color Group | 長尺の多数カットをGroupで一括ルック管理（トーク常設カット等） | 未検証 | 索引行C10復帰（vlog再審）。API面: project_settings.add_color_group/timeline_item_color.assign_color_group/color_group.*（索引記載。Group node詳細はAdvanced） |
+| C10 | Color Group | 長尺の多数カットをGroupで一括ルック管理（トーク常設カット等） | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: add_color_group('qwgroup')→get_color_groups読戻し→timeline item（croute_450f V1 item1）へassign→get_color_group完全一致（disposable、API-only）。Group node詳細はAdvancedのまま範囲外。 |
 
 ### U. Audio・Fairlight
 
@@ -172,7 +172,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 
 | 機能ID | 機能名 | TikTok系/Vlog系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
-| O01 | MCP内の編集・Color・Audio guideを検索 | agentがcraft操作前に手順と落とし穴を読む自己参照（安全な判断の前提） | 未検証 | 索引行O01復帰（vlog再審）。API面: knowledge.topics/get/search/capabilities（索引記載） |
+| O01 | MCP内の編集・Color・Audio guideを検索 | agentがcraft操作前に手順と落とし穴を読む自己参照（安全な判断の前提） | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: topics(36件)→get(resolve-session全文)→search('grading' 5hits)→capabilities(36 topics/62 aliases)、全段非空を読戻し。読取専用機能のため読戻し自体が能力の実証（U01先例）。 |
 
 ### N. レビューで追加発見（2026-09-07監査——suda索引に不在、高頻度のみ抽出）
 
@@ -225,14 +225,14 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N43 | VFR・回転フラグ付き素材の実素材確認（16:9 master文脈） | スマホ4K素材の毎本通る道 | 未検証 | vlog再審: V2は縦型文脈のtrap引用のみ——横型masterで実証ゼロ |
 | N44 | 混在解像度/fpsの1タイムライン扱い | 複数カメラ+スマホ混在のスケーリング | 未検証 | vlog再審: 行なし（N12は色のみ） |
 | N45 | タイムラプス連番画像のimport（StartIndex/EndIndex） | 連写真からの場面作り | 未検証 | vlog再審: M01はclip搬入のみ |
-| N46 | clip尺・タイムコード読取（logging） | 素材確認・selectsの土台 | 未検証 | vlog再審: U01は音声限定、M01はid読戻しまで |
+| N46 | clip尺・タイムコード読取（logging） | 素材確認・selectsの土台 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: probe_clip_propertiesで実値読取（edit-source.mov: 8467f/00:04:42:07/StartTC 19:41:50:04/3840x2160/H.264/FPS30、wav: 00:00:05:08/Wave/48000）。読取専用機能のため読戻し自体が能力の実証（U01先例）。 |
 | N47 | レンズ補正（fisheye・GoPro系） | アクションカム素材 | 未検証 | vlog再審: 行なし（中頻度・使用時のみ） |
-| N48 | .cube LUTファイルの適用 | 市販LUTパック運用の根幹 | 未検証 | vlog再審: C01実証はDRX/CDL経路のみで.cube証拠ゼロ・C03 LUT Exportは失敗実測 |
+| N48 | .cube LUTファイルの適用 | 市販LUTパック運用の根幹 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: 自作identity .cube（LUT_3D_SIZE 2、private/runtime/sol-safeguards-20260906/qw_identity2.cube）→probe_node_graph(2 nodes)→node1へset_lut→get_lut='MCP/qw_identity2.cube'完全一致（disposable timeline item、API-only）。node2は先行sessionのPower Window grade保持のためnode1を選択。render A/Bはidentityのため省略。 |
 | N49 | log素材のnormalize（Log→709変換） | log撮りカメラ素材の下処理 | 未検証 | vlog再審: N12は土台未検証・C04は直接補正のみ——log前提行なし |
 | N50 | 昼→夜の見た目統一 | 撮影時間帯が混ざるロケ素材 | 未検証 | vlog再審: C08は同条件マッチで時間帯変化の行なし |
 | N51 | フィルムグレイン付与 | フィルム風ルック仕上げ | 未検証 | vlog再審: N09は逆のノイズ除去——付与側の行なし |
 | N52 | LUT強度ミックス（Key Output Gain等） | LUT当ての強さ調整 | 未検証 | vlog再審: 適用on/offのみで強度行なし |
-| N53 | マスター保存形式の選定（ProRes vs H.264等） | 画質・容量・再編集用途の分岐 | 未検証 | vlog再審: V4はh264縦型のみ（vendorにprores target aliasあり・未記載） |
+| N53 | マスター保存形式の選定（ProRes vs H.264等） | 画質・容量・再編集用途の分岐 | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: get_formats(22形式)→get_codecs実読取。回答: ProRes一式（422/HQ/LT/Proxy/4444/XQ）はQuickTime(mov)のみ、mp4はH.264/H.265のみ。読取専用機能のため読戻し自体が能力の実証（U01先例）。 |
 ## 縦型（9:16）前提条件ブロック — スタイルではなく出力形式の変更
 
 style-vocabulary.md B②の通り、縦型は「スタイル」ではなく**出力フォーマットの
