@@ -28,7 +28,7 @@ from services.job_runner.stage_runner_models import SequenceClock
 from services.job_runner.state_store import StateStore
 from services.mcp_client.execution_runner import BackendPolicyError, McpExecutionRunner
 from services.qa.parity_harness import run_parity
-from services.toolchain.mcp_fit import EXPECTED_ROW_COUNT, load_mcp_fit
+from services.toolchain.mcp_fit import EXPECTED_PROVIDER_VERSION, EXPECTED_ROW_COUNT, load_mcp_fit
 from tests.mcp_client.live_support import (
     MCP_FIT_PATH,
     PROBES_DIR,
@@ -641,7 +641,7 @@ def test_live_capability_probes_fill_matrix_and_snapshot(
     assert len(logs) == EXPECTED_ROW_COUNT
     snapshot_path = write_matrix_and_snapshot(
         logs,
-        provider_version="2.207.0",
+        provider_version=EXPECTED_PROVIDER_VERSION,
         pin_commit=json.loads(PIN_PATH.read_bytes())["commit"],
         server_mode="compound",
         resolve_build=live.resolve_version_string,

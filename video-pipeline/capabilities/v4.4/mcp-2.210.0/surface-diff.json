@@ -1,0 +1,98 @@
+{
+ "advanced": {
+  "note": "no resolve-advanced/ or bin/ paths in git diff v2.207.0..v2.210.0",
+  "path_scoped_changed_files": []
+ },
+ "baseline": {
+  "method": "static parse via services.toolchain.mcp_vendor_surface.parse_vendor_surface on the live v2.207.0 checkout (private/vendor/davinci-resolve-mcp) and the v2.210.0 worktree (private/vendor/davinci-resolve-mcp-v2.210.0); advanced (Node) surface compared by git path-scope diff; envelope compared by src/utils/operation_result.py byte-identity. No Resolve, no server spawn.",
+  "new": {
+   "commit": "4c42f429298ec63fd793e7a9d16bd7994d16f307",
+   "provider_version": "2.210.0",
+   "tag": "v2.210.0"
+  },
+  "old": {
+   "commit": "5a1db6776fbe76098a706a41811ca787dfbd9990",
+   "provider_version": "2.207.0",
+   "tag": "v2.207.0"
+  }
+ },
+ "compound": {
+  "action_diffs": {
+   "resolve_control": {
+    "added": [
+     "inspect_operation",
+     "list_lifecycle_hooks"
+    ],
+    "removed": []
+   }
+  },
+  "arg_diffs": {},
+  "confirm_token_diff": {
+   "added": [],
+   "removed": []
+  },
+  "counts": {
+   "new_actions": 750,
+   "new_tools": 36,
+   "old_actions": 748,
+   "old_tools": 36
+  },
+  "likely_renames": [],
+  "safety_class_changes": {},
+  "tools_added": [],
+  "tools_removed": []
+ },
+ "duplicates": {
+  "new": [
+   [
+    "fusion_comp",
+    "bulk_set_expressions"
+   ]
+  ],
+  "old": [
+   [
+    "fusion_comp",
+    "bulk_set_expressions"
+   ]
+  ]
+ },
+ "envelope": {
+  "changed": [],
+  "files": [
+   "src/utils/operation_result.py"
+  ],
+  "verdict": "src/utils/operation_result.py is byte-identical v2.207.0..v2.210.0 — _operation keys unchanged (status, operation, execution_id, verification, optional duration_ms/changes/warnings)"
+ },
+ "granular": {
+  "counts": {
+   "new": 353,
+   "old": 353
+  },
+  "module_tool_diffs": {},
+  "modules_added": [],
+  "modules_removed": []
+ },
+ "kernel_catalog": {
+  "new": {
+   "rows": 145,
+   "stated_actions": 136,
+   "stated_tools": 9
+  },
+  "old": {
+   "rows": 145,
+   "stated_actions": 136,
+   "stated_tools": 9
+  },
+  "rows_added": [],
+  "rows_removed": []
+ },
+ "packaging": {
+  "changed_files": [
+   "install.py",
+   "package-lock.json",
+   "package.json"
+  ],
+  "requirements_txt_changed": false
+ },
+ "schema_version": "mcp-surface-diff-v1"
+}

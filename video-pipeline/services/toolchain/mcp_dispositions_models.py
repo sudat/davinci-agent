@@ -95,6 +95,10 @@ READ_ACTION_EXCEPTIONS: Final[frozenset[str]] = frozenset(
         # knowledge tool (v2.207.0, src/server.py:31327): read-only guide
         # queries — bare verb forms the prefix regex cannot see.
         "topics", "get", "search",
+        # resolve_control.inspect_operation (v2.210.0, execution_lifecycle
+        # inspect_operation): classifies pre-flight risk and reads state —
+        # never executes the inspected action.
+        "inspect_operation",
     )
 )
 #: …or end in one of these reviewed read-only suffixes.

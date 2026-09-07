@@ -1,0 +1,30 @@
+{
+ "checked_against": {
+  "v2.207.0_commit": "5a1db6776fbe76098a706a41811ca787dfbd9990",
+  "v2.210.0_commit": "4c42f429298ec63fd793e7a9d16bd7994d16f307"
+ },
+ "compound_operation_universe": {
+  "removed": [],
+  "v2.207.0": 748,
+  "v2.210.0": 750
+ },
+ "dispositions_rows": {
+  "checked": 1026,
+  "method": "compound universe from parse_vendor_surface(v2.210.0 worktree) + granular/advanced/kernel surfaces verified byte-unchanged by git path-scope diff (no resolve-advanced/, bin/, src/granular/ content changes); no action removed or renamed on any surface, so no row can orphan",
+  "orphaned_operation_ids": []
+ },
+ "new_operations_needing_disposition_rows": [
+  "resolve_control.inspect_operation",
+  "resolve_control.list_lifecycle_hooks"
+ ],
+ "note": "v2.207.0->v2.210.0 removes nothing: all 66 surface bindings, 11 ops_read bindings, and 1026 disposition rows survive on v2.210.0. The 2 new resolve_control trace-family operations need rows at phase-2 inventory regeneration; recommendation read/deferred, matching the execution-trace family treatment in mcp-2.207.0 (P3 guidance).",
+ "ops_read_operation_bindings": {
+  "checked": 11,
+  "would_fail_closed": []
+ },
+ "schema_version": "mcp-fail-closed-impact-v1",
+ "surface_operation_bindings": {
+  "checked": 66,
+  "would_fail_closed": []
+ }
+}

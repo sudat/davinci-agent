@@ -1,0 +1,7 @@
+{
+  "command": "uv run python -m services.cli.episode0 freeze-manifest (real-01)",
+  "limitation": "A full v1 editorial chain on the DJI clip is not runnable live: the clip has no transcript (no speech pipeline output available in this environment), so editorial stages beyond ingest/manifest cannot execute. The legacy-vs-mcp base-cut parity run (parity-basecut-report.json) is the base-execution-path demonstration for Gate V43-0.",
+  "returncode": 1,
+  "stderr_tail": "freeze_failed: source not found: /Users/stc/Developer/davinci-agent/private/reference-episodes/real-01/DJI_20260819090647_0039_D.MP4\n",
+  "stdout_tail": ""
+}
