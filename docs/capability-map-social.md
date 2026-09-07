@@ -8,11 +8,12 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 > 入ったり止められるのが嫌なの。事前に貴方やsolが検証をすべき
 
 2026-09-07 レビュー（suda指示・10エージェント監査+Fable指摘）: 判定修正10件・根拠更新22件・高頻度欠落の新規行30件（N接頭辞・索引に不在。内5件はFable指摘2で追加）を追加、索引省略行からQ01/M08の2件を復帰。
-## 冒頭集計 — 全 107 項目（2026-09-07 レビュー反映後・実測）
+2026-09-07 vlog/長尺再審（suda指示・8エージェント）: 新規23行（N31〜N53）・索引11行復帰・用途文8行の両対応化。マルチカムは不使用回答で省略維持。
+## 冒頭集計 — 全 141 項目（2026-09-07 レビュー反映後・実測）
 
 | 状態 | 件数 | 意味 |
 |---|---|---|
-| 未検証 | **51** | 一度も試していない（N行30件を含む）。この地図の要点 |
+| 未検証 | **85** | 一度も試していない（N行48件・復帰11行を含む）。この地図の要点 |
 | 検証済みA | 26 | API書込＋読み戻しで検証済み |
 | 検証済みI | 12 | interchange（.drt/.drx）で検証済み |
 | 検証済みC | 5 | 座標＋Directでlive検証済み |
@@ -20,7 +21,7 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 | C経路未試行 | 2 | API/interchange試行済み・GUI操作は未試行 |
 | 不可 | 1 | 到達不能と測定 |
 | 未決定 | 1 | 判断未了 |
-| **計** | **107** |  |
+| **計** | **141** |  |
 
 状態語彙は固定（言い換え禁止）。「たぶんできる」「should work」は書かない。
 検証済みタグはすべて根拠path付き。根拠なきものは未検証のまま置く。
@@ -41,20 +42,27 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 機能IDは `~/.metacua/DAVINCI_CAPABILITY_INDEX.md` の verbatim。TikTok系での用途は
 3目標スタイル（style-vocabulary.md B節: ①宋世羅-style静的テロップ＋変調 ②TikTok
 縦型太字字幕ズーム多用 ③vlog地点表示）＋ vendor rough-cut ガイドの toolkit を
-filterに derive した。表にない索引行（T18/T19、U07、C10、M02〜M05/M09〜M12、
-A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺の通常
-編集で直接使わないため省略した（省略自体が判断であることを明示する。Q01・M08は2026-09-07レビュー+Fable指摘で復帰）。
+filterに derive した。表にない索引行（T18/T19、U07、M03、M09〜M11、
+A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
+編集で直接使わないため省略した（省略自体が判断であることを明示する。Q01・M08はFable指摘で、Q02/A01〜A03/C10/M02/M04/M05/M12/O01/Q08はvlog再審で復帰。M09/M10マルチカムはsuda回答「使わない」で省略維持）。
 
 ### A/M. プロジェクト・素材（縦型の前提＋素材搬入）
 
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
+| A01 | 接続・起動。「Resolveへ接続」「Editページを開いて」 | 全作業の入口（毎session） | 未検証 | 索引行A01復帰（vlog再審2026-09-07）。実務で毎session使用だが形式検証（write+readback）としては未整理。API面: resolve_control.launch/runtime_mode/get_page/open_page（索引記載） |
+| A02 | Project一覧・作成・Load・Save・Close | エピソード毎projectの作成・保存——制作の背骨 | 未検証 | 索引行A02復帰。API面: project_manager.list/safe_project_create/load/save/close（索引記載）。未保存dialogはCU/ユーザー対応・削除は明示依頼の注意付き |
+| A03 | Project Export・Import・Archive・Restore | 納品後のArchive保存・危険操作前バックアップ（一人作業の保険） | 未検証 | 索引行A03復帰。API面: safe_project_export/import/archive/restore（索引記載） |
 | A04 | Project設定の読替・変更 | 縦型9:16（解像度・fps）の設定変更。前提条件ブロック参照 | 検証済みA | journal 20:05:11 検証済みA: 解像度 1920x1080→1080x1920 書換+readback実証（write+readback）。旧記述（v4.3 probeはfps=30のみ）は陳腐化。 |
 | A05 | Timeline設定の読替・変更 | 縦型Timelineの tall 解像度設定。前提条件ブロック参照 | 検証済みA | project_settings.set_setting（timelineResolutionWidth/Height→1080x1920、readback OK）→新規タイムラインが縦型を継承→レンダリング出力も1080x1920を確認。**既存タイムラインの解像度は timeline.set_setting で変更不可（success False 実測）— 作成前のプロジェクト設定かGUIで変更** |
 | M01 | 素材Import | 縦型素材・写真素材（wishlist #3挿入カット）の搬入 | 検証済みA | `video-pipeline/capabilities/v4.3/mcp-fit.json`（import-media: 3 clips＋media-pool ids読戻し、status accepted） |
+| M02 | Bin作成・移動・整理 | 毎エピソードの素材整理（footage/BGM/GFX分け）——取り込み直後の定型 | 未検証 | 索引行M02復帰（vlog再審）。API面: media_pool.add_subfolder/move_clips/move_folders/organize_clips（索引記載。Smart Bin/Power Bin新規はCU） |
+| M04 | Metadata・Clip Name・Reel Name | clip名の意味付け・解析metadata書き戻し（素材検索の土台） | 未検証 | 索引行M04復帰。API面: get_metadata/set_metadata/set_name/copy_metadata/normalize_metadata（索引記載） |
+| M05 | Clip Marker・Flag・Clip Color・Mark In/Out | よい場面を素材側に記すテイク確認・selects範囲指定（Q01の素材側対応） | 未検証 | 索引行M05復帰。API面: media_pool_item_markers.*/set_clip_color/set_mark_in_out（索引記載） |
 | M06 | 既存ProxyのLink/Unlink | 4K縦型の重い素材を軽く扱う | 検証済みA | journal 20:10:48 検証済みA: link_proxy書込+Proxy属性readback（Proxy=1920x1080・Proxy Media Path設定確認）。 |
 | M07 | Proxy/Optimized Media新規生成 | 同上（生成はCU route） | 検証済みC / 未検証 | **Optimized Media生成=検証済みC**: Media Pool右クリック→「最適化メディアを生成」で6.8GB・8,467キャッシュファイル実生成、進捗ダイアログもAX読取可（journal 03:57:38）。**Proxy生成=未検証**（「同メニュー系」という推定のみ——Fable指摘4で分割併記）。APIはリンク系のみで生成actionなし＝生成はGUI起動 |
 | M08 | Relink・Replace source clip | メディアオフライン時の再接続・素材差し替え（プロジェクト移動・素材整理で必須の復旧操作） | 未検証 | 索引行M08は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: media_pool.safe_relink / media_pool_item.replace_clip / replace_clip_preserve_sub_clip（索引記載、未試行。file identity曖昧なら停止の注意付き）。TimelineのReplace Editとは別。 |
+| M12 | Media templateを保存・再利用 | offline DRT構築（T02）をrender可能にする前提処理 | 未検証 | 索引行M12復帰。API面: media_pool.capture_media_template（索引記載）。本repoのauthoring経路で必須 |
 
 ### T. Timeline構築・カット・配置・Retime
 
@@ -121,6 +129,7 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | 検証済みC / 未検証 | **Tracker=検証済みC**: 追従ウィンドウのフレーム毎変位を実renderで実証（純追跡差分100/99px vs ビット一致ゼロ床、sat再飽和クラスタmid→end進行、journal 01:56:11）。**Color Warper=未検証**（グリッドドラッグ未実証——根拠の併記明記はFable指摘4）。track開始クリックがsilent-failする例あり（playhead進行で要確認）。素材がほぼ無彩色のため効果は小さめ |
 | C08 | Shot/Skin/WB/Reference match | 複数cutの色統一 | 検証済みI / 未検証 | offline drx match tools実走（journal 21:29:44）: shot/WB gradeCount=2・drx出力あり。ただしskin_gradeCount=0（肌マッチ生成ゼロ）・match品質のrender検証なし——skin分は未検証。 |
 | C09 | Scope/Gamut/Legal QC | 品質測定 | 検証済みI | journal 20:15:46: signalstats実測（YMIN=11/YMAX=229）。※経路はffmpeg offline測定で.drt/.drx不使用——I定義との適合は要確認（Opus判断待ち）。 |
+| C10 | Color Group | 長尺の多数カットをGroupで一括ルック管理（トーク常設カット等） | 未検証 | 索引行C10復帰（vlog再審）。API面: project_settings.add_color_group/timeline_item_color.assign_color_group/color_group.*（索引記載。Group node詳細はAdvanced） |
 
 ### U. Audio・Fairlight
 
@@ -153,9 +162,17 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | Q01 | Timeline Marker・review annotation | YouTubeチャプター生成（R04のチャプターcheckboxと直結）・レビュー往復・自然言語修正指示の目印 | 未検証 | 索引行Q01は省略リストにあったが2026-09-07レビュー+Fable指摘で復帰。API面: timeline_markers.*/timeline_item_markers.*/export_review_report（索引記載、未試行）。Source clip markerはM05。 |
+| Q02 | Media解析・文字起こし・shot分析 | トークcontentの核——文字起こしが編集判断・字幕・カット候補の起点 | 未検証 | 索引行Q02復帰（vlog再審最有力）。API面: media_analysis.analyze_*/transcribe_audio（索引記載）。※Q06と同じく本機はtranscription backend未導入の可能性——検証時に確認 |
 | Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 未検証 | detect_scene_cutsを2タイムラインで実行しsuccess=True（journal 19:54:20/19:55:06）だが、検出cut数・markerのreadbackなし＝API受理のみ（verification.status=unverified）。検証済みAの要件未達のため格下げ。 |
 | Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | 未検証 | edit_engine.plan_selects 自体は存在するが解析DBが前提。本機はローカルtranscription backendが未導入で解析パイプラインが起動不可（no_auto_install方針）— backend導入後に再挑戦。v4.3のselects probe失敗と同じ所在 |
+| Q08 | Grade/mix反復案 | カット間ルック揃え・ラウドネス目標の測定→候補→再測定loop | 未検証 | 索引行Q08復帰。API面: media_analysis.grade_loop/mix_plan（索引記載。自動適用を意味しない） |
 
+
+### O. 実行管理（guide参照）
+
+| 機能ID | 機能名 | TikTok系/Vlog系での用途 | 現在の状態 | 根拠 |
+|---|---|---|---|---|
+| O01 | MCP内の編集・Color・Audio guideを検索 | agentがcraft操作前に手順と落とし穴を読む自己参照（安全な判断の前提） | 未検証 | 索引行O01復帰（vlog再審）。API面: knowledge.topics/get/search/capabilities（索引記載） |
 
 ### N. レビューで追加発見（2026-09-07監査——suda索引に不在、高頻度のみ抽出）
 
@@ -164,19 +181,19 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | N01 | スナッピング on/off | 人間編集の基本トグル（自動化は座標指定のため影響小） | 未検証 | 2026-09-07レビュー: 編集基本監査で完全欠落と判定 |
-| N02 | Ripple delete・ギャップ詰め | 間詰めpacingの最頻出操作（T05/T06が部分対応だが明示行なし） | 未検証 | 同上 |
+| N02 | Ripple delete・ギャップ詰め | 間詰めpacingの最頻出操作（T05/T06が部分対応だが明示行なし）。長尺トークのデッドエア除去が最大用途 | 未検証 | 同上 |
 | N03 | Linked selection・音声分離(detach) | 音だけ差し替え・詰めの常見ワークフロー | 未検証 | 同上。journalにproxy unlink(M06)とset_clips_linked API言示の形跡あり——clipリンク解除(detach)自体は未試行（Fable指摘2の追記） |
-| N04 | アジャストメントクリップ | 全カット一括ルック（style ①一括モノクロ等） | 未検証 | 2026-09-07レビュー: color監査で完全欠落 |
+| N04 | アジャストメントクリップ | 全カット一括ルック（style ①一括モノクロ等）。長尺エピソード全体のルック統一・公開前一括補正 | 未検証 | 2026-09-07レビュー: color監査で完全欠落 |
 | N05 | フリーズフレーム | TikTokズーム演出の部品（T14根拠noteにsuspended言及のみ） | 未検証 | 編集基本監査 |
 | N06 | ソースIn/Outマーク | 素材区間指定の基本（T01の配置が代替するがマーク自体の行なし） | 未検証 | 同上 |
-| N07 | セーフエリア/グリッドオーバーレイ | 9:16縦型テロップ安全域の確認 | 未検証 | 同上 |
+| N07 | セーフエリア/グリッドオーバーレイ | 9:16縦型テロップ安全域の確認。16:9でも下部テロップ/字幕の被り確認に使用 | 未検証 | 同上 |
 | N08 | グリーンスクリーンキーイング（Delta/Ultra/3D/Chroma） | 背景差替え（wishlist #4）——F10不可の唯一の現実的代替経路 | 未検証 | 2026-09-07レビュー: color監査でCRITICAL判定 |
 | N09 | 映像ノイズリダクション（temporal/spatial） | 暗所スマホ素材の必須級 | 未検証 | 同上 |
 | N10 | 顔補正/Face Refinement・顔トラッキング | 顔出しクリエイターの定番beauty | 未検証 | 同上 |
-| N11 | Retime品質設定（Optical Flow/Speed Warp） | スローモーション品質（T12/T15は速度値のみで品質モード未扱い） | 未検証 | 同上 |
+| N11 | Retime品質設定（Optical Flow/Speed Warp） | スローモーション品質（T12/T15は速度値のみで品質モード未扱い）。旅行・アクション素材のスローでも同様 | 未検証 | 同上 |
 | N12 | カラーマネジメント（RCM/ACES） | 素材混在時の色一貫性の土台 | 未検証 | 同上 |
-| N13 | Text+深度スタイリング（縁取り/グラデ/カーニング/行間） | 太字字幕の生命線——S01は本文+Size+色のみ | 未検証 | 2026-09-07レビュー: titles監査でCRITICAL判定 |
-| N14 | 絵文字/ステッカー/グラフィック素材 | TikTok字幕の頻出装飾 | 未検証 | 同上 |
+| N13 | Text+深度スタイリング（縁取り/グラデ/カーニング/行間） | 太字字幕の生命線——S01は本文+Size+色のみ。長尺テロップ2階層の縁取り/可読性に同型＋ふりがな（ルビ）は未踏査 | 未検証 | 2026-09-07レビュー: titles監査でCRITICAL判定 |
+| N14 | 絵文字/ステッカー/グラフィック素材 | TikTok字幕の頻出装飾（TikTok先行——vlogでは地点ピン/矢印等の軽用に留まる） | 未検証 | 同上 |
 | N15 | テキスト背景プレート（角丸ボックス・色帯） | 読みやすさの要 | 未検証 | 同上 |
 | N16 | ロゴ/ウォーターマーク常時overlay | 収益面で常時使用（M01+T01+F02の統合workflow行なし） | 未検証 | 同上 |
 | N17 | Fusionタイトルテンプレート適用 | 既成アニメ付きタイトル（F03/F04は素node構築のみ） | 未検証 | 同上 |
@@ -184,15 +201,38 @@ A01〜A03/A06/A07、O01〜O04、Q02/Q04/Q05/Q07/Q08、R07）は縦型・短尺�
 | N19 | クリップ端フェードハンドル | BGM/SFX出入りフェード | 未検証 | 同上 |
 | N20 | 波形/タイムコード自動同期 | 別録りwavと映像の同期の必須工程 | 未検証 | 同上 |
 | N21 | 音声ノイズリダクション・Dialogue Leveler | 部屋ノイズ・声量ムラ（U02 Voice Isolationは別機能） | 未検証 | 同上 |
-| N22 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤 | 未検証 | 同上 |
+| N22 | clip color/flag・bin整理・メディアプール検索 | レビュー・素材整理の基盤。長尺1本の素材量（複数日・複数カード）で頻度上昇 | 未検証 | 同上 |
 | N23 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 未検証 | 同上 |
 | N24 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 未検証 | 同上 |
 | N25 | In/Out範囲render・VBR/CBR品質（bitrate）・音声format/ch指定・複数timeline一括render | YouTube横型master＋TikTok縦型の両納品で毎回の操作——16:9 masterの品質・コーデック深度を含む（R行に存在せず） | 未検証 | 2026-09-07レビューdelivery監査CRITICAL＋vlog再審で横型master品質を明記。※一時筆誤で行が消滅していたのを復元（N23との重複解消） |
 | N26 | キーフレームのイージング（Ease In/Out/Bezier） | 「スムーズなズーム」等の実務はイージング前提——F02の実証は直線(Linear)のみ | 未検証 | Fable指摘2（2026-09-07）: 索引・地図とも行なし。F02はLinearのみ実証のため未検証部分を本行へ分離 |
-| N27 | .drfxテンプレートパックの導入・使用 | TikTok系エフェクト多用の実態は購入テンプレ運用が大半——導入と適用の両面 | 未検証 | Fable指摘2: 索引・地図とも行なし（N17は内蔵テンプレ適用で別物） |
+| N27 | .drfxテンプレートパックの導入・使用 | TikTok系エフェクト多用の実態は購入テンプレ運用が大半——導入と適用の両面。vlogもタイトル/LUTテンプレ運用は同型 | 未検証 | Fable指摘2: 索引・地図とも行なし（N17は内蔵テンプレ適用で別物） |
 | N28 | サムネイル用静止画書き出し | YouTube運用で毎本必要 | 未検証 | Fable指摘2: 行なし。MCPにexport_frame_as_still存在（vendor記載・未試行）。C03はルック保存目的で別物 |
 | N29 | 16:9→9:16背景ぼかしパディング | 縦型転換の定番レシピ | 未検証 | Fable指摘2: V節は解像度設定のみでこのレイアウト操作の行なし |
 | N30 | BGM/SEを指定トラック・指定位置へ配置 | 音声素材のアセンブリ配置（T01は映像・写真の構築） | 未検証 | Fable指摘2: 音声版の行なし |
+| N31 | 地点・店舗情報カードの合成（地名＋地図/映像＋テキストの複合構成） | style ③地点表示の本体・グルメカード | 未検証 | vlog再審2026-09-07: 構成workflow行がゼロ（F05/C07/S01/M01は部品のみ） |
+| N32 | Text+テロップの発話同期（喋りに合わせた出し引き） | style ①静的テロップ2階層の最頻出操作 | 未検証 | vlog再審: S03/S07は字幕トラック側のみ——Text+側の工程行なし |
+| N33 | テロップ読了速度に基づく表示duration規約 | 長尺で文字量→最低表示秒の計算が毎本 | 未検証 | vlog再審: 行も規約もなし（編集判断層を含む） |
+| N34 | B-roll重ねworkflow（ナレーション上への実写挿入） | トークの切れ味を決める定番 | 未検証 | vlog再審: T01/T06配置primitiveは検証済みだがworkflow明示行なし |
+| N35 | エンドカード・エンドスクリーン安全域（末尾UI避け・空き確保） | YouTube毎本 | 未検証 | vlog再審: N07は縦型テロップ用で別物 |
+| N36 | 室内反響除去（de-reverb） | 部屋録り声のクリーン化 | 未検証 | vlog再審: U05「エコー」は演出として足す側で逆方向——行なし |
+| N37 | 環境音・ルームトーン敷き | カット継ぎの聴感自然化 | 未検証 | vlog再審: U08/U09はBGM限定で行なし |
+| N38 | ピッチ保持の速度変更（声） | 早回し・スロー時に声の高さを保つ | 未検証 | vlog再審: T12〜T15/N11は映像側のみ |
+| N39 | 音声スクラブ・波形編集 | 語頭正確カット | 未検証 | vlog再審: 行なし（U10はファイル加工） |
+| N40 | チャンネル構成の書込（mono→stereo等） | カメラ音声+外部録音の混在処理 | 未検証 | vlog再審: U01は読取のみ——書込側行なし |
+| N41 | 音楽ビート検出・ビート刻みカット | モンタージュ・切り替えの音楽合わせ | 未検証 | vlog再審: U09に「音楽sync」の語のみ・beat検出行なし |
+| N42 | 音声のみ書き出し（timeline→音声ファイル） | ポッドキャスト再利用 | 未検証 | vlog再審: R行は映像形式のみ（低頻度） |
+| N43 | VFR・回転フラグ付き素材の実素材確認（16:9 master文脈） | スマホ4K素材の毎本通る道 | 未検証 | vlog再審: V2は縦型文脈のtrap引用のみ——横型masterで実証ゼロ |
+| N44 | 混在解像度/fpsの1タイムライン扱い | 複数カメラ+スマホ混在のスケーリング | 未検証 | vlog再審: 行なし（N12は色のみ） |
+| N45 | タイムラプス連番画像のimport（StartIndex/EndIndex） | 連写真からの場面作り | 未検証 | vlog再審: M01はclip搬入のみ |
+| N46 | clip尺・タイムコード読取（logging） | 素材確認・selectsの土台 | 未検証 | vlog再審: U01は音声限定、M01はid読戻しまで |
+| N47 | レンズ補正（fisheye・GoPro系） | アクションカム素材 | 未検証 | vlog再審: 行なし（中頻度・使用時のみ） |
+| N48 | .cube LUTファイルの適用 | 市販LUTパック運用の根幹 | 未検証 | vlog再審: C01実証はDRX/CDL経路のみで.cube証拠ゼロ・C03 LUT Exportは失敗実測 |
+| N49 | log素材のnormalize（Log→709変換） | log撮りカメラ素材の下処理 | 未検証 | vlog再審: N12は土台未検証・C04は直接補正のみ——log前提行なし |
+| N50 | 昼→夜の見た目統一 | 撮影時間帯が混ざるロケ素材 | 未検証 | vlog再審: C08は同条件マッチで時間帯変化の行なし |
+| N51 | フィルムグレイン付与 | フィルム風ルック仕上げ | 未検証 | vlog再審: N09は逆のノイズ除去——付与側の行なし |
+| N52 | LUT強度ミックス（Key Output Gain等） | LUT当ての強さ調整 | 未検証 | vlog再審: 適用on/offのみで強度行なし |
+| N53 | マスター保存形式の選定（ProRes vs H.264等） | 画質・容量・再編集用途の分岐 | 未検証 | vlog再審: V4はh264縦型のみ（vendorにprores target aliasあり・未記載） |
 ## 縦型（9:16）前提条件ブロック — スタイルではなく出力形式の変更
 
 style-vocabulary.md B②の通り、縦型は「スタイル」ではなく**出力フォーマットの
