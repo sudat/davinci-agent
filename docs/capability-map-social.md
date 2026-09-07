@@ -9,12 +9,13 @@ sudaさん指示（2026-09-06）・Opus構成で作成。目的はひとつ: **s
 
 2026-09-07 レビュー（suda指示・10エージェント監査+Fable指摘）: 判定修正10件・根拠更新22件・高頻度欠落の新規行30件（N接頭辞・索引に不在。内5件はFable指摘2で追加）を追加、索引省略行からQ01/M08の2件を復帰。
 2026-09-07 vlog/長尺再審（suda指示・8エージェント）: 新規23行（N31〜N53）・索引11行復帰・用途文8行の両対応化。マルチカムは不使用回答で省略維持。
-## 冒頭集計 — 全 141 項目（2026-09-07 QW2 batch宣言⑱反映後・実測）
+2026-09-07 QW3 batch（宣言⑲）: 4行を検証済みAへ（A02/A03/T16/N42）。Q03は読戻しを完結させたが検出marker増加ゼロで未検証維持。N26はkeyframe API自体がサーバ側エラーで未検証維持。Q02はbackend不在の環境記録を根拠に追加。A03のarchive legのみ測定不能（bare false）。
+## 冒頭集計 — 全 141 項目（2026-09-07 QW3 batch宣言⑲反映後・実測）
 
 | 状態 | 件数 | 意味 |
 |---|---|---|
-| 未検証 | **73** | 一度も試していない（QW batchで9行・QW2 batchで3行が解消）。この地図の要点 |
-| 検証済みA | 37 | API書込＋読み戻しで検証済み（QW batch +8: O01/A01/N46/M02/M04/N48/N53/C10、QW2 batch +3: Q01/N23/N45） |
+| 未検証 | **69** | 一度も試していない（QW batchで9行・QW2 batchで3行・QW3 batchで4行が解消）。この地図の要点 |
+| 検証済みA | 41 | API書込＋読み戻しで検証済み（QW batch +8: O01/A01/N46/M02/M04/N48/N53/C10、QW2 batch +3: Q01/N23/N45、QW3 batch +4: A02/A03/T16/N42） |
 | 検証済みI | 12 | interchange（.drt/.drx）で検証済み |
 | 検証済みC | 5 | 座標＋Directでlive検証済み |
 | 複合状態 | 10 | 1行に2状態併記——束ね機能の部分検証を分割表示（T12/T13/S09/S07/C03/C08/C06/C07/M07/M05） |
@@ -51,8 +52,8 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | A01 | 接続・起動。「Resolveへ接続」「Editページを開いて」 | 全作業の入口（毎session） | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: get_version（Studio 21.0.4.5）→ deliver→edit→color→edit のopen_page往復をget_pageで全段readback一致。API-only（click/CUなし）。旧記述（形式検証未整理）は本実証で解消。 |
-| A02 | Project一覧・作成・Load・Save・Close | エピソード毎projectの作成・保存——制作の背骨 | 未検証 | 索引行A02復帰。API面: project_manager.list/safe_project_create/load/save/close（索引記載）。未保存dialogはCU/ユーザー対応・削除は明示依頼の注意付き |
-| A03 | Project Export・Import・Archive・Restore | 納品後のArchive保存・危険操作前バックアップ（一人作業の保険） | 未検証 | 索引行A03復帰。API面: safe_project_export/import/archive/restore（索引記載） |
+| A02 | Project一覧・作成・Load・Save・Close | エピソード毎projectの作成・保存——制作の背骨 | 検証済みA | journal 2026-09-07 10:25:26 QW3 batch（宣言⑲）検証済みA: list(9)→safe_project_create('__fvp_test__sol_qw3_tmp', id 146fb0d5-acbc-475a-a63c-cacbab4bcb46)→load→get_name一致→save→close→list(10)→crouteへload→get_name一致→safe_project_delete(dry_run後real)→list(9)。注意: safe_project_create/deleteは名前が_mcp_始まりでないとallow_non_mcp_name=Trueが必須（実測）。未保存dialogはCU/ユーザー対応のまま範囲外 |
+| A03 | Project Export・Import・Archive・Restore | 納品後のArchive保存・危険操作前バックアップ（一人作業の保険） | 検証済みA | journal 2026-09-07 10:29:08 QW3 batch（宣言⑲）検証済みA: safe_project_export→qw3_export.drp 1,115,685B→safe_project_import('__fvp_test__sol_qw3_restored')→listで照合読み→delete掃除。**archiveのみ不可实测**: safe_project_archiveはdry_run would_archive=Trueに対しreal実行がbare success=false（message無し、path直下/サブdir両形、10:26:50/10:26:58）。ArchiveはGUI経路のままC経路未試行 |
 | A04 | Project設定の読替・変更 | 縦型9:16（解像度・fps）の設定変更。前提条件ブロック参照 | 検証済みA | journal 20:05:11 検証済みA: 解像度 1920x1080→1080x1920 書換+readback実証（write+readback）。旧記述（v4.3 probeはfps=30のみ）は陳腐化。 |
 | A05 | Timeline設定の読替・変更 | 縦型Timelineの tall 解像度設定。前提条件ブロック参照 | 検証済みA | project_settings.set_setting（timelineResolutionWidth/Height→1080x1920、readback OK）→新規タイムラインが縦型を継承→レンダリング出力も1080x1920を確認。**既存タイムラインの解像度は timeline.set_setting で変更不可（success False 実測）— 作成前のプロジェクト設定かGUIで変更** |
 | M01 | 素材Import | 縦型素材・写真素材（wishlist #3挿入カット）の搬入 | 検証済みA | `video-pipeline/capabilities/v4.3/mcp-fit.json`（import-media: 3 clips＋media-pool ids読戻し、status accepted） |
@@ -83,7 +84,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | T13 | Reverse | 逆再生演出 | 危険(.drt)/未検証 | .drt経路: `private/runtime/sol-input-mech-20260906/summary_report.txt`（RECORD_reverse_crash_verbatim: reverse（cuts[].reverse）の.drt importはResolve 21.0.4.5でクラッシュする（実測1回）。再現確認は費用対効果から未実施）。GUI経路: 2026-09-07 両ラウンドで到達点更新も未達成。第1ラウンド（15steps）: speed dialogのreverse checkboxをverified pressで押下したがAX読取はval=0のまま（journal 04:14:10）。第2ラウンド（4th agent）: Inspector/速度ダイアログの逆再生checkboxをAXPressで**val=1まで到達・確認**（初）→「変更」押下でダイアログは閉じるがrenderは一切不変（5記録点を全ソースフレーム照合してマッピング導出: src≈1.25×kの125%順方向のまま、RetimeProcess=0のまま）＝checked状態はclipの再生方向にコミットされず未検証維持。逆再生の読み戻しはduration/source extentが判定不能（既存125%clipと混同注意）で、render順序照合が唯一の確定手段（journal 05:05-05:35） |
 | T14 | 可変Speed Ramp | スピードランプ演出 | 未検証 | 未検証（freezeは同Sm2TimeMap系でsuspended。crash-tolerant宣言なしに再開しないこと — summary_report.txt RECORD_reverse_crash_verbatim） |
 | T15 | 既存clipのRetime対話編集 | ramp・easingの手直し | 未検証 | 未検証（CU route。T12の25%はダイアログ値の確定でありCurve/easing編集ではない） |
-| T16 | Stabilize / Smart Reframe | 手ブレ・縦型reframe | 未検証 | API stabilize/smart_reframe呼び出しはsuccess=Trueを返した（journal 19:58:51）が、効果のreadback・render証拠なし＝API受理のみ。検証済みAの要件（write+readback）未達のため格下げ。 |
+| T16 | Stabilize / Smart Reframe | 手ブレ・縦型reframe | 検証済みA | journal 2026-09-07 10:24:42 QW3 batch（宣言⑲）検証済みA: stabilize(item success, archive v8)前後で同frame 86500を単.frame mp4 render→ffmpeg 480p gray比較: mean_abs_diff 2.076・max 144・3.58%画素>10lev（before 24047B/after 23660B）。※timeline_frame captureは本機localeで「完了」vs Complete判定不整合のためRENDER_FAILED誤爆（Plan Bの明示render jobで実証）。Smart Reframe自体は未検証 |
 | T17 | Compound / Fusion Clip作成 | 複合演出の1object化 | 検証済みA | journal 19:49:48 検証済みA: Fusion Clip 1作成をitem一覧+spanでreadback（Compound Clipも同様に名称+span readback）。 |
 
 ### F. Transform・Edit Effects・Fusion・Magic Mask
@@ -129,7 +130,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | C07 | Tracker / Color Warper | モーショントラッカー正対の地点表示（style ③） | 検証済みC / 未検証 | **Tracker=検証済みC**: 追従ウィンドウのフレーム毎変位を実renderで実証（純追跡差分100/99px vs ビット一致ゼロ床、sat再飽和クラスタmid→end進行、journal 01:56:11）。**Color Warper=未検証**（グリッドドラッグ未実証——根拠の併記明記はFable指摘4）。track開始クリックがsilent-failする例あり（playhead進行で要確認）。素材がほぼ無彩色のため効果は小さめ |
 | C08 | Shot/Skin/WB/Reference match | 複数cutの色統一 | 検証済みI / 未検証 | offline drx match tools実走（journal 21:29:44）: shot/WB gradeCount=2・drx出力あり。ただしskin_gradeCount=0（肌マッチ生成ゼロ）・match品質のrender検証なし——skin分は未検証。 |
 | C09 | Scope/Gamut/Legal QC | 品質測定 | 検証済みI | journal 20:15:46: signalstats実測（YMIN=11/YMAX=229）。※経路はffmpeg offline測定で.drt/.drx不使用——I定義との適合は要確認（Opus判断待ち）。 |
-| C10 | Color Group | 長尺の多数カットをGroupで一括ルック管理（トーク常設カット等） | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: add_color_group('qwgroup')→get_color_groups読戻し→timeline item（croute_450f V1 item1）へassign→get_color_group完全一致（disposable、API-only）。Group node詳細はAdvancedのまま範囲外。 |
+| C10 | Color Group | 長尺の多数カットをGroupで一括ルック管理（トーク常設カット等） | 検証済みA | journal 2026-09-07 QW batch（宣言⑰）検証済みA: add_color_group('qwgroup')→get_color_groups読戻し→timeline item（croute_450f V1 item1）へassign→get_color_group完全一致（disposable、API-only）。QW3 batch（宣言⑲）10:22:09で拡張読戻し: color_group.get_pre_clip_graph('qwgroup')={available:true,num_nodes:1}・get_post_clip_graph同様={available:true,num_nodes:1}（Group nodeのpre/post clip graphもAPI読取可）。 |
 
 ### U. Audio・Fairlight
 
@@ -162,8 +163,8 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | 機能ID | 機能名 | TikTok系での用途 | 現在の状態 | 根拠 |
 |---|---|---|---|---|
 | Q01 | Timeline Marker・review annotation | YouTubeチャプター生成（R04のチャプターcheckboxと直結）・レビュー往復・自然言語修正指示の目印 | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: timeline_markers full CRUD on disposable croute_450f — add(frame0/Blue/qw2/test/qw2-cd)→get_all完全一致→get_by_custom_data一致→delete_at_frame→get_all空。export_review_report title「Review Annotation Report」3 scopes（timeline/item/pool、annotation 0）。API-only。timeline_item/media_pool_item marker面は未試行（本行のtimeline marker面のみ実証）。 |
-| Q02 | Media解析・文字起こし・shot分析 | トークcontentの核——文字起こしが編集判断・字幕・カット候補の起点 | 未検証 | 索引行Q02復帰（vlog再審最有力）。API面: media_analysis.analyze_*/transcribe_audio（索引記載）。※Q06と同じく本機はtranscription backend未導入の可能性——検証時に確認 |
-| Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 未検証 | detect_scene_cutsを2タイムラインで実行しsuccess=True（journal 19:54:20/19:55:06）だが、検出cut数・markerのreadbackなし＝API受理のみ（verification.status=unverified）。検証済みAの要件未達のため格下げ。 |
+| Q02 | Media解析・文字起こし・shot分析 | トークcontentの核——文字起こしが編集判断・字幕・カット候補の起点 | 未検証 | QW3 batch（宣言⑲）10:22:19 環境記録: media_analysis.capabilities()で本機はtranscription backend全滅（whisper_cli/whisper_cpp/mlx_whisper/http_transcriptionいずれもavailable=false・providers=[]）——Q06と同じブロッカーを本機で確定。vision(host_chat_paths)とffmpeg/ffprobeはavailable。analyze実行は未実施のため未検証のまま |
+| Q03 | Scene Cut Detection | cut検出（jump-cut補助） | 未検証 | QW3 batch（宣言⑲）10:21:29 読戻し完結: detect_scene_cuts(background) job d4139ae1 done success=Trueだが、markers get_all前後とも0件でmarker増分ゼロ（単一素材timeline croute_450fでは検出結果がmarkerとして現れない実測）。API受理以上の効果なし＝未検証維持。マルチカット素材での再検証は未済 |
 | Q06 | Editorial plan・Selects・Silence edit案 | 冒頭10秒まとめ（wishlist #2）の判断材料 | 未検証 | edit_engine.plan_selects 自体は存在するが解析DBが前提。本機はローカルtranscription backendが未導入で解析パイプラインが起動不可（no_auto_install方針）— backend導入後に再挑戦。v4.3のselects probe失敗と同じ所在 |
 | Q08 | Grade/mix反復案 | カット間ルック揃え・ラウドネス目標の測定→候補→再測定loop | 未検証 | 索引行Q08復帰。API面: media_analysis.grade_loop/mix_plan（索引記載。自動適用を意味しない） |
 
@@ -205,7 +206,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N23 | タイムライン複製/snapshot退避 | 破壊的操作前の保険 | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: timeline.duplicate(croute_450f→croute_450f_qwdup, id d8b80d9c) list 17→18→delete_timelines（confirm token・preview名一致確認・自作dupのみ削除）→17に復帰。currentをcroute_450fに戻し済み。API-only。 |
 | N24 | XML/AAF/EDL interchange往復 | 他NLE・長期保管（T02は.drt/.drpのみ） | 未検証 | 同上 |
 | N25 | In/Out範囲render・VBR/CBR品質（bitrate）・音声format/ch指定・複数timeline一括render | YouTube横型master＋TikTok縦型の両納品で毎回の操作——16:9 masterの品質・コーデック深度を含む（R行に存在せず） | 未検証 | 2026-09-07レビューdelivery監査CRITICAL＋vlog再審で横型master品質を明記。※一時筆誤で行が消滅していたのを復元（N23との重複解消） |
-| N26 | キーフレームのイージング（Ease In/Out/Bezier） | 「スムーズなズーム」等の実務はイージング前提——F02の実証は直線(Linear)のみ | 未検証 | Fable指摘2（2026-09-07）: 索引・地図とも行なし。F02はLinearのみ実証のため未検証部分を本行へ分離 |
+| N26 | キーフレームのイージング（Ease In/Out/Bezier） | 「スムーズなズーム」等の実務はイージング前提——F02の実証は直線(Linear)のみ | 未検証 | QW3 batch（宣言⑲）10:22:00: timeline_item get_keyframes('ZoomX')/add_keyframeがサーバ側で「'NoneType' object is not callable」エラー（同一itemのget_transformは成功＝keyframe経路のみ不達）。書込自体が不可のため未検証維持。set_keyframe_interpolation到達前の段で停止 |
 | N27 | .drfxテンプレートパックの導入・使用 | TikTok系エフェクト多用の実態は購入テンプレ運用が大半——導入と適用の両面。vlogもタイトル/LUTテンプレ運用は同型 | 未検証 | Fable指摘2: 索引・地図とも行なし（N17は内蔵テンプレ適用で別物） |
 | N28 | サムネイル用静止画書き出し | YouTube運用で毎本必要 | 未検証 | Fable指摘2: 行なし。MCPにexport_frame_as_still存在（vendor記載・未試行）。C03はルック保存目的で別物 |
 | N29 | 16:9→9:16背景ぼかしパディング | 縦型転換の定番レシピ | 未検証 | Fable指摘2: V節は解像度設定のみでこのレイアウト操作の行なし |
@@ -221,7 +222,7 @@ A06/A07、O02〜O04、Q04/Q05/Q07、R07）は縦型・短尺の通常
 | N39 | 音声スクラブ・波形編集 | 語頭正確カット | 未検証 | vlog再審: 行なし（U10はファイル加工） |
 | N40 | チャンネル構成の書込（mono→stereo等） | カメラ音声+外部録音の混在処理 | 未検証 | vlog再審: U01は読取のみ——書込側行なし |
 | N41 | 音楽ビート検出・ビート刻みカット | モンタージュ・切り替えの音楽合わせ | 未検証 | vlog再審: U09に「音楽sync」の語のみ・beat検出行なし |
-| N42 | 音声のみ書き出し（timeline→音声ファイル） | ポッドキャスト再利用 | 未検証 | vlog再審: R行は映像形式のみ（低頻度） |
+| N42 | 音声のみ書き出し（timeline→音声ファイル） | ポッドキャスト再利用 | 検証済みA | journal 2026-09-07 10:30:28 QW3 batch（宣言⑲）検証済みA: prepare_render_job(from_preset="Audio Only", marks 86401-86448)→render→qw3_audio2.wav 577,588B＝ffprobe pcm_s24le/48000Hz/2ch/2.000s。注意: format wavはset_format_and_codecでは拒否（available_codecs={}）・prepare_render_jobでもpresetpin無しだとmp4/H264を黙って継承する——**from_preset="Audio Only"必須**の実測 |
 | N43 | VFR・回転フラグ付き素材の実素材確認（16:9 master文脈） | スマホ4K素材の毎本通る道 | 未検証 | vlog再審: V2は縦型文脈のtrap引用のみ——横型masterで実証ゼロ |
 | N44 | 混在解像度/fpsの1タイムライン扱い | 複数カメラ+スマホ混在のスケーリング | 未検証 | vlog再審: 行なし（N12は色のみ） |
 | N45 | タイムラプス連番画像のimport（StartIndex/EndIndex） | 連写真からの場面作り | 検証済みA | journal 2026-09-07 QW2 batch（宣言⑱）: ffmpeg testsrc 64x64 PNG 30枚（qw_seq_001〜030）→safe_import_sequence dry_run成功→本import成功（qw_seq_[001-030].png, id b49d65fb）。probe: Frames=30/FPS24/Duration 00:00:01:06/Online。disposable poolに残置。API-only。 |
