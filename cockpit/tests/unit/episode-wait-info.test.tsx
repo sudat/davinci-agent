@@ -170,6 +170,33 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     expect(screen.getByTestId("wait-current-work").textContent).toContain("試し編集");
   });
 
+  it("同一段階の並行2工程は具体工程名で判別可能（codex回帰）", () => {
+    renderGuidance({
+      current_stage: "preview",
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 20_000).toISOString(),
+        },
+        {
+          stage_name: "preview",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 10_000).toISOString(),
+        },
+      ],
+    });
+    const text = screen.getByTestId("wait-stage-elapsed").textContent ?? "";
+    expect(text).toContain("（compile） 00:20");
+    expect(text).toContain("（preview） 00:10");
+  });
+
   it("現在工程の行がまだ無ければ進み具合は未計測と正直に言う（百分率なし）", () => {
     const { container } = renderGuidance({
       stage_runs: [

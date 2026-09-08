@@ -134,7 +134,10 @@ export default function EpisodeWaitInfo({
     runningStageNames.length === 0
       ? "実行中の工程はありません"
       : runningStageNames
-          .map((name) => `${stageGroupOf(name) ?? name} ${stageElapsedText(name)}`)
+          .map((name) => {
+            const group = stageGroupOf(name);
+            return `${group === null ? name : `${group}（${name}）`} ${stageElapsedText(name)}`;
+          })
           .join("・");
   const currentWork =
     runningStageNames.length > 0
