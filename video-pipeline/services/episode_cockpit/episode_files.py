@@ -26,6 +26,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from services.episode_cockpit.consultation_store import latest_adopted_policy
 from services.episode_cockpit.episode_ops import (
     _PIPELINE_ROOT,
     RUNNER_LOG_NAME,
@@ -731,6 +732,88 @@ class FileOps(WorkspaceContext):
         if len(applied) > 1:
             result["applied_commands"] = [command.command_id for command in applied]
         return result
+
+    def record_consultation_rebuild(
+        self, episode_id: str, *, judgment_id: str
+    ) -> dict[str, object]:
+        """Schedule a selection rebuild for an adopted consultation judgment.
+
+        The reservation carries ``judgment_id`` so the consultation view
+        derives the rebuild state deterministically per policy; the spawn
+        entry links back via ``reserves_sequence`` (the existing
+        予約→起動→成果 discipline). The lineage is the selection re-entry
+        projection (selection→plan→compile→preview). The rebuild consumes
+        NO consultation LLM budget (deterministic orchestration + the
+        chain's own director path). ``runner-active`` (a runner holds the
+        lock) propagates as the typed 409 — the judgment route maps it to
+        an unscheduled 200 with the recorded judgment intact.
+        """
+
+        episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
+        if latest_adopted_policy(episode_dir) is None:
+            raise CockpitUnprocessableError(
+                "no-adopted-policy",
+                "selection rebuild needs an adopted consultation policy; "
+                "none is on the table",
+            )
+        log_path = episode_dir / REBUILD_LOG_NAME
+        start = PIPELINE_STAGES.index("selection")
+        stop = PIPELINE_STAGES.index("preview")
+        stages = tuple(PIPELINE_STAGES[start : stop + 1])
+        marker = f"consultation-{judgment_id}"
+        reservation = RebuildRequestEntry(
+            sequence=self._next_sequence(log_path),
+            stage_hint=",".join(stages),
+            judgment_id=judgment_id,
+        )
+        self._append_jsonl(log_path, reservation)  # the 予約 (pre-spawn reservation)
+        run_id = uuid.uuid4().hex[:12]
+        try:
+            _spawn_runner(
+                [
+                    sys.executable,
+                    "-m",
+                    RUNNER_MODULE,
+                    "--episode-root",
+                    str(episode_dir),
+                    "--stop",
+                    RUNNER_STOP,
+                    "--from-stage",
+                    stages[0],
+                    "--applied-command",
+                    marker,
+                    "--run-id",
+                    run_id,
+                    "--state-store",
+                    str(self._state_store_path),
+                ],
+                cwd=_PIPELINE_ROOT,
+                log_path=episode_dir / RUNNER_LOG_NAME,
+            )
+        except OSError as error:
+            raise CockpitUnprocessableError(
+                "runner-spawn-failed", f"cannot start the rebuild runner: {error}"
+            ) from error
+        self._append_jsonl(
+            log_path,
+            RebuildRequestEntry(
+                sequence=self._next_sequence(log_path),
+                stage_hint=",".join(stages),
+                spawned=True,
+                run_id=run_id,
+                reserves_sequence=reservation.sequence,
+                judgment_id=judgment_id,
+            ),
+        )
+        return {
+            "stage_hint": ",".join(stages),
+            "scheduled": True,
+            "stages": list(stages),
+            "runner_log": str(episode_dir / RUNNER_LOG_NAME),
+            "applied_command": marker,
+            "run_id": run_id,
+            "judgment_id": judgment_id,
+        }
 
     def _load_brief(self, episode_id: str) -> BriefDraft:
         path = self._episode_dir(episode_id) / "brief.json"

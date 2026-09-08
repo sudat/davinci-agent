@@ -169,7 +169,8 @@ def test_message_creates_consultation_with_one_proposal(
     body = _post_message(client, episode_id, "ブログ告知用に短くしたい")
 
     assert set(body) == {
-        "consultation_id", "created_at", "message", "proposals", "judgments", "budget"
+        "consultation_id", "created_at", "message", "proposals", "judgments", "budget",
+        "policy", "rebuild", "policy_outcomes",
     }
     assert body["message"] == "ブログ告知用に短くしたい"
     assert body["judgments"] == []
@@ -383,7 +384,7 @@ def test_judgment_is_append_only_and_scope_verbatim(
         },
     )
 
-    assert first.status_code == 200
+    assert first.status_code == 202  # adoptable judgment schedules a selection rebuild
     judgments = first.json()["judgments"]
     assert len(judgments) == 1
     assert judgments[0]["proposal_id"] == "prop-1"

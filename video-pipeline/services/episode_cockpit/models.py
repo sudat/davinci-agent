@@ -171,6 +171,11 @@ class RebuildRequestEntry(StrictModel):
     ``reserves_sequence`` names the reservation entry it launched.
     A pre-spawn reservation therefore reads ``spawned=False, run_id=None``
     and survives reload for restore.
+
+    Consultation slice 2 (additive, backward compatible): ``judgment_id``
+    links a selection rebuild to the adopted consultation judgment that
+    requested it, so the consultation view derives the rebuild state
+    deterministically per policy. Absent (None) on every legacy line.
     """
 
     schema_version: Literal["cockpit-rebuild-request-v1"] = "cockpit-rebuild-request-v1"
@@ -181,6 +186,7 @@ class RebuildRequestEntry(StrictModel):
     run_id: NonEmpty | None = None
     target_version: NonEmpty | None = None
     reserves_sequence: SequenceNumber | None = None
+    judgment_id: NonEmpty | None = None
 
 
 class ReviewProposalConsumed(StrictModel):

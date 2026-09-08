@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import BeforeValidator, Field, ValidationError
 
 from services.contracts.primitives import StrictModel
@@ -53,13 +54,15 @@ from services.episode_cockpit.consultation_store import (
     consultation_view,
     consume_budget,
     ensure_budget_available,
+    latest_adopted_policy,
     load_budget_limits,
     load_consultations,
     now_stamp,
     require_consultation,
     require_proposal,
+    selection_rebuild_active,
 )
-from services.episode_cockpit.errors import CockpitUnprocessableError
+from services.episode_cockpit.errors import CockpitConflictError, CockpitUnprocessableError
 from services.episode_cockpit.models import NonEmpty  # noqa: TC001 (FastAPI get_type_hints)
 
 # Same-package reuse of the review-interpreter transport seams (config
@@ -315,9 +318,10 @@ def build_consultation_llm_call(
 def consultation_list(episode_id: str, workspace: Workspace) -> dict[str, object]:
     episode_dir = _episode_dir(workspace, episode_id)
     limits = load_budget_limits()
+    snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
     return {
         "consultations": [
-            consultation_view(episode_dir, record, limits)
+            consultation_view(episode_dir, record, limits, snapshot=snapshot)
             for record in load_consultations(episode_dir)
         ]
     }
@@ -371,22 +375,36 @@ def consultation_message(
         intervals=1,
         wall_seconds=wall_seconds,
     )
-    return consultation_view(episode_dir, record, limits)
+    snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
+    return consultation_view(episode_dir, record, limits, snapshot=snapshot)
 
 
 @router.post("/episodes/{episode_id}/consultation/judgment")
 def consultation_judgment(
     episode_id: str, request: ConsultationJudgmentRequest, workspace: Workspace
-) -> dict[str, object]:
+) -> JSONResponse:
+    """Append an adoption judgment; an adoptable one schedules a rebuild.
+
+    Validation is unchanged (unknown words → 4xx, unknown consultation →
+    404, unknown proposal → 422). When the appended judgment is adopt|revise
+    with a non-empty scope AND the extracted latest policy is this judgment,
+    a SELECTION rebuild is scheduled through the existing reservation
+    machinery (202 with the view). Otherwise — reject/both_wrong/delegate,
+    empty scope, no resolvable proposal, or a rebuild already running — the
+    judgment is recorded and the view returns unchanged-shape 200. The
+    rebuild consumes no consultation LLM budget.
+    """
+
     episode_dir = _episode_dir(workspace, episode_id)
     limits = load_budget_limits()
     record = require_consultation(episode_dir, request.consultation_id)
     if request.proposal_id is not None:
         require_proposal(episode_dir, request.consultation_id, request.proposal_id)
+    judgment_id = uuid.uuid4().hex[:12]
     append_judgment(
         episode_dir,
         ConsultationJudgmentV1(
-            judgment_id=uuid.uuid4().hex[:12],
+            judgment_id=judgment_id,
             consultation_id=request.consultation_id,
             proposal_id=request.proposal_id,
             decision=request.decision,
@@ -395,7 +413,34 @@ def consultation_judgment(
             created_at=now_stamp(),
         ),
     )
-    return consultation_view(episode_dir, record, limits)
+    snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
+    policy = latest_adopted_policy(episode_dir)
+    scope_adopted = (
+        request.scope.composition or request.scope.appearance or request.scope.audio
+    )
+    if (
+        request.decision in ("adopt", "revise")
+        and scope_adopted
+        and policy is not None
+        and policy.judgment_id == judgment_id
+        and not selection_rebuild_active(episode_dir, snapshot.stage_runs)
+    ):
+        try:
+            workspace.record_consultation_rebuild(episode_id, judgment_id=judgment_id)
+        except CockpitConflictError:
+            pass
+        else:
+            refreshed = workspace._require_snapshot(episode_id)  # noqa: SLF001
+            return JSONResponse(
+                status_code=202,
+                content=consultation_view(
+                    episode_dir, record, limits, snapshot=refreshed
+                ),
+            )
+    return JSONResponse(
+        status_code=200,
+        content=consultation_view(episode_dir, record, limits, snapshot=snapshot),
+    )
 
 
 __all__ = ["build_consultation_llm_call", "router"]
