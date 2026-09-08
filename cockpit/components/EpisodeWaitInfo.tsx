@@ -207,7 +207,7 @@ export default function EpisodeWaitInfo({
         </p>
         {typeof retryCount === "number" && retryCount > 0 ? (
           <p className="field-hint" data-testid="wait-retry">
-            再試行中です（{retryCount}回目）
+            再試行中です（{retryCount}回目・最大回数は提供されていません）
             {retryReason !== null ? `：理由 ${retryReason}` : ""}
           </p>
         ) : null}

@@ -272,11 +272,27 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     expect(screen.getByTestId("wait-worker-report").textContent).toContain("最後の作業報告");
   });
 
-  it("今回runの再試行回数を表示する（理由や最大回数は捏造しない）", () => {
+  it("今回runの再試行回数を表示する（最大回数は提供されていないと明示）", () => {
+    renderGuidance({
+      current_run_retry_count: 2,
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "failed_blocked",
+          retry_count: 1,
+          last_error_code: "compile-failed",
+          run_id: "run-1",
+        },
+      ],
+    });
+    const retry = screen.getByTestId("wait-retry").textContent ?? "";
+    expect(retry).toBe("再試行中です（2回目・最大回数は提供されていません）：理由 compile-failed");
+  });
+
+  it("再試行中表示に捏造した方針数値を含まない（秒数や最大N回を作らない）", () => {
     renderGuidance({ current_run_retry_count: 2 });
     const retry = screen.getByTestId("wait-retry").textContent ?? "";
-    expect(retry).toContain("再試行中です（2回目）");
-    expect(retry).not.toContain("最大");
+    expect(retry).not.toMatch(/\d+秒|最大\d+回/);
   });
 
   it("止まっている段階があるときは中止未実装を明示し再照会を出す", () => {
