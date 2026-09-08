@@ -347,7 +347,8 @@ def test_consultation_view_matches_pinned_contract(episode_dir: Path) -> None:
     view = consultation_view(episode_dir, _record(), ConsultationBudgetLimits())
 
     assert set(view) == {
-        "consultation_id", "created_at", "message", "proposals", "judgments", "budget"
+        "consultation_id", "created_at", "message", "proposals", "judgments", "budget",
+        "policy", "rebuild", "policy_outcomes",
     }
     assert view["message"] == "ブログ告知用に短くしたい"
     proposal = cast("list[dict[str, object]]", view["proposals"])[0]
@@ -372,3 +373,15 @@ def test_consultation_view_matches_pinned_contract(episode_dir: Path) -> None:
         "wall_seconds_used": 1.25, "wall_seconds_limit": 600.0,
         "cost_display": "unmeasured",
     }
+    adopted = cast("dict[str, object]", view["policy"])["adopted"]
+    assert adopted is not None
+    assert cast("dict[str, object]", adopted)["judgment_id"] == "j-1"
+    assert cast("dict[str, object]", adopted)["structure"] == (
+        cast("dict[str, object]", details)["structure"]
+    )
+    assert view["rebuild"] == {
+        "status": "none",
+        "target_version": None,
+        "detail": "この方針の再生成は要求されていません。",
+    }
+    assert view["policy_outcomes"] == []
