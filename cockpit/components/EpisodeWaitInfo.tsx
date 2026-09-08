@@ -3,10 +3,11 @@
 import { useRef } from "react";
 import type { EpisodeStatus } from "@/lib/api";
 import {
-  activeRunId,
   formatElapsed,
   groupProgress,
+  lastStartedRowOfActiveRun,
   perStageLatestRows,
+  runningStageRows,
   stageGroupOf,
   STAGE_GROUPS,
 } from "@/lib/stageGroups";
@@ -71,10 +72,10 @@ export default function EpisodeWaitInfo({
 
   // codex P1-2: activity is ONLY the active run's running rows — a run id's
   // existence or an old run's running residue never marks the episode busy.
-  const active = activeRunId(status);
-  const runActive =
-    active !== null &&
-    status.stage_runs.some((row) => row.run_id === active && row.status === "running");
+  // 導出源は stageGroups.runningStageRows に集約（工程名・開始時刻・経過の
+  // 同一ソース）。job.current_stage は到達済み段階であり別物。
+  const activeRunningRows = runningStageRows(status);
+  const runActive = activeRunningRows.length > 0;
   const unreviewed = status.unreviewed_proposal_set === true;
   const reportUnknown =
     status.last_worker_report_at === null ||
@@ -112,12 +113,8 @@ export default function EpisodeWaitInfo({
       : [...perStageLatestRows(status).entries()].filter(([stage]) =>
           currentGroup.stages.includes(stage),
         );
-  // 現在工程の同一ソース導出（codex再指摘）: job.current_stage は rebuild 中に
-  // 更新されないため、工程名も開始時刻も「現行runの実行中行」からだけ出す。
-  // 到達済み current_stage とは区別し、複数並行は推測してまとめない。
-  const activeRunningRows = status.stage_runs.filter(
-    (row) => row.run_id === active && row.status === "running",
-  );
+  // 現在工程の同一ソース導出（codex再指摘）: 工程名も開始時刻も現行runの
+  // 実行中行からだけ出す。複数並行は推測してまとめず工程ごとに併記する。
   const runningStageNames = [
     ...new Set(activeRunningRows.map((row) => row.stage_name)),
   ];
@@ -130,9 +127,16 @@ export default function EpisodeWaitInfo({
       ? "不明（開始時刻を取得できません）"
       : formatElapsed(now - Math.min(...stamps));
   }
+  // 停止/終端時は成長する経過を捏造しない: 現行runに開始時刻付きの行が
+  // あれば、その実測時刻を「最後の実行開始」として固定表示する。
+  const lastStarted = lastStartedRowOfActiveRun(status);
+  const stoppedStageElapsed =
+    lastStarted === null || lastStarted.first_started_at === undefined
+      ? "実行中の工程はありません"
+      : `実行中の工程はありません（最後の実行開始 ${clockOf(lastStarted.first_started_at)}）`;
   const stageElapsedLine =
     runningStageNames.length === 0
-      ? "実行中の工程はありません"
+      ? stoppedStageElapsed
       : runningStageNames
           .map((name) => {
             const group = stageGroupOf(name);

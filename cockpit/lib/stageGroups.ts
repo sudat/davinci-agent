@@ -68,6 +68,30 @@ export function perStageLatestRows(status: EpisodeStatus): Map<string, StageRunR
   return truth;
 }
 
+/** codex P1（2026-09-08 14:32Z）: 現在の作業の導出源は現行runの「実行中」行
+ * のみ。job.current_stage はrebuild中も更新されず「到達済み段階」を指し続け、
+ * 実行中工程がそれを追い越すことがある。工程名・開始時刻・経過をこの行たち
+ * からだけ出し、両者を同一視しない。 */
+export function runningStageRows(status: EpisodeStatus): StageRunRow[] {
+  const active = activeRunId(status);
+  return active === null
+    ? []
+    : status.stage_runs.filter((row) => row.run_id === active && row.status === "running");
+}
+
+/** 停止/終端時の時計の意味を固定する源: 現行runの行のうち first_started_at
+ * が実在する最後の行（行は時系列追記）。停止後の表示は成長する経過ではなく
+ * 実測の開始時刻そのもの（最後の実行開始）とする。 */
+export function lastStartedRowOfActiveRun(status: EpisodeStatus): StageRunRow | null {
+  const active = activeRunId(status);
+  let last: StageRunRow | null = null;
+  for (const row of status.stage_runs) {
+    if (active !== null && row.run_id !== active) continue;
+    if (!Number.isNaN(Date.parse(row.first_started_at ?? ""))) last = row;
+  }
+  return last;
+}
+
 /** Group progress from each stage's LATEST truthful row — no invented
  * state: current-run failure beats active running beats succeeded; a
  * dead run's residue never marks the group active or failed. */

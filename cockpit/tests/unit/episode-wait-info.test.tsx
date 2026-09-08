@@ -170,6 +170,59 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     expect(screen.getByTestId("wait-current-work").textContent).toContain("試し編集");
   });
 
+  it("複数工程が並行で動くときは推測してまとめず工程ごとに併記する（codex並行指摘）", () => {
+    renderGuidance({
+      current_stage: "preview",
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 20_000).toISOString(),
+        },
+        {
+          stage_name: "analyze",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 10_000).toISOString(),
+        },
+      ],
+    });
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toBe(
+      "試し編集（compile） 00:20・素材の受付と確認（analyze） 00:10",
+    );
+    expect(screen.getByTestId("wait-current-work").textContent).toBe(
+      "試し編集・素材の受付と確認",
+    );
+  });
+
+  it("実行中が無く現行runに終端行があれば時計の意味を最後の実行開始として固定表示する（成長する経過を捏造しない）", () => {
+    const startedAt = new Date(T0.getTime() - 45_000);
+    renderGuidance({
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "failed_blocked",
+          retry_count: 1,
+          last_error_code: "compile-failed",
+          run_id: "run-1",
+          first_started_at: startedAt.toISOString(),
+        },
+      ],
+    });
+    const clock = [startedAt.getHours(), startedAt.getMinutes(), startedAt.getSeconds()]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toBe(
+      `実行中の工程はありません（最後の実行開始 ${clock}）`,
+    );
+    expect(screen.getByTestId("wait-current-work").textContent).toContain("実行中の工程なし");
+  });
+
   it("同一段階の並行2工程は具体工程名で判別可能（codex回帰）", () => {
     renderGuidance({
       current_stage: "preview",
