@@ -37,6 +37,8 @@ function okStatus(seq: number): Response {
 const flagsOk = () =>
   jsonResponse("f", 200, { flags: [], not_yet_generated: true });
 const preview404 = () => new Response(null, { status: 404 });
+const consultationOk = () =>
+  jsonResponse("c", 200, { consultations: [] });
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -55,6 +57,9 @@ describe("EpisodeView poll hardening（工程2P）", () => {
       if (url.endsWith("/flags")) return new Promise(() => undefined);
       if (url.endsWith("/preview")) return new Promise(() => undefined);
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
+      if (url.includes("/consultation")) {
+        return Promise.resolve(jsonResponse("c", 200, { consultations: [] }));
+      }
       statusCalls += 1;
       return Promise.resolve(okStatus(statusCalls));
     });
@@ -75,6 +80,10 @@ describe("EpisodeView poll hardening（工程2P）", () => {
       const url = String(input);
       if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
       if (url.endsWith("/preview")) return Promise.resolve(preview404());
+      if (url.endsWith("/consultation")) {
+        // 相談は常に成功扱い: status失敗時のerror noticeは1つだけにする
+        return Promise.resolve(consultationOk());
+      }
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
       if (failing) return Promise.reject(new TypeError("network down"));
       return Promise.resolve(okStatus(1));
@@ -106,6 +115,7 @@ describe("EpisodeView poll hardening（工程2P）", () => {
       const url = String(input);
       if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
       if (url.endsWith("/preview")) return Promise.resolve(preview404());
+      if (url.endsWith("/consultation")) return Promise.resolve(consultationOk());
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
       statusCalls += 1;
       return Promise.resolve(okStatus(statusCalls));

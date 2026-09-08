@@ -28,6 +28,9 @@ function stubApi(routes: Routes): ReturnType<typeof vi.fn> {
     const url = String(input);
     if (url.endsWith("/flags")) return Promise.resolve(routes.flags());
     if (url.endsWith("/preview")) return Promise.resolve(routes.preview());
+    if (url.includes("/consultation")) {
+      return Promise.resolve(jsonResponse("c", 200, { consultations: [] }));
+    }
     return Promise.resolve(routes.status());
   });
   vi.stubGlobal("fetch", fetchMock);

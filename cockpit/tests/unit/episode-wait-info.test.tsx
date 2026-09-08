@@ -76,10 +76,38 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     );
   });
 
-  it("runが動いている間は今は操作不要", () => {
-    renderGuidance({});
+  it("動作報告がある稼働中は今は操作不要", () => {
+    renderGuidance({
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+        },
+      ],
+      last_worker_report_at: new Date(T0.getTime() - 5_000).toISOString(),
+    });
     expect(screen.getByTestId("wait-operator-action").textContent).toBe(
       "今は操作不要です（自動で進行しています）",
+    );
+  });
+
+  it("動作報告が無ければ応答不明（自動で進行していると断定しない）", () => {
+    renderGuidance({
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+        },
+      ],
+    });
+    expect(screen.getByTestId("wait-operator-action").textContent).toBe(
+      "進み具合は応答不明です（しばらく待つか再照会してください）",
     );
   });
 

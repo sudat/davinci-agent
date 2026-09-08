@@ -1,10 +1,10 @@
-# ダビンチエージェント PRD V5.0.8
+# ダビンチエージェント PRD V5.0.9
 
 ## 0. 文書メタデータ、権威関係、読み方
 
 | 項目 | 内容 |
 |---|---|
-| 文書 | ダビンチエージェント PRD V5.0.8（V5.0.8: 2026-09-08 工程2P（進捗と待機の可視化）の実装検証を記録。検証済み: backend ruff全pass・pytest 396 passed/2 skipped・job_runner 72/72・basedpyright 0エラー / UI typecheck・vitest 142 passed・production build / 隔離browser E2E 17 passed・2 skipped（port 8799で実backend+実frontend。2 skippedは実chainの`LIVE_V44_E2E=1`ゲート）。受入specの陳腐化assertion 2件を2P正直語彙へ整合（`PREVIEW_READY`の接尾辞表示対応、rebuild phase語彙に正直な停止状態を追加）。合成fast-path環境はrun/成果物を持たないため実rebuild再renderの完走を検証せず、完走の証明はlive-episode.spec.ts（実chain）が担うとspecコメントへ明記。2P設計表は`private/runtime/sol-ux-redesign-20260907/step2p-design.md`（codex条件8項を反映）。【履歴】V5.0.7=2026-09-08 工程2修正ラウンド4のcodex独立レビュー**合格**（指摘修正範囲）。静止画の配送事実契約は現行どおり `frames_delivery_attempted`=**呼出試行**（起動前失敗を含む・**実配送は未確認**）/ `frames_verified`=試行かつ応答あり。ラウンド3=順次原子性+適用記録境界、ラウンド2=束ね/代替案区別+3段階正直性、ラウンド1=安全対策（いずれも合格）。【未確認】codexの2P独立レビュー結果。実素材・実LLMでの2P動作。実素材・実LLM・修正後実ブラウザE2Eの製品合格。 |
+| 文書 | ダビンチエージェント PRD V5.0.9（V5.0.9: 2026-09-08 codex独立レビュー〔2P未合格4指摘・2.5対応表未承認、private/verification/2026-09-08-independent-2p-and-25-review.md〕への対応を記録。対応済み: P1-1 再読込でrebuild表示をserver連鎖から復元、P1-2 現行runと履歴の分離（旧run失敗/実行中残滓が現在進捗に混入しない）、受入a/b試験是正（PREVIEW_READY接尾辞と期待停止終端の具体assert、live-episode.spec.ts語彙整合）、P2一部（作業報告なしなら応答不明と正直表示・最後の実進捗表示・null key修正）。2.5 slice1（相談記録保存・判断・予算のbackend API+相談パネル）を実装・検証。検証値: ruff全pass・basedpyright 0・pytest 421 passed・vitest 167 passed・typecheck 0・隔離E2E 17 passed 2 skipped〔liveはLIVE_V44_E2Eゲート〕。契約一致（GET/POST形状・decision語彙both_wrong含む）を双方実装から突合済み。【未対応の明示】再試行最大回数/次動作（backendが最大値を未提供）、180秒閾値の扱い、stale表示への最終取得時刻、previewOkの版結びつけ、2.5 slice2（方針→Director実入力・U44）、U45/U46正本定義の実装。【履歴】V5.0.8=工程2P実装検証（backend/UI/E2E数値は上記に更新置換）。静止画配送契約は現行どおり `frames_delivery_attempted`=呼出試行/`frames_verified`=試行かつ応答あり。【未確認】codexの再レビュー結果。実素材・実LLMでの動作。 |
 | 作成・証拠カットオフ | 2026-09-07（Asia/Tokyo） |
 | 対象 | sudaさんの実際の動画制作。DaVinci Resolve Studio 21 と Cockpit を用いる |
 | リポジトリ | `/Users/stc/Developer/davinci-agent` |

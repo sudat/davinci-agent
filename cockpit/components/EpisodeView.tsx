@@ -17,6 +17,7 @@ import PreviewPlayer, { type PreviewAvailability } from "@/components/PreviewPla
 import FlagList from "@/components/FlagList";
 import BeforeAfterSummary from "@/components/BeforeAfterSummary";
 import FinishingDomainPanel from "@/components/FinishingDomainPanel";
+import ConsultationPanel from "@/components/ConsultationPanel";
 import ReviewChatPanel from "@/components/ReviewChatPanel";
 import { useNow } from "@/components/useNow";
 import { jobStatusSuffix } from "@/lib/stageGroups";
@@ -176,6 +177,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         )}
       </section>
       <FinishingDomainPanel episodeId={episodeId} />
+      <ConsultationPanel episodeId={episodeId} status={status} />
       <section className="card">
         <h2 className="card-title">プレビュー</h2>
         <PreviewPlayer episodeId={episodeId} state={preview} videoRef={videoRef} />

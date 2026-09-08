@@ -347,11 +347,13 @@ test("合成fast-path: review可能な状態まで到達（stage実行待ちな�
   seedReviewStore(episodeId);
 
   await page.goto(`/episodes/${episodeId}`);
-  // 2P: UIはPREVIEW_READYに正直な接尾辞（試し編集完了）を付して表示する。
-  // ステータス語彙自体の一致を確認するため部分一致。
+  // 受入a（codex指摘反映）: 語彙と正直な接尾辞をそれぞれ確認する。
   await expect(page.getByTestId("episode-status")).toContainText("PREVIEW_READY", {
     timeout: 15_000,
   });
+  await expect(page.getByTestId("episode-status")).toContainText(
+    "試し編集完了（全体の完了ではありません）",
+  );
   await expect(page.getByTestId("current-stage")).toHaveText("preview");
   await expect(page.getByTestId("preview-player")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("flag-item")).toBeVisible({ timeout: 15_000 });
@@ -446,14 +448,13 @@ test("NL修正→構造化プレビュー→適用→部分rebuild 202", async (
   await page.getByTestId("review-apply-button").click();
 
   await expect(page.getByTestId("rebuild-indicator")).toBeVisible({ timeout: 20_000 });
-  // T9 contract, 2P vocabulary: the indicator shows ONE honest phase line
-  // (予約済み/実行中/完了/確認待ち/停止). This synthetic fast-path has no
-  // run/ workspace (the real chain stops at ingest by design), so the
-  // re-render cannot complete here — a terminal 停止 is the honest phase.
-  // Rebuild completion with a republished preview is proven by
-  // live-episode.spec.ts (LIVE_V44_E2E=1, real chain).
+  // 受入b（codex指摘反映）: 合成fast-pathはrun/成果物を持たず、rebuildは
+  // preview段階の失敗という既知の終端に至る。全許容regexではなく、期待する
+  // 停止の終端表示そのものを確認する。成功経路（予約→実行→完了＋版付き
+  // 成果物の実測）はここで主張せず、live-episode.spec.ts（実chain・
+  // LIVE_V44_E2E=1）が担保する。
   await expect(page.getByTestId("rebuild-phase")).toHaveText(
-    /再build(予約済み|実行中|完了|が止まっています)|試し編集完了・確認してください/,
+    "再buildが止まっています（確認が必要です）",
     { timeout: 20_000 },
   );
   const stageHint = await page.getByTestId("rebuild-stage-hint").textContent();
@@ -464,7 +465,7 @@ test("NL修正→構造化プレビュー→適用→部分rebuild 202", async (
   record(
     "nl-correction-structured-partial-rebuild",
     "pass",
-    `「この後2秒残して」→ draft echo (keep_longer/+2s/target 1s) → 適用 → rebuild scheduled (202) + stage hint "${stageHint}"（selection/ingest等の無関係stageは再実行対象外）+ phase表示は2P正直語彙の1つ。合成環境はrun/を持たないため再render完走は検証対象外（実chainでの完走はLIVE_V44_E2E=1のlive-episode.spec.tsが担保）`,
+    `「この後2秒残して」→ draft echo (keep_longer/+2s/target 1s) → 適用 → rebuild scheduled (202) + stage hint "${stageHint}"（selection/ingest等の無関係stageは再実行対象外）+ 期待終端「再buildが止まっています（確認が必要です）」をassert（合成環境はrun/無しでpreview段階が失敗する既知経路）。実chainでの成功経路はLIVE_V44_E2E=1のlive-episode.spec.tsが担保`,
   );
 
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
@@ -562,10 +563,13 @@ test("restart resume: SIGTERM→再起→episode状態と承認済みが保持",
   await restartBackend();
 
   await page.goto(`/episodes/${episodeId}`);
-  // 2P: 同上。restart後もstatus語彙PREVIEW_READYが表示され続けることを確認。
+  // 受入a（codex指摘反映）: restart後も語彙と接尾辞が揃って表示され続ける。
   await expect(page.getByTestId("episode-status")).toContainText("PREVIEW_READY", {
     timeout: 20_000,
   });
+  await expect(page.getByTestId("episode-status")).toContainText(
+    "試し編集完了（全体の完了ではありません）",
+  );
   await expect(page.getByTestId("current-stage")).toHaveText("preview");
   await expect(page.getByTestId("preview-player")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId("decided-item")).toHaveCount(4);

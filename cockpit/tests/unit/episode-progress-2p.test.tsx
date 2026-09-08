@@ -162,3 +162,31 @@ describe("EpisodeView — PREVIEW_READYの語彙（codex条件1）", () => {
     expect(statusText).not.toContain("全体完了");
   });
 });
+
+describe("EpisodeProgress — 旧run混入の分離（codex独立レビューP1-2）", () => {
+  it("旧runのpreview失敗+今回runのpreview成功は完了扱い（止まらない・busyにしない）", () => {
+    const mixed = statusWith({
+      status: "PREVIEW_READY",
+      current_stage: "preview",
+      stage_runs: [
+        {
+          stage_name: "preview",
+          status: "failed_blocked",
+          retry_count: 1,
+          last_error_code: "preview-failed",
+          run_id: "run-8",
+        },
+        {
+          stage_name: "preview",
+          status: "succeeded",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-9",
+        },
+      ],
+    });
+    render(<EpisodeProgress status={mixed} />);
+    expect(screen.getByTestId("episode-progress").getAttribute("aria-busy")).toBe("false");
+    expect(screen.queryByTestId("wait-stalled")).toBeNull();
+  });
+});

@@ -25,7 +25,7 @@ from __future__ import annotations
 import pytest
 
 from services.episode_cockpit import api as cockpit_api
-from services.episode_cockpit import episode_ops
+from services.episode_cockpit import api_consultation, episode_ops
 
 _GATE_VARS = ("EDITORIAL_DIRECTOR_API_KEY", "EDITORIAL_DIRECTOR_NETWORK_ENABLED")
 
@@ -35,6 +35,10 @@ def _hermetic_editorial_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in _GATE_VARS:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(cockpit_api, "build_review_llm_call", lambda: None)
+    # The consultation factory follows the same review-interpreter pattern;
+    # without this stub a message-route test would probe the locally
+    # logged-in codex CLI (production_model runtime is shipped ON).
+    monkeypatch.setattr(api_consultation, "build_consultation_llm_call", lambda: None)
 
 
 @pytest.fixture(autouse=True)

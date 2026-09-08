@@ -151,10 +151,13 @@ test.describe("live real-chain episode", () => {
     const previewFile = path.join(EPISODES_ROOT, episodeId, "previews", "preview.mp4");
     expect(fs.existsSync(previewFile), `preview file missing: ${previewFile}`).toBe(true);
 
-    // The page's own poll converges on the same truth.
-    await expect(page.getByTestId("episode-status")).toHaveText("PREVIEW_READY", {
+    // The page's own poll converges on the same truth (受入a: 語彙＋接尾辞).
+    await expect(page.getByTestId("episode-status")).toContainText("PREVIEW_READY", {
       timeout: 15_000,
     });
+    await expect(page.getByTestId("episode-status")).toContainText(
+      "試し編集完了（全体の完了ではありません）",
+    );
     await expect(page.getByTestId("preview-player")).toBeVisible({ timeout: 15_000 });
 
     expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
@@ -167,7 +170,7 @@ test.describe("live real-chain episode", () => {
     const consoleErrors = trackConsoleErrors(page, [404]);
 
     await page.goto(`/episodes/${episodeId}`);
-    await expect(page.getByTestId("episode-status")).toHaveText("PREVIEW_READY", {
+    await expect(page.getByTestId("episode-status")).toContainText("PREVIEW_READY", {
       timeout: 15_000,
     });
     await expect(page.getByTestId("preview-player")).toBeVisible({ timeout: 15_000 });
@@ -190,7 +193,8 @@ test.describe("live real-chain episode", () => {
       /再build(予約済み|実行中|完了)/,
       { timeout: 20_000 },
     );
-    await expect(page.getByTestId("rebuild-phase")).toHaveText("再build完了", {
+    // 完了labelは接尾辞付き（「再build完了（試し編集の更新を確認済み）」）。
+    await expect(page.getByTestId("rebuild-phase")).toContainText("再build完了", {
       timeout: REBUILD_TIMEOUT_MS,
     });
 
@@ -206,7 +210,7 @@ test.describe("live real-chain episode", () => {
       .filter((line) => line !== "");
     expect(metricLines.length).toBeGreaterThanOrEqual(1);
 
-    await expect(page.getByTestId("episode-status")).toHaveText("PREVIEW_READY", {
+    await expect(page.getByTestId("episode-status")).toContainText("PREVIEW_READY", {
       timeout: 15_000,
     });
     await expect(page.getByTestId("preview-player")).toBeVisible({ timeout: 15_000 });

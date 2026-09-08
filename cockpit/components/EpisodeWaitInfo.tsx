@@ -3,8 +3,10 @@
 import { useRef } from "react";
 import type { EpisodeStatus } from "@/lib/api";
 import {
+  activeRunId,
   formatElapsed,
   groupProgress,
+  perStageLatestRows,
   stageGroupOf,
   STAGE_GROUPS,
 } from "@/lib/stageGroups";
@@ -21,16 +23,28 @@ type EpisodeWaitInfoProps = {
 
 const UNMEASURED_TEXT = "この工程の進み具合は取得できません";
 
-function reportLine(status: EpisodeStatus): string {
-  const raw = status.last_worker_report_at;
-  if (raw === null || raw === undefined || raw === "") return "応答不明";
+function clockOf(raw: string): string {
   const at = new Date(raw);
-  const clock = Number.isNaN(at.getTime())
+  return Number.isNaN(at.getTime())
     ? raw
     : [at.getHours(), at.getMinutes(), at.getSeconds()]
         .map((part) => String(part).padStart(2, "0"))
         .join(":");
-  return `最後の作業報告 ${clock}`;
+}
+
+function reportLine(status: EpisodeStatus): string {
+  const raw = status.last_worker_report_at;
+  if (raw === null || raw === undefined || raw === "") return "最後の作業報告 応答不明";
+  return `最後の作業報告 ${clockOf(raw)}`;
+}
+
+function lastRealProgress(status: EpisodeStatus): string | null {
+  const arrived = status.stage_runs
+    .map((row) => row.first_output_arrived_at)
+    .filter((value): value is string => typeof value === "string" && value !== "")
+    .sort();
+  const latest = arrived.at(-1);
+  return latest === undefined ? null : clockOf(latest);
 }
 
 /**
@@ -55,10 +69,17 @@ export default function EpisodeWaitInfo({
   const elapsedMs = Math.max(0, now - anchor);
   if (elapsedMs <= SHOW_AFTER_MS) return null;
 
+  // codex P1-2: activity is ONLY the active run's running rows — a run id's
+  // existence or an old run's running residue never marks the episode busy.
+  const active = activeRunId(status);
   const runActive =
-    (status.current_run ?? null) !== null ||
-    status.stage_runs.some((row) => row.status === "running");
+    active !== null &&
+    status.stage_runs.some((row) => row.run_id === active && row.status === "running");
   const unreviewed = status.unreviewed_proposal_set === true;
+  const reportUnknown =
+    status.last_worker_report_at === null ||
+    status.last_worker_report_at === undefined ||
+    status.last_worker_report_at === "";
   const idleDone =
     !runActive &&
     !unreviewed &&
@@ -88,7 +109,9 @@ export default function EpisodeWaitInfo({
   const currentGroupRows =
     currentGroup === undefined
       ? []
-      : status.stage_runs.filter((row) => currentGroup.stages.includes(row.stage_name));
+      : [...perStageLatestRows(status).entries()].filter(([stage]) =>
+          currentGroup.stages.includes(stage),
+        );
   const currentWork = stageGroupOf(status.current_stage) ?? status.current_stage;
   const retryCount = status.current_run_retry_count;
   const retryReason =
@@ -110,14 +133,22 @@ export default function EpisodeWaitInfo({
           <dt>現在の作業</dt>
           <dd data-testid="wait-current-work">{currentWork}</dd>
         </div>
+        <div>
+          <dt>最後の実進捗</dt>
+          <dd data-testid="wait-last-progress">
+            {lastRealProgress(status) ?? "取得できません"}
+          </dd>
+        </div>
       </dl>
       <div aria-live="polite">
         <p data-testid="wait-groups">
-          {groupLines.map((line) => (
-            <span key={line} className="wait-group-line">
-              {line}
-            </span>
-          ))}
+          {groupLines
+            .filter((line): line is string => line !== null)
+            .map((line) => (
+              <span key={line} className="wait-group-line">
+                {line}
+              </span>
+            ))}
         </p>
         {currentGroupRows.length === 0 ? (
           <p className="field-hint" data-testid="wait-unmeasured">
@@ -129,13 +160,13 @@ export default function EpisodeWaitInfo({
             ? "あなたの確認待ちです（修正案を確認してください）"
             : failedGroups.length > 0
               ? "動いていません（止まっている段階を確認してください）"
-              : "今は操作不要です（自動で進行しています）"}
+              : reportUnknown
+                ? "進み具合は応答不明です（しばらく待つか再照会してください）"
+                : "今は操作不要です（自動で進行しています）"}
         </p>
-        {runActive ? (
-          <p className="field-hint" data-testid="wait-worker-report">
-            {reportLine(status)}
-          </p>
-        ) : null}
+        <p className="field-hint" data-testid="wait-worker-report">
+          {reportLine(status)}
+        </p>
         {typeof retryCount === "number" && retryCount > 0 ? (
           <p className="field-hint" data-testid="wait-retry">
             再試行中です（{retryCount}回目）

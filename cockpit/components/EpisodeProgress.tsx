@@ -1,7 +1,12 @@
 "use client";
 
 import type { EpisodeStatus } from "@/lib/api";
-import { jobStatusSuffix, stageGroupOf } from "@/lib/stageGroups";
+import {
+  activeRunId,
+  jobStatusSuffix,
+  perStageLatestRows,
+  stageGroupOf,
+} from "@/lib/stageGroups";
 import EpisodeWaitInfo from "@/components/EpisodeWaitInfo";
 
 type EpisodeProgressProps = {
@@ -27,9 +32,16 @@ function measuredEtaMinutes(value: number | undefined): number | null {
 export default function EpisodeProgress({ status, now, onRequery }: EpisodeProgressProps) {
   const eta = measuredEtaMinutes(status.eta_minutes);
   const units = status.work_units;
-  const succeeded = status.stage_runs.filter((run) => run.status === "succeeded").length;
-  const running = status.stage_runs.filter((run) => run.status === "running").length;
   const suffix = jobStatusSuffix(status.status);
+  // codex P1-2: stage counts come from each stage's LATEST truthful row —
+  // an old run's success/running residue never inflates the counters and
+  // never keeps the region busy (aria-busy) after its run ended.
+  const active = activeRunId(status);
+  const latest = [...perStageLatestRows(status).values()];
+  const succeeded = latest.filter((run) => run.status === "succeeded").length;
+  const running = latest.filter(
+    (run) => run.status === "running" && run.run_id === active,
+  ).length;
 
   return (
     <div data-testid="episode-progress" aria-live="polite" aria-busy={running > 0}>

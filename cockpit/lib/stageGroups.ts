@@ -33,14 +33,56 @@ export const GROUP_PROGRESS_LABEL: Record<GroupProgress, string> = {
   untouched: "未着手",
 };
 
-/** Group progress from the stage table's own status values — no invented
- *  state: failed beats running beats succeeded; no rows = 未着手. */
+/** The run whose rows are CURRENT activity (codex P1-2: 現行runと履歴の分離):
+ * a pending reservation's unspawned run (null → nothing is active), else
+ * the rebuild current_run, else the run of the chronologically-last row
+ * (the initial chain). A run's EXISTENCE never proves activity — only its
+ * running rows do. */
+export function activeRunId(status: EpisodeStatus): string | null {
+  const pending = status.pending_rebuild;
+  if (pending !== null && pending !== undefined) return pending.run_id ?? null;
+  if (typeof status.current_run === "string" && status.current_run !== "") {
+    return status.current_run;
+  }
+  return status.stage_runs.at(-1)?.run_id ?? null;
+}
+
+type StageRunRow = EpisodeStatus["stage_runs"][number];
+
+/** Per stage, the LATEST truthful row: the active run's row overrides
+ * history; a historical stage keeps its own last row (rows append
+ * chronologically). Old-run failures/residue can never override what the
+ * current run actually did, and vice versa. */
+export function perStageLatestRows(status: EpisodeStatus): Map<string, StageRunRow> {
+  const active = activeRunId(status);
+  const truth = new Map<string, StageRunRow>();
+  for (const run of status.stage_runs) {
+    if (active !== null && run.run_id !== active) continue;
+    truth.set(run.stage_name, run);
+  }
+  for (const run of status.stage_runs) {
+    if (truth.has(run.stage_name)) continue;
+    if (active !== null && run.run_id === active) continue;
+    truth.set(run.stage_name, run);
+  }
+  return truth;
+}
+
+/** Group progress from each stage's LATEST truthful row — no invented
+ * state: current-run failure beats active running beats succeeded; a
+ * dead run's residue never marks the group active or failed. */
 export function groupProgress(status: EpisodeStatus, group: StageGroup): GroupProgress {
-  const rows = status.stage_runs.filter((run) => group.stages.includes(run.stage_name));
-  if (rows.length === 0) return "untouched";
-  if (rows.some((run) => run.status === "failed_blocked")) return "failed";
-  if (rows.some((run) => run.status === "running")) return "current";
-  if (rows.some((run) => run.status === "succeeded")) return "done";
+  const active = activeRunId(status);
+  let anySucceeded = false;
+  let anyActiveRunning = false;
+  for (const [stage, row] of perStageLatestRows(status)) {
+    if (!group.stages.includes(stage)) continue;
+    if (row.status === "failed_blocked") return "failed";
+    if (row.status === "succeeded") anySucceeded = true;
+    if (row.status === "running" && row.run_id === active) anyActiveRunning = true;
+  }
+  if (anyActiveRunning) return "current";
+  if (anySucceeded) return "done";
   return "untouched";
 }
 
@@ -56,4 +98,16 @@ export function formatElapsed(ms: number): string {
  *  他の job status は生の値のまま（対応する実測語彙がないため作らない）。 */
 export function jobStatusSuffix(jobStatus: string): string | null {
   return jobStatus === "PREVIEW_READY" ? "試し編集完了（全体の完了ではありません）" : null;
+}
+
+/** UX 2.5 slice-1: 方針相談（編集前の方向性相談）が意味を持つのは
+ *  plan確定（PLAN_COMMITTED）まで = 上位2グループ（素材の受付と確認・
+ *  方針の準備）の段階のみ。可否判定もこの表からだけ導く（新規の段階
+ *  語彙を作らない）。 */
+const CONSULTATION_STAGE_GROUP_LABELS = ["素材の受付と確認", "方針の準備"];
+
+export function isConsultationStage(stageName: string): boolean {
+  return STAGE_GROUPS.filter((group) =>
+    CONSULTATION_STAGE_GROUP_LABELS.includes(group.label),
+  ).some((group) => group.stages.includes(stageName));
 }

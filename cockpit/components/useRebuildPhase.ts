@@ -51,13 +51,26 @@ function previewArrivedThisRun(
  * (2xx). The old baseline-count comparison is REMOVED — legacy payloads
  * without run scoping can never claim 完了 from unscoped success rows.
  */
+/** U30 hydration (codex P1-1): a reload starts with rebuildResult=null, but
+ * the SERVER chain is the authority — a live reservation or a spawned run
+ * must still restore the phase line. Terminal-only history (no reservation,
+ * no current run) stays hydrated only while the backend keeps naming the
+ * run; the legacy no-scope fallback below is never reached from hydration. */
+function hasServerRebuildChain(status: EpisodeStatus | null): boolean {
+  if (status === null) return false;
+  if (status.pending_rebuild !== null && status.pending_rebuild !== undefined) {
+    return true;
+  }
+  return typeof status.current_run === "string" && status.current_run !== "";
+}
+
 export function deriveRebuildPhase(
   rebuildResult: RebuildResult | null,
   status: EpisodeStatus | null,
   previewOk: boolean | null,
 ): RebuildPhase | null {
-  if (rebuildResult === null) return null;
-  if (!rebuildResult.scheduled) return "recorded";
+  if (rebuildResult === null && !hasServerRebuildChain(status)) return null;
+  if (rebuildResult !== null && !rebuildResult.scheduled) return "recorded";
   if (status === null) return "scheduled";
   if (status.pending_rebuild !== null && status.pending_rebuild !== undefined) {
     return "scheduled";

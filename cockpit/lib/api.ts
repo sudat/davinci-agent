@@ -28,3 +28,4 @@ export * from "@/lib/review-api";
 export * from "@/lib/approval-api";
 export * from "@/lib/kit-preview-api";
 export * from "@/lib/finishing-api";
+export * from "@/lib/consultation-api";

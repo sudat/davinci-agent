@@ -215,11 +215,36 @@ describe("useRebuildPhase — run対応の状態遷移（U30失敗先行fixture�
     expect(rebuildPhaseText("failed")).toContain("止まっています");
   });
 
-  it("scheduled=falseは記録どまり（表示なし）、rebuild結果なしは常にnull", () => {
+  it("scheduled=falseは記録どまり（表示なし）", () => {
     expect(
       deriveRebuildPhase({ stage_hint: null, scheduled: false }, baseStatus({}), null),
     ).toBe("recorded");
     expect(rebuildPhaseText("recorded")).toBeNull();
-    expect(deriveRebuildPhase(null, U30_OLD_RUN_RESIDUE, true)).toBeNull();
+  });
+});
+
+describe("useRebuildPhase — 再読込復元（U30 hydration / codex独立レビューP1-1）", () => {
+  it("null読み出しでも予約中のserver連鎖があれば予約済みを復元する", () => {
+    expect(deriveRebuildPhase(null, U30_OLD_RUN_RESIDUE, null)).toBe("scheduled");
+  });
+
+  it("null読み出しでも今回runの失敗行があれば停止を復元する", () => {
+    const blocked = baseStatus({
+      current_run: "run-18b",
+      stage_runs: [
+        {
+          stage_name: "preview",
+          status: "failed_blocked",
+          retry_count: 0,
+          last_error_code: "preview-failed",
+          run_id: "run-18b",
+        },
+      ],
+    });
+    expect(deriveRebuildPhase(null, blocked, null)).toBe("failed");
+  });
+
+  it("server連鎖の無いnull読み出しは表示しない（無関係episodeで線を出さない）", () => {
+    expect(deriveRebuildPhase(null, baseStatus({}), null)).toBeNull();
   });
 });
