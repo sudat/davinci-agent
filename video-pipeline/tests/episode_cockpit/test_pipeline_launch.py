@@ -24,11 +24,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.cli import episode_runner, episode_runner_editorial
+from services.cli.bundle import ReviewTarget, assemble_real_bundle, save_bundle
 from services.cli.episode_runner_state import RunContext
 from services.cli.live_editorial_codex import CodexTransportGatedError
 from services.cli.real_chain import RealChainError
 from services.episode_cockpit import episode_ops
 from services.episode_cockpit.app import create_cockpit_app
+from services.foundation_io import sha256_file
 from services.job_runner.cas import apply_transition, current_job_state
 from services.job_runner.state_store import StateStore
 from services.job_runner.transitions import MAIN_PATH
@@ -103,6 +105,25 @@ def _fake_chain_factory(
         preview = out_dir / "preview-v1"
         preview.mkdir(parents=True, exist_ok=True)
         (preview / "preview.mp4").write_bytes(b"fake-preview")
+        save_bundle(
+            assemble_real_bundle(
+                episode_id=episode_root.name,
+                eligibility_status="supported",
+                mezzanine_sha256="0" * 64,
+                edit_source_world_sha256="0" * 64,
+                episode_manifest_sha256="0" * 64,
+                policy_sha256="0" * 64,
+                target=ReviewTarget(
+                    plan_version="v1",
+                    plan_sha256="0" * 64,
+                    ir_sha256="0" * 64,
+                    preview_dir="preview-v1",
+                    preview_sha256=sha256_file(preview / "preview.mp4"),
+                    trace_sha256="0" * 64,
+                ),
+            ),
+            out_dir / "review-bundle.json",
+        )
 
     return fake_chain
 
@@ -211,6 +232,40 @@ def test_run_advances_episode_to_preview_ready(
     assert "chain_finished" in kinds
     assert kinds[-1] == "runner_finished"
     assert events[kinds.index("editorial_mode")]["mode"] == "heuristic_diagnostic"
+
+
+def test_preview_published_event_carries_run_version_hash(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        episode_runner, "run_real_chain", _fake_chain_factory(captured)
+    )
+
+    body = _create_episode(client, source_folder)
+    episode_id = str(body["episode_id"])
+    episode_dir = workspace["episodes_root"] / episode_id
+    exit_code = episode_runner.run(
+        episode_root=episode_dir,
+        stop="PREVIEW_READY",
+        state_store_path=workspace["state_store"],
+    )
+
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    events = _runner_log_events(episode_dir)
+    started = next(event for event in events if event["event"] == "runner_started")
+    published = next(
+        event for event in events if event["event"] == "preview_published"
+    )
+    assert published["run_id"] == started["run_id"]
+    assert published["target_version"] == "v1"
+    assert published["content_hash"] == sha256_file(
+        episode_dir / "previews" / "preview.mp4"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -160,8 +160,14 @@ def stage_compile(episode_root: Path, head: HeadState) -> tuple[EditPlan0C, Time
         raise RebuildStageError("ir-unreadable", str(error)) from error
 
 
-def stage_preview(
-    episode_root: Path, head: HeadState, plan: EditPlan0C, ir: TimelineIr0C, log: BinaryIO
+def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log+run binding)
+    episode_root: Path,
+    head: HeadState,
+    plan: EditPlan0C,
+    ir: TimelineIr0C,
+    log: BinaryIO,
+    *,
+    run_id: str,
 ) -> str:
     """Re-render the review-plane preview from the new version + republish."""
 
@@ -193,7 +199,7 @@ def stage_preview(
         raise RebuildStageError("preview-failed", str(error)) from error
     preview_sha = sha256_file(run_dir / f"preview-v{head.version}" / PREVIEW_NAME)
     _update_bundle(bundle_file, bundle, head, preview_sha)
-    publish_preview(episode_root, log, source_dir=f"preview-v{head.version}")
+    publish_preview(episode_root, log, source_dir=f"preview-v{head.version}", run_id=run_id)
     return preview_sha
 
 
@@ -341,7 +347,7 @@ def _execute(
         record_stage(store, ctx, stage, "running")
         log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="running")
         try:
-            adopted = _run_stage(stage, episode_root, carried, ctx.log)
+            adopted = _run_stage(stage, episode_root, carried, ctx.log, run_id=ctx.run_id)
         except RebuildStageError as error:
             block_stage(store, ctx, stage, error.code)
             log_event(
@@ -353,7 +359,9 @@ def _execute(
         log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="succeeded")
 
 
-def _run_stage(stage: str, episode_root: Path, carried: ReentryState, log: BinaryIO) -> str:
+def _run_stage(
+    stage: str, episode_root: Path, carried: ReentryState, log: BinaryIO, *, run_id: str
+) -> str:
     """One re-entry stage against the carried state; returns its adopted hash.
 
     Entering at compile/preview hydrates the missing head/IR itself (the
@@ -376,7 +384,7 @@ def _run_stage(stage: str, episode_root: Path, carried: ReentryState, log: Binar
         return carried.head.index.versions[str(carried.head.version)].ir_sha256
     if carried.plan is None or carried.ir is None:
         carried.plan, carried.ir = stage_compile(episode_root, carried.head)
-    return stage_preview(episode_root, carried.head, carried.plan, carried.ir, log)
+    return stage_preview(episode_root, carried.head, carried.plan, carried.ir, log, run_id=run_id)
 
 
 def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log: BinaryIO) -> int:

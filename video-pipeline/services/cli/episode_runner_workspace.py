@@ -17,9 +17,12 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from pydantic import ValidationError
+
+from services.cli.bundle import BUNDLE_NAME, BundleDriftError, load_bundle
 from services.cli.episode_runner_state import log_event
 from services.cli.real_episode import EPISODE_MANIFEST_NAME, RealEpisodeManifest
-from services.foundation_io import atomic_write, canonical_model_bytes
+from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 from services.preview.render import PREVIEW_NAME
 
 if TYPE_CHECKING:
@@ -85,9 +88,20 @@ def write_chain_manifest(episode_root: Path, episode_id: str, video: Path) -> No
 
 
 def publish_preview(
-    episode_root: Path, log: BinaryIO, source_dir: str = PREVIEW_DIR_NAME
+    episode_root: Path,
+    log: BinaryIO,
+    source_dir: str = PREVIEW_DIR_NAME,
+    *,
+    run_id: str | None = None,
 ) -> None:
-    """Link run/<source_dir>/preview.mp4 to previews/preview.mp4 (cockpit path)."""
+    """Link run/<source_dir>/preview.mp4 to previews/preview.mp4 (cockpit path).
+
+    The ``preview_published`` line carries the run-binding evidence:
+    ``run_id`` (the caller's RunContext run), ``target_version`` (the
+    chain review bundle's ``current`` plan version), ``content_hash``
+    (measured from the published file) — each OMITTED when its evidence
+    is absent, never guessed.
+    """
 
     source = episode_root / RUN_DIR_NAME / source_dir / PREVIEW_NAME
     target = episode_root / "previews" / PREVIEW_NAME
@@ -100,7 +114,31 @@ def publish_preview(
         os.link(source, target)
     except OSError:
         shutil.copyfile(source, target)
-    log_event(log, "preview_published", path=str(target), source=source_dir)
+    log_event(
+        log,
+        "preview_published",
+        path=str(target),
+        source=source_dir,
+        **_publish_binding(episode_root, target, run_id),
+    )
+
+
+def _publish_binding(
+    episode_root: Path, target: Path, run_id: str | None
+) -> dict[str, object]:
+    """Run-binding evidence taken from the review bundle + the published bytes."""
+
+    evidence: dict[str, object] = {}
+    if run_id is not None:
+        evidence["run_id"] = run_id
+    try:
+        bundle = load_bundle(episode_root / RUN_DIR_NAME / BUNDLE_NAME)
+    except (BundleDriftError, ValidationError):
+        bundle = None
+    if bundle is not None:
+        evidence["target_version"] = bundle.current.plan_version
+    evidence["content_hash"] = sha256_file(target)
+    return evidence
 
 
 def mirror_review_store(episode_root: Path, log: BinaryIO) -> bool:

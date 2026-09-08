@@ -298,7 +298,7 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
         _advance_chain(store, ctx, call.episode_root, chain_env)
         _verify_reached(store, ctx)
         if call.stop == "PREVIEW_READY":
-            publish_preview(call.episode_root, log)
+            publish_preview(call.episode_root, log, run_id=run_id)
             mirror_review_store(call.episode_root, log)
         log_event(log, "chain_finished", run_id=run_id, stop=call.stop)
         return EXIT_SUCCESS

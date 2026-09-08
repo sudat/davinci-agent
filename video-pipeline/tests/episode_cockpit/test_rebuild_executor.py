@@ -172,16 +172,28 @@ def _fake_chain_factory(captured: dict[str, object]) -> Callable[..., None]:
     return fake_chain
 
 
-def _fake_stage_preview(
-    episode_root: Path, head: HeadState, plan: EditPlan0C, ir: TimelineIr0C, log: BinaryIO
+def _fake_stage_preview(  # noqa: PLR0913 (mirrors the real stage_preview seam)
+    episode_root: Path,
+    head: HeadState,
+    plan: EditPlan0C,
+    ir: TimelineIr0C,
+    log: BinaryIO,
+    *,
+    run_id: str,
 ) -> str:
-    """Rebuild preview seam: write version-tagged bytes + republish (no ffmpeg)."""
+    """Rebuild preview seam: version-tagged bytes, then the REAL ordering —
+    bundle hand-off (_update_bundle) BEFORE publish; the publish event's
+    target_version is only honest if the bundle is already repointed."""
 
     preview_dir = episode_root / "run" / f"preview-v{head.version}"
     preview_dir.mkdir(parents=True, exist_ok=True)
     (preview_dir / "preview.mp4").write_bytes(f"fake-preview-v{head.version}".encode())
-    publish_preview(episode_root, log, source_dir=f"preview-v{head.version}")
-    return sha256_file(preview_dir / "preview.mp4")
+    (preview_dir / TRACE_NAME).write_text('{"note": "fake trace"}')
+    preview_sha = sha256_file(preview_dir / "preview.mp4")
+    bundle_file = episode_root / "run" / "review-bundle.json"
+    episode_runner_rebuild._update_bundle(bundle_file, load_bundle(bundle_file), head, preview_sha)
+    publish_preview(episode_root, log, source_dir=f"preview-v{head.version}", run_id=run_id)
+    return preview_sha
 
 
 def _initial_preview_ready(
@@ -233,6 +245,26 @@ def _stage_counts(workspace: dict[str, Path], episode_id: str) -> dict[str, list
     for run in snapshot.stage_runs:
         counts.setdefault(run.stage_name, []).append(run.status)
     return counts
+
+
+def _assert_publish_events(
+    episode_dir: Path, events: list[dict[str, object]]
+) -> None:
+    """Both publishes carry run/version/hash; each hash matches its artifact."""
+
+    started = [event for event in events if event["event"] == "runner_started"]
+    published = [event for event in events if event["event"] == "preview_published"]
+    assert len(published) == 2
+    assert published[0]["run_id"] == started[0]["run_id"]
+    assert published[0]["target_version"] == "v1"
+    assert published[0]["content_hash"] == sha256_file(
+        episode_dir / "run" / "preview-v1" / "preview.mp4"
+    )
+    assert published[1]["run_id"] == started[-1]["run_id"]
+    assert published[1]["target_version"] == "v2"
+    assert published[1]["content_hash"] == sha256_file(
+        episode_dir / "previews" / "preview.mp4"
+    )
 
 
 def _runner_log_events(episode_dir: Path) -> list[dict[str, object]]:
@@ -340,6 +372,7 @@ def test_remove_section_rebuild_executes_stop_bounded_lineage(
     assert "rebuild_finished" in kinds
     skipped = [event for event in events if event["event"] == "rebuild_stage_skipped"]
     assert [event["stage"] for event in skipped] == ["resolve_build", "qc", "render"]
+    _assert_publish_events(episode_dir, events)
 
 
 # ---------------------------------------------------------------------------
@@ -675,8 +708,9 @@ def test_stage_preview_repoints_bundle_at_cockpit_review_store(
     )
     monkeypatch.setattr(episode_runner_rebuild, "load_tools", object)
 
+    log = io.BytesIO()
     preview_sha = episode_runner_rebuild.stage_preview(
-        episode_dir, head, plan, ir, io.BytesIO()
+        episode_dir, head, plan, ir, log, run_id="run-binding01"
     )
 
     bundle_file = episode_dir / "run" / "review-bundle.json"
@@ -691,3 +725,15 @@ def test_stage_preview_repoints_bundle_at_cockpit_review_store(
         episode_dir / "run" / "preview-v2" / PREVIEW_NAME
     )
     assert (episode_dir / "previews" / "preview.mp4").read_bytes() == b"regression-preview-v2"
+    published = next(
+        event
+        for event in (
+            json.loads(line) for line in log.getvalue().splitlines() if line.startswith(b"{")
+        )
+        if event["event"] == "preview_published"
+    )
+    assert published["run_id"] == "run-binding01"
+    assert published["target_version"] == "v2"
+    assert published["content_hash"] == sha256_file(
+        episode_dir / "previews" / "preview.mp4"
+    )
