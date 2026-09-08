@@ -91,6 +91,9 @@ def publish_preview(
 
     source = episode_root / RUN_DIR_NAME / source_dir / PREVIEW_NAME
     target = episode_root / "previews" / PREVIEW_NAME
+    if not source.is_file():
+        log_event(log, "preview_publish_skipped", reason="source-missing")
+        return
     target.parent.mkdir(parents=True, exist_ok=True)
     target.unlink(missing_ok=True)
     try:

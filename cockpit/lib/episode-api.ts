@@ -27,6 +27,16 @@ export type StageRun = {
   status: string;
   retry_count: number;
   last_error_code: string | null;
+  /** 工程2P run-scoping: the run that recorded this row. Absent on rows
+   *  from backends/runs that never named a run — never guessed. */
+  run_id?: string;
+  /** Wall-clock stage milestones (ISO-or-absent; absent = unmeasured —
+   *  the UI renders them honestly as 取得できません, never fabricated).
+   *  first_output_arrived_at is the FIRST succeeded output arrival and is
+   *  the only one of the three that counts as 成果進捗. */
+  first_started_at?: string;
+  last_transition_at?: string;
+  first_output_arrived_at?: string;
 };
 
 /** Completed/remaining work units — present only when the backend counts them. */
@@ -48,6 +58,31 @@ export type BeforeAfterSummary = {
   items?: BeforeAfterItem[];
 };
 
+/** One entry of the rebuild chain (予約→起動→成果), readable without
+ *  inference: `spawned=false, run_id=null` = a reservation not yet
+ *  launched (survives reload); a spawn entry names its run and the plan
+ *  version it renders. Mirrors backend RebuildRequestEntry. */
+export type RebuildChainEntry = {
+  schema_version: string;
+  sequence: number;
+  stage_hint: string | null;
+  marker: string | null;
+  spawned: boolean;
+  run_id: string | null;
+  target_version: string | null;
+  reserves_sequence: number | null;
+};
+
+/** The latest chain entry when it is still an unspawned reservation
+ *  (起動待ち). Present only in that state; null/absent otherwise. */
+export type PendingRebuild = {
+  sequence: number;
+  stage_hint: string | null;
+  marker: string | null;
+  run_id: string | null;
+  target_version: string | null;
+};
+
 export type EpisodeStatus = {
   episode_id: string;
   job_id: string;
@@ -61,6 +96,28 @@ export type EpisodeStatus = {
   eta_minutes?: number;
   work_units?: WorkUnits;
   before_after?: BeforeAfterSummary;
+  /** --- 工程2P run/clock visibility (backend status_view.py) --- */
+  /** The run id of the latest SPAWNED rebuild entry (null = none running
+   *  for the latest request). Phase derivation scopes to this run ONLY. */
+  current_run?: string | null;
+  /** The plan version the current run renders (absent when unknown). */
+  current_target_version?: string | null;
+  pending_rebuild?: PendingRebuild | null;
+  rebuild_requests?: RebuildChainEntry[];
+  /** Run-scoped last 動作報告 (terminal/failure events included).
+   *  null = no report reached us — displayed as 応答不明, never as normal. */
+  last_worker_report_at?: string | null;
+  last_worker_report_event?: string | null;
+  /** True iff an UNCONSUMED proposal set answers the CURRENT plan head. */
+  unreviewed_proposal_set?: boolean;
+  /** Present only when the CURRENT run has retried (>0); legacy payloads
+   *  and retry-free runs omit it. Max is not provided — never displayed. */
+  current_run_retry_count?: number;
+  /** Wall-clock intake time — the reference for 経過時間. Absent = unmeasured. */
+  intake_created_at?: string;
+  /** THIS-run first preview output arrival (試し編集完了 labeling only —
+   *  never overall completion). Absent = not arrived (or unmeasured). */
+  preview_first_arrived_at?: string;
 };
 
 /** One flagged review item. `at_seconds` is optional: the task-44 flags

@@ -15,6 +15,7 @@ from services.compile.phase0c import CompileError, apply_command
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.review_command.events import (
     GENESIS_EVENT_HASH,
+    RESTORED_EVENT_KIND,
     ReviewEvent0C,
     build_event,
 )
@@ -211,7 +212,7 @@ def recover_orphan(log_path: Path, plan_dir: Path) -> None:
     events = load_events(log_path)
     entries = dict(index.versions)
     for position, event in enumerate(events, start=1):
-        if event.kind != "decision_applied":
+        if event.kind not in ("decision_applied", RESTORED_EVENT_KIND):
             continue
         label = event.result_plan_version
         if label is None:

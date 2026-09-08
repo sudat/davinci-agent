@@ -9,6 +9,10 @@ explicit target). The LLM has no execution authority: the apply path is
 untouched and re-interprets deterministically.
 """
 
+# allow: SIZE_OK — one interpreter-contract concern per file
+# (fake-transport responses x deterministic re-validation across modes);
+# the transport matrix shares ONE app fixture set.
+
 from __future__ import annotations
 
 import json
@@ -228,7 +232,110 @@ def test_llm_delta_only_applies_to_keep_longer_rule() -> None:
         NearbyContext(),
         _fake_llm(_proposal("remove_section", target=134.0, delta=9.0)),
     )
-    assert draft.seconds_delta is None  # deterministic rule: delta is keep_longer-only
+    assert draft.seconds_delta is None  # deterministic rule: delta is span-length kinds only
+
+
+def test_llm_quiet_longer_keeps_seconds_delta() -> None:
+    """P1 quiet_longer delta: the apply side maps quiet_longer to
+    adjust_source_span and REQUIRES seconds_delta — the interpreter must
+    preserve it (pre-existing drop blocked every quiet_longer proposal)."""
+    draft = interpret(
+        UNKNOWN_PHRASING,
+        ReviewChatContext(at_seconds=None),
+        NearbyContext(),
+        _fake_llm(_proposal("quiet_longer", target=134.0, delta=2.0)),
+    )
+    assert draft.command_kind == "quiet_longer"
+    assert draft.seconds_delta == 2.0
+    assert draft.needs_confirmation is False
+
+
+# ---------------------------------------------------------------------------
+# (b3) feelings route (UX redesign 工程1): investigation + hypothesis
+# ---------------------------------------------------------------------------
+
+
+def test_feelings_fallback_records_investigation_without_hypothesis() -> None:
+    drafts = interpret_message(
+        "ここ退屈",
+        ReviewChatContext(at_seconds=6.0),
+        NearbyContext(at_seconds=6.0),
+        None,
+    )
+    assert len(drafts) == 1
+    draft = drafts[0]
+    assert draft.command_kind == "mark_boring"
+    assert draft.needs_confirmation is True
+    assert draft.investigated is True
+    assert draft.hypothesis is None
+
+
+def test_llm_hypothesis_flows_into_investigated_draft() -> None:
+    draft = interpret(
+        "ここ退屈",
+        ReviewChatContext(at_seconds=6.0),
+        NearbyContext(at_seconds=6.0),
+        _fake_llm(
+            {
+                "command_kind": "remove_section",
+                "target_seconds": 6.0,
+                "hypothesis_ja": "同じ説明が続いているのが原因の可能性",
+            }
+        ),
+    )
+    assert draft.command_kind == "remove_section"
+    assert draft.needs_confirmation is True  # U01: feelings never auto-confirm
+    assert draft.confirmation_reason
+    assert draft.investigated is True
+    assert draft.hypothesis == "同じ説明が続いているのが原因の可能性"
+
+
+def test_non_feelings_llm_proposal_keeps_plain_confirmation_rules() -> None:
+    draft = interpret(
+        UNKNOWN_PHRASING,
+        ReviewChatContext(at_seconds=None),
+        NearbyContext(),
+        _fake_llm(_proposal(target=134.0)),
+    )
+    assert draft.needs_confirmation is False
+    assert draft.investigated is False
+    assert draft.hypothesis is None
+
+
+def test_invalid_hypothesis_drops_proposal_to_flagged_fallback() -> None:
+    context = ReviewChatContext(at_seconds=6.0)
+    draft = interpret(
+        "ここ退屈",
+        context,
+        NearbyContext(at_seconds=6.0),
+        _fake_llm(
+            {
+                "command_kind": "remove_section",
+                "target_seconds": 6.0,
+                "hypothesis_ja": 123,
+            }
+        ),
+    )
+    deterministic = interpret_command("ここ退屈", context)
+    assert draft.model_dump() == deterministic.model_copy(
+        update={"investigated": True}
+    ).model_dump()
+    assert draft.needs_confirmation is True
+    assert draft.investigated is True
+    assert draft.hypothesis is None
+
+
+def test_empty_hypothesis_normalizes_to_none() -> None:
+    draft = interpret(
+        "ここ退屈",
+        ReviewChatContext(at_seconds=6.0),
+        NearbyContext(at_seconds=6.0),
+        _fake_llm({"command_kind": "remove_section", "target_seconds": 6.0, "hypothesis_ja": ""}),
+    )
+    assert draft.command_kind == "remove_section"
+    assert draft.needs_confirmation is True  # U01: flagged regardless of hypothesis
+    assert draft.investigated is True
+    assert draft.hypothesis is None
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +364,7 @@ def test_multi_proposal_message_yields_drafts_in_order() -> None:
     assert len({draft.command_id for draft in drafts}) == 2
 
 
-def test_multi_proposal_invalid_element_dropped_valid_survives() -> None:
+def test_multi_proposal_invalid_element_bundle_degrades_to_single_flagged_draft() -> None:
     drafts = interpret_message(
         UNKNOWN_PHRASING,
         ReviewChatContext(at_seconds=None),
@@ -271,9 +378,57 @@ def test_multi_proposal_invalid_element_dropped_valid_survives() -> None:
             }
         ),
     )
+    # P1-3: a bundle with a lost element is never partially served — the
+    # whole response degrades to ONE honestly-flagged draft
     assert len(drafts) == 1
-    assert drafts[0].command_kind == "remove_section"
-    assert drafts[0].target_seconds == 134.0
+    draft = drafts[0]
+    assert draft.command_kind is None
+    assert draft.needs_confirmation is True
+    assert "2件の修正のうち1件（nuke_timeline）" in str(draft.confirmation_reason)  # noqa: RUF001 (JA notice)
+    assert "全体を適用できません" in str(draft.confirmation_reason)
+
+
+def test_bundle_degrade_reason_names_the_lost_kind_of_three() -> None:
+    drafts = interpret_message(
+        UNKNOWN_PHRASING,
+        ReviewChatContext(at_seconds=None),
+        NearbyContext(),
+        _fake_llm(
+            {
+                "proposals": [
+                    _proposal("remove_section", target=134.0),
+                    {"command_kind": "keep_longer", "target_seconds": "not-a-number"},
+                    _proposal("remove_section", target=2.0),
+                ]
+            }
+        ),
+    )
+    assert len(drafts) == 1
+    draft = drafts[0]
+    assert draft.command_kind is None
+    assert draft.needs_confirmation is True
+    assert draft.confirmation_reason == (
+        "3件の修正のうち1件（keep_longer）が解釈できなかったため、"  # noqa: RUF001 (JA notice)
+        "全体を適用できません。内容を見直してください"
+    )
+
+
+def test_all_valid_bundle_still_serves_every_draft() -> None:
+    drafts = interpret_message(
+        UNKNOWN_PHRASING,
+        ReviewChatContext(at_seconds=None),
+        NearbyContext(),
+        _fake_llm(
+            {
+                "proposals": [
+                    _proposal("remove_section", target=134.0),
+                    _proposal("remove_section", target=2.0),
+                ]
+            }
+        ),
+    )
+    assert [draft.target_seconds for draft in drafts] == [134.0, 2.0]
+    assert all(draft.needs_confirmation is False for draft in drafts)
 
 
 def test_multi_proposal_all_invalid_falls_back_to_deterministic() -> None:
@@ -411,6 +566,9 @@ def test_factory_builds_call_with_injected_transport(
     schema = request["text"]["format"]["schema"]
     kind_enum = schema["$defs"]["ReviewCommandKind"]["enum"]
     assert sorted(kind_enum) == sorted(PROPOSAL_KINDS)
+    proposal_schema = schema["$defs"]["ReviewLlmProposal"]
+    assert "hypothesis_ja" in proposal_schema["properties"]
+    assert "hypothesis_ja" not in proposal_schema.get("required", [])
     data = json.loads(request["input"][1]["content"])
     assert data["operator_message"] == UNKNOWN_PHRASING
     assert request["input"][1]["role"] == "user"
@@ -638,7 +796,8 @@ def test_review_chat_route_with_fake_llm_returns_clear_draft(
     )
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"received", "sequence", "draft"}
+    assert set(body) == {"received", "sequence", "draft", "proposal_kind"}
+    assert body["proposal_kind"] == "command-bundle"
     draft = body["draft"]
     assert draft["command_kind"] == "remove_section"
     assert draft["target_seconds"] == 134.0
@@ -682,7 +841,9 @@ def test_review_chat_route_multi_proposal_returns_draft_and_drafts(
     )
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"received", "sequence", "draft", "drafts"}
+    assert set(body) == {"received", "sequence", "draft", "drafts", "proposal_kind"}
+    # two explicit fixes = one bundle, never 「2案」
+    assert body["proposal_kind"] == "command-bundle"
     assert body["draft"]["target_seconds"] == 0.0
     assert [draft["target_seconds"] for draft in body["drafts"]] == [0.0, 2.0]
     assert all(draft["command_kind"] == "remove_section" for draft in body["drafts"])

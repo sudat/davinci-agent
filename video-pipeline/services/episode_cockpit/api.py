@@ -8,7 +8,7 @@ typed cockpit errors (handlers registered in ``app.py``).
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import FileResponse
@@ -29,10 +29,22 @@ from services.episode_cockpit.models import (
     ReviewChatRequest,
     Seconds,
 )
-from services.episode_cockpit.review_chat import ReviewChatContext
+from services.episode_cockpit.review_chat import (
+    _FEELINGS_REASON,
+    ReviewChatContext,
+    classify_reaction,
+    interpret_command,
+)
+from services.episode_cockpit.review_frames import gather_route_frame_materials
 from services.episode_cockpit.review_interpreter import (
     build_review_llm_call,
-    interpret_message,
+    interpret_message_with_outcome,
+    llm_carries_images,
+)
+from services.episode_cockpit.review_reactions import (
+    checked_materials,
+    investigation_state,
+    reaction_chat_response,
 )
 from services.reference_learning.domain_extract import extract_domains_seeded
 
@@ -121,21 +133,94 @@ def episode_flags(episode_id: str, workspace: Workspace) -> dict[str, object]:
 def review_chat(
     episode_id: str, request: ReviewChatRequest, workspace: Workspace
 ) -> dict[str, object]:
-    stored = workspace.append_review_chat(
-        episode_id, text=request.text, at_seconds=request.at_seconds
-    )
+    """Review chat entry (the UI-facing contract). Reaction messages answer
+    the latest saved proposal set; feelings-class messages get a cause
+    investigation. ``checked_materials`` (when present) carries THREE
+    separate honesty levels — ``frames`` (extraction fact),
+    ``frames_delivery_attempted`` (an image-capable transport call was
+    ATTEMPTED with these frames — invocation fact; pre-spawn failures
+    included; actual transport-level delivery is UNCONFIRMED),
+    ``frames_verified`` (attempted AND the model returned usable proposals
+    — evidence-level, see ``checked_materials``). Stills are never an
+    audio or whole-video verification."""
+
+    reaction = classify_reaction(request.text)
+    if reaction is not None:
+        return reaction_chat_response(
+            episode_id,
+            request,
+            workspace,
+            reaction,
+            build_review_llm_call(),
+        )
+    return _plain_review_chat(episode_id, request, workspace)
+
+
+def _plain_review_chat(
+    episode_id: str,
+    request: ReviewChatRequest,
+    workspace: CockpitWorkspace,
+) -> dict[str, object]:
     nearby = workspace.nearby_context(episode_id, at_seconds=request.at_seconds)
-    drafts = interpret_message(
-        request.text,
-        ReviewChatContext(at_seconds=request.at_seconds),
-        nearby,
-        build_review_llm_call(),
+    context = ReviewChatContext(at_seconds=request.at_seconds)
+    # 工程2 rework #1: gated read-only stills for feelings-class
+    # investigations (gate OFF → () and today's behavior, byte for byte).
+    frames = gather_route_frame_materials(
+        workspace,
+        episode_id,
+        at_seconds=request.at_seconds,
+        eligible=(
+            interpret_command(request.text, context).confirmation_reason
+            == _FEELINGS_REASON
+        ),
+    )
+    if frames:
+        context = context.model_copy(update={"frame_materials": frames})
+    llm = build_review_llm_call()
+    drafts, llm_proposals_used, llm_invoked = interpret_message_with_outcome(
+        request.text, context, nearby, llm
+    )
+    primary = drafts[0]
+    # The interpreter classifies (UX redesign P1a): a feeling riding an
+    # explicit command (「この区間を削除して。退屈から」) is a direct command —
+    # ``investigated`` marks materials-gathered ONLY for feelings-class
+    # interpretations, and is never a cause-identified claim.
+    investigated = primary.investigated
+    stored = workspace.append_review_chat(
+        episode_id,
+        text=request.text,
+        at_seconds=request.at_seconds,
+        investigated=investigated,
+        hypothesis=primary.hypothesis if investigated else None,
+        frame_materials=frames,
+    )
+    # Persist the SERVER-SAVED proposal set (brief §5.3): the echoed browser
+    # draft is never the adoption authority — the apply route matches the
+    # request against THIS saved set. ``sequence`` in the response names the
+    # chat entry whose set the apply request may reference.
+    workspace.record_review_proposals(
+        episode_id,
+        chat_sequence=cast("int", stored["sequence"]),
+        drafts=tuple(drafts),
+        proposal_kind="command-bundle",
     )
     # ``draft`` stays the primary (first) command for compatibility;
     # ``drafts`` rides along only when the interpreter proposed SEVERAL.
-    response = stored | {"draft": drafts[0].model_dump(mode="json")}
+    response = stored | {"draft": primary.model_dump(mode="json")}
     if len(drafts) > 1:
         response["drafts"] = [draft.model_dump(mode="json") for draft in drafts]
+    response["proposal_kind"] = "command-bundle"
+    if investigated:
+        response["investigation_state"] = investigation_state(primary, nearby)
+        frames_delivery_attempted = (
+            bool(frames) and llm_carries_images(llm) and llm_invoked
+        )
+        response["checked_materials"] = checked_materials(
+            nearby,
+            frames,
+            frames_delivery_attempted=frames_delivery_attempted,
+            frames_verified=frames_delivery_attempted and llm_proposals_used,
+        )
     return response
 
 

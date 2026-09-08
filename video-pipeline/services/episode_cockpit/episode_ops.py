@@ -25,6 +25,7 @@ from services.episode_cockpit.errors import (
     CockpitUnprocessableError,
 )
 from services.episode_cockpit.models import BriefDraft, IntakeRecordV1
+from services.episode_cockpit.status_view import build_status_payload
 from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.job_runner.state_errors import StateStoreError
@@ -151,24 +152,7 @@ class JobOps(WorkspaceContext):
 
     def episode_status(self, episode_id: str) -> dict[str, object]:
         snapshot = self._require_snapshot(episode_id)
-        job = snapshot.job
-        return {
-            "episode_id": job.episode_id,
-            "job_id": job.job_id,
-            "status": job.status,
-            "current_stage": job.current_stage,
-            "created_at_seq": job.created_at_seq,
-            "updated_at_seq": job.updated_at_seq,
-            "stage_runs": [
-                {
-                    "stage_name": run.stage_name,
-                    "status": run.status,
-                    "retry_count": run.retry_count,
-                    "last_error_code": run.last_error_code,
-                }
-                for run in snapshot.stage_runs
-            ],
-        }
+        return build_status_payload(snapshot, self._episode_dir(snapshot.job.episode_id))
 
     def publish_status(self, episode_id: str) -> dict[str, object]:
         """Read-only publish surface: package file + upload ledger, never a write."""

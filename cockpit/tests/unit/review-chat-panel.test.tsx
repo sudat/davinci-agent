@@ -1,3 +1,8 @@
+// allow: SIZE_OK — 本ファイルは工程1以前から存在した 407 pure LOC のテスト群であり、
+// 工程1の追加分（+350）は review-chat-investigation-display.test.tsx と
+// review-revert-panel.test.tsx に責任単位で分割済み。工程2 rework では既存の
+// alternatives複数案テスト2件を kind-aware 化したのみ（+3）。既存の古い試験部分まで
+// 無関係に整理しない（reviewer の minimal-diff 指示）ためこれ以上の分割は行わない。
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ReviewChatPanel from "@/components/ReviewChatPanel";
@@ -134,7 +139,7 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
       expect(screen.getByTestId("rebuild-indicator")).toBeTruthy();
     });
     expect(screen.getByTestId("rebuild-phase").textContent).toBe(
-      "再build予約済み（runner起動待ち・進捗は自動更新）",
+      "再build予約済み（起動待ち）",
     );
     expect(screen.getByTestId("rebuild-stage-hint").textContent).toContain("plan");
     expect(screen.getByTestId("rebuild-stage-hint").textContent).toContain("render");
@@ -156,22 +161,50 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
     );
     expect(screen.getByTestId("rebuild-phase").textContent).toBe("再build実行中");
 
-    // rebuild finished: compile row succeeded (rebuild-only) and nothing running
+    // rebuild finished: THIS-run rows (run-2) reach preview first-output
+    // arrival and the preview probe is 2xx — 工程2P: 完了は今回runの成果
+    // 確認（probe 2xx）後だけ（旧runの成功行では完了にしない）。
     episodeStatus = statusOf([
       { stage_name: "preview", status: "succeeded", retry_count: 0, last_error_code: null },
-      { stage_name: "plan", status: "succeeded", retry_count: 0, last_error_code: null },
-      { stage_name: "compile", status: "succeeded", retry_count: 0, last_error_code: null },
-      { stage_name: "preview", status: "succeeded", retry_count: 0, last_error_code: null },
+      {
+        stage_name: "plan",
+        status: "succeeded",
+        retry_count: 0,
+        last_error_code: null,
+        run_id: "run-2",
+      },
+      {
+        stage_name: "compile",
+        status: "succeeded",
+        retry_count: 0,
+        last_error_code: null,
+        run_id: "run-2",
+        first_output_arrived_at: "2026-09-08T12:01:00+00:00",
+      },
+      {
+        stage_name: "preview",
+        status: "succeeded",
+        retry_count: 0,
+        last_error_code: null,
+        run_id: "run-2",
+        first_output_arrived_at: "2026-09-08T12:02:00+00:00",
+      },
     ]);
+    (episodeStatus as { current_run?: string | null }).current_run = "run-2";
+    (episodeStatus as { preview_first_arrived_at?: string }).preview_first_arrived_at =
+      "2026-09-08T12:02:00+00:00";
     view.rerender(
       <ReviewChatPanel
         episodeId="ep-abc"
         getAtSeconds={() => 1.5}
         status={episodeStatus}
+        previewOk={true}
         fetchImpl={fetchImpl as unknown as typeof fetch}
       />,
     );
-    expect(screen.getByTestId("rebuild-phase").textContent).toBe("再build完了");
+    expect(screen.getByTestId("rebuild-phase").textContent).toBe(
+      "再build完了（試し編集の更新を確認済み）",
+    );
   });
 
   it("実行可能な種以外は理由付きで記録どまりになる", async () => {
@@ -269,7 +302,7 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
     );
   });
 
-  it("複数ドラフトは番号付きで表示され、1回の適用で全部まとめて適用される", async () => {
+  it("alternatives複数ドラフトは番号付きで表示され、まとめて適用のボタンは各案の採用ボタンに置き換わる", async () => {
     const DRAFT_REMOVE_0 = {
       ...DRAFT_KEEP_LONGER,
       command_id: "rcmd-remove0000001",
@@ -283,37 +316,15 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
       command_id: "rcmd-remove0000002",
       target_seconds: 2,
     };
-    const APPLIED_1 = { ...APPLIED, command_id: DRAFT_REMOVE_0.command_id, target_seconds: 0, seconds_delta: null };
-    const APPLIED_2 = { ...APPLIED, command_id: DRAFT_REMOVE_2.command_id, target_seconds: 2, seconds_delta: null };
-    const applyBodies: object[] = [];
-    const rebuildBodies: object[] = [];
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith("/review-chat")) {
-        return jsonResponse({
-          received: true,
-          sequence: 4,
-          draft: DRAFT_REMOVE_0,
-          drafts: [DRAFT_REMOVE_0, DRAFT_REMOVE_2],
-        });
-      }
-      if (url.endsWith("/review-chat/apply")) {
-        applyBodies.push(JSON.parse(String(init?.body)));
-        return jsonResponse({
-          applied: APPLIED_1,
-          applied_commands: [APPLIED_1, APPLIED_2],
-          rebuild: REBUILD_PLAN,
-        });
-      }
-      if (url.endsWith("/rebuild")) {
-        rebuildBodies.push(JSON.parse(String(init?.body)));
-        return jsonResponse(
-          { ...REBUILD_SCHEDULED, applied_command: APPLIED_1.command_id, applied_commands: [APPLIED_1.command_id, APPLIED_2.command_id] },
-          202,
-        );
-      }
-      throw new Error(`unexpected url: ${url}`);
-    });
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        received: true,
+        sequence: 4,
+        draft: DRAFT_REMOVE_0,
+        drafts: [DRAFT_REMOVE_0, DRAFT_REMOVE_2],
+        proposal_kind: "alternatives",
+      }),
+    );
 
     render(
       <ReviewChatPanel
@@ -333,33 +344,14 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
     });
     expect(screen.getByTestId("review-draft-2").textContent).toContain("区間を削除");
     expect(screen.getByTestId("review-draft-2").textContent).toContain("2s");
-    expect((screen.getByTestId("review-apply-button") as HTMLButtonElement).disabled).toBe(
-      false,
-    );
-    expect(screen.getByTestId("review-apply-button").textContent).toBe(
-      "この修正をすべて適用",
-    );
-
-    fireEvent.click(screen.getByTestId("review-apply-button"));
-    await waitFor(() => {
-      expect(screen.getByTestId("rebuild-indicator")).toBeTruthy();
-    });
-    expect(applyBodies).toEqual([
-      {
-        text: DRAFT_REMOVE_0.text,
-        at_seconds: null,
-        drafts: [DRAFT_REMOVE_0, DRAFT_REMOVE_2],
-      },
-    ]);
-    expect(rebuildBodies).toEqual([
-      {
-        applied_command: APPLIED_1.command_id,
-        applied_commands: [APPLIED_1.command_id, APPLIED_2.command_id],
-      },
-    ]);
-    expect(screen.getByTestId("rebuild-indicator").textContent).toContain(
-      "rcmd-remove0000001、rcmd-remove0000002",
-    );
+    // alternatives（互いに排他的な案）では一括適用はしない: 各案の採用ボタンが一括ボタンを置き換える
+    expect(screen.queryByTestId("review-apply-button")).toBeNull();
+    expect(screen.queryByTestId("review-apply-all-button")).toBeNull();
+    expect(screen.getByTestId("review-draft-adopt-1")).toBeTruthy();
+    expect(screen.getByTestId("review-draft-adopt-2")).toBeTruthy();
+    expect(screen.getByTestId("review-draft-adopt-1").textContent).toBe("この案を採用");
+    // 案への反応として「両方違う」も出せる
+    expect(screen.getByTestId("review-both-different").textContent).toBe("両方違う");
   });
 
   it("APIエラー以外の失敗は unexpected-client-error に丸めて表示する", async () => {
@@ -401,7 +393,7 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
     expect(screen.queryByTestId("review-draft")).toBeNull();
   });
 
-  it("複数ドラフトのうち1つでも曖昧なら適用できない", async () => {
+  it("alternatives複数ドラフトのうち曖昧な案だけ採用できず、明確な案は採用できる", async () => {
     const clear = {
       ...DRAFT_KEEP_LONGER,
       command_id: "rcmd-clear00000001",
@@ -416,6 +408,7 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
         sequence: 5,
         draft: clear,
         drafts: [clear, ambiguous],
+        proposal_kind: "alternatives",
       }),
     );
     render(
@@ -433,9 +426,13 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
     await waitFor(() => {
       expect(screen.getByTestId("review-draft-2")).toBeTruthy();
     });
+    // 安全規律は案単位でも変わらない: 曖昧な案はその場で採用できない
     expect(
-      (screen.getByTestId("review-apply-button") as HTMLButtonElement).disabled,
+      (screen.getByTestId("review-draft-adopt-2") as HTMLButtonElement).disabled,
     ).toBe(true);
+    expect(
+      (screen.getByTestId("review-draft-adopt-1") as HTMLButtonElement).disabled,
+    ).toBe(false);
     expect(screen.getByTestId("review-draft-needs-confirmation-2").textContent).toContain(
       "どの修正にも当てはまりませんでした",
     );

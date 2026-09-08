@@ -472,7 +472,11 @@ def test_verify_detects_duplicate_key_hash_rows_in_tampered_db(tmp_path: Path) -
         " adopted_artifact_hash TEXT,"
         " status TEXT NOT NULL,"
         " retry_count INTEGER NOT NULL,"
-        " last_error_code TEXT)"
+        " last_error_code TEXT,"
+        " run_id TEXT,"
+        " first_started_at TEXT,"
+        " first_output_arrived_at TEXT,"
+        " last_transition_at TEXT)"
     )
     tamper.execute("INSERT INTO stage_runs SELECT * FROM stage_runs_orig")
     tamper.execute("DROP TABLE stage_runs_orig")
@@ -535,4 +539,8 @@ def test_schema_discipline_no_plan_body_columns(tmp_path: Path) -> None:
         "status",
         "retry_count",
         "last_error_code",
+        "run_id",
+        "first_started_at",
+        "first_output_arrived_at",
+        "last_transition_at",
     }

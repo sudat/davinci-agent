@@ -11,7 +11,7 @@ counter owned by the store, never a wall-clock reading.
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import Field, TypeAdapter
 
@@ -57,6 +57,17 @@ class JobRow(StrictModel):
 
 
 class StageRunRow(StrictModel):
+    """One stage-run bookkeeping row.
+
+    ``run_id`` and the three wall-clock fields are 2P run-visibility
+    columns (caller-supplied ISO-8601 stamps — this module never reads
+    the wall clock). ``first_output_arrived_at`` is the FIRST time the
+    row reached ``succeeded`` and is never overwritten by a later
+    upsert; ``last_transition_at`` moves only when the row's meaning
+    (status/retry/error/adopted hash) changes. ``None`` = unmeasured
+    (rows written before the columns existed keep serving honestly).
+    """
+
     job_id: Identifier
     stage_name: Identifier
     input_artifact_hashes: tuple[Sha256, ...]
@@ -65,6 +76,10 @@ class StageRunRow(StrictModel):
     idempotency_key: Identifier
     retry_count: int = Field(default=0, ge=0, strict=True)
     last_error_code: Identifier | None = None
+    run_id: Identifier | None = None
+    first_started_at: str | None = None
+    first_output_arrived_at: str | None = None
+    last_transition_at: str | None = None
 
 
 class LeaseRow(StrictModel):
@@ -130,6 +145,13 @@ class PragmaState(StrictModel):
 
 _HASH_LIST = TypeAdapter(list[Sha256])
 
+# Shared SELECT column list — order IS the stage_run_from_row index contract.
+STAGE_RUN_COLUMNS: Final = (
+    "job_id, stage_name, idempotency_key, input_artifact_hashes,"
+    " adopted_artifact_hash, status, retry_count, last_error_code,"
+    " run_id, first_started_at, first_output_arrived_at, last_transition_at"
+)
+
 
 def text_column(value: object) -> str:
     """Narrow a SQLite column value to ``str`` or fail closed."""
@@ -164,6 +186,7 @@ def decode_hash_list(raw: str) -> tuple[Sha256, ...]:
 
 
 __all__ = [
+    "STAGE_RUN_COLUMNS",
     "ApprovalRefRow",
     "CachePointerRow",
     "JobRecovery",

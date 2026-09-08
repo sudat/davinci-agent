@@ -109,6 +109,7 @@ class RunnerInvocation:
     from_stage: str | None = None
     applied_command: str | None = None
     editorial_runtime: Path | None = None
+    run_id: str | None = None
 
 
 def _frame_count_from_normalize_record(episode_root: Path) -> int | None:
@@ -124,7 +125,9 @@ def _frame_count_from_normalize_record(episode_root: Path) -> int | None:
         return None
 
 
-def _ensure_decode_budget(episode_root: Path, log: BinaryIO) -> None:
+def _ensure_decode_budget(
+    episode_root: Path, log: BinaryIO, run_id: str
+) -> None:
     """Scale V44_MAX_DECODE_FRAMES from the SOURCE frame count when env-unset.
 
     The cockpit backend boots WITHOUT the operator's V44_MAX_DECODE_FRAMES
@@ -145,6 +148,7 @@ def _ensure_decode_budget(episode_root: Path, log: BinaryIO) -> None:
         log_event(
             log,
             "decode_budget_scaled",
+            run_id=run_id,
             skipped=True,
             frame_count=frame_count,
             reason="below_or_at_default",
@@ -155,6 +159,7 @@ def _ensure_decode_budget(episode_root: Path, log: BinaryIO) -> None:
     log_event(
         log,
         "decode_budget_scaled",
+        run_id=run_id,
         frame_count=frame_count,
         budget=budget,
         source=source,
@@ -278,7 +283,7 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
                 require_production_ready(store, ctx, transport)
         except EditorialGateError as error:
             raise _gate_error(error) from error
-        _ensure_decode_budget(call.episode_root, log)
+        _ensure_decode_budget(call.episode_root, log, run_id)
         chain_env = dict(os.environ) if mode == PRODUCTION_MODE else sanitized_env()
         if "V44_MAX_DECODE_FRAMES" in os.environ and "V44_MAX_DECODE_FRAMES" not in chain_env:
             chain_env["V44_MAX_DECODE_FRAMES"] = os.environ["V44_MAX_DECODE_FRAMES"]
@@ -288,14 +293,14 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
         except WorkspaceAdaptationError as error:
             block_stage(store, ctx, "ingest", error.code)
             raise RunnerBlockedError(error.code, error.detail) from error
-        log_event(log, "chain_manifest_written", video=str(video))
+        log_event(log, "chain_manifest_written", run_id=run_id, video=str(video))
         record_stage(store, ctx, "ingest", "running")
         _advance_chain(store, ctx, call.episode_root, chain_env)
         _verify_reached(store, ctx)
         if call.stop == "PREVIEW_READY":
             publish_preview(call.episode_root, log)
             mirror_review_store(call.episode_root, log)
-        log_event(log, "chain_finished", stop=call.stop)
+        log_event(log, "chain_finished", run_id=run_id, stop=call.stop)
         return EXIT_SUCCESS
 
 
@@ -307,8 +312,14 @@ def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
     from_stage: str | None = None,
     applied_command: str | None = None,
     editorial_runtime: Path | None = None,
+    run_id: str | None = None,
 ) -> int:
-    """Advance one cockpit episode through the existing chain; 0/1/2."""
+    """Advance one cockpit episode through the existing chain; 0/1/2.
+
+    ``run_id`` (2P): when the SPAWNING parent pre-generates the run id it
+    can pass it here so the rebuild-request records and the runner.log
+    events name the SAME run; absent, one is generated internally.
+    """
 
     call = RunnerInvocation(
         episode_root,
@@ -318,22 +329,23 @@ def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
         from_stage,
         applied_command,
         editorial_runtime,
+        run_id,
     )
     call.episode_root.mkdir(parents=True, exist_ok=True)
-    run_id = uuid.uuid4().hex[:12]
+    run_id = call.run_id if call.run_id is not None else uuid.uuid4().hex[:12]
     with (call.episode_root / LOG_NAME).open("ab") as log:
         try:
             exit_code = _run_inner(call, run_id, log)
         except RunnerMalformedError as error:
-            log_event(log, "malformed", code=error.code, detail=error.detail)
+            log_event(log, "malformed", run_id=run_id, code=error.code, detail=error.detail)
             exit_code = EXIT_MALFORMED
         except RunnerBlockedError as error:
-            log_event(log, "blocked", code=error.code, detail=error.detail)
+            log_event(log, "blocked", run_id=run_id, code=error.code, detail=error.detail)
             exit_code = EXIT_BLOCKED
         except Exception:  # noqa: BLE001 (last-ditch containment; log and exit 1)
-            log_event(log, "runner_crashed", detail=traceback.format_exc())
+            log_event(log, "runner_crashed", run_id=run_id, detail=traceback.format_exc())
             exit_code = EXIT_BLOCKED
-        log_event(log, "runner_finished", exit_code=exit_code)
+        log_event(log, "runner_finished", run_id=run_id, exit_code=exit_code)
         return exit_code
 
 
@@ -358,6 +370,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--editorial-runtime", type=Path, default=None)
     parser.add_argument(
+        "--run-id",
+        default=None,
+        help="2P: the spawning parent's pre-generated run id (log/record linkage)",
+    )
+    parser.add_argument(
         "--state-store",
         type=Path,
         default=None,
@@ -375,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
         from_stage=arguments.from_stage,
         applied_command=arguments.applied_command,
         editorial_runtime=arguments.editorial_runtime,
+        run_id=arguments.run_id,
     )
 
 

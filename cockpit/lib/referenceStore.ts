@@ -33,10 +33,16 @@ export type SavedAnnotation = {
   saved_at: string;
 };
 
+/** 工程2: 「どちらも違う」 joined the pairwise scale as `neither`. */
+export type PairwiseChoice = "a" | "b" | "neither";
+
 export type SavedPairwise = {
   domain: PreferenceDomain;
-  choice: "a" | "b";
-  reason: string;
+  choice: PairwiseChoice;
+  /** Optional since 工程2: pre-existing records carry a reason STRING and
+   *  still parse unchanged; new records store null when the operator left
+   *  the reason empty (never fabricated). */
+  reason: string | null;
   reference_a_id: string;
   reference_b_id: string;
   saved_at: string;

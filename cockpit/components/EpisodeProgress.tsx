@@ -1,9 +1,15 @@
 "use client";
 
 import type { EpisodeStatus } from "@/lib/api";
+import { jobStatusSuffix, stageGroupOf } from "@/lib/stageGroups";
+import EpisodeWaitInfo from "@/components/EpisodeWaitInfo";
 
 type EpisodeProgressProps = {
   status: EpisodeStatus;
+  /** Deterministic clock for the wait guidance (tests / the view ticker). */
+  now?: number;
+  /** Wired to the view's immediate requery (stall recovery, 再照会). */
+  onRequery?: () => void;
 };
 
 function measuredEtaMinutes(value: number | undefined): number | null {
@@ -12,18 +18,26 @@ function measuredEtaMinutes(value: number | undefined): number | null {
 }
 
 /**
- * Stage + work units. ETA is rendered ONLY when the payload carries a
- * measured `eta_minutes` — otherwise stage/progress alone (PRD 13.2:
- * never invent precision).
+ * Stage + work units + the 工程2P wait guidance. ETA is rendered ONLY when
+ * the payload carries a measured `eta_minutes` — otherwise stage/progress
+ * alone (PRD 13.2: never invent precision). The region is a polite live
+ * area and reports busy-ness while any stage row is running; PREVIEW_READY
+ * is labeled 試し編集完了 — never 全体完了 (工程2P 改訂条件1).
  */
-export default function EpisodeProgress({ status }: EpisodeProgressProps) {
+export default function EpisodeProgress({ status, now, onRequery }: EpisodeProgressProps) {
   const eta = measuredEtaMinutes(status.eta_minutes);
   const units = status.work_units;
   const succeeded = status.stage_runs.filter((run) => run.status === "succeeded").length;
   const running = status.stage_runs.filter((run) => run.status === "running").length;
+  const suffix = jobStatusSuffix(status.status);
 
   return (
-    <div data-testid="episode-progress">
+    <div data-testid="episode-progress" aria-live="polite" aria-busy={running > 0}>
+      {suffix !== null ? (
+        <p className="work-units" data-testid="job-status-suffix">
+          {suffix}
+        </p>
+      ) : null}
       <p data-testid="work-units" className="work-units">
         {units !== undefined
           ? `完了 ${units.completed} / 残り ${units.remaining} 作業単位`
@@ -39,6 +53,7 @@ export default function EpisodeProgress({ status }: EpisodeProgressProps) {
           <thead>
             <tr>
               <th>ステージ</th>
+              <th>段階</th>
               <th>状態</th>
               <th>リトライ</th>
               <th>最終エラー</th>
@@ -51,6 +66,7 @@ export default function EpisodeProgress({ status }: EpisodeProgressProps) {
               // row position is unique in the payload.
               <tr key={`${run.stage_name}-${index}`}>
                 <td>{run.stage_name}</td>
+                <td>{stageGroupOf(run.stage_name) ?? "—"}</td>
                 <td>{run.status}</td>
                 <td>{run.retry_count}</td>
                 <td>{run.last_error_code ?? "—"}</td>
@@ -61,6 +77,7 @@ export default function EpisodeProgress({ status }: EpisodeProgressProps) {
       ) : (
         <p className="empty-note">ステージ実行はまだありません。2秒ごとに自動更新します。</p>
       )}
+      <EpisodeWaitInfo status={status} now={now} onRequery={onRequery} />
     </div>
   );
 }

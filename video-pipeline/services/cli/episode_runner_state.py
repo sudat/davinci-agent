@@ -76,7 +76,17 @@ def record_stage(  # noqa: PLR0913 (store + ctx + the StageRunRow field contract
     *,
     error_code: str | None = None,
     adopted: str | None = None,
+    now: str | None = None,
 ) -> None:
+    """Record one stage transition with caller-supplied (or current) wall clock.
+
+    The clock fields are SEPARATED (2P): ``first_started_at`` freezes the
+    first entry into ``running``; ``first_output_arrived_at`` is stamped
+    ONLY on ``succeeded`` and the store never overwrites it once set;
+    ``last_transition_at`` moves only when the row's meaning changes.
+    """
+
+    stamp = datetime.now(UTC).isoformat() if now is None else now
     store.record_stage_run(
         StageRunRow(
             job_id=ctx.job_id,
@@ -86,20 +96,29 @@ def record_stage(  # noqa: PLR0913 (store + ctx + the StageRunRow field contract
             status=status,  # type: ignore[arg-type] (stage-run statuses)
             idempotency_key=f"{RUNNER_VERSION}:{ctx.run_id}:{stage}",
             last_error_code=error_code,
+            run_id=ctx.run_id,
+            first_started_at=stamp if status == "running" else None,
+            first_output_arrived_at=stamp if status == "succeeded" else None,
+            last_transition_at=stamp,
         )
     )
 
 
-def block_stage(store: StateStore, ctx: RunContext, stage: str, code: str) -> None:
+def block_stage(
+    store: StateStore, ctx: RunContext, stage: str, code: str, *, now: str | None = None
+) -> None:
     """Record one blocked stage run through the existing StateStore semantics."""
 
-    record_stage(store, ctx, stage, "failed_blocked", error_code=code)
+    record_stage(store, ctx, stage, "failed_blocked", error_code=code, now=now)
 
 
-def block_running_frontier(store: StateStore, ctx: RunContext, code: str) -> None:
+def block_running_frontier(
+    store: StateStore, ctx: RunContext, code: str, *, now: str | None = None
+) -> None:
     """Mark this run's stale ``running`` rows failed_blocked (the honest halt)."""
 
     prefix = f"{RUNNER_VERSION}:{ctx.run_id}:"
+    stamp = datetime.now(UTC).isoformat() if now is None else now
     for row in store.get_job_snapshot(ctx.job_id).stage_runs:
         if row.idempotency_key.startswith(prefix) and row.status == "running":
             store.set_stage_status(
@@ -107,6 +126,7 @@ def block_running_frontier(store: StateStore, ctx: RunContext, code: str) -> Non
                 idempotency_key=row.idempotency_key,
                 status="failed_blocked",
                 last_error_code=code,
+                last_transition_at=stamp,
             )
 
 
@@ -140,7 +160,10 @@ def mirror_upto(
             new_artifact_hash=observed_hash,
         )
         record_stage(store, ctx, stage, "succeeded", adopted=observed_hash)
-        log_event(ctx.log, "stage", stage=stage, status="succeeded", job_status=nxt)
+        log_event(
+            ctx.log, "stage", run_id=ctx.run_id, stage=stage, status="succeeded",
+            job_status=nxt,
+        )
     if observed != ctx.stop:
         ahead = STAGE_OF_STATUS.get(MAIN_PATH[MAIN_PATH.index(observed) + 1])
         if ahead is not None:
@@ -174,7 +197,9 @@ def watch_chain(
     try:
         store = StateStore.open(ctx.state_store_path)
     except (StateStoreError, sqlite3.Error) as error:
-        log_event(ctx.log, "watcher_stopped", reason=f"open-failed: {error}")
+        log_event(
+            ctx.log, "watcher_stopped", run_id=ctx.run_id, reason=f"open-failed: {error}"
+        )
         return
     try:
         while not stop_event.wait(WATCH_POLL_SECONDS):
@@ -184,7 +209,9 @@ def watch_chain(
             try:
                 mirror_upto(store, ctx, observed[0], observed[1])
             except (StateStoreError, sqlite3.Error) as error:
-                log_event(ctx.log, "watcher_error", reason=str(error))
+                log_event(
+                    ctx.log, "watcher_error", run_id=ctx.run_id, reason=str(error)
+                )
     finally:
         store.close()
 

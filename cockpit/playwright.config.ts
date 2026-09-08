@@ -2,7 +2,9 @@ import { defineConfig } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 
-const backendPort = 8765;
+// 2P isolation: keep 8765 default, allow a dedicated port when 8765 is held
+// by an unrelated process (e2e teardown kills listeners on this port).
+const backendPort = Number(process.env.COCKPIT_E2E_PORT ?? 8765);
 const frontendPort = 3100;
 // Frontend must be addressed via localhost (not 127.0.0.1): Next 16's dev
 // allowed-origins guard 403s _next/static + HMR for 127.0.0.1, which kills

@@ -250,6 +250,14 @@ def test_review_chat_apply_returns_applied_command_and_lineage_rebuild(
     episode_id = _create_episode(client, source_folder)
     _seed_review_store(workspace, episode_id)
 
+    # Adoption authority is the server-saved proposal set (brief §5.3):
+    # the correction must be previewed before it can be applied.
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "この後2秒残して", "at_seconds": 1.0},
+    )
+    assert preview.status_code == 200, preview.text
+
     response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "この後2秒残して", "at_seconds": 1.0},
@@ -288,9 +296,21 @@ def test_review_chat_apply_unconfirmed_draft_is_structured_422(
     episode_id = _create_episode(client, source_folder)
     _seed_review_store(workspace, episode_id)
 
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "ありがとうございます", "at_seconds": 1.0},
+    )
+    assert preview.status_code == 200
+    flagged = preview.json()["draft"]
+    assert flagged["needs_confirmation"] is True
+
     response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
-        json={"text": "ありがとうございます", "at_seconds": 1.0},
+        json={
+            "text": "ありがとうございます",
+            "at_seconds": 1.0,
+            "drafts": [flagged],
+        },
     )
 
     assert response.status_code == 422

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import EpisodeProgress from "@/components/EpisodeProgress";
 import type { EpisodeStatus } from "@/lib/api";
-
 function status(overrides: Partial<EpisodeStatus>): EpisodeStatus {
   return {
     episode_id: "ep-test01",
@@ -58,5 +57,19 @@ describe("EpisodeProgress — 作業単位の完了/残", () => {
     const units = screen.getByTestId("work-units");
     expect(units.textContent).toContain("2"); // succeeded stage 数
     expect(units.textContent).not.toContain("残");
+  });
+});
+
+describe("EpisodeProgress — PREVIEW_READYは試し編集完了（全体完了ではない・工程2P）", () => {
+  it("PREVIEW_READYに接尾語 試し編集完了 を出し、単体の全体完了とは言わない", () => {
+    render(<EpisodeProgress status={status({ status: "PREVIEW_READY" })} />);
+    const suffix = screen.getByTestId("job-status-suffix");
+    expect(suffix.textContent).toContain("試し編集完了");
+    expect(suffix.textContent).toContain("全体の完了ではありません");
+  });
+
+  it("CREATEDなど対応語彙のないstatusでは接尾語を出さない（捏造しない）", () => {
+    render(<EpisodeProgress status={status({})} />);
+    expect(screen.queryByTestId("job-status-suffix")).toBeNull();
   });
 });

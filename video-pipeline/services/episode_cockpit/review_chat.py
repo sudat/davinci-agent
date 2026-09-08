@@ -11,10 +11,18 @@ other domains become AppliedCommands recorded in the episode's
 from. Chat text is DATA: only patterns are matched, nothing is executed.
 """
 
-# allow: SIZE_OK — 474 pure LOC under a plan-pinned single-file commit scope
-# (task 47: review_chat.py only); ~120 LOC are the pure command-pattern data
-# table plus immutable store/lineage tables. Split parser-vs-apply/plan into
-# two modules at task-51 wiring when models.py unlocks.
+# allow: SIZE_OK — ~640 pure LOC under a plan-pinned single-file commit scope
+# (task 47: review_chat.py only; the UX redesign 工程1 review-fix delta added
+# the feelings-display docstrings + the investigated-bridge authority note;
+# 工程2 adds the reaction classifier + prior-proposal context + the honest
+# no-proposal draft builder, and the rework adds the shared pre-commit path
+# (_prepare_commit/validate_draft_applicable) + the proposal-kind context,
+# and rework #1 adds the gated FrameMaterial context field, and rework
+# round 2 adds the _DELTA_KINDS bridge + the simulation head override on
+# _prepare_commit (P1-1) — same parser/store file by design);
+# ~120 LOC are the pure command-pattern data table plus immutable
+# store/lineage tables. Split parser-vs-apply/plan into two modules at
+# task-51 wiring when models.py unlocks.
 
 from __future__ import annotations
 
@@ -34,7 +42,14 @@ from services.episode_cockpit.errors import (
     CockpitNotFoundError,
     CockpitUnprocessableError,
 )
-from services.episode_cockpit.models import NonEmpty, Seconds  # noqa: TC001 (pydantic runtime)
+from services.episode_cockpit.models import (  # noqa: TC001 (pydantic runtime)
+    FrameMaterial,
+    NonEmpty,
+    ProposalKind,
+    ReviewReactionKind,
+    Seconds,
+    SequenceNumber,
+)
 from services.foundation_io import canonical_model_bytes
 from services.review_command.commit import CommitOutcome, commit_command
 from services.review_command.models import (
@@ -108,14 +123,18 @@ class ReviewChatError(CockpitUnprocessableError):
     """Typed review-chat parse/apply failure (structured 422 at the boundary)."""
 
 
-class ReviewChatContext(StrictModel):
-    """Where the reviewer was when the message was sent (player position)."""
-
-    at_seconds: Seconds | None = None
-
-
 class ReviewCommandDraft(StrictModel):
-    """Deterministic interpretation preview of one natural-language message."""
+    """Deterministic interpretation preview of one natural-language message.
+
+    ``hypothesis`` / ``investigated`` are DISPLAY-ONLY fields carried by the
+    feelings route (cause investigation): they never enter the command_id
+    hash and never relax confirmation — an investigated draft still needs
+    the operator's explicit apply to commit. ``investigated`` is a
+    materials-gathered flag (transcript/scene text only; 工程1 never checks
+    the actual video/audio) — NEVER a cause-identified claim: with no
+    hypothesis the honest display is 「周辺の字幕と場面情報を確認しましたが、
+    原因はまだ特定できていません」, never 「原因を調査しました」.
+    """
 
     schema_version: Literal["cockpit-review-command-draft-v1"] = (
         "cockpit-review-command-draft-v1"
@@ -128,6 +147,8 @@ class ReviewCommandDraft(StrictModel):
     scope: Literal["episode", "channel"] = "episode"
     needs_confirmation: bool
     confirmation_reason: str | None = None
+    hypothesis: str | None = None
+    investigated: bool = False
 
     @model_validator(mode="after")
     def require_confirmation_consistency(self) -> ReviewCommandDraft:
@@ -144,6 +165,47 @@ class ReviewCommandDraft(StrictModel):
                 "command_kind", "unrecognized drafts always need confirmation"
             )
         return self
+
+
+class PriorProposalContext(StrictModel):
+    """工程2: the earlier proposal set a reaction message responds to.
+
+    DATA for the LLM (never instructions): the drafts it may adjust plus
+    the display state of that earlier investigation. Rides
+    ``ReviewChatContext`` so the transport-agnostic LLM call signature is
+    unchanged and old fakes keep working.
+    """
+
+    set_sequence: SequenceNumber
+    drafts: Annotated[tuple[ReviewCommandDraft, ...], BeforeValidator(tuple)] = ()
+    investigation_state: str | None = None
+
+
+class ReviewChatContext(StrictModel):
+    """Where the reviewer was when the message was sent.
+
+    工程2 (additive): ``reaction_kind`` / ``prior_set`` carry the proposal
+    conversation a reaction message continues — DATA for the LLM data
+    block (``review_interpreter._request_parts``), never instructions;
+    the deterministic interpreter ignores them.
+
+    工程2 rework: ``proposal_kind`` selects the LLM proposal mode the
+    route runs in — ``command-bundle`` (explicit fixes, enumerate ALL) or
+    ``alternatives`` (mutually exclusive choices, max 2). It shapes the
+    interpreter instructions and the deterministic per-mode cap; the
+    SAVED set records the same kind (``review_proposals``).
+
+    工程2 rework #1 (additive, PriorProposalContext precedent):
+    ``frame_materials`` carries the checked video STILLS as DATA for the
+    LLM (gated on by ``review_frame_materials.enabled``). A still is one
+    frame — never an audio or whole-video verification.
+    """
+
+    at_seconds: Seconds | None = None
+    reaction_kind: ReviewReactionKind | None = None
+    prior_set: PriorProposalContext | None = None
+    proposal_kind: ProposalKind = "command-bundle"
+    frame_materials: tuple[FrameMaterial, ...] = ()
 
 
 class AppliedCommand(StrictModel):
@@ -274,6 +336,47 @@ _KIND_RULES = tuple(
     for kind, pattern, positional in _RULE_SPEC
 )
 _POSITION_DEPENDENT = frozenset(rule.kind for rule in _KIND_RULES if rule.position_dependent)
+# Feelings/goal vocabulary (UX redesign 工程1, JA-first): a match routes the
+# message through cause investigation instead of positional auto-confirm.
+_FEELINGS_PATTERN = re.compile(
+    r"退屈|つまらな|(?:面白|おもしろ)くない|眠たくな|素人っぽい|映画っぽく"
+    r"|\bboring\b|\bdull\b",
+    re.IGNORECASE,
+)
+_FEELINGS_KINDS = frozenset({"mark_boring"})
+_FEELINGS_REASON = (
+    "this expresses a feeling, not a concrete change; the cause is "
+    "investigated before any change is proposed"
+)
+# Reaction vocabulary (UX redesign 工程2, brief §3.3/§6.2): a message that
+# reacts to the PREVIEWED proposal set instead of naming a new correction.
+# Classification precedence: a direct _RULE_SPEC command always wins; then
+# the explicit both-different rejection; then the pairwise choice; then the
+# continuation/adjustment vocabulary. Choice records the CHOICE FACT only —
+# a reason is never asked for and never recorded (U04).
+_BOTH_DIFFERENT_PATTERN = re.compile(
+    r"両方[ととも]?違う|どちらも違う|どっちも違う|どれも違う"
+    r"|両方[ととも]?だめ|どちらもだめ|どっちもだめ"
+)
+_CHOICE_A_PATTERN = re.compile(
+    r"(?:^|[^A-Za-z0-9])[AaＡ]\s*(?:が|で|を|に|だ|です)|1番目|一番目|最初の方",  # noqa: RUF001 (fullwidth letter is intentional JA input)
+    re.IGNORECASE,
+)
+_CHOICE_B_PATTERN = re.compile(
+    r"(?:^|[^A-Za-z0-9])[BbＢ]\s*(?:が|で|を|に|だ|です)|2番目|二番目|2つ目|二つ目|後の方",  # noqa: RUF001 (fullwidth letter is intentional JA input)
+    re.IGNORECASE,
+)
+_CONTINUATION_PATTERN = re.compile(
+    r"前より|もっと|さっきの|さっき|今の|前回|今回は|落ち着|せわしな"
+    r"|速すぎ|遅すぎ|早すぎ|きつ|目に優し"
+)
+_REJECTION_FALLBACK_REASON = (
+    "両方とも違うとの反応を記録しました。原因の再調査が必要です"
+)
+_CONTINUATION_FALLBACK_REASON = (
+    "前の提案を踏まえた調整の依頼として記録しました。原因の特定には"
+    "追加の確認が必要です"
+)
 _POSITION_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
@@ -295,6 +398,10 @@ _APPLICABLE_KINDS: Mapping[ReviewCommandKind, SpanOperation] = {
     "keep_longer": "adjust_source_span",
     "quiet_longer": "adjust_source_span",
 }
+# Span-length kinds: the apply side translates them with an explicit
+# seconds amount (_prepare_commit: delta-required otherwise), so the
+# parsers must carry it for both — matching _APPLICABLE_KINDS.
+_DELTA_KINDS: frozenset[ReviewCommandKind] = frozenset({"keep_longer", "quiet_longer"})
 
 
 def _first_group_float(patterns: tuple[re.Pattern[str], ...], text: str) -> float | None:
@@ -323,6 +430,64 @@ def _resolve_target(text: str, at_seconds: float | None) -> float | None:
     return at_seconds
 
 
+def _is_feelings_interpretation(kind: ReviewCommandKind | None, text: str) -> bool:
+    """Feelings interpretation: the sentiment IS the message (its kind is the
+    boring marker or nothing concrete matched) — explicit command verbs win."""
+
+    if kind is not None:
+        return kind in _FEELINGS_KINDS
+    return _FEELINGS_PATTERN.search(text) is not None
+
+
+def classify_reaction(text: str) -> ReviewReactionKind | None:
+    """工程2 U02-U05: classify a message that reacts to the previewed
+    proposal set (closed Literal set). A direct _RULE_SPEC command ALWAYS
+    wins (「退屈なところを削除して」 is a command; 「今回だけ」 beats the
+    continuation 「今回は」); without one, an explicit both-different
+    rejection beats a pairwise choice, which beats continuation vocabulary.
+    """
+
+    if any(rule.pattern.search(text) for rule in _KIND_RULES):
+        return None
+    if _BOTH_DIFFERENT_PATTERN.search(text):
+        return "both-different"
+    if _CHOICE_B_PATTERN.search(text):
+        return "choice-b"
+    if _CHOICE_A_PATTERN.search(text):
+        return "choice-a"
+    if _CONTINUATION_PATTERN.search(text):
+        return "continuation"
+    return None
+
+
+def reaction_no_proposal_draft(text: str, reason: str) -> ReviewCommandDraft:
+    """Honest flagged draft when a reaction must not (or cannot) produce a
+    new proposal: the reaction is recorded, NO new proposal is fabricated,
+    and the flag states what is missing (re-investigation)."""
+
+    return ReviewCommandDraft(
+        command_id=_command_id(None, None, None, text),
+        command_kind=None,
+        text=text,
+        needs_confirmation=True,
+        confirmation_reason=reason,
+    )
+
+
+def with_reaction_fallback_reason(
+    drafts: list[ReviewCommandDraft], reason: str
+) -> list[ReviewCommandDraft]:
+    """Replace the generic unrecognized-input flag on kind-None drafts with
+    the reaction-specific honest reason (LLM-less fallback path)."""
+
+    return [
+        draft
+        if draft.command_kind is not None
+        else draft.model_copy(update={"confirmation_reason": reason})
+        for draft in drafts
+    ]
+
+
 def _command_id(
     kind: ReviewCommandKind | None, target: float | None, delta: float | None, text: str
 ) -> str:
@@ -337,10 +502,14 @@ def interpret_command(text: str, context: ReviewChatContext) -> ReviewCommandDra
         (rule.kind for rule in _KIND_RULES if rule.pattern.search(text)), None
     )
     target = _resolve_target(text, context.at_seconds)
-    delta = _first_group_float(_DELTA_PATTERNS, text) if kind == "keep_longer" else None
+    delta = _first_group_float(_DELTA_PATTERNS, text) if kind in _DELTA_KINDS else None
     scope = "channel" if kind == "channel_lower_third" else "episode"
     reason: str | None = None
-    if kind is None:
+    if _is_feelings_interpretation(kind, text):
+        # Feelings NEVER auto-confirm from position alone (brief rule 2/3):
+        # the cause-investigation route decides the change.
+        reason = _FEELINGS_REASON
+    elif kind is None:
         reason = "no known command kind matched the message; restate the correction"
     elif kind in _POSITION_DEPENDENT and target is None:
         reason = (
@@ -420,24 +589,38 @@ def _translate_adjust(
     )
 
 
-def apply_command(draft: ReviewCommandDraft, *, store: ReviewStoreLocation) -> AppliedCommand:
-    """Apply an approved draft: 0C event+version where translatable, else intent."""
+def _prepare_commit(
+    draft: ReviewCommandDraft,
+    *,
+    store: ReviewStoreLocation,
+    head: HeadState | None = None,
+) -> (
+    tuple[
+        HeadState,
+        RemoveSegmentProposal0C | AdjustSourceSpanProposal0C,
+        OperatorDecision0C,
+    ]
+    | None
+):
+    """Shared pre-commit path of ``apply_command``/``validate_draft_applicable``:
+    every deterministic check plus proposal translation, NO writes. ``None``
+    means an intent-only command (nothing to translate or commit). ``head``
+    overrides the store head — apply_drafts passes the PROVISIONAL head of
+    its sequential simulation (P1-1: draft i+1 is validated against the
+    plan AFTER drafts 1..i applied)."""
 
-    if draft.needs_confirmation or draft.command_kind is None:
+    if draft.command_kind is None:
+        raise ReviewChatError("draft-not-confirmed", "only confirmed drafts may be applied")
+    if draft.needs_confirmation and not draft.investigated:
         raise ReviewChatError("draft-not-confirmed", "only confirmed drafts may be applied")
     kind = draft.command_kind
     operation = _APPLICABLE_KINDS.get(kind)
     if operation is None:
-        return AppliedCommand(
-            command_id=draft.command_id,
-            command_kind=kind,
-            affected_domain=COMMAND_DOMAIN[kind],
-            target_seconds=draft.target_seconds,
-            seconds_delta=draft.seconds_delta,
-        )
+        return None
     if draft.target_seconds is None:
         raise ReviewChatError("target-required", f"{kind} needs a target timestamp")
-    head = load_head(store.log_path, store.plan_dir)
+    if head is None:
+        head = load_head(store.log_path, store.plan_dir)
     frame = int(draft.target_seconds * head.plan.frame_rate.as_fraction + 0.5)
     if operation == "adjust_source_span":
         if draft.seconds_delta is None:
@@ -448,6 +631,42 @@ def apply_command(draft: ReviewCommandDraft, *, store: ReviewStoreLocation) -> A
     decision = OperatorDecision0C(
         decision_id=f"dec-{draft.command_id[5:]}", actor_intent="operator", note=draft.text
     )
+    return head, proposal, decision
+
+
+def validate_draft_applicable(draft: ReviewCommandDraft, *, store: ReviewStoreLocation) -> None:
+    """Run every check ``apply_command`` performs BEFORE its commit; the
+    same typed errors surface early (工程2 atomicity: a batch is fully
+    validated against the current plan state before anything commits)."""
+
+    _prepare_commit(draft, store=store)
+
+
+def apply_command(draft: ReviewCommandDraft, *, store: ReviewStoreLocation) -> AppliedCommand:
+    """Apply an approved draft: 0C event+version where translatable, else intent.
+
+    Confirmation is ``needs_confirmation=False``, OR an investigated
+    (feelings-route) draft: there the operator's explicit apply call of the
+    echoed draft IS the confirmation of the investigated proposal. The
+    bridge is safe because the apply route only hands over drafts that
+    field-for-field equal a SERVER-SAVED proposal set
+    (``review_proposals.resolve_authoritative_drafts``) — a fabricated
+    ``investigated`` flag can never reach here (brief §5.3).
+    """
+
+    prepared = _prepare_commit(draft, store=store)
+    if draft.command_kind is None:  # unreachable: _prepare_commit rejects None kinds
+        raise ReviewChatError("draft-not-confirmed", "only confirmed drafts may be applied")
+    kind = draft.command_kind
+    if prepared is None:
+        return AppliedCommand(
+            command_id=draft.command_id,
+            command_kind=kind,
+            affected_domain=COMMAND_DOMAIN[kind],
+            target_seconds=draft.target_seconds,
+            seconds_delta=draft.seconds_delta,
+        )
+    head, proposal, decision = prepared
     outcome: CommitOutcome = commit_command(proposal, decision, store.log_path, store.plan_dir)
     return AppliedCommand(
         command_id=draft.command_id,
@@ -530,14 +749,19 @@ __all__ = [
     "DEFAULT_LINEAGE",
     "PIPELINE_STAGES",
     "AppliedCommand",
+    "PriorProposalContext",
     "RebuildPlan",
     "ReviewChatContext",
     "ReviewChatError",
     "ReviewCommandDraft",
     "ReviewStoreLocation",
     "apply_command",
+    "classify_reaction",
     "interpret_command",
     "load_applied_command",
     "plan_rebuild",
+    "reaction_no_proposal_draft",
     "record_applied_command",
+    "validate_draft_applicable",
+    "with_reaction_fallback_reason",
 ]

@@ -80,6 +80,11 @@ def test_apply_bootstraps_from_run_store_when_cockpit_store_absent(
     # Ensure cockpit review/ does not exist yet
     assert not (episode_dir / "review" / "store" / "versions.json").exists()
 
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "この区間を削除して", "at_seconds": 6.0},
+    )
+    assert preview.status_code == 200, preview.text
     response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "この区間を削除して", "at_seconds": 6.0},
@@ -89,14 +94,14 @@ def test_apply_bootstraps_from_run_store_when_cockpit_store_absent(
     assert body["applied"]["command_kind"] == "remove_section"
     assert body["applied"]["result_plan_version"] == "v2"
 
-    # Idempotency: existing v2 must not be re-bootstrapped
-    # Re-applying same command should fail with target-not-in-plan
+    # Idempotency: the consumed proposal set cannot be re-applied, and the
+    # plan head stays at v2 (no double mutation).
     second = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "この区間を削除して", "at_seconds": 6.0},
     )
     assert second.status_code == 422
-    assert second.json()["error"]["code"] == "target-not-in-plan"
+    assert second.json()["error"]["code"] == "proposal-consumed"
     # Cockpit store not overwritten by run store (still v2)
     head = load_head(episode_dir / "review" / "events.jsonl", episode_dir / "review" / "store")
     assert head.version == 2
@@ -104,6 +109,11 @@ def test_apply_bootstraps_from_run_store_when_cockpit_store_absent(
 
 def test_apply_without_any_store_returns_typed_422(client: TestClient, source_folder: Path) -> None:
     episode_id = _create_episode(client, source_folder)
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "この区間を削除して", "at_seconds": 6.0},
+    )
+    assert preview.status_code == 200
     response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "この区間を削除して", "at_seconds": 6.0},
@@ -127,6 +137,11 @@ def test_apply_with_existing_cockpit_store_does_not_clobber(
     initialize_store(
         manifest_plan("p0c-remove-clear"), cockpit_store.log_path, cockpit_store.plan_dir
     )
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "この区間を削除して", "at_seconds": 6.0},
+    )
+    assert preview.status_code == 200
     first = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "この区間を削除して", "at_seconds": 6.0},
@@ -141,6 +156,11 @@ def test_apply_with_existing_cockpit_store_does_not_clobber(
     assert head.version == 2
 
     # Another distinct command should create v3, proving store was untouched
+    preview_keep = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "この後2秒残して", "at_seconds": 6.0},
+    )
+    assert preview_keep.status_code == 200
     second = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "この後2秒残して", "at_seconds": 6.0},
@@ -169,6 +189,11 @@ def test_review_commit_error_maps_to_structured_422_not_500(
     )
     # Corrupt seal
     (episode_dir / "review" / "events.jsonl.seal").write_text("corrupt", encoding="utf-8")
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "この区間を削除して", "at_seconds": 6.0},
+    )
+    assert preview.status_code == 200
     response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "この区間を削除して", "at_seconds": 6.0},

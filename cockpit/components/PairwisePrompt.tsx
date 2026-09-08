@@ -6,12 +6,18 @@ import { DOMAIN_LABEL } from "@/lib/domains";
 import {
   addPairwiseRecord,
   loadPairwise,
+  type PairwiseChoice,
   type SavedPairwise,
 } from "@/lib/referenceStore";
 
 type PairwisePromptProps = {
   referenceIds: string[];
 };
+
+/** 「どちらも違う」 renders by name; a/b keep the classic letter label. */
+export function pairwiseChoiceLabel(choice: PairwiseChoice): string {
+  return choice === "neither" ? "どちらも違う" : `${choice.toUpperCase()} を選択`;
+}
 
 /**
  * Opportunistic A/B comparison (PRD 16.3: ask only when it matters). The
@@ -22,23 +28,25 @@ type PairwisePromptProps = {
 export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
   const [records, setRecords] = useState<SavedPairwise[]>([]);
   const [domain, setDomain] = useState<PreferenceDomain>("color");
-  const [choice, setChoice] = useState<"a" | "b" | "">("");
+  const [choice, setChoice] = useState<PairwiseChoice | "">("");
   const [reason, setReason] = useState("");
 
   useEffect(() => {
     setRecords(loadPairwise());
   }, []);
 
-  const canRecord =
-    referenceIds.length >= 2 && choice !== "" && reason.trim() !== "";
+  // 工程2: the reason is OPTIONAL (理由（任意）) — the choice fact alone is
+  // recordable; an empty reason is stored as null, never fabricated.
+  const canRecord = referenceIds.length >= 2 && choice !== "";
 
   const record = () => {
     if (!canRecord) return;
     const [a, b] = referenceIds;
+    const trimmed = reason.trim();
     const saved: SavedPairwise = {
       domain,
       choice,
-      reason: reason.trim(),
+      reason: trimmed === "" ? null : trimmed,
       reference_a_id: a,
       reference_b_id: b,
       saved_at: new Date().toISOString(),
@@ -92,9 +100,18 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
             >
               B（{referenceIds[1]}）
             </button>
+            <button
+              type="button"
+              className="choice-button"
+              aria-pressed={choice === "neither"}
+              onClick={() => setChoice("neither")}
+              data-testid="pairwise-choice-neither"
+            >
+              どちらも違う
+            </button>
           </div>
           <label className="field" htmlFor="pairwise-reason">
-            理由（必須）
+            理由（任意）
             <textarea
               id="pairwise-reason"
               value={reason}
@@ -122,8 +139,8 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
           {records.map((item, index) => (
             <li key={`${item.saved_at}-${index}`} data-testid="saved-pairwise-item">
               <span>
-                {DOMAIN_LABEL[item.domain]}: {item.choice.toUpperCase()} を選択 —{" "}
-                {item.reason}
+                {DOMAIN_LABEL[item.domain]}: {pairwiseChoiceLabel(item.choice)}
+                {item.reason !== null ? ` — ${item.reason}` : ""}
               </span>
             </li>
           ))}

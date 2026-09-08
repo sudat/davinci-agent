@@ -10,7 +10,8 @@ import { execSync } from "node:child_process";
  */
 export default async function globalTeardown(): Promise<void> {
   try {
-    execSync("lsof -nP -ti tcp:8765 -sTCP:LISTEN | xargs kill 2>/dev/null || true", {
+    const port = process.env.COCKPIT_E2E_PORT ?? "8765";
+    execSync(`lsof -nP -ti tcp:${port} -sTCP:LISTEN | xargs kill 2>/dev/null || true`, {
       shell: "/bin/sh",
       stdio: "ignore",
     });

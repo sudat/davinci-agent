@@ -211,6 +211,12 @@ def _initial_preview_ready(
 
 
 def _apply_remove(client: TestClient, episode_id: str) -> dict[str, object]:
+    # Adoption authority is the server-saved proposal set: preview, then apply.
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": REMOVE_TEXT, "at_seconds": None},
+    )
+    assert preview.status_code == 200
     response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": REMOVE_TEXT, "at_seconds": None},
@@ -367,19 +373,32 @@ def test_multi_draft_apply_two_commands_one_union_rebuild(
     runner_spawn_calls: list[dict[str, object]],
 ) -> None:
     episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
-                                                      monkeypatch)
-    text = "冒頭のあいさスを削除して、あとのところは2秒長く残して"
-    drafts = [
-        _echo_draft("remove_section", 0.5, text),
-        _echo_draft("keep_longer", 1.0, text, delta=2.0),
-    ]
+                                                     monkeypatch)
+
+    def fake_llm(text: str, context: object, nearby: object) -> dict:
+        del text, context, nearby
+        return {
+            "proposals": [
+                {"command_kind": "remove_section", "target_seconds": 0.5},
+                {"command_kind": "keep_longer", "target_seconds": 1.0, "seconds_delta": 2.0},
+            ]
+        }
+
+    monkeypatch.setattr("services.episode_cockpit.api.build_review_llm_call", lambda: fake_llm)
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "冒頭のあいさスを削除して、あとのところは2秒長く残して"},
+    )
+    assert preview.status_code == 200
+    previewed = preview.json()["drafts"]
+    assert len(previewed) == 2
 
     applied_response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={
-            "text": text,
+            "text": "冒頭のあいさスを削除して、あとのところは2秒長く残して",
             "at_seconds": None,
-            "drafts": [draft.model_dump(mode="json") for draft in drafts],
+            "drafts": previewed,
         },
     )
     assert applied_response.status_code == 200
@@ -430,17 +449,21 @@ def test_multi_draft_apply_rejects_forged_command_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     episode_id, _episode_dir = _initial_preview_ready(client, workspace, source_folder,
-                                                       monkeypatch)
+                                                      monkeypatch)
     text = "0:00と0:02のあいさりとテストのところを削除して"
-    forged = _echo_draft("remove_section", 0.5, text).model_dump(mode="json")
-    forged["target_seconds"] = 1.0  # id no longer matches the echoed fields
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat", json={"text": text, "at_seconds": None}
+    )
+    assert preview.status_code == 200
+    forged = dict(preview.json()["draft"])
+    forged["target_seconds"] = 1.0  # differs from the saved proposal set
 
     response = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": text, "at_seconds": None, "drafts": [forged]},
     )
     assert response.status_code == 422
-    assert response.json()["error"]["code"] == "draft-echo-mismatch"
+    assert response.json()["error"]["code"] == "proposal-mismatch"
     assert "draft-not-confirmed" not in response.text
 
 
@@ -458,6 +481,11 @@ def test_lower_bgm_rebuild_stays_intent_only(
 ) -> None:
     episode_id, _episode_dir = _initial_preview_ready(client, workspace, source_folder,
                                                       monkeypatch)
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": "ここのBGMをもっと小さく", "at_seconds": 1.0},
+    )
+    assert preview.status_code == 200
     applied = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
         json={"text": "ここのBGMをもっと小さく", "at_seconds": 1.0},

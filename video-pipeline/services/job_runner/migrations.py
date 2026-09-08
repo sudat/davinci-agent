@@ -100,6 +100,18 @@ MIGRATIONS: tuple[Migration, ...] = (
             )""",
         ),
     ),
+    Migration(
+        version=3,
+        name="stage-run-run-visibility-clocks",
+        statements=(
+            # 2P run visibility: NULL = unmeasured, so pre-change rows keep
+            # serving; column order matches STAGE_RUN_COLUMNS (decode contract).
+            "ALTER TABLE stage_runs ADD COLUMN run_id TEXT",
+            "ALTER TABLE stage_runs ADD COLUMN first_started_at TEXT",
+            "ALTER TABLE stage_runs ADD COLUMN first_output_arrived_at TEXT",
+            "ALTER TABLE stage_runs ADD COLUMN last_transition_at TEXT",
+        ),
+    ),
 )
 
 LATEST_VERSION = MIGRATIONS[-1].version

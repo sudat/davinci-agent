@@ -93,41 +93,47 @@ def _draft(text: str, at_seconds: float | None = REMOVE_CLEAR_RATE_SECONDS):
 # ---------------------------------------------------------------------------
 
 KIND_SAMPLES = [
-    ("remove_section", "この区間を削除して", 12.5),
-    ("remove_section", "remove this section", 30.0),
-    ("keep_longer", "この後2秒残して", 12.5),
-    ("keep_longer", "keep 2 seconds more before the cut", 40.0),
-    ("use_other_take", "ここは別のテイクで", 55.0),
-    ("use_other_take", "use the other take", 60.0),
-    ("insert_broll", "ここにもっとBロールを入れて", 61.0),
-    ("insert_broll", "insert more B-roll here", 62.0),
-    ("mark_boring", "このショットは退屈", 63.0),
-    ("mark_boring", "this shot is boring", 64.0),
-    ("quiet_longer", "この静かな場面をもっと長く", 65.0),
-    ("quiet_longer", "leave this quiet moment longer", 66.0),
-    ("subtitle_shorter", "字幕をもっと短くして", None),
-    ("subtitle_shorter", "make subtitles shorter", None),
-    ("remove_effect", "ズーム効果はやめて", None),
-    ("remove_effect", "remove the zoom effect", None),
-    ("lower_bgm", "ここのBGMをもっと小さく", 70.0),
-    ("lower_bgm", "lower the BGM here", 71.0),
-    ("match_color", "この2つのショットの色を揃えて", None),
-    ("match_color", "make these shots match in color", None),
-    ("channel_lower_third", "このテロップのスタイルをチャンネル全体で使って", None),
-    ("channel_lower_third", "use this lower-third style for the whole channel", None),
-    ("episode_only", "この修正はこのエピソードだけにして", None),
-    ("episode_only", "this correction is only for this episode", None),
+    # (kind, text, position, auto_confirmed) — feelings-class messages
+    # (mark_boring) NEVER auto-confirm from position alone: they route
+    # through cause investigation (UX redesign 工程1).
+    ("remove_section", "この区間を削除して", 12.5, True),
+    ("remove_section", "remove this section", 30.0, True),
+    ("keep_longer", "この後2秒残して", 12.5, True),
+    ("keep_longer", "keep 2 seconds more before the cut", 40.0, True),
+    ("use_other_take", "ここは別のテイクで", 55.0, True),
+    ("use_other_take", "use the other take", 60.0, True),
+    ("insert_broll", "ここにもっとBロールを入れて", 61.0, True),
+    ("insert_broll", "insert more B-roll here", 62.0, True),
+    ("mark_boring", "このショットは退屈", 63.0, False),
+    ("mark_boring", "this shot is boring", 64.0, False),
+    ("quiet_longer", "この静かな場面をもっと長く", 65.0, True),
+    ("quiet_longer", "leave this quiet moment longer", 66.0, True),
+    ("subtitle_shorter", "字幕をもっと短くして", None, True),
+    ("subtitle_shorter", "make subtitles shorter", None, True),
+    ("remove_effect", "ズーム効果はやめて", None, True),
+    ("remove_effect", "remove the zoom effect", None, True),
+    ("lower_bgm", "ここのBGMをもっと小さく", 70.0, True),
+    ("lower_bgm", "lower the BGM here", 71.0, True),
+    ("match_color", "この2つのショットの色を揃えて", None, True),
+    ("match_color", "make these shots match in color", None, True),
+    ("channel_lower_third", "このテロップのスタイルをチャンネル全体で使って", None, True),
+    ("channel_lower_third", "use this lower-third style for the whole channel", None, True),
+    ("episode_only", "この修正はこのエピソードだけにして", None, True),
+    ("episode_only", "this correction is only for this episode", None, True),
 ]
 
 
-@pytest.mark.parametrize(("expected_kind", "text", "at_seconds"), KIND_SAMPLES)
+@pytest.mark.parametrize(
+    ("expected_kind", "text", "at_seconds", "auto_confirmed"), KIND_SAMPLES
+)
 def test_command_kind_parses_when_message_matches_pattern(
-    expected_kind: str, text: str, at_seconds: float | None
+    expected_kind: str, text: str, at_seconds: float | None, *, auto_confirmed: bool
 ) -> None:
     draft = interpret_command(text, ReviewChatContext(at_seconds=at_seconds))
     assert draft.command_kind == expected_kind
-    assert draft.needs_confirmation is False
-    assert draft.confirmation_reason is None
+    assert draft.needs_confirmation is not auto_confirmed
+    if auto_confirmed:
+        assert draft.confirmation_reason is None
     assert draft.target_seconds == at_seconds
 
 
@@ -138,6 +144,23 @@ def test_keep_longer_extracts_seconds_delta_in_both_languages() -> None:
     )
     assert ja.seconds_delta == 2.0
     assert en.seconds_delta == 2.5
+
+
+def test_quiet_longer_extracts_seconds_delta_and_applies_as_span_adjustment(
+    review_store: ReviewStoreLocation,
+) -> None:
+    """quiet_longer delta bridge: the apply side maps quiet_longer to
+    adjust_source_span and rejects delta-less drafts (delta-required), so
+    the parser must carry the named amount exactly like keep_longer."""
+    draft = interpret_command(
+        "13秒のところを2秒、静かにゆっくり長くして", ReviewChatContext(at_seconds=None)
+    )
+    assert draft.command_kind == "quiet_longer"
+    assert draft.target_seconds == 13.0
+    assert draft.seconds_delta == 2.0
+    assert draft.needs_confirmation is False
+    applied = apply_command(draft, store=review_store)
+    assert applied.result_plan_version == "v2"
 
 
 def test_channel_lower_third_marks_channel_scope() -> None:
@@ -164,6 +187,32 @@ def test_needs_confirmation_when_no_pattern_matches() -> None:
     assert draft.command_kind is None
     assert draft.needs_confirmation is True
     assert draft.confirmation_reason
+
+
+def test_feelings_with_position_never_auto_confirms() -> None:
+    draft = interpret_command("ここ退屈", ReviewChatContext(at_seconds=6.0))
+    assert draft.command_kind == "mark_boring"
+    assert draft.needs_confirmation is True
+    assert draft.confirmation_reason
+    assert draft.target_seconds == 6.0
+    assert draft.hypothesis is None
+    assert draft.investigated is False
+
+
+@pytest.mark.parametrize(
+    "text", ["全体が素人っぽい", "もっと映画っぽく", "おもしろくない", "なんかつまらない"]
+)
+def test_feelings_goal_words_route_to_investigation(text: str) -> None:
+    draft = interpret_command(text, ReviewChatContext(at_seconds=None))
+    assert draft.needs_confirmation is True
+    assert draft.confirmation_reason
+
+
+def test_direct_command_with_feeling_word_keeps_direct_flow() -> None:
+    draft = interpret_command("退屈なところを削除して", ReviewChatContext(at_seconds=6.0))
+    assert draft.command_kind == "remove_section"
+    assert draft.needs_confirmation is False
+    assert draft.confirmation_reason is None
 
 
 def test_explicit_time_reference_resolves_target_without_player_position() -> None:

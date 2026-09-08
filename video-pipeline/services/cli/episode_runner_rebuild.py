@@ -339,17 +339,18 @@ def _execute(
     carried = ReentryState()
     for stage in stages.executed:
         record_stage(store, ctx, stage, "running")
-        log_event(ctx.log, "rebuild_stage", stage=stage, status="running")
+        log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="running")
         try:
             adopted = _run_stage(stage, episode_root, carried, ctx.log)
         except RebuildStageError as error:
             block_stage(store, ctx, stage, error.code)
             log_event(
-                ctx.log, "rebuild_stage", stage=stage, status="failed_blocked", code=error.code
+                ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage,
+                status="failed_blocked", code=error.code,
             )
             raise
         record_stage(store, ctx, stage, "succeeded", adopted=adopted)
-        log_event(ctx.log, "rebuild_stage", stage=stage, status="succeeded")
+        log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="succeeded")
 
 
 def _run_stage(stage: str, episode_root: Path, carried: ReentryState, log: BinaryIO) -> str:
@@ -385,7 +386,10 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
 
     stages = reentry_stages(call.from_stage if call.from_stage is not None else "")
     for stage in BEYOND_STOP_STAGES:
-        log_event(log, "rebuild_stage_skipped", stage=stage, reason=f"beyond {call.stop} stop")
+        log_event(
+            log, "rebuild_stage_skipped", run_id=ctx.run_id, stage=stage,
+            reason=f"beyond {call.stop} stop",
+        )
     snapshot = store.get_job_snapshot(ctx.job_id)
     if snapshot.job.status != REQUIRED_STATUS:
         raise RebuildStageError(
@@ -397,7 +401,10 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
     wall = time.monotonic() - started
     if call.applied_command is not None:
         _append_metric(call.episode_root, call.applied_command, stages, wall)
-    log_event(log, "rebuild_finished", stages=list(stages.executed), wall_seconds=round(wall, 3))
+    log_event(
+        log, "rebuild_finished", run_id=ctx.run_id,
+        stages=list(stages.executed), wall_seconds=round(wall, 3),
+    )
     return EXIT_SUCCESS
 
 

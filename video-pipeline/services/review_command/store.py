@@ -22,9 +22,11 @@ from services.contracts.primitives import Identifier, Sha256, StrictModel
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 from services.review_command.events import (
     GENESIS_EVENT_HASH,
+    RESTORED_EVENT_KIND,
     EventSeal,
     EventStreamError,
     ReviewEvent0C,
+    _tuplize,
     parse_event_stream,
 )
 from services.review_command.reducer import version_ir
@@ -89,21 +91,6 @@ def seal_path(log_path: Path) -> Path:
 
 def sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
-
-
-def _tuplize(value: object) -> object:
-    """Coerce parsed JSON arrays to tuples for strict contract models.
-
-    Envelopes with ``mode="before"`` validators parse JSON payloads through
-    Python-mode strict validation, where bare ``tuple[...]`` fields reject
-    lists; canonical bytes round-trip exactly after this coercion.
-    """
-
-    if isinstance(value, list):
-        return tuple(_tuplize(item) for item in value)
-    if isinstance(value, dict):
-        return {key: _tuplize(item) for key, item in value.items()}
-    return value
 
 
 def load_index(plan_dir: Path) -> PlanVersionsIndex:
@@ -171,7 +158,8 @@ def load_version_plan(plan_dir: Path, index: PlanVersionsIndex, version: int) ->
 def load_head(log_path: Path, plan_dir: Path) -> HeadState:
     index = load_index(plan_dir)
     events = load_events(log_path)
-    applied = [event for event in events if event.kind == "decision_applied"]
+    version_creating = ("decision_applied", RESTORED_EVENT_KIND)
+    applied = [event for event in events if event.kind in version_creating]
     results = {event.result_plan_version for event in applied}
     for version_label in index.versions:
         if int(version_label) > 1 and f"v{version_label}" not in results:

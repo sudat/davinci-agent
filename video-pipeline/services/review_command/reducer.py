@@ -6,6 +6,11 @@ zero file IO: the versioned-file writer owns persistence. Phase 1 will wrap
 this same function with Production commit authority.
 """
 
+# allow: SIZE_OK — 226 pure LOC: the fold must validate every event kind
+# (chain, sequence, version order) in ONE pass over the sealed stream, and the
+# plan_restored branch shares that pass's version-chain invariants with
+# decision_applied; splitting either branch out would duplicate the checks.
+
 from __future__ import annotations
 
 import hashlib
@@ -25,9 +30,11 @@ from services.contracts.primitives import ArtifactRef, SourceFrameSpan
 from services.foundation_io import canonical_model_bytes
 from services.review_command.events import (
     GENESIS_EVENT_HASH,
+    RESTORED_EVENT_KIND,
     ReviewEvent0C,
     compute_event_id,
     event_proposal,
+    event_restored_plan,
 )
 from services.review_command.models import (
     AdjustSourceSpanProposal0C,
@@ -215,6 +222,23 @@ def reduce(events: Sequence[ReviewEvent0C], base_plan: EditPlan0C) -> ReduceResu
                 "models propose; only operator decisions may be applied",
             )
             plan = _apply_decision(plan, event)
+            current_version = result
+            applied_versions.append(result)
+        elif event.kind == RESTORED_EVENT_KIND:
+            expected_version = f"v{len(applied_versions) + 2}"
+            result = event.result_plan_version
+            if result is None or result != expected_version:
+                raise ReduceConflictError(
+                    "version_chain",
+                    f"event at sequence {event.sequence} must produce {expected_version}, "
+                    f"not {event.result_plan_version}",
+                )
+            _require(
+                event.actor_intent == "operator",
+                "model_authored_decision",
+                "models propose; only operator decisions may restore a plan version",
+            )
+            plan = event_restored_plan(event)
             current_version = result
             applied_versions.append(result)
         elif event.kind == "command_deferred":

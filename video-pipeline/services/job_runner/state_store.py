@@ -25,6 +25,7 @@ from services.job_runner.migrations import (
 from services.job_runner.state_errors import StateStoreError
 from services.job_runner.state_leases import LeaseOps
 from services.job_runner.state_models import (
+    STAGE_RUN_COLUMNS,
     JobRow,
     JobSnapshot,
     JobStatus,
@@ -156,9 +157,7 @@ class StateStore(LeaseOps, StageRunOps, PointerOps):
             updated_at_seq=int_column(job_row[5]),
         )
         runs = self._connection.execute(
-            "SELECT job_id, stage_name, idempotency_key, input_artifact_hashes,"
-            " adopted_artifact_hash, status, retry_count, last_error_code"
-            " FROM stage_runs WHERE job_id = ? ORDER BY rowid",
+            f"SELECT {STAGE_RUN_COLUMNS} FROM stage_runs WHERE job_id = ? ORDER BY rowid",  # noqa: S608 (constant columns)
             (job_id,),
         ).fetchall()
         return JobSnapshot(job=job, stage_runs=tuple(stage_run_from_row(r) for r in runs))
