@@ -111,6 +111,28 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     );
   });
 
+  it("現在の工程の経過は現行runの開始時刻基準（全体経過とは別項目）", () => {
+    renderGuidance({
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 20_000).toISOString(),
+        },
+      ],
+    });
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("00:20");
+    expect(screen.getByTestId("wait-elapsed").textContent).toContain("00:30");
+  });
+
+  it("現在の工程の開始時刻が無ければ工程経過は不明と明示", () => {
+    renderGuidance({});
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("不明");
+  });
+
   it("現在工程の行がまだ無ければ進み具合は未計測と正直に言う（百分率なし）", () => {
     const { container } = renderGuidance({
       stage_runs: [

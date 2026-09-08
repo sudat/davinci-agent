@@ -118,15 +118,38 @@ export default function EpisodeWaitInfo({
     status.stage_runs.find(
       (row) => row.last_error_code !== null && row.run_id === (status.current_run ?? null),
     )?.last_error_code ?? null;
+  // 現在工程の経過（codex訂正定義）: 現行runの当該stage行 first_started_at 基準。
+  // 受付時刻や画面を開いた時刻（全体/閲覧経過）では代用しない。不明は不明。
+  const stageStartedMs = Math.min(
+    ...status.stage_runs
+      .filter(
+        (row) =>
+          row.stage_name === status.current_stage &&
+          row.run_id === active &&
+          typeof row.first_started_at === "string" &&
+          row.first_started_at !== "" &&
+          !Number.isNaN(Date.parse(row.first_started_at)),
+      )
+      .map((row) => Date.parse(row.first_started_at ?? "")),
+  );
+  const stageElapsedMs = Number.isFinite(stageStartedMs) ? stageStartedMs : null;
 
   return (
     <div data-testid="wait-guidance" className="wait-guidance" aria-busy={runActive}>
       <dl className="status-list">
         <div>
-          <dt>経過時間</dt>
+          <dt>全体の経過時間</dt>
           <dd data-testid="wait-elapsed">
             {formatElapsed(elapsedMs)}
             {Number.isNaN(intakeMs) ? "（画面を開いてから）" : ""}
+          </dd>
+        </div>
+        <div>
+          <dt>現在の工程の経過</dt>
+          <dd data-testid="wait-stage-elapsed">
+            {stageElapsedMs === null
+              ? "不明（開始時刻を取得できません）"
+              : formatElapsed(now - stageElapsedMs)}
           </dd>
         </div>
         <div>
