@@ -112,27 +112,39 @@ export default function EpisodeWaitInfo({
       : [...perStageLatestRows(status).entries()].filter(([stage]) =>
           currentGroup.stages.includes(stage),
         );
-  const currentWork = stageGroupOf(status.current_stage) ?? status.current_stage;
+  // 現在工程の同一ソース導出（codex再指摘）: job.current_stage は rebuild 中に
+  // 更新されないため、工程名も開始時刻も「現行runの実行中行」からだけ出す。
+  // 到達済み current_stage とは区別し、複数並行は推測してまとめない。
+  const activeRunningRows = status.stage_runs.filter(
+    (row) => row.run_id === active && row.status === "running",
+  );
+  const runningStageNames = [
+    ...new Set(activeRunningRows.map((row) => row.stage_name)),
+  ];
+  function stageElapsedText(stageName: string): string {
+    const stamps = activeRunningRows
+      .filter((row) => row.stage_name === stageName)
+      .map((row) => Date.parse(row.first_started_at ?? ""))
+      .filter((ms) => !Number.isNaN(ms));
+    return stamps.length === 0
+      ? "不明（開始時刻を取得できません）"
+      : formatElapsed(now - Math.min(...stamps));
+  }
+  const stageElapsedLine =
+    runningStageNames.length === 0
+      ? "実行中の工程はありません"
+      : runningStageNames
+          .map((name) => `${stageGroupOf(name) ?? name} ${stageElapsedText(name)}`)
+          .join("・");
+  const currentWork =
+    runningStageNames.length > 0
+      ? runningStageNames.map((name) => stageGroupOf(name) ?? name).join("・")
+      : `${stageGroupOf(status.current_stage) ?? status.current_stage}（実行中の工程なし）`;
   const retryCount = status.current_run_retry_count;
   const retryReason =
     status.stage_runs.find(
       (row) => row.last_error_code !== null && row.run_id === (status.current_run ?? null),
     )?.last_error_code ?? null;
-  // 現在工程の経過（codex訂正定義）: 現行runの当該stage行 first_started_at 基準。
-  // 受付時刻や画面を開いた時刻（全体/閲覧経過）では代用しない。不明は不明。
-  const stageStartedMs = Math.min(
-    ...status.stage_runs
-      .filter(
-        (row) =>
-          row.stage_name === status.current_stage &&
-          row.run_id === active &&
-          typeof row.first_started_at === "string" &&
-          row.first_started_at !== "" &&
-          !Number.isNaN(Date.parse(row.first_started_at)),
-      )
-      .map((row) => Date.parse(row.first_started_at ?? "")),
-  );
-  const stageElapsedMs = Number.isFinite(stageStartedMs) ? stageStartedMs : null;
 
   return (
     <div data-testid="wait-guidance" className="wait-guidance" aria-busy={runActive}>
@@ -146,11 +158,7 @@ export default function EpisodeWaitInfo({
         </div>
         <div>
           <dt>現在の工程の経過</dt>
-          <dd data-testid="wait-stage-elapsed">
-            {stageElapsedMs === null
-              ? "不明（開始時刻を取得できません）"
-              : formatElapsed(now - stageElapsedMs)}
-          </dd>
+          <dd data-testid="wait-stage-elapsed">{stageElapsedLine}</dd>
         </div>
         <div>
           <dt>現在の作業</dt>

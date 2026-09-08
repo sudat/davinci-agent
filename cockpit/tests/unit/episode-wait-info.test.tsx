@@ -128,9 +128,46 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     expect(screen.getByTestId("wait-elapsed").textContent).toContain("00:30");
   });
 
-  it("現在の工程の開始時刻が無ければ工程経過は不明と明示", () => {
+  it("実行中の工程が無ければ実行中なしと明示（停止/終端時の時計の意味を固定）", () => {
     renderGuidance({});
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toBe(
+      "実行中の工程はありません",
+    );
+  });
+
+  it("実行中行に開始時刻が無ければ工程経過は不明と明示", () => {
+    renderGuidance({
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+        },
+      ],
+    });
     expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("不明");
+  });
+
+  it("job.current_stageと実行中工程が乖離しても実行中工程から経過を出す（codex回帰）", () => {
+    renderGuidance({
+      current_stage: "preview",
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 20_000).toISOString(),
+        },
+      ],
+    });
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("00:20");
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("試し編集");
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).not.toContain("不明");
+    expect(screen.getByTestId("wait-current-work").textContent).toContain("試し編集");
   });
 
   it("現在工程の行がまだ無ければ進み具合は未計測と正直に言う（百分率なし）", () => {
