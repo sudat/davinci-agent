@@ -217,4 +217,63 @@ test.describe("live real-chain episode", () => {
 
     expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
   });
+
+  test("consultation U44 (live lane): 希望→相談→本番AI不在の正直な表示→再読み込みで状態復元", async ({
+    page,
+  }) => {
+    // U44 scenario shape (wish → consult → adopt → wait → updated preview
+    // → reload restores), run against the REAL chain with zero seeding like
+    // the tests above. The live lane boots the backend in
+    // heuristic_diagnostic mode, so the consultation message POST honestly
+    // refuses (consultation-llm-unavailable, no heuristic fallback, no
+    // journal write) — this test pins THAT honest surface plus the U44
+    // reload-restore property, instead of assuming LLM success. The full
+    // adopt→rebuild→updated-preview leg needs the production model runtime
+    // and stays a documented non-run here.
+    test.setTimeout(120_000);
+    const consoleErrors = trackConsoleErrors(page, [404]);
+
+    const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "cockpit-live-consult-"));
+    fs.copyFileSync(FIXTURE_CLIP, path.join(sourceDir, "camera-001.mp4"));
+
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/new-episode$/);
+    await page.locator("#source-folder").fill(sourceDir);
+    await page.locator("#brief-text").fill("live E2E U44: 相談の正直な不在表示");
+    await page.getByTestId("create-button").click();
+    await page.waitForURL(/\/episodes\/ep-[0-9a-f]+$/, { timeout: 20_000 });
+    const consultId = page.url().split("/").pop() as string;
+
+    // Still early in the chain (intake/ingest): the pre-plan panel mounts.
+    await expect(page.getByTestId("consultation-panel")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByTestId("consultation-empty")).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page
+      .getByTestId("consultation-message-input")
+      .fill("e2e: 冒頭を引きの映像から見せたい");
+    await page.getByTestId("consultation-send").click();
+
+    await expect(page.getByTestId("consultation-llm-unavailable")).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // U44 reload-restore: nothing was journaled (the refused message writes
+    // no consultation), so a fresh load shows the same empty state — the
+    // panel state comes from the polled view, never from client memory.
+    await page.goto(`/episodes/${consultId}`);
+    await expect(page.getByTestId("consultation-panel")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByTestId("consultation-empty")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("consultation-policy-outcome")).toHaveCount(0);
+    await expect(page.getByTestId("consultation-rebuild-state")).toHaveCount(0);
+
+    expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
+  });
 });

@@ -75,11 +75,11 @@ function errorFromEnvelope(body: unknown, status: number): CockpitApiError | nul
   return new CockpitApiError(code, status, stringifyDetail(inner.detail));
 }
 
-export async function request<T>(
+export async function requestWithStatus<T>(
   path: string,
   init: RequestInit,
   fetchImpl: FetchLike,
-): Promise<T> {
+): Promise<{ status: number; body: T }> {
   let response: Response;
   try {
     response = await fetchImpl(`${apiBase()}${path}`, {
@@ -123,5 +123,13 @@ export async function request<T>(
       `JSONではありません: ${text.slice(0, 200)}`,
     );
   }
-  return body as T;
+  return { status: response.status, body: body as T };
+}
+
+export async function request<T>(
+  path: string,
+  init: RequestInit,
+  fetchImpl: FetchLike,
+): Promise<T> {
+  return (await requestWithStatus<T>(path, init, fetchImpl)).body;
 }

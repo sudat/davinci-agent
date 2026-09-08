@@ -4,6 +4,7 @@ import ConsultationPanel from "@/components/ConsultationPanel";
 import type {
   Consultation,
   ConsultationPayload,
+  ConsultationPolicyOutcomeEntry,
   ConsultationProposal,
   ConsultationJudgment,
   EpisodeStatus,
@@ -435,5 +436,192 @@ describe("ConsultationPanel（UX 2.5 slice-1）", () => {
       "新しい提案が届きました",
     );
     expect(screen.getAllByTestId("consultation-proposal")).toHaveLength(1);
+  });
+});
+
+describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", () => {
+  const adoptedPolicy = {
+    consultation_id: "c-1",
+    judgment_id: "j-1",
+    proposal_id: "p-1",
+    decision: "adopt" as const,
+    scope: { composition: true, appearance: false, audio: true },
+    audience_message: "",
+    structure: "",
+    duration_estimate: "",
+    candidate_scenes: [],
+    subtitle_policy: "",
+    audio_policy: "",
+    tempo_policy: "",
+    reference_mapping: "",
+    unused_reasons: "",
+    unconfirmed: [],
+    note: "",
+  };
+
+  const honoredOutcome: ConsultationPolicyOutcomeEntry = {
+    kind: "policy_outcome",
+    outcome_id: "o-1",
+    consultation_id: "c-1",
+    judgment_id: "j-1",
+    proposal_id: "p-1",
+    plan_version: "v3",
+    status: "honored",
+    reasons: [],
+    note: null,
+    recorded_at: "2026-09-08T10:10:00Z",
+  };
+
+  const failedOutcome: ConsultationPolicyOutcomeEntry = {
+    kind: "policy_outcome",
+    outcome_id: "o-2",
+    consultation_id: "c-1",
+    judgment_id: "j-2",
+    proposal_id: "p-1",
+    plan_version: null,
+    status: "failed",
+    reasons: ["対象の版が見つかりませんでした", "方針の範囲が空でした"],
+    note: null,
+    recorded_at: "2026-09-08T10:11:00Z",
+  };
+
+  it("採用の判断（202）は再編集の準備告知と「反映中」を出し、pollで成功→失敗が切り替わり、失敗後も判断できる", async () => {
+    vi.useFakeTimers();
+    let rebuild: ConsultationPayload["rebuild"] = {
+      status: "requested",
+      target_version: null,
+      detail: null,
+    };
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/consultation/judgment")) {
+        return jsonResponse(
+          {
+            consultations: [
+              { ...entryOneJudged, policy: { adopted: adoptedPolicy }, rebuild },
+            ],
+          },
+          202,
+        );
+      }
+      if (url.endsWith("/consultation")) {
+        return jsonResponse({
+          consultations: [
+            { ...entryOneJudged, policy: { adopted: adoptedPolicy }, rebuild },
+          ],
+        });
+      }
+      return jsonResponse(payloadEmpty);
+    }) as typeof fetch;
+
+    renderPanel(fetchImpl);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getAllByTestId("consultation-proposal")).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("consultation-judgment-adopt"));
+    fireEvent.click(screen.getByTestId("consultation-judgment-submit"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(screen.getByTestId("consultation-announcement").textContent).toContain(
+      "採用した方針を反映する再編集を準備しています",
+    );
+    expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
+      "反映中",
+    );
+
+    rebuild = { status: "succeeded", target_version: "v3", detail: null };
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
+      "反映しました（対象版 v3）",
+    );
+
+    rebuild = {
+      status: "failed",
+      target_version: null,
+      detail: "対象の版が見つかりませんでした",
+    };
+    await vi.advanceTimersByTimeAsync(2000);
+    const failed = screen.getByTestId("consultation-rebuild-state").textContent ?? "";
+    expect(failed).toContain("反映できませんでした");
+    expect(failed).toContain("対象の版が見つかりませんでした");
+    expect(failed).toContain("相談を続けられます");
+
+    fireEvent.click(screen.getByTestId("consultation-judgment-revise"));
+    const submit = screen.getByTestId("consultation-judgment-submit") as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+  });
+
+  it("見送りの判断（200）は再編集の行を出さない（不在は無表示であって不明表示ではない）", async () => {
+    const { fetchImpl } = recordingFetch((url) =>
+      url.endsWith("/consultation/judgment")
+        ? jsonResponse(entryOne, 200)
+        : jsonResponse(payloadOne),
+    );
+    renderPanel(fetchImpl);
+    await screen.findAllByTestId("consultation-proposal");
+
+    fireEvent.click(screen.getByTestId("consultation-judgment-reject"));
+    fireEvent.click(screen.getByTestId("consultation-judgment-submit"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("consultation-announcement").textContent).toContain(
+        "判断を記録しました",
+      );
+    });
+    expect(screen.queryByTestId("consultation-rebuild-state")).toBeNull();
+  });
+
+  it("採用した方針の反映結果エントリを表示する（反映／失敗と理由）", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({
+        consultations: [{ ...entryOne, policy_outcomes: [honoredOutcome, failedOutcome] }],
+      }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(2);
+    expect(outcomes[0]!.textContent).toContain("反映されました（対象版 v3）");
+    expect(outcomes[1]!.textContent).toContain(
+      "反映できませんでした：対象の版が見つかりませんでした、方針の範囲が空でした",
+    );
+  });
+
+  it("新フィールドのない旧viewは従来どおり表示し、再編集の行も不明も出さない", async () => {
+    const { fetchImpl } = recordingFetch(() => jsonResponse(payloadOne));
+    renderPanel(fetchImpl);
+
+    await screen.findAllByTestId("consultation-proposal");
+    expect(screen.getByTestId("consultation-budget")).toBeVisible();
+    expect(screen.queryByTestId("consultation-rebuild-state")).toBeNull();
+    expect(screen.queryByTestId("consultation-policy-outcome")).toBeNull();
+  });
+
+  it("再読込（作り直し）でもpollのviewから同じ再編集状態が復元する", async () => {
+    const succeeded: ConsultationPayload = {
+      consultations: [
+        {
+          ...entryOneJudged,
+          policy: { adopted: adoptedPolicy },
+          rebuild: { status: "succeeded", target_version: "v3", detail: null },
+        },
+      ],
+    };
+    const { fetchImpl } = recordingFetch(() => jsonResponse(succeeded));
+
+    const first = renderPanel(fetchImpl);
+    await waitFor(() => {
+      expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
+        "反映しました（対象版 v3）",
+      );
+    });
+    first.unmount();
+
+    renderPanel(fetchImpl);
+    await waitFor(() => {
+      expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
+        "反映しました（対象版 v3）",
+      );
+    });
   });
 });

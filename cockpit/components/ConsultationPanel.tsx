@@ -1,15 +1,23 @@
 "use client";
 
+// allow: SIZE_OK — 304 pure LOC: one consultation-panel concern. The poll
+// merge (absorbView, journal row keys), the judgment forms, and the
+// slice-2 rebuild-state line are one interaction unit over the same polled
+// view; splitting the merge from its render would separate the U44
+// reload-restore behavior from the state that produces it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   apiFailure,
   CockpitApiError,
   getConsultation,
+  isPolicyOutcomeEntry,
   postConsultationJudgment,
   postConsultationMessage,
   type Consultation,
+  type ConsultationEntry,
   type ConsultationJudgmentInput,
   type ConsultationPayload,
+  type ConsultationRebuild,
   type EpisodeStatus,
 } from "@/lib/api";
 import ConsultationBudgetReadout, {
@@ -32,6 +40,37 @@ type ConsultationPanelProps = {
 function isConsultationPayload(value: unknown): value is ConsultationPayload {
   if (typeof value !== "object" || value === null) return false;
   return Array.isArray((value as { consultations?: unknown }).consultations);
+}
+
+function entryKeyOf(entry: ConsultationEntry, index: number): string {
+  if (isPolicyOutcomeEntry(entry)) {
+    const id = [entry.outcome_id, entry.judgment_id, entry.recorded_at].find(
+      (value) => typeof value === "string" && value !== "",
+    );
+    return `policy-outcome:${id ?? `row-${index}`}`;
+  }
+  return entry.consultation_id;
+}
+
+/** Slice-2 rebuild line, derived ONLY from the polled view (`view.rebuild`)
+ *  — never from client memory, so a reload restores the same display
+ *  (U44). Absent/"none"/unknown renders as nothing: this line exists only
+ *  while an adopted policy is being (or was) reflected. */
+function rebuildLineOf(rebuild: ConsultationRebuild | null | undefined): string | null {
+  if (rebuild === null || rebuild === undefined) return null;
+  const status: unknown = rebuild.status;
+  if (status === "requested" || status === "running") {
+    return "採用した方針を反映中です";
+  }
+  if (status === "succeeded") {
+    const version: unknown = rebuild.target_version;
+    return `反映しました（対象版 ${typeof version === "string" && version !== "" ? version : "不明"}）`;
+  }
+  if (status === "failed") {
+    const detail: unknown = rebuild.detail;
+    return `反映できませんでした：${typeof detail === "string" && detail !== "" ? detail : "詳細は不明"}。相談を続けられます`;
+  }
+  return null;
 }
 
 /**
@@ -65,25 +104,46 @@ export default function ConsultationPanel({
   const knownProposalIdsRef = useRef<Set<string> | null>(null);
   const requeryRef = useRef<(() => void) | null>(null);
 
-  const applyPayload = useCallback((next: ConsultationPayload) => {
-    absorb(next.consultations);
-  }, []);
-
-  /** Upsert entries (GET list, or the single updated entry the POSTs
-   *  return) and record which proposal ids are already on screen so the
-   *  aria-live announcement fires only for genuinely NEW proposals. */
-  const absorb = useCallback((entries: Consultation[]) => {
+  /** Merge a view (GET list, or the whole view a judgment POST returns)
+   *  into state: journal rows upsert by key, per-view `policy_outcomes`
+   *  riders merge into the journal as their own rows, and the episode-level
+   *  policy/rebuild state takes the latest view row that carries them (the
+   *  wire rides them on each view row). Proposal arrival is announced via
+   *  aria-live only for genuinely NEW proposals. */
+  const absorbView = useCallback((view: ConsultationPayload) => {
     setPayload((prev) => {
-      if (prev === null) return { consultations: entries };
-      const byId = new Map(
-        prev.consultations.map((entry) => [entry.consultation_id, entry]),
-      );
-      for (const entry of entries) byId.set(entry.consultation_id, entry);
-      return { consultations: [...byId.values()] };
+      const byKey = new Map<string, ConsultationEntry>();
+      for (const entry of prev?.consultations ?? []) {
+        byKey.set(entryKeyOf(entry, byKey.size), entry);
+      }
+      let nextPolicy: ConsultationPayload["policy"];
+      let nextRebuild: ConsultationPayload["rebuild"];
+      for (const entry of view.consultations) {
+        byKey.set(entryKeyOf(entry, byKey.size), entry);
+        if (!isPolicyOutcomeEntry(entry)) {
+          for (const outcome of entry.policy_outcomes ?? []) {
+            byKey.set(entryKeyOf(outcome, byKey.size), outcome);
+          }
+          if (entry.policy !== undefined && entry.policy !== null) {
+            nextPolicy = entry.policy;
+          }
+          if (entry.rebuild !== undefined && entry.rebuild !== null) {
+            nextRebuild = entry.rebuild;
+          }
+        }
+      }
+      const next: ConsultationPayload = { consultations: [...byKey.values()] };
+      const policy = nextPolicy ?? prev?.policy;
+      const rebuild = nextRebuild ?? prev?.rebuild;
+      if (policy !== undefined) next.policy = policy;
+      if (rebuild !== undefined) next.rebuild = rebuild;
+      return next;
     });
     const known = knownProposalIdsRef.current;
-    const ids = entries.flatMap((entry) =>
-      entry.proposals.map((proposal) => proposal.proposal_id),
+    const ids = view.consultations.flatMap((entry) =>
+      isPolicyOutcomeEntry(entry)
+        ? []
+        : entry.proposals.map((proposal) => proposal.proposal_id),
     );
     if (known === null) {
       knownProposalIdsRef.current = new Set(ids);
@@ -95,6 +155,22 @@ export default function ConsultationPanel({
       setAnnouncement(`新しい提案が届きました（${fresh.length}件）`);
     }
   }, []);
+
+  const applyPayload = useCallback(
+    (next: ConsultationPayload) => {
+      absorbView(next);
+    },
+    [absorbView],
+  );
+
+  /** Upsert single message entries (the message POST returns one updated
+   *  entry); episode-level policy/rebuild already on screen are kept. */
+  const absorb = useCallback(
+    (entries: Consultation[]) => {
+      absorbView({ consultations: entries });
+    },
+    [absorbView],
+  );
 
   useEffect(() => {
     if (!eligible) return;
@@ -190,10 +266,14 @@ export default function ConsultationPanel({
       setBusy(true);
       setError(null);
       try {
-        const entry = await postConsultationJudgment(episodeId, input, fetchImpl);
-        absorb([entry]);
+        const { status, view } = await postConsultationJudgment(episodeId, input, fetchImpl);
+        absorbView(view);
         setFetchedAt(Date.now());
-        setAnnouncement("判断を記録しました");
+        if (status === 202) {
+          setAnnouncement("採用した方針を反映する再編集を準備しています");
+        } else {
+          setAnnouncement("判断を記録しました");
+        }
       } catch (cause) {
         recordFailure(cause, "判断を記録できませんでした");
       } finally {
@@ -207,6 +287,7 @@ export default function ConsultationPanel({
   const budgetExhausted = error?.code === "consultation-budget-exhausted";
   const llmUnavailable = error?.code === "consultation-llm-unavailable";
   const latestBudget = latestBudgetOf(payload);
+  const rebuildLine = rebuildLineOf(payload?.rebuild);
 
   return (
     <section className="card" data-testid="consultation-panel">
@@ -271,6 +352,11 @@ export default function ConsultationPanel({
         {announcement !== null ? (
           <p className="field-hint" data-testid="consultation-announcement">
             {announcement}
+          </p>
+        ) : null}
+        {rebuildLine !== null ? (
+          <p className="field-hint" data-testid="consultation-rebuild-state">
+            {rebuildLine}
           </p>
         ) : null}
       </div>

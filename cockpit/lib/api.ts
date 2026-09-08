@@ -20,7 +20,7 @@
  * re-exports so `@/lib/api` stays the single import surface.
  */
 
-export { apiBase, apiFailure, CockpitApiError, DEFAULT_API_BASE } from "@/lib/http";
+export { apiBase, apiFailure, CockpitApiError, DEFAULT_API_BASE, requestWithStatus } from "@/lib/http";
 
 export * from "@/lib/episode-api";
 export * from "@/lib/reference-api";

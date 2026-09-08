@@ -206,6 +206,153 @@ function seedReviewStore(episodeId: string): void {
   );
 }
 
+// Slice-2 consultation seed: two journal consultations (one per decision
+// path) written with the REAL backend store models, like SEED_REVIEW_STORE.
+// No LLM involved — the message/proposal rows are journal facts; the
+// judgments themselves go through the REAL judgment endpoint via the UI.
+const SEED_CONSULTATION = `
+import sys
+from pathlib import Path
+
+from services.episode_cockpit.consultation_store import (
+    ConsultationBudgetEventV1,
+    ConsultationProposalDetails,
+    ConsultationProposalSetV1,
+    ConsultationProposalV1,
+    ConsultationRecordV1,
+    append_budget_event,
+    append_consultation,
+    append_proposal_set,
+    now_stamp,
+)
+
+base = Path(sys.argv[1])
+
+def seed(consultation_id: str, message: str, title: str) -> None:
+    stamp = now_stamp()
+    append_consultation(
+        base,
+        ConsultationRecordV1(
+            consultation_id=consultation_id, created_at=stamp, message=message
+        ),
+    )
+    append_proposal_set(
+        base,
+        ConsultationProposalSetV1(
+            consultation_id=consultation_id,
+            created_at=stamp,
+            proposals=(
+                ConsultationProposalV1(
+                    proposal_id="prop-1",
+                    title=title,
+                    summary="e2e用のお試し提案",
+                    details=ConsultationProposalDetails(
+                        audience_message="視聴者に工夫を伝える",
+                        structure="引き → Before → 改造 → After → まとめ",
+                        duration_estimate="45秒前後",
+                        candidate_scenes=("冒頭の引き",),
+                        subtitle_policy="短く区切って読みやすく",
+                        audio_policy="いつもの選曲",
+                        tempo_policy="前半は速め、まとめはゆっくり",
+                        reference_mapping="いつもの冒頭構成を踏襲する",
+                        unused_reasons="主題から離れるカットは使いません",
+                        unconfirmed=("Afterの撮影状況は未確認",),
+                    ),
+                ),
+            ),
+        ),
+    )
+    append_budget_event(
+        base,
+        ConsultationBudgetEventV1(
+            consultation_id=consultation_id,
+            llm_calls=0,
+            intervals=0,
+            wall_seconds=0.0,
+            created_at=stamp,
+        ),
+    )
+
+seed("c-reject-1", "e2e: 見送る方針の相談", "見送り候補の構成案")
+seed("c-adopt-1", "e2e: 採用する方針の相談", "採用候補の構成案")
+print("consultation-seeded")
+`;
+
+// Backstage job-state move (sqlite, like SEED_PIPELINE_STATE): the
+// consultation panel only mounts on pre-plan stages (selection/plan), while
+// the synthetic episode rests at preview — so these tests park the stage at
+// selection and restore it afterwards. Status text itself is untouched.
+const SET_JOB_STATE = `
+import sqlite3
+import sys
+
+episode_id = sys.argv[1]
+state_store = sys.argv[2]
+status = sys.argv[3]
+stage = sys.argv[4]
+connection = sqlite3.connect(state_store)
+connection.execute(
+    "UPDATE jobs SET status = ?, current_stage = ? WHERE job_id = ?",
+    (status, stage, episode_id),
+)
+connection.commit()
+connection.close()
+print("job-state-set")
+`;
+
+// Backstage runner-lock wait: the judgment route only schedules (202) when
+// no runner holds the episode lock — earlier tests detached runners, so wait
+// (up to 60s) for the lock to be free instead of racing the ADOPT click.
+const WAIT_RUNNER_IDLE = `
+import fcntl
+import os
+import sys
+import time
+from pathlib import Path
+
+lock_path = Path(sys.argv[1]) / "runner.lock"
+lock_path.parent.mkdir(parents=True, exist_ok=True)
+deadline = time.monotonic() + 60
+while True:
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        break
+    except OSError:
+        pass
+    finally:
+        os.close(descriptor)
+    if time.monotonic() > deadline:
+        raise SystemExit("runner lock still held after 60s")
+    time.sleep(1)
+print("runner-idle")
+`;
+
+function seedConsultation(episodeId: string): void {
+  execFileSync(
+    "uv",
+    ["run", "python", "-c", SEED_CONSULTATION, path.join(EPISODES_ROOT, episodeId)],
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+  );
+}
+
+function setJobState(episodeId: string, status: string, stage: string): void {
+  execFileSync(
+    "uv",
+    ["run", "python", "-c", SET_JOB_STATE, episodeId, STATE_STORE, status, stage],
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+  );
+}
+
+function waitRunnerIdle(episodeId: string): void {
+  execFileSync(
+    "uv",
+    ["run", "python", "-c", WAIT_RUNNER_IDLE, path.join(EPISODES_ROOT, episodeId)],
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+  );
+}
+
 function seedPreviewClip(episodeId: string): void {
   const previewDir = path.join(EPISODES_ROOT, episodeId, "previews");
   fs.mkdirSync(previewDir, { recursive: true });
@@ -596,6 +743,102 @@ test("restart resume: SIGTERM→再起→episode状態と承認済みが保持",
     "pass",
     "フロー中に直接Resolve操作は発生せず（manual-finalization記録なし）。発生した場合はManual Finalizationとして記録される経路がT49実装済み",
   );
+
+  expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
+});
+
+test("consultation slice2: REJECT判断は200で再生成なし（告知のみ）", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const consoleErrors = trackConsoleErrors(page, [404]);
+
+  // Backstage (harness-only): park the stage where the panel mounts and
+  // plant the two journal consultations; every judgment below goes through
+  // the REAL endpoint via the UI form.
+  setJobState(episodeId, "PREVIEW_READY", "selection");
+  seedConsultation(episodeId);
+
+  await page.goto(`/episodes/${episodeId}`);
+  await expect(page.getByTestId("consultation-panel")).toBeVisible({ timeout: 15_000 });
+  const entry = page.locator(
+    '[data-testid="consultation-entry"][data-consultation-id="c-reject-1"]',
+  );
+  await expect(entry.getByTestId("consultation-entry-message")).toContainText(
+    "e2e: 見送る方針の相談",
+  );
+
+  await entry.getByTestId("consultation-judgment-reject").click();
+  await entry.getByTestId("consultation-judgment-submit").click();
+
+  // 200 path: recorded, no rebuild scheduled, no rebuild-state line.
+  await expect(page.getByTestId("consultation-announcement")).toHaveText(
+    "判断を記録しました",
+    { timeout: 15_000 },
+  );
+  await expect(entry.getByTestId("consultation-judgment-recorded")).toContainText(
+    "見送る",
+  );
+  await expect(page.getByTestId("consultation-rebuild-state")).toHaveCount(0);
+
+  expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
+});
+
+test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗終端＋反映結果行", async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  const consoleErrors = trackConsoleErrors(page, [404]);
+
+  waitRunnerIdle(episodeId);
+
+  await page.goto(`/episodes/${episodeId}`);
+  await expect(page.getByTestId("consultation-panel")).toBeVisible({ timeout: 15_000 });
+  const entry = page.locator(
+    '[data-testid="consultation-entry"][data-consultation-id="c-adopt-1"]',
+  );
+  await expect(entry.getByTestId("consultation-entry-message")).toContainText(
+    "e2e: 採用する方針の相談",
+  );
+
+  await entry.getByTestId("consultation-judgment-adopt").click();
+  await expect(entry.getByTestId("consultation-adopt-note")).toBeVisible();
+  await entry.getByTestId("consultation-judgment-submit").click();
+
+  // 202 path: the announcement names the scheduled re-edit, and the
+  // rebuild-state line shows 反映中 from the POST view (policy/rebuild ride
+  // on the journal view row — the wire shape this test pins).
+  await expect(page.getByTestId("consultation-announcement")).toHaveText(
+    "採用した方針を反映する再編集を準備しています",
+    { timeout: 15_000 },
+  );
+  await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
+    "反映中",
+    { timeout: 15_000 },
+  );
+
+  // Honest terminal in the synthetic episode: no run/ artifacts exist, so
+  // the detached selection rebuild fails fast and appends a REAL failed
+  // policy-outcome to the journal (deterministic-baseline mode) — the
+  // rebuild-state line flips to the honest failure and the panel merges
+  // the outcome rider as its own 反映結果 row on poll.
+  await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
+    "反映できませんでした",
+    { timeout: 180_000 },
+  );
+  await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
+    "相談を続けられます",
+  );
+  const outcome = page.getByTestId("consultation-policy-outcome");
+  await expect(outcome.first()).toContainText("採用した方針の反映結果", {
+    timeout: 30_000,
+  });
+  await expect(outcome.first()).toContainText("反映できませんでした", {
+    timeout: 30_000,
+  });
+
+  // Restore the resting synthetic state for the checklist writer below.
+  setJobState(episodeId, "PREVIEW_READY", "preview");
 
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
 });

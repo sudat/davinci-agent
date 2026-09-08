@@ -1,6 +1,6 @@
 "use client";
 
-import type { ConsultationBudget, ConsultationPayload } from "@/lib/api";
+import { isPolicyOutcomeEntry, type ConsultationBudget, type ConsultationPayload } from "@/lib/api";
 
 /** The most recent budget snapshot. Journal order is not depended on —
  *  the newest `created_at` wins; null while no consultation exists. */
@@ -9,6 +9,7 @@ export function latestBudgetOf(payload: ConsultationPayload | null): Consultatio
   let latest: ConsultationBudget | null = null;
   let latestAt = -Infinity;
   for (const entry of payload.consultations) {
+    if (isPolicyOutcomeEntry(entry)) continue;
     const at = Date.parse(entry.created_at);
     if (
       !Number.isNaN(at) &&

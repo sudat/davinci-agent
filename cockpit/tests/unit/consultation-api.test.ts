@@ -134,4 +134,93 @@ describe("postConsultationJudgment", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toEqual(input);
   });
+
+  it("202は再編集あり：view全体（policy/rebuild付き）をstatus付きで返す", async () => {
+    const view = {
+      consultations: [entry],
+      policy: {
+        adopted: {
+          consultation_id: "c-1",
+          judgment_id: "j-1",
+          proposal_id: "p-1",
+          decision: "adopt",
+          scope: { composition: true, appearance: false, audio: true },
+          audience_message: "",
+          structure: "",
+          duration_estimate: "",
+          candidate_scenes: "",
+          subtitle_policy: "",
+          audio_policy: "",
+          tempo_policy: "",
+          reference_mapping: "",
+          unused_reasons: "",
+          unconfirmed: "",
+          note: "",
+        },
+      },
+      rebuild: { status: "requested", target_version: null, detail: null },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(202, view));
+
+    const result = await postConsultationJudgment(
+      "ep-x",
+      {
+        consultation_id: "c-1",
+        proposal_id: "p-1",
+        decision: "adopt",
+        scope: { composition: true, appearance: false, audio: true },
+        note: null,
+      },
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    expect(result.status).toBe(202);
+    expect(result.view.consultations).toEqual([entry]);
+    expect(result.view.rebuild).toEqual({
+      status: "requested",
+      target_version: null,
+      detail: null,
+    });
+    expect(result.view.policy?.adopted?.judgment_id).toBe("j-1");
+  });
+
+  it("200は再編集なし：新フィールドのないviewをstatus付きで返す", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { consultations: [entry] }));
+
+    const result = await postConsultationJudgment(
+      "ep-x",
+      {
+        consultation_id: "c-1",
+        proposal_id: "p-1",
+        decision: "reject",
+        scope: { composition: true, appearance: true, audio: true },
+        note: null,
+      },
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.view.consultations).toEqual([entry]);
+    expect(result.view.policy).toBeUndefined();
+    expect(result.view.rebuild).toBeUndefined();
+  });
+
+  it("旧形式（単一エントリ本文）はviewに包んで返す", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, entry));
+
+    const result = await postConsultationJudgment(
+      "ep-x",
+      {
+        consultation_id: "c-1",
+        proposal_id: "p-1",
+        decision: "reject",
+        scope: { composition: true, appearance: true, audio: true },
+        note: null,
+      },
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.view.consultations).toEqual([entry]);
+  });
 });
