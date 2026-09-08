@@ -21,7 +21,7 @@ from services.editorial.models import DeclaredCandidate  # noqa: TC001 (pydantic
 from services.foundation_io import canonical_model_bytes
 
 if TYPE_CHECKING:
-    from services.editorial.models import DirectorRequest
+    from services.editorial.models import AdoptedPolicySummaryV1, DirectorRequest
 
 PROMPT_CONTRACT_VERSION: Final = "phase-1-editorial-director-v1"
 
@@ -52,6 +52,48 @@ SYSTEM_PROMPT: Final = (
 )
 
 
+ADOPTED_POLICY_LABEL: Final = "採用済み相談方針"
+
+
+def render_adopted_policy_text(summary: AdoptedPolicySummaryV1 | None) -> str | None:
+    """Render the adopted policy summary as labeled constraint text.
+
+    None when no policy is adopted: the bundle hash then covers an absent
+    policy exactly like every pre-slice-2 request. Adopted scope flags name
+    WHICH aspects bind; everything else stays a proposal, never a directive.
+    """
+
+    if summary is None:
+        return None
+    scope = summary.scope
+    adopted = ", ".join(
+        name
+        for name, flag in (
+            ("composition", scope.composition),
+            ("appearance", scope.appearance),
+            ("audio", scope.audio),
+        )
+        if flag
+    )
+    header = (
+        f"{ADOPTED_POLICY_LABEL} (operator decision: {summary.decision}; "
+        f"adopted scope: {adopted or 'none stated'}):"
+    )
+    lines = [
+        header,
+        f"structure: {summary.structure}",
+        f"candidate_scenes: {', '.join(summary.candidate_scenes) or '-'}",
+        f"subtitle_policy: {summary.subtitle_policy}",
+        f"audio_policy: {summary.audio_policy}",
+        f"tempo_policy: {summary.tempo_policy}",
+        f"unused_reasons: {summary.unused_reasons}",
+        f"unconfirmed: {', '.join(summary.unconfirmed) or '—'}",
+    ]
+    if summary.note:
+        lines.append(f"operator note: {summary.note}")
+    return "\n".join(lines)
+
+
 class PromptBundle(StrictModel):
     """The exact model-facing payload; its canonical bytes are hashed."""
 
@@ -61,6 +103,7 @@ class PromptBundle(StrictModel):
     episode_id: str
     rule_spec: object
     candidates: tuple[DeclaredCandidate, ...]
+    adopted_policy_text: str | None = None
 
 
 def build_prompt(request: DirectorRequest) -> PromptBundle:
@@ -71,6 +114,7 @@ def build_prompt(request: DirectorRequest) -> PromptBundle:
         episode_id=request.episode_id,
         rule_spec=request.rules.model_dump(mode="json"),
         candidates=request.candidates,
+        adopted_policy_text=render_adopted_policy_text(request.adopted_policy),
     )
 
 
@@ -93,11 +137,13 @@ def request_hash(
 
 
 __all__ = [
+    "ADOPTED_POLICY_LABEL",
     "PROMPT_CONTRACT_VERSION",
     "SYSTEM_PROMPT",
     "UNTRUSTED_DATA_NOTICE",
     "PromptBundle",
     "build_prompt",
     "prompt_bundle_hash",
+    "render_adopted_policy_text",
     "request_hash",
 ]

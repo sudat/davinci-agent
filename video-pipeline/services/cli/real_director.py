@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Final, Literal
 from services.cli.live_editorial import LiveHttpTransport
 from services.cli.real_policy import load_policy, write_policy_snapshot
 from services.cli.real_pool import evidence_index_for, rules_for
+from services.cli.real_selection_inputs import save_selection_inputs
 from services.contracts.editorial_model import (
     EditorialSelectionProposal,
     SelectionEntry,
@@ -33,7 +34,11 @@ from services.editorial.candidate_models import (
     SelectionPlanProposal,
 )
 from services.editorial.director import EditorialDirector
-from services.editorial.models import DeclaredCandidate, DirectorRequest
+from services.editorial.models import (
+    AdoptedPolicySummaryV1,
+    DeclaredCandidate,
+    DirectorRequest,
+)
 from services.editorial.pin import load_pin
 from services.editorial.policy import decide_production_transport_policy
 from services.editorial.proposal_builder import build_selection_proposal
@@ -116,6 +121,7 @@ def director_request(  # noqa: PLR0913 (declared-candidate table from the real p
     rules: EditorialRules,
     pool: CandidatePool,
     speech_text: dict[str, str],
+    adopted_policy: AdoptedPolicySummaryV1 | None = None,
 ) -> DirectorRequest:
     return DirectorRequest(
         episode_id=episode_id,
@@ -140,6 +146,7 @@ def director_request(  # noqa: PLR0913 (declared-candidate table from the real p
             )
             for record in pool.segments
         ),
+        adopted_policy=adopted_policy,
     )
 
 
@@ -203,6 +210,7 @@ def select(  # noqa: PLR0913 (director wiring: pool + rules + policy + env + evi
     index_path: str,
     policy: ResolvedConfig,
     env: dict[str, str],
+    adopted_policy: AdoptedPolicySummaryV1 | None = None,
 ) -> DirectorOutcome:
     if director_mode(env) == "deterministic-baseline":
         digest = hashlib.sha256(
@@ -217,6 +225,7 @@ def select(  # noqa: PLR0913 (director wiring: pool + rules + policy + env + evi
     request = director_request(
         episode_id=episode_id, source_id=source_id, total_frames=total_frames,
         rules=rules, pool=pool, speech_text=redacted_speech_text(speech_text),
+        adopted_policy=adopted_policy,
     )
     return _live(request, index_path, policy, env)
 
@@ -251,6 +260,7 @@ def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real 
     policy_path: Path | None,
     out_dir: Path,
     env: dict[str, str],
+    adopted_policy: AdoptedPolicySummaryV1 | None = None,
 ) -> tuple[DirectorOutcome, SelectionPlanProposal, ReconciliationResult, Path]:
     policy_file = policy_path if policy_path is not None else write_policy_snapshot(
         episode_id, out_dir
@@ -263,7 +273,12 @@ def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real 
         rules=rules, pool=pool, speech_ids=speech_ids,
         speech_text={segment.segment_id: segment.text for segment in speech},
         index_path=analysis.record.index_path, policy=load_policy(policy_file), env=env,
+        adopted_policy=adopted_policy,
     )
     selection = selection_proposal(episode_id, rules, pool, evidence_index, outcome)
     reconciled = reconcile(outcome.proposal, pool, evidence_index)
+    save_selection_inputs(
+        out_dir, episode_id=episode_id, source_id=source_id,
+        total_frames=total_frames, analysis=analysis, pool=pool, speech=speech,
+    )
     return outcome, selection, reconciled, policy_file

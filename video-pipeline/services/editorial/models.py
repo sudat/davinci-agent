@@ -9,9 +9,9 @@ instruction, or a credential value.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BeforeValidator, Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from services.contracts.editorial_model import (  # noqa: TC001 (pydantic runtime fields)
@@ -23,6 +23,9 @@ from services.fixtures.manifest_phase1 import (  # noqa: TC001 (pydantic runtime
     EditorialRules,
     EditSourceSpec,
 )
+
+# Strict models never coerce list→tuple; pin the consultation BeforeValidator convention.
+type _StringSequence = Annotated[tuple[str, ...], BeforeValidator(tuple)]
 
 
 class DeclaredCandidate(StrictModel):
@@ -47,6 +50,35 @@ class DeclaredCandidate(StrictModel):
         return self
 
 
+class AdoptedPolicyScopeV1(StrictModel):
+    """Which aspects the operator adopted (unchecked stays unconfirmed)."""
+
+    composition: bool = False
+    appearance: bool = False
+    audio: bool = False
+
+
+class AdoptedPolicySummaryV1(StrictModel):
+    """Compact adopted-consultation-policy input for the director (slice 2).
+
+    Plain strings only: the deterministic extraction lives in
+    ``consultation_store.policy_summary``; the live prompt renders this
+    summary as labeled constraint text, while the deterministic baseline
+    cannot interpret it (honest failure upstream, never a silent drop).
+    """
+
+    decision: Literal["adopt", "revise"]
+    scope: AdoptedPolicyScopeV1 = AdoptedPolicyScopeV1()
+    structure: str = ""
+    candidate_scenes: _StringSequence = ()
+    subtitle_policy: str = ""
+    audio_policy: str = ""
+    tempo_policy: str = ""
+    unused_reasons: str = ""
+    unconfirmed: _StringSequence = ()
+    note: str | None = None
+
+
 class DirectorRequest(StrictModel):
     """Declared inputs for one editorial-director run (frozen Phase-1 shape)."""
 
@@ -54,6 +86,7 @@ class DirectorRequest(StrictModel):
     edit_source: EditSourceSpec
     rules: EditorialRules
     candidates: tuple[DeclaredCandidate, ...] = Field(min_length=1)
+    adopted_policy: AdoptedPolicySummaryV1 | None = None
 
 
 class EditorialPolicyEnvelope(StrictModel):
@@ -142,6 +175,8 @@ class DirectorRunResult(StrictModel):
 
 
 __all__ = [
+    "AdoptedPolicyScopeV1",
+    "AdoptedPolicySummaryV1",
     "DeclaredCandidate",
     "DirectorRequest",
     "DirectorRunResult",
