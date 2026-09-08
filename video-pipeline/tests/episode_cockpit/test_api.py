@@ -9,6 +9,7 @@ append). Loopback discipline is enforced at factory time.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,12 +18,14 @@ from fastapi.testclient import TestClient
 
 from services.approvals.ingress import record_fixture_operation
 from services.approvals.store import OperationRecordStore
+from services.cli.bundle import ReviewTarget, assemble_real_bundle, save_bundle
 from services.episode_cockpit.app import (
     LOOPBACK_HOST,
     CockpitBindError,
     create_cockpit_app,
     run,
 )
+from services.foundation_io import sha256_file
 from services.job_runner.state_errors import StateStoreError
 from services.job_runner.state_models import StageRunRow
 from services.job_runner.state_store import StateStore
@@ -30,7 +33,7 @@ from services.preview.render import PREVIEW_NAME
 from services.reference_learning.models import ReferenceLibraryV1
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
 
 
 @pytest.fixture
@@ -344,8 +347,103 @@ def test_review_chat_stores_raw_message(
 
 
 # ---------------------------------------------------------------------------
-# (h) preview: structured 404 when absent, FileResponse when present
+# (h) preview: structured 404 when absent, FileResponse when present;
+#     X-Cockpit-Preview-* binding headers ONLY on the full cross-check
 # ---------------------------------------------------------------------------
+
+# The header NAMES are the frontend contract — asserted literally here so a
+# rename fails loudly instead of silently degrading the UI to 不明.
+_BINDING_HEADERS = (
+    "X-Cockpit-Preview-Run-Id",
+    "X-Cockpit-Preview-Target-Version",
+    "X-Cockpit-Preview-Content-SHA256",
+    "X-Cockpit-Preview-Output-Arrived-At",
+)
+_PUBLISH_TS = "2026-09-09T00:00:00+00:00"
+_PUBLISH_RUN_ID = "run-bind001"
+
+
+def _assert_no_binding_headers(headers: Mapping[str, str]) -> None:
+    for header in _BINDING_HEADERS:
+        assert header not in headers
+
+
+def _write_preview(workspace: dict[str, Path], episode_id: str) -> str:
+    preview_dir = workspace["episodes_root"] / episode_id / "previews"
+    preview_dir.mkdir(parents=True)
+    preview = preview_dir / PREVIEW_NAME
+    preview.write_bytes(b"mp4-bytes")
+    return sha256_file(preview)
+
+
+def _seed_publish_record(
+    episode_dir: Path, sha: str, *, run_id: str = _PUBLISH_RUN_ID
+) -> None:
+    record: dict[str, object] = {
+        "ts": _PUBLISH_TS,
+        "event": "preview_published",
+        "path": str(episode_dir / "previews" / PREVIEW_NAME),
+        "source": "preview-v1",
+        "run_id": run_id,
+        "target_version": "v1",
+        "content_hash": sha,
+    }
+    with (episode_dir / "runner.log").open("ab") as stream:
+        stream.write((json.dumps(record) + "\n").encode())
+
+
+def _seed_preview_stage_row(
+    workspace: dict[str, Path], episode_id: str, sha: str, *, run_id: str = _PUBLISH_RUN_ID
+) -> None:
+    with StateStore.open(workspace["state_store"]) as store:
+        store.record_stage_run(
+            StageRunRow(
+                job_id=episode_id,
+                stage_name="preview",
+                input_artifact_hashes=(),
+                adopted_artifact_hash=sha,
+                status="succeeded",
+                idempotency_key=f"cockpit-episode-runner-v1:{run_id}:preview",
+                run_id=run_id,
+                first_output_arrived_at=_PUBLISH_TS,
+                last_transition_at=_PUBLISH_TS,
+            )
+        )
+
+
+def _seed_review_bundle(episode_dir: Path, sha: str, *, version: str = "v1") -> None:
+    run_dir = episode_dir / "run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    save_bundle(
+        assemble_real_bundle(
+            episode_id=episode_dir.name,
+            eligibility_status="supported",
+            mezzanine_sha256="b" * 64,
+            edit_source_world_sha256="c" * 64,
+            episode_manifest_sha256="d" * 64,
+            policy_sha256="e" * 64,
+            target=ReviewTarget(
+                plan_version=version,
+                plan_sha256="f" * 64,
+                ir_sha256="1" * 64,
+                preview_dir="preview-v1",
+                preview_sha256=sha,
+                trace_sha256="2" * 64,
+            ),
+        ),
+        run_dir / "review-bundle.json",
+    )
+
+
+def _seed_full_match(workspace: dict[str, Path], episode_id: str) -> str:
+    """Preview file + complete publish record + matching stage row + bundle."""
+
+    sha = _write_preview(workspace, episode_id)
+    episode_dir = workspace["episodes_root"] / episode_id
+    _seed_publish_record(episode_dir, sha)
+    _seed_preview_stage_row(workspace, episode_id, sha)
+    _seed_review_bundle(episode_dir, sha)
+    return sha
 
 
 def test_preview_absent_is_structured_404(
@@ -361,14 +459,166 @@ def test_preview_serves_existing_file(
     client: TestClient, workspace: dict[str, Path], source_folder: Path
 ) -> None:
     created = _create_episode(client, source_folder)
-    preview_dir = workspace["episodes_root"] / str(created["episode_id"]) / "previews"
-    preview_dir.mkdir(parents=True)
-    (preview_dir / PREVIEW_NAME).write_bytes(b"mp4-bytes")
+    episode_id = str(created["episode_id"])
+    _write_preview(workspace, episode_id)
 
-    response = client.get(f"/episodes/{created['episode_id']!s}/preview")
+    response = client.get(f"/episodes/{episode_id}/preview")
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("video/mp4")
     assert response.content == b"mp4-bytes"
+    _assert_no_binding_headers(response.headers)
+
+
+
+def test_preview_full_match_serves_binding_headers(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    sha = _seed_full_match(workspace, episode_id)
+
+    response = client.get(f"/episodes/{episode_id}/preview")
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    assert response.headers["X-Cockpit-Preview-Run-Id"] == _PUBLISH_RUN_ID
+    assert response.headers["X-Cockpit-Preview-Target-Version"] == "v1"
+    assert response.headers["X-Cockpit-Preview-Content-SHA256"] == sha
+    assert response.headers["X-Cockpit-Preview-Output-Arrived-At"] == _PUBLISH_TS
+
+
+def test_preview_stage_row_mismatch_serves_without_headers(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    sha = _write_preview(workspace, episode_id)
+    episode_dir = workspace["episodes_root"] / episode_id
+    _seed_publish_record(episode_dir, sha, run_id="run-bind001")
+    _seed_preview_stage_row(workspace, episode_id, sha, run_id="run-other")
+    _seed_review_bundle(episode_dir, sha)
+    response = client.get(f"/episodes/{episode_id}/preview")
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    _assert_no_binding_headers(response.headers)
+
+
+def test_preview_adopted_hash_mismatch_serves_without_headers(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    sha = _write_preview(workspace, episode_id)
+    episode_dir = workspace["episodes_root"] / episode_id
+    _seed_publish_record(episode_dir, sha)
+    _seed_preview_stage_row(workspace, episode_id, "9" * 64)
+    _seed_review_bundle(episode_dir, sha)
+
+    response = client.get(f"/episodes/{episode_id}/preview")
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    _assert_no_binding_headers(response.headers)
+
+
+def test_preview_bundle_mismatch_serves_without_headers(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    sha = _write_preview(workspace, episode_id)
+    episode_dir = workspace["episodes_root"] / episode_id
+    _seed_publish_record(episode_dir, sha)
+    _seed_preview_stage_row(workspace, episode_id, sha)
+    _seed_review_bundle(episode_dir, "7" * 64)
+
+    response = client.get(f"/episodes/{episode_id}/preview")
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    _assert_no_binding_headers(response.headers)
+
+
+def test_preview_old_format_record_serves_without_headers(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    _write_preview(workspace, episode_id)
+    episode_dir = workspace["episodes_root"] / episode_id
+    record = {
+        "ts": _PUBLISH_TS,
+        "event": "preview_published",
+        "path": str(episode_dir / "previews" / PREVIEW_NAME),
+        "source": "preview-v1",
+    }
+    with (episode_dir / "runner.log").open("ab") as stream:
+        stream.write((json.dumps(record) + "\n").encode())
+
+    response = client.get(f"/episodes/{episode_id}/preview")
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    _assert_no_binding_headers(response.headers)
+
+
+def test_preview_corrupt_record_serves_without_headers(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    sha = _write_preview(workspace, episode_id)
+    episode_dir = workspace["episodes_root"] / episode_id
+    _seed_publish_record(episode_dir, "not-even-hex")
+    _seed_preview_stage_row(workspace, episode_id, sha)
+    _seed_review_bundle(episode_dir, sha)
+
+    response = client.get(f"/episodes/{episode_id}/preview")
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    _assert_no_binding_headers(response.headers)
+
+
+def test_preview_wrong_content_hash_param_conflicts_409(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    _seed_full_match(workspace, episode_id)
+
+    response = client.get(
+        f"/episodes/{episode_id}/preview", params={"content_hash": "f" * 64}
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "preview-content-hash-mismatch"
+    assert response.content != b"mp4-bytes"
+
+
+def test_preview_matching_content_hash_param_serves_200(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    sha = _seed_full_match(workspace, episode_id)
+
+    response = client.get(
+        f"/episodes/{episode_id}/preview", params={"content_hash": sha}
+    )
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    assert response.headers["X-Cockpit-Preview-Content-SHA256"] == sha
+
+
+def test_preview_unbound_with_hash_param_still_serves(
+    client: TestClient, workspace: dict[str, Path], source_folder: Path
+) -> None:
+    """An unknown binding cannot conflict — the video serves without headers."""
+
+    created = _create_episode(client, source_folder)
+    episode_id = str(created["episode_id"])
+    _write_preview(workspace, episode_id)
+
+    response = client.get(
+        f"/episodes/{episode_id}/preview", params={"content_hash": "f" * 64}
+    )
+    assert response.status_code == 200
+    assert response.content == b"mp4-bytes"
+    _assert_no_binding_headers(response.headers)
 
 
 # ---------------------------------------------------------------------------

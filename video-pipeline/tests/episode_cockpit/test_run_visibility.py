@@ -215,6 +215,22 @@ def test_last_worker_report_scoped_to_current_run(
     assert status["preview_first_arrived_at"]  # this-run preview arrival
 
 
+def test_initial_run_target_version_from_complete_publish_record(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, _ = _initial_run(
+        client, workspace, source_folder, monkeypatch, run_id="run-init"
+    )
+
+    status = client.get(f"/episodes/{episode_id}").json()
+
+    assert status["current_run"] == "run-init"
+    assert status["current_target_version"] == "v1"
+
+
 # --- rebuild linkage: 予約(sequence)→起動(run_id) survives reload ---------
 
 

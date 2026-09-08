@@ -48,6 +48,10 @@ from services.episode_cockpit.models import (
     ReviewProposalConsumed,
     ReviewReactionKind,
 )
+from services.episode_cockpit.preview_binding import (
+    PreviewBinding,
+    derive_preview_binding,
+)
 from services.episode_cockpit.review_apply import apply_drafts
 from services.episode_cockpit.review_chat import (
     DEFAULT_LINEAGE,
@@ -132,6 +136,13 @@ class FileOps(WorkspaceContext):
         if not path.is_file():
             raise CockpitNotFoundError("preview-not-found", f"no rendered preview at {path}")
         return path
+
+    def preview_binding(self, episode_id: str) -> PreviewBinding | None:
+        """The verified run/version binding of the served preview (None = unknown)."""
+
+        snapshot = self._require_snapshot(episode_id)
+        episode_dir = self._episode_dir(snapshot.job.episode_id)
+        return derive_preview_binding(episode_dir, snapshot.stage_runs)
 
     def review_flags(self, episode_id: str) -> dict[str, object]:
         base = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)

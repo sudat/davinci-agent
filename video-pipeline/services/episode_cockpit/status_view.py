@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Final
 from pydantic import ValidationError
 
 from services.episode_cockpit.models import IntakeRecordV1, RebuildRequestEntry
+from services.episode_cockpit.preview_binding import published_target_version
 from services.episode_cockpit.review_proposals import (
     latest_unconsumed_set,
     load_consumed_proposals,
@@ -85,7 +86,9 @@ def derive_current_run(
     the latest request — current_run is None and 予約済み stays
     derivable from ``rebuild_requests``. Only with NO rebuild records at
     all does the initial chain run count (last ``runner_started`` in the
-    bounded log tail).
+    bounded log tail); its target version comes from the latest COMPLETE
+    ``preview_published`` record only — an old-format or incomplete
+    record keeps the version honestly unknown (None).
     """
 
     current: str | None = None
@@ -100,7 +103,7 @@ def derive_current_run(
     if current is None and not entries:
         for event in reversed(tail_events(runner_log)):
             if event.get("event") == "runner_started" and event.get("run_id"):
-                return str(event["run_id"]), None
+                return str(event["run_id"]), published_target_version(runner_log)
     return current, target
 
 

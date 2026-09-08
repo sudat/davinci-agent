@@ -16,6 +16,7 @@ from pydantic import BeforeValidator
 
 from services.contracts.primitives import Identifier, StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
+from services.episode_cockpit.errors import CockpitConflictError
 
 # Runtime imports (NOT TYPE_CHECKING): FastAPI resolves parameter annotations
 # at decoration time via get_type_hints, so these model imports stay top-level.
@@ -29,6 +30,7 @@ from services.episode_cockpit.models import (
     ReviewChatRequest,
     Seconds,
 )
+from services.episode_cockpit.preview_binding import binding_headers
 from services.episode_cockpit.review_chat import (
     _FEELINGS_REASON,
     ReviewChatContext,
@@ -118,9 +120,31 @@ def put_brief(
 
 
 @router.get("/episodes/{episode_id}/preview")
-def episode_preview(episode_id: str, workspace: Workspace) -> FileResponse:
+def episode_preview(
+    episode_id: str, workspace: Workspace, content_hash: str | None = None
+) -> FileResponse:
+    """Serve the preview video; ``X-Cockpit-Preview-*`` headers ONLY on a
+    full cross-check (publish record + succeeded preview stage row + review
+    bundle all agree). Header absence means unknown — the video contract
+    (200/206, 404 when absent) is unchanged and never partial-headed. A
+    ``content_hash`` query differing from the bound record's is a 409
+    without the video; an unknown binding cannot differ, so it serves.
+    """
+
+    path = workspace.preview_path(episode_id)
+    binding = workspace.preview_binding(episode_id)
+    if (
+        content_hash is not None
+        and binding is not None
+        and binding.content_hash != content_hash
+    ):
+        raise CockpitConflictError(
+            "preview-content-hash-mismatch",
+            "the requested content_hash does not match the current bound preview",
+        )
+    headers = binding_headers(binding) if binding is not None else None
     return FileResponse(
-        workspace.preview_path(episode_id), media_type="video/mp4", filename="preview.mp4"
+        path, media_type="video/mp4", filename="preview.mp4", headers=headers
     )
 
 
