@@ -6,11 +6,11 @@ over the canonical bytes of the event content with the id itself zeroed, so
 the same decision content always yields the same event id.
 """
 
-# allow: SIZE_OK — 274 pure LOC; the kind semantics and their payload parsers
-# (event_proposal / event_restored_plan, plus the _tuplize coercion the
-# versioned store shares) must stay co-located because parse_event_stream
-# routes each sealed line by kind; splitting the plan_restored payload parser
-# out would fork the event contract across two modules.
+# allow: SIZE_OK — the kind semantics and their payload parsers
+# (event_proposal / event_restored_plan / event_policy_plan, plus the
+# _tuplize coercion the versioned store shares) must stay co-located because
+# parse_event_stream routes each sealed line by kind; splitting any payload
+# parser out would fork the event contract across two modules.
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ type EventKind0C = Literal[
     "command_deferred",
     "moment-selection-v2-committed",
     "plan_restored",
+    "policy_applied",
 ]
 type EventActor0C = Literal["operator", "model"]
 MOMENT_SELECTION_V2_COMMITTED: Final = "moment-selection-v2-committed"
@@ -40,7 +41,17 @@ MOMENT_SELECTION_V2_COMMITTED: Final = "moment-selection-v2-committed"
 # parent's. The restored-from version and the restored plan ride the hash-
 # bound payload (never new ReviewEvent0C fields: that would change the
 # canonical bytes — and hence the event ids — of every existing sealed log).
+# UX redesign 工程1: undo is a NEW forward version whose content equals the
+# parent's. The restored-from version and the restored plan ride the hash-
+# bound payload (never new ReviewEvent0C fields: that would change the
+# canonical bytes — and hence the event ids — of every existing sealed log).
 RESTORED_EVENT_KIND: Final = "plan_restored"
+# Consultation slice 2: a director re-run under an adopted consultation
+# policy commits a WHOLESALE new plan version (the re-derived plan cannot
+# be expressed as remove/adjust deltas). Same self-contained payload shape
+# as plan_restored: the judgment linkage plus the full derived plan, so the
+# reducer folds it without disk reads. Additive: existing kinds untouched.
+POLICY_EVENT_KIND: Final = "policy_applied"
 
 
 class ReviewEvent0C(StrictModel):
@@ -71,6 +82,8 @@ class ReviewEvent0C(StrictModel):
             self._require_moment_selection_semantics()
         elif self.kind == RESTORED_EVENT_KIND:
             self._require_plan_restored_semantics()
+        elif self.kind == POLICY_EVENT_KIND:
+            self._require_policy_applied_semantics()
         else:
             if self.applied or self.result_plan_version is not None:
                 raise PydanticCustomError(
@@ -118,6 +131,25 @@ class ReviewEvent0C(StrictModel):
             raise PydanticCustomError(
                 "event_kind",
                 "plan_restored events must record the deciding operator",
+            )
+
+    def _require_policy_applied_semantics(self) -> None:
+        """Policy commits are applied operator decisions advancing the version."""
+
+        if not self.applied or self.result_plan_version is None:
+            raise PydanticCustomError(
+                "event_kind",
+                "policy_applied events must be applied with a result version",
+            )
+        if self.result_plan_version == self.base_plan_version:
+            raise PydanticCustomError(
+                "event_kind",
+                "policy_applied must advance the plan version",
+            )
+        if self.decision_id is None:
+            raise PydanticCustomError(
+                "event_kind",
+                "policy_applied events must record the deciding operator",
             )
 
     def _require_moment_selection_semantics(self) -> None:
@@ -193,6 +225,12 @@ def event_proposal(event: ReviewEvent0C) -> ReviewCommandProposal0C:
             "payload, not a Phase-0C review command proposal; parse it with "
             "event_restored_plan"
         )
+    if event.kind == POLICY_EVENT_KIND:
+        raise EventStreamError(
+            f"event at sequence {event.sequence} carries a policy-applied "
+            "payload, not a Phase-0C review command proposal; parse it with "
+            "event_policy_plan"
+        )
     return parse_proposal(event.proposal_json)
 
 
@@ -237,6 +275,53 @@ def event_restored_plan(event: ReviewEvent0C) -> EditPlan0C:
     except (ValidationError, ValueError) as error:
         raise EventStreamError(
             f"unparsable restored plan at sequence {event.sequence}"
+        ) from error
+
+
+def policy_payload(
+    judgment_id: str, proposal_id: str | None, decision: str, plan: EditPlan0C
+) -> str:
+    """Canonical opaque payload for ``policy_applied`` events: the adopting
+    judgment linkage plus the full derived plan (hash-bound, self-contained
+    so the reducer folds a policy commit without disk reads)."""
+
+    return json.dumps(
+        {
+            "judgment_id": judgment_id,
+            "proposal_id": proposal_id,
+            "decision": decision,
+            "plan": json.loads(canonical_model_bytes(plan)),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def event_policy_plan(event: ReviewEvent0C) -> EditPlan0C:
+    """Parse the bound policy payload, refusing streams whose hash drifts."""
+
+    if event.kind != POLICY_EVENT_KIND:
+        raise EventStreamError(
+            f"event at sequence {event.sequence} is not a policy commit"
+        )
+    verify_proposal_hash(event)
+    try:
+        payload = json.loads(event.proposal_json)
+        plan_json = payload["plan"]
+    except (ValueError, KeyError, TypeError) as error:
+        raise EventStreamError(
+            f"malformed policy payload at sequence {event.sequence}"
+        ) from error
+    if not isinstance(plan_json, dict):
+        raise EventStreamError(
+            f"malformed policy payload at sequence {event.sequence}"
+        )
+    try:
+        return EditPlan0C.model_validate(_tuplize(plan_json))
+    except (ValidationError, ValueError) as error:
+        raise EventStreamError(
+            f"unparsable policy plan at sequence {event.sequence}"
         ) from error
 
 
@@ -288,6 +373,8 @@ def parse_event_stream(data: bytes) -> tuple[ReviewEvent0C, ...]:
                 verify_proposal_hash(event)
             elif event.kind == RESTORED_EVENT_KIND:
                 event_restored_plan(event)
+            elif event.kind == POLICY_EVENT_KIND:
+                event_policy_plan(event)
             else:
                 event_proposal(event)
         except EventStreamError:
@@ -316,16 +403,19 @@ def event_stream_bytes(events: tuple[ReviewEvent0C, ...]) -> bytes:
 __all__ = [
     "GENESIS_EVENT_HASH",
     "MOMENT_SELECTION_V2_COMMITTED",
+    "POLICY_EVENT_KIND",
     "RESTORED_EVENT_KIND",
     "EventSeal",
     "EventStreamError",
     "ReviewEvent0C",
     "build_event",
     "compute_event_id",
+    "event_policy_plan",
     "event_proposal",
     "event_restored_plan",
     "event_stream_bytes",
     "parse_event_stream",
+    "policy_payload",
     "restore_payload",
     "verify_proposal_hash",
 ]

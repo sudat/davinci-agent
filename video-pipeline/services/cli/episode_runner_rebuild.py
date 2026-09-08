@@ -2,9 +2,10 @@
 
 ``--from-stage`` executes the stop-bounded lineage projection: the stages
 from the given re-entry point up to ``preview`` (the ``PREVIEW_READY``
-stop) run against the CURRENT committed artifacts — the cockpit review
-store under ``review/`` holds the plan version the deterministic
-apply/commit path sealed, so the plan stage consumes that head version,
+stop) run against the CURRENT committed artifacts — entering at
+``selection`` re-runs the director seam under the latest adopted
+consultation policy and commits the derived plan as a new review-store
+version (consultation slice 2); the plan stage consumes that head version,
 compile materializes its IR, and preview re-renders + re-publishes the
 operator preview. Stages before the re-entry point are untouched; lineage
 stages beyond ``PREVIEW_READY`` (resolve_build/qc/render) are skipped with
@@ -14,16 +15,19 @@ appends fresh per-run stage rows (uuid idempotency keys — the task-7
 mirror discipline).
 """
 
-# allow: SIZE_OK — 273 pure LOC: plan-pinned single-file re-entry executor
-# (stage-set projection + plan/compile/preview stage fns + bundle hand-off +
-# metrics writer belong to one task-9 commit scope); same precedent as
-# review_chat.py / review_interpreter.py.
+# allow: SIZE_OK — plan-pinned single-file re-entry executor
+# (stage-set projection + selection/plan/compile/preview stage fns + bundle
+# hand-off + metrics writer belong to one task-9 commit scope, extended by
+# the consultation slice-2 selection stage); same precedent as
+# review_chat.py / review_interpreter.py. The production director/derive
+# seams live in episode_runner_selection.py, not here.
 
 from __future__ import annotations
 
 import json as _json
 import os
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +35,7 @@ from typing import TYPE_CHECKING, BinaryIO, Final
 
 from pydantic import Field
 
+from services.cli import episode_runner_selection
 from services.cli.bundle import (
     BundleDriftError,
     ReviewBundle,
@@ -48,6 +53,7 @@ from services.cli.episode_runner_workspace import (
 )
 from services.cli.preview_render import render_review_preview
 from services.cli.project import plan_sha256
+from services.cli.real_director import director_mode
 from services.cli.review_common import (
     load_tools,
     mezzanine_for,
@@ -56,11 +62,24 @@ from services.cli.review_common import (
     store_plan,
 )
 from services.contracts.primitives import StrictModel
+from services.episode_cockpit.consultation_store import (
+    AdoptedPolicyV1,
+    ConsultationPolicyOutcomeV1,
+    append_policy_outcome,
+    latest_adopted_policy,
+    now_stamp,
+)
 from services.episode_cockpit.review_chat import PIPELINE_STAGES
 from services.foundation_io import sha256_file
 from services.preview.models import AppliedDecision
 from services.preview.render import PREVIEW_NAME, TRACE_NAME
-from services.review_command.store import HeadState, load_head
+from services.review_command.policy_commit import commit_policy
+from services.review_command.store import (
+    HeadState,
+    OperatorDecision0C,
+    ReviewCommitError,
+    load_head,
+)
 
 if TYPE_CHECKING:
     from services.cli.episode_runner import RunnerInvocation
@@ -145,6 +164,108 @@ def stage_plan(episode_root: Path) -> HeadState:
         return load_head(log_path, plan_dir)
     except Exception as error:
         raise RebuildStageError("review-store-unreadable", str(error)) from error
+
+
+def _failed_outcome(
+    episode_root: Path,
+    policy: AdoptedPolicyV1,
+    reasons: tuple[str, ...],
+    note: str,
+) -> None:
+    append_policy_outcome(
+        episode_root,
+        ConsultationPolicyOutcomeV1(
+            outcome_id=uuid.uuid4().hex[:12],
+            consultation_id=policy.consultation_id,
+            judgment_id=policy.judgment_id,
+            proposal_id=policy.proposal_id,
+            plan_version=None,
+            status="failed",
+            reasons=reasons,
+            note=note,
+            created_at=now_stamp(),
+        ),
+    )
+
+
+def stage_selection(episode_root: Path, log: BinaryIO, *, policy: AdoptedPolicyV1) -> str:
+    """Re-run the director under the adopted policy; commit a new version.
+
+    The §9.1:406 loop: load the review-store head, re-run the initial
+    chain's director seam with the adopted policy as constraint input,
+    derive + validate the plan through the chain's own pure functions, and
+    commit it as a NEW review-store version via the review-command commit
+    path. ANY failure appends a failed outcome (never a silent drop),
+    marks the stage failed via the existing block path, and commits no
+    version — the consultation UI then shows the failure (相談へ戻る).
+    """
+
+    stage_plan(episode_root)
+    if director_mode(dict(os.environ)) == "deterministic-baseline":
+        reason = "編集長が決定論化モードのため方針を解釈できませんでした"
+        _failed_outcome(
+            episode_root, policy, (reason,),
+            "方針の解釈も検証も行っていません。公開モデル runtime で再実行してください。",
+        )
+        raise RebuildStageError("policy-not-interpretable", reason)
+    try:
+        rerun = episode_runner_selection.rerun_director_with_policy(
+            episode_root, policy, dict(os.environ)
+        )
+    except episode_runner_selection.SelectionRerunError as error:
+        _failed_outcome(
+            episode_root, policy, (f"{error.code}: {error.detail}",),
+            "監督の再実行に失敗したため、方針の検証を行っていません。",
+        )
+        raise RebuildStageError(error.code, error.detail) from error
+    try:
+        new_plan = episode_runner_selection.derive_policy_plan(episode_root, rerun)
+    except episode_runner_selection.PolicyDerivationError as error:
+        _failed_outcome(
+            episode_root, policy, (f"{error.code}: {error.detail}",),
+            "計画の導出・検証に失敗したため、版を確定していません。",
+        )
+        raise RebuildStageError(error.code, error.detail) from error
+    log_path, plan_dir = _review_store(episode_root)
+    decision = OperatorDecision0C(
+        decision_id=f"dec-policy-{policy.judgment_id}",
+        actor_intent="operator",
+        note=f"adopted consultation policy {policy.judgment_id} ({policy.decision})",
+    )
+    try:
+        outcome = commit_policy(
+            new_plan, decision, log_path, plan_dir,
+            judgment_id=policy.judgment_id,
+            proposal_id=policy.proposal_id,
+            policy_decision=policy.decision,
+        )
+        verified = load_head(log_path, plan_dir)
+    except Exception as error:
+        code = error.code if isinstance(error, ReviewCommitError) else "policy-commit-failed"
+        _failed_outcome(
+            episode_root, policy, (f"{code}: {error}",),
+            "版の確定に失敗したため、方針は反映されていません。",
+        )
+        raise RebuildStageError(code, str(error)) from error
+    append_policy_outcome(
+        episode_root,
+        ConsultationPolicyOutcomeV1(
+            outcome_id=uuid.uuid4().hex[:12],
+            consultation_id=policy.consultation_id,
+            judgment_id=policy.judgment_id,
+            proposal_id=policy.proposal_id,
+            plan_version=f"v{outcome.version}",
+            status="honored",
+            reasons=(f"adopted {policy.decision} policy re-run by the director",),
+            note="反映の検証は構造検証のみ (プランナー充足性・生成・コンパイル・版再読込)。",
+            created_at=now_stamp(),
+        ),
+    )
+    log_event(
+        log, "policy_selection_committed", policy=policy.judgment_id,
+        plan_version=f"v{outcome.version}",
+    )
+    return plan_sha256(verified.plan)
 
 
 def stage_compile(episode_root: Path, head: HeadState) -> tuple[EditPlan0C, TimelineIr0C]:
@@ -370,10 +491,18 @@ def _run_stage(
     """
 
     if stage == "selection":
-        raise RebuildStageError(
-            "stage-reentry-unsupported",
-            "selection re-entry needs the director pass; not rebuild-executable yet",
-        )
+        policy = latest_adopted_policy(episode_root)
+        if policy is None:
+            raise RebuildStageError(
+                "no-adopted-policy",
+                "selection re-entry needs an adopted consultation policy; "
+                "none is on the table",
+            )
+        adopted = stage_selection(episode_root, log, policy=policy)
+        carried.head = stage_plan(episode_root)
+        carried.plan = None
+        carried.ir = None
+        return adopted
     if stage == "plan":
         carried.head = stage_plan(episode_root)
         return plan_sha256(carried.head.plan)
@@ -450,4 +579,5 @@ __all__ = [
     "stage_compile",
     "stage_plan",
     "stage_preview",
+    "stage_selection",
 ]

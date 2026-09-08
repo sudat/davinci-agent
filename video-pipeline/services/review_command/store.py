@@ -22,6 +22,7 @@ from services.contracts.primitives import Identifier, Sha256, StrictModel
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
 from services.review_command.events import (
     GENESIS_EVENT_HASH,
+    POLICY_EVENT_KIND,
     RESTORED_EVENT_KIND,
     EventSeal,
     EventStreamError,
@@ -158,7 +159,7 @@ def load_version_plan(plan_dir: Path, index: PlanVersionsIndex, version: int) ->
 def load_head(log_path: Path, plan_dir: Path) -> HeadState:
     index = load_index(plan_dir)
     events = load_events(log_path)
-    version_creating = ("decision_applied", RESTORED_EVENT_KIND)
+    version_creating = ("decision_applied", RESTORED_EVENT_KIND, POLICY_EVENT_KIND)
     applied = [event for event in events if event.kind in version_creating]
     results = {event.result_plan_version for event in applied}
     for version_label in index.versions:

@@ -6,10 +6,11 @@ zero file IO: the versioned-file writer owns persistence. Phase 1 will wrap
 this same function with Production commit authority.
 """
 
-# allow: SIZE_OK — 226 pure LOC: the fold must validate every event kind
-# (chain, sequence, version order) in ONE pass over the sealed stream, and the
-# plan_restored branch shares that pass's version-chain invariants with
-# decision_applied; splitting either branch out would duplicate the checks.
+# allow: SIZE_OK — the fold must validate every event kind (chain,
+# sequence, version order) in ONE pass over the sealed stream; the
+# plan_restored and policy_applied branches share that pass's version-chain
+# invariants with decision_applied, and splitting any branch out would
+# duplicate the checks.
 
 from __future__ import annotations
 
@@ -30,9 +31,11 @@ from services.contracts.primitives import ArtifactRef, SourceFrameSpan
 from services.foundation_io import canonical_model_bytes
 from services.review_command.events import (
     GENESIS_EVENT_HASH,
+    POLICY_EVENT_KIND,
     RESTORED_EVENT_KIND,
     ReviewEvent0C,
     compute_event_id,
+    event_policy_plan,
     event_proposal,
     event_restored_plan,
 )
@@ -139,6 +142,20 @@ def _require(condition: object, code: ReduceErrorCode, detail: str) -> None:
         raise ReduceConflictError(code, detail)
 
 
+def _next_version(event: ReviewEvent0C, applied_count: int) -> str:
+    """The version an applied event must produce (shared version-chain rule)."""
+
+    expected = f"v{applied_count + 2}"
+    result = event.result_plan_version
+    if result is None or result != expected:
+        raise ReduceConflictError(
+            "version_chain",
+            f"event at sequence {event.sequence} must produce {expected}, "
+            f"not {event.result_plan_version}",
+        )
+    return result
+
+
 def _apply_decision(plan: EditPlan0C, event: ReviewEvent0C) -> EditPlan0C:
     proposal = event_proposal(event)
     try:
@@ -208,14 +225,7 @@ def reduce(events: Sequence[ReviewEvent0C], base_plan: EditPlan0C) -> ReduceResu
             f"{event.base_plan_version} after {current_version} was committed",
         )
         if event.kind == "decision_applied":
-            expected_version = f"v{len(applied_versions) + 2}"
-            result = event.result_plan_version
-            if result is None or result != expected_version:
-                raise ReduceConflictError(
-                    "version_chain",
-                    f"event at sequence {event.sequence} must produce {expected_version}, "
-                    f"not {event.result_plan_version}",
-                )
+            result = _next_version(event, len(applied_versions))
             _require(
                 event.actor_intent == "operator",
                 "model_authored_decision",
@@ -225,20 +235,23 @@ def reduce(events: Sequence[ReviewEvent0C], base_plan: EditPlan0C) -> ReduceResu
             current_version = result
             applied_versions.append(result)
         elif event.kind == RESTORED_EVENT_KIND:
-            expected_version = f"v{len(applied_versions) + 2}"
-            result = event.result_plan_version
-            if result is None or result != expected_version:
-                raise ReduceConflictError(
-                    "version_chain",
-                    f"event at sequence {event.sequence} must produce {expected_version}, "
-                    f"not {event.result_plan_version}",
-                )
+            result = _next_version(event, len(applied_versions))
             _require(
                 event.actor_intent == "operator",
                 "model_authored_decision",
                 "models propose; only operator decisions may restore a plan version",
             )
             plan = event_restored_plan(event)
+            current_version = result
+            applied_versions.append(result)
+        elif event.kind == POLICY_EVENT_KIND:
+            result = _next_version(event, len(applied_versions))
+            _require(
+                event.actor_intent == "operator",
+                "model_authored_decision",
+                "models propose; only operator decisions may commit a policy plan",
+            )
+            plan = event_policy_plan(event)
             current_version = result
             applied_versions.append(result)
         elif event.kind == "command_deferred":
