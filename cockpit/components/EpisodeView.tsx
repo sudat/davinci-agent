@@ -14,6 +14,12 @@ import {
 import ErrorNotice from "@/components/ErrorNotice";
 import EpisodeProgress from "@/components/EpisodeProgress";
 import PreviewPlayer, { type PreviewAvailability } from "@/components/PreviewPlayer";
+import {
+  derivePreviewBinding,
+  previewAllowsCompletion,
+  previewBindingLine,
+  type PreviewProbeObservation,
+} from "@/lib/previewBinding";
 import FlagList from "@/components/FlagList";
 import BeforeAfterSummary from "@/components/BeforeAfterSummary";
 import FinishingDomainPanel from "@/components/FinishingDomainPanel";
@@ -49,11 +55,22 @@ function clockOfEpoch(ms: number): string {
  * fetches (flags / preview probe) are fire-and-track: they must never
  * delay the next poll schedule (codex条件6). visibilitychange/focus
  * trigger an immediate requery.
+ *
+ * Preview binding: the probe result (or its failure, kept distinct) and the
+ * polled status derive ONE binding line under the player — 試し編集が今回の
+ * 実行/対象版のものかを推測なしで名乗る。previewOkはその三値写像で、
+ * currentのときだけ完了判定に使える。
  */
 export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const [status, setStatus] = useState<EpisodeStatus | null>(null);
   const [flags, setFlags] = useState<FlagsPayload | null>(null);
-  const [preview, setPreview] = useState<PreviewAvailability>("checking");
+  /** 動画の機械的な再生可否（player描画とcanSeekの根拠）。probe失敗では
+   *  直前の状態を保持する（最後の再生可能videoを消さない）。 */
+  const [playerState, setPlayerState] = useState<PreviewAvailability>("checking");
+  /** probe観測（成功/失敗を区別して保持）。binding行とpreviewOkの根拠。 */
+  const [probeObservation, setProbeObservation] = useState<PreviewProbeObservation | null>(
+    null,
+  );
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -80,7 +97,12 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         if (cancelled) return;
         if (flagsResult.status === "fulfilled") setFlags(flagsResult.value);
         if (previewResult.status === "fulfilled") {
-          setPreview(previewResult.value ? "available" : "not_generated");
+          setProbeObservation({ kind: "probed", probe: previewResult.value });
+          setPlayerState(previewResult.value.available ? "available" : "not_generated");
+        } else {
+          // probe失敗は専用状態（確認できません）。直前の再生可能videoは
+          // 消さず、binding行とpreviewOkだけ即座に今回claimを落とす。
+          setProbeObservation({ kind: "failed" });
         }
       });
     };
@@ -129,6 +151,11 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
   const stale =
     !notFound && now - (fetchedAt ?? openedAtRef.current ?? now) > STALE_AFTER_MS;
+
+  const binding = derivePreviewBinding(probeObservation, status);
+  const previewOk = previewAllowsCompletion(binding);
+  const probedHash =
+    probeObservation?.kind === "probed" ? probeObservation.probe.content_hash : null;
 
   return (
     <div>
@@ -193,7 +220,15 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       <ConsultationPanel episodeId={episodeId} status={status} />
       <section className="card">
         <h2 className="card-title">プレビュー</h2>
-        <PreviewPlayer episodeId={episodeId} state={preview} videoRef={videoRef} />
+        <PreviewPlayer
+          episodeId={episodeId}
+          state={playerState}
+          contentHash={probedHash}
+          videoRef={videoRef}
+        />
+        <p className="field-hint" aria-live="polite" data-testid="preview-binding">
+          {previewBindingLine(binding)}
+        </p>
       </section>
       <section className="card">
         <h2 className="card-title">レビューflag</h2>
@@ -201,7 +236,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           <FlagList
             flags={flags.flags}
             notYetGenerated={flags.not_yet_generated}
-            canSeek={preview === "available"}
+            canSeek={playerState === "available"}
             onSeek={seekTo}
           />
         ) : (
@@ -212,7 +247,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         episodeId={episodeId}
         getAtSeconds={() => videoRef.current?.currentTime ?? null}
         status={status}
-        previewOk={preview === "available"}
+        previewOk={previewOk}
       />
       <BeforeAfterSummary summary={status?.before_after ?? null} />
     </div>

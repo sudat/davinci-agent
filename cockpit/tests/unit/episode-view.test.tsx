@@ -69,6 +69,9 @@ describe("EpisodeView — 計測裏付けのない実際のpayload形状（task-
     await waitFor(() =>
       expect(screen.getByTestId("preview-pending")).toBeVisible(),
     );
+    expect(screen.getByTestId("preview-binding").textContent).toBe(
+      "試し編集はまだ生成されていません",
+    );
     expect(screen.getByTestId("flags-empty")).toBeVisible();
     expect(screen.queryByTestId("eta")).toBeNull();
     expect(screen.queryByTestId("before-after")).toBeNull();

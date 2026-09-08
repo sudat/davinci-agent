@@ -8,6 +8,11 @@ export type PreviewAvailability = "checking" | "available" | "not_generated";
 type PreviewPlayerProps = {
   episodeId: string;
   state: PreviewAvailability;
+  /** probeが検証したcontent hash。既知ならURLにcontent_hashを付け、
+   *  要素をhashでkeyingする — hashが変わればvideoを実reloadedする
+   *  （前回実行の.encodeをstale再生しない）。null = 不明（旧バックエンド
+   *  等）→ 従来どおりの固定URL。hashは捏造しない。 */
+  contentHash: string | null;
   videoRef: RefObject<HTMLVideoElement | null>;
 };
 
@@ -18,6 +23,7 @@ type PreviewPlayerProps = {
 export default function PreviewPlayer({
   episodeId,
   state,
+  contentHash,
   videoRef,
 }: PreviewPlayerProps) {
   if (state === "checking") {
@@ -39,11 +45,16 @@ export default function PreviewPlayer({
   }
   return (
     <video
+      key={contentHash ?? "unverified"}
       data-testid="preview-player"
       className="video-player"
       controls
       preload="metadata"
-      src={previewUrl(episodeId)}
+      src={
+        contentHash === null
+          ? previewUrl(episodeId)
+          : `${previewUrl(episodeId)}?content_hash=${encodeURIComponent(contentHash)}`
+      }
       ref={videoRef}
     />
   );
