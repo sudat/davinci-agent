@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import EpisodeWaitInfo from "@/components/EpisodeWaitInfo";
 import type { EpisodeStatus } from "@/lib/api";
+import {
+  lastStartedRowOfActiveRun,
+  runningStageRows,
+  stageWorkName,
+} from "@/lib/stageGroups";
 
 /**
  * 工程2Pの10秒必須待機情報（改訂条件5）の成分試験: 経過時間・現在の作業・
@@ -62,7 +67,9 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
       ],
     });
     expect(screen.getByTestId("wait-elapsed").textContent).toContain("00:30");
-    expect(screen.getByTestId("wait-current-work").textContent).toContain("試し編集");
+    expect(screen.getByTestId("wait-current-work").textContent).toContain(
+      "編集指示の具体化",
+    );
     const groups = screen.getByTestId("wait-groups").textContent ?? "";
     expect(groups).toContain("完了済みの段階: 素材の受付と確認・方針の準備");
     expect(groups).toContain("現在の段階: 試し編集");
@@ -165,9 +172,9 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
       ],
     });
     expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("00:20");
-    expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("試し編集");
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain("編集指示の具体化");
     expect(screen.getByTestId("wait-stage-elapsed").textContent).not.toContain("不明");
-    expect(screen.getByTestId("wait-current-work").textContent).toContain("試し編集");
+    expect(screen.getByTestId("wait-current-work").textContent).toContain("編集指示の具体化");
   });
 
   it("複数工程が並行で動くときは推測してまとめず工程ごとに併記する（codex並行指摘）", () => {
@@ -193,10 +200,10 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
       ],
     });
     expect(screen.getByTestId("wait-stage-elapsed").textContent).toBe(
-      "試し編集（compile） 00:20・素材の受付と確認（analyze） 00:10",
+      "編集指示の具体化（compile） 00:20・素材の分析（analyze） 00:10",
     );
     expect(screen.getByTestId("wait-current-work").textContent).toBe(
-      "試し編集・素材の受付と確認",
+      "編集指示の具体化・素材の分析",
     );
   });
 
@@ -272,7 +279,7 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     expect(screen.getByTestId("wait-worker-report").textContent).toContain("最後の作業報告");
   });
 
-  it("今回runの再試行回数を表示する（最大回数は提供されていないと明示）", () => {
+  it("今回runの再試行回数と次動作を表示する（上限・次回失敗時の動作は不明と明示）", () => {
     renderGuidance({
       current_run_retry_count: 2,
       stage_runs: [
@@ -286,7 +293,16 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
       ],
     });
     const retry = screen.getByTestId("wait-retry").textContent ?? "";
-    expect(retry).toBe("再試行中です（2回目・最大回数は提供されていません）：理由 compile-failed");
+    expect(retry).toBe(
+      "再試行中です（2回目・最大回数は提供されていません）：理由 compile-failed。次の動作: 同じ工程の再実行（この経路の上限・次回失敗時の動作は提供されていません）",
+    );
+  });
+
+  it("再試行の次動作は同じ工程の再実行とだけ言い上限・失敗時を捏造しない", () => {
+    renderGuidance({ current_run_retry_count: 2 });
+    const retry = screen.getByTestId("wait-retry").textContent ?? "";
+    expect(retry).toContain("次の動作: 同じ工程の再実行");
+    expect(retry).toContain("この経路の上限・次回失敗時の動作は提供されていません");
   });
 
   it("再試行中表示に捏造した方針数値を含まない（秒数や最大N回を作らない）", () => {
@@ -324,5 +340,106 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     button.click();
     expect(onRequery).toHaveBeenCalledTimes(1);
     view.unmount();
+  });
+
+  it("今回の実行を特定できないとき旧runの開始時刻を表示しない（codex P1回帰）", () => {
+    const oldStarted = new Date(T0.getTime() - 45_000);
+    const overrides: Partial<EpisodeStatus> = {
+      current_run: null,
+      pending_rebuild: {
+        sequence: 1,
+        stage_hint: null,
+        marker: null,
+        run_id: null,
+        target_version: null,
+      },
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "succeeded",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-0",
+          first_started_at: oldStarted.toISOString(),
+        },
+      ],
+    };
+    const status = statusAt(
+      new Date(T0.getTime() - 30_000).toISOString(),
+      overrides,
+    );
+    expect(runningStageRows(status)).toEqual([]);
+    expect(lastStartedRowOfActiveRun(status)).toBeNull();
+    renderGuidance(overrides);
+    const line = screen.getByTestId("wait-stage-elapsed").textContent ?? "";
+    const oldClock = [oldStarted.getHours(), oldStarted.getMinutes(), oldStarted.getSeconds()]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+    expect(line).toBe(
+      "実行中の工程はありません（最後の実行開始 不明（今回の実行を特定できません））",
+    );
+    expect(line).not.toContain(oldClock);
+  });
+
+  it("現行runが既知なら旧runの行に引っ張られず現行runの開始時刻を出す", () => {
+    const oldStarted = new Date(T0.getTime() - 90_000);
+    const activeStarted = new Date(T0.getTime() - 45_000);
+    renderGuidance({
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "failed_blocked",
+          retry_count: 1,
+          last_error_code: "compile-failed",
+          run_id: "run-0",
+          first_started_at: oldStarted.toISOString(),
+        },
+        {
+          stage_name: "compile",
+          status: "failed_blocked",
+          retry_count: 1,
+          last_error_code: "compile-failed",
+          run_id: "run-1",
+          first_started_at: activeStarted.toISOString(),
+        },
+      ],
+    });
+    const activeClock = [
+      activeStarted.getHours(),
+      activeStarted.getMinutes(),
+      activeStarted.getSeconds(),
+    ]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+    const oldClock = [oldStarted.getHours(), oldStarted.getMinutes(), oldStarted.getSeconds()]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+    const line = screen.getByTestId("wait-stage-elapsed").textContent ?? "";
+    expect(line).toBe(`実行中の工程はありません（最後の実行開始 ${activeClock}）`);
+    expect(line).not.toContain(oldClock);
+  });
+
+  it("両欄は同一の作業名語彙を使う（内部工程名は補助表示のみ）", () => {
+    expect(stageWorkName("compile")).toBe("編集指示の具体化");
+    expect(stageWorkName("preview")).toBe("試し映像の作成");
+    expect(stageWorkName("analyze")).toBe("素材の分析");
+    expect(stageWorkName("selection")).toBe("使う場面の選定");
+    renderGuidance({
+      current_stage: "preview",
+      stage_runs: [
+        {
+          stage_name: "preview",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 10_000).toISOString(),
+        },
+      ],
+    });
+    expect(screen.getByTestId("wait-stage-elapsed").textContent).toContain(
+      "試し映像の作成（preview）",
+    );
+    expect(screen.getByTestId("wait-current-work").textContent).toBe("試し映像の作成");
   });
 });

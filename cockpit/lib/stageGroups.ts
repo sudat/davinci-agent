@@ -24,6 +24,37 @@ export function stageGroupOf(stageName: string): string | null {
   return group?.label ?? null;
 }
 
+/** 各工程が実際に行う作業の平易名（待機表示の両欄が共用する単一語彙）。
+ *  導出元（捏造しないための根拠）: ingest=実素材の登録・分類・受入判定
+ *  （real_episode.py ingest_real_episode）、normalize=CFR編集用素材への統一
+ *  （real_chain.py _normalize の cfr30 mezzanine）、analyze=3種の実解析器
+ *  （ASR・対話・映像、real_analyze.py run_real_analyzers）、selection=候補から
+ *  使う場面の選定（real_director.py select_and_reconcile／episode_runner_
+ *  rebuild.py stage_selection の方針下での監督再実行）、plan=構成の決定
+ *  （採用版の確定）、compile=版の計画＋中間表現の実体化（stage_compile
+ *  "Materialize the head version's plan + IR"）、preview=試し映像の再描画・
+ *  再公開（stage_preview "Re-render the review-plane preview"）、
+ *  resolve_build/qc/render=仕上げ（Resolve組み立て・仕上がり確認・本番書き出し、
+ *  Data Plane の Resolve Adapter→Final Render→QC の順）、publish=公開。
+ *  段階ラベル（STAGE_GROUPS）とは別物であり、そちらは変えない。 */
+export const STAGE_WORK_NAMES: Record<string, string> = {
+  ingest: "素材の登録",
+  normalize: "形式の統一",
+  analyze: "素材の分析",
+  selection: "使う場面の選定",
+  plan: "構成の決定",
+  compile: "編集指示の具体化",
+  preview: "試し映像の作成",
+  resolve_build: "本番編集の組み立て",
+  qc: "仕上がりの確認",
+  render: "本番映像の書き出し",
+  publish: "公開",
+};
+
+export function stageWorkName(stageName: string): string {
+  return STAGE_WORK_NAMES[stageName] ?? stageName;
+}
+
 export type GroupProgress = "done" | "current" | "failed" | "untouched";
 
 export const GROUP_PROGRESS_LABEL: Record<GroupProgress, string> = {
@@ -81,12 +112,15 @@ export function runningStageRows(status: EpisodeStatus): StageRunRow[] {
 
 /** 停止/終端時の時計の意味を固定する源: 現行runの行のうち first_started_at
  * が実在する最後の行（行は時系列追記）。停止後の表示は成長する経過ではなく
- * 実測の開始時刻そのもの（最後の実行開始）とする。 */
+ * 実測の開始時刻そのもの（最後の実行開始）とする。現行runを特定できない
+ * （active null: 未起動の予約のみ等）ときは行を選ばない — 旧runの開始時刻を
+ * 今回の実行開始として表示してはならない。呼び出し側は明示の不明表示にする。 */
 export function lastStartedRowOfActiveRun(status: EpisodeStatus): StageRunRow | null {
   const active = activeRunId(status);
+  if (active === null) return null;
   let last: StageRunRow | null = null;
   for (const row of status.stage_runs) {
-    if (active !== null && row.run_id !== active) continue;
+    if (row.run_id !== active) continue;
     if (!Number.isNaN(Date.parse(row.first_started_at ?? ""))) last = row;
   }
   return last;

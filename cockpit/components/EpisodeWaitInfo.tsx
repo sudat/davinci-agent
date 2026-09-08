@@ -3,12 +3,13 @@
 import { useRef } from "react";
 import type { EpisodeStatus } from "@/lib/api";
 import {
+  activeRunId,
   formatElapsed,
   groupProgress,
   lastStartedRowOfActiveRun,
   perStageLatestRows,
   runningStageRows,
-  stageGroupOf,
+  stageWorkName,
   STAGE_GROUPS,
 } from "@/lib/stageGroups";
 import { useNow } from "@/components/useNow";
@@ -128,25 +129,26 @@ export default function EpisodeWaitInfo({
       : formatElapsed(now - Math.min(...stamps));
   }
   // 停止/終端時は成長する経過を捏造しない: 現行runに開始時刻付きの行が
-  // あれば、その実測時刻を「最後の実行開始」として固定表示する。
+  // あれば、その実測時刻を「最後の実行開始」として固定表示する。現行runを
+  // 特定できない（未起動の予約のみ等）ときは旧runの時刻を使わず、今回の
+  // 実行を特定できない旨を明示する（旧run時刻の誤表示の回帰対策）。
   const lastStarted = lastStartedRowOfActiveRun(status);
   const stoppedStageElapsed =
-    lastStarted === null || lastStarted.first_started_at === undefined
-      ? "実行中の工程はありません"
-      : `実行中の工程はありません（最後の実行開始 ${clockOf(lastStarted.first_started_at)}）`;
+    activeRunId(status) === null
+      ? "実行中の工程はありません（最後の実行開始 不明（今回の実行を特定できません））"
+      : lastStarted === null || lastStarted.first_started_at === undefined
+        ? "実行中の工程はありません"
+        : `実行中の工程はありません（最後の実行開始 ${clockOf(lastStarted.first_started_at)}）`;
   const stageElapsedLine =
     runningStageNames.length === 0
       ? stoppedStageElapsed
       : runningStageNames
-          .map((name) => {
-            const group = stageGroupOf(name);
-            return `${group === null ? name : `${group}（${name}）`} ${stageElapsedText(name)}`;
-          })
+          .map((name) => `${stageWorkName(name)}（${name}） ${stageElapsedText(name)}`)
           .join("・");
   const currentWork =
     runningStageNames.length > 0
-      ? runningStageNames.map((name) => stageGroupOf(name) ?? name).join("・")
-      : `${stageGroupOf(status.current_stage) ?? status.current_stage}（実行中の工程なし）`;
+      ? runningStageNames.map((name) => stageWorkName(name)).join("・")
+      : `${stageWorkName(status.current_stage)}（実行中の工程なし）`;
   const retryCount = status.current_run_retry_count;
   const retryReason =
     status.stage_runs.find(
@@ -205,10 +207,13 @@ export default function EpisodeWaitInfo({
         <p className="field-hint" data-testid="wait-worker-report">
           {reportLine(status)}
         </p>
+        {/* 再試行の次動作は実コードの意味だけ書く: stage_runner.py _attempts
+            は同一工程の runner_fn を attempt+1 で再実行し（上限 max_attempts・
+            次回失敗時の動作は payload に無い）、失敗終端は failed_blocked 停止
+            →再照会/rebuild の運用者主導回復（自動の次動作なし）。数値は作らない。 */}
         {typeof retryCount === "number" && retryCount > 0 ? (
           <p className="field-hint" data-testid="wait-retry">
-            再試行中です（{retryCount}回目・最大回数は提供されていません）
-            {retryReason !== null ? `：理由 ${retryReason}` : ""}
+            {`再試行中です（${retryCount}回目・最大回数は提供されていません）${retryReason !== null ? `：理由 ${retryReason}` : ""}。次の動作: 同じ工程の再実行（この経路の上限・次回失敗時の動作は提供されていません）`}
           </p>
         ) : null}
         {failedGroups.length > 0 ? (
