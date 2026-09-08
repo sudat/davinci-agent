@@ -4,6 +4,7 @@ import {
   CockpitApiError,
   createEpisode,
   getEpisodeStatus,
+  probeEpisodePreview,
 } from "@/lib/api";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -163,5 +164,110 @@ describe("getEpisodeStatus", () => {
     const apiError = cause as CockpitApiError;
     expect(apiError.code).toBe("job-not-found");
     expect(apiError.status).toBe(404);
+  });
+});
+
+describe("probeEpisodePreview（試し編集probeの正規化）", () => {
+  const bindingHeaders = {
+    "content-type": "video/mp4",
+    "x-cockpit-preview-run-id": "run-20260909-a",
+    "x-cockpit-preview-target-version": "v7",
+    "x-cockpit-preview-content-sha256": "c".repeat(64),
+    "x-cockpit-preview-output-arrived-at": "2026-09-09T01:02:03+00:00",
+  };
+
+  it("206+全ヘッダ → available true と4欄を正規化する（2-byte Range probe）", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 206, headers: bindingHeaders }));
+    const probe = await probeEpisodePreview("ep-1", fetchImpl as unknown as typeof fetch);
+    expect(probe).toEqual({
+      available: true,
+      run_id: "run-20260909-a",
+      target_version: "v7",
+      content_hash: "c".repeat(64),
+      output_arrived_at: "2026-09-09T01:02:03+00:00",
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/cockpit-api/episodes/ep-1/preview");
+    expect(init.headers).toMatchObject({ range: "bytes=0-1" });
+  });
+
+  it("200でも正規化できる（Rangeを無視するバックエンド）", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 200, headers: bindingHeaders }));
+    const probe = await probeEpisodePreview("ep-1", fetchImpl as unknown as typeof fetch);
+    expect(probe.available).toBe(true);
+    expect(probe.run_id).toBe("run-20260909-a");
+    expect(probe.target_version).toBe("v7");
+  });
+
+  it("ヘッダが一部欠け → 欠けた欄だけ null（推測しない）", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 206,
+        headers: {
+          "x-cockpit-preview-run-id": "run-1",
+          "x-cockpit-preview-content-sha256": "abc",
+        },
+      }),
+    );
+    const probe = await probeEpisodePreview("ep-1", fetchImpl as unknown as typeof fetch);
+    expect(probe).toEqual({
+      available: true,
+      run_id: "run-1",
+      target_version: null,
+      content_hash: "abc",
+      output_arrived_at: null,
+    });
+  });
+
+  it("旧バックエンド（ヘッダなしの200）→ available true・全欄 null（下流は不明として扱う）", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const probe = await probeEpisodePreview("ep-1", fetchImpl as unknown as typeof fetch);
+    expect(probe).toEqual({
+      available: true,
+      run_id: null,
+      target_version: null,
+      content_hash: null,
+      output_arrived_at: null,
+    });
+  });
+
+  it("404 → available false・全欄 null（未生成）", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+    const probe = await probeEpisodePreview("ep-1", fetchImpl as unknown as typeof fetch);
+    expect(probe).toEqual({
+      available: false,
+      run_id: null,
+      target_version: null,
+      content_hash: null,
+      output_arrived_at: null,
+    });
+  });
+
+  it("404以外のHTTPエラーは throw する（not_generated に偽装しない）", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
+    const cause = await probeEpisodePreview(
+      "ep-1",
+      fetchImpl as unknown as typeof fetch,
+    ).catch((error: unknown) => error);
+    expect(cause).toBeInstanceOf(CockpitApiError);
+    const apiError = cause as CockpitApiError;
+    expect(apiError.code).toBe("http-500");
+    expect(apiError.status).toBe(500);
+  });
+
+  it("ネットワーク断は network-error で throw する", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    const cause = await probeEpisodePreview(
+      "ep-1",
+      fetchImpl as unknown as typeof fetch,
+    ).catch((error: unknown) => error);
+    expect(cause).toBeInstanceOf(CockpitApiError);
+    expect((cause as CockpitApiError).code).toBe("network-error");
   });
 });

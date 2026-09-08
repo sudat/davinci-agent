@@ -172,13 +172,36 @@ export function previewUrl(episodeId: string): string {
   return `${apiBase()}/episodes/${encodeURIComponent(episodeId)}/preview`;
 }
 
+/** One preview probe result. The run/version binding comes ONLY from the
+ *  X-Cockpit-Preview-* response headers — a missing header stays null and
+ *  downstream renders it as 不明, never guessed. Old backends serve the
+ *  video without the headers → available=true with all-null fields. */
+export type EpisodePreviewProbe = {
+  available: boolean;
+  run_id: string | null;
+  target_version: string | null;
+  content_hash: string | null;
+  output_arrived_at: string | null;
+};
+
+/** Header value, or null when the header is absent/empty. An empty header
+ *  carries no identity — reporting "" as a value would fabricate a binding. */
+function headerOrNull(response: Response, name: string): string | null {
+  const value = response.headers.get(name);
+  return value === null || value === "" ? null : value;
+}
+
 /** Probe GET /episodes/{id}/preview with a 2-byte Range request (the
- *  FastAPI route answers 405 to HEAD): 2xx → file exists; anything else →
- *  not generated (episode existence is already known from status). */
+ *  FastAPI route answers 405 to HEAD). 200/206 → the file exists; the
+ *  X-Cockpit-Preview-* headers carry the run/version binding (missing
+ *  header → null). 404 → not generated (episode existence is already
+ *  known from status). ANY other status — and network failure — THROWS:
+ *  a probe outage must reach the UI as 確認できません (probe_failed),
+ *  never silently as not_generated. */
 export async function probeEpisodePreview(
   episodeId: string,
   fetchImpl: FetchLike = fetch,
-): Promise<boolean> {
+): Promise<EpisodePreviewProbe> {
   let response: Response;
   try {
     response = await fetchImpl(previewUrl(episodeId), {
@@ -192,5 +215,27 @@ export async function probeEpisodePreview(
       `バックエンドに接続できません: ${String(cause)}`,
     );
   }
-  return response.ok;
+  if (response.status === 404) {
+    return {
+      available: false,
+      run_id: null,
+      target_version: null,
+      content_hash: null,
+      output_arrived_at: null,
+    };
+  }
+  if (response.status !== 200 && response.status !== 206) {
+    throw new CockpitApiError(
+      `http-${response.status}`,
+      response.status,
+      "試し編集の有無を確認できませんでした",
+    );
+  }
+  return {
+    available: true,
+    run_id: headerOrNull(response, "X-Cockpit-Preview-Run-Id"),
+    target_version: headerOrNull(response, "X-Cockpit-Preview-Target-Version"),
+    content_hash: headerOrNull(response, "X-Cockpit-Preview-Content-SHA256"),
+    output_arrived_at: headerOrNull(response, "X-Cockpit-Preview-Output-Arrived-At"),
+  };
 }
