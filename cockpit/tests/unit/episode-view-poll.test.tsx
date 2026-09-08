@@ -109,6 +109,56 @@ describe("EpisodeView poll hardening（工程2P）", () => {
     expect(screen.queryByTestId("error-notice")).toBeNull();
   });
 
+  it("途切れbannerは最終取得時刻（時計+経過）を表示する", async () => {
+    let failing = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
+      if (url.endsWith("/preview")) return Promise.resolve(preview404());
+      if (url.endsWith("/consultation")) return Promise.resolve(consultationOk());
+      if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
+      if (failing) return Promise.reject(new TypeError("network down"));
+      return Promise.resolve(okStatus(1));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<EpisodeView episodeId="ep-poll01" />);
+    await vi.advanceTimersByTimeAsync(0);
+    const lastFetchAt = Date.now();
+
+    failing = true;
+    await vi.advanceTimersByTimeAsync(16000);
+    const line = screen.getByTestId("stale-last-fetch");
+    const at = new Date(lastFetchAt);
+    const expectedClock = [at.getHours(), at.getMinutes(), at.getSeconds()]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
+    expect(line.textContent).toBe(`最終取得 ${expectedClock}（00:16前）`);
+
+    failing = false;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(screen.queryByTestId("stale-last-fetch")).toBeNull();
+  });
+
+  it("一度も取得成功がない場合は最終取得を正直に「不明」と出す（開始時計で代用しない）", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
+      if (url.endsWith("/preview")) return Promise.resolve(preview404());
+      if (url.endsWith("/consultation")) return Promise.resolve(consultationOk());
+      if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
+      return Promise.reject(new TypeError("network down"));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<EpisodeView episodeId="ep-poll01" />);
+    await vi.advanceTimersByTimeAsync(16000);
+    expect(screen.getByTestId("stale-banner")).toBeTruthy();
+    expect(screen.getByTestId("stale-last-fetch").textContent).toBe(
+      "最終取得 不明（一度も成功していません）",
+    );
+  });
+
   it("focusとvisibilitychangeで即時再照会する（次の2秒tickを待たない）", async () => {
     let statusCalls = 0;
     const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {

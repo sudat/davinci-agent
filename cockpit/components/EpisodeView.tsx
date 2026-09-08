@@ -20,7 +20,7 @@ import FinishingDomainPanel from "@/components/FinishingDomainPanel";
 import ConsultationPanel from "@/components/ConsultationPanel";
 import ReviewChatPanel from "@/components/ReviewChatPanel";
 import { useNow } from "@/components/useNow";
-import { jobStatusSuffix } from "@/lib/stageGroups";
+import { jobStatusSuffix, formatElapsed } from "@/lib/stageGroups";
 
 const POLL_INTERVAL_MS = 2000;
 const STALE_AFTER_MS = 15000;
@@ -28,6 +28,13 @@ const STALE_AFTER_MS = 15000;
 type EpisodeViewProps = {
   episodeId: string;
 };
+
+function clockOfEpoch(ms: number): string {
+  const at = new Date(ms);
+  return [at.getHours(), at.getMinutes(), at.getSeconds()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
 
 /**
  * Episode status view: polling progress (ETA only when measured), preview
@@ -37,7 +44,8 @@ type EpisodeViewProps = {
  * 工程2P poll hardening: every successful status fetch records `fetchedAt`
  * (the 状態取得時刻); failures keep polling but never refresh it. 15s
  * without a successful fetch shows the dedicated 途切れ banner (distinct
- * from the error notice, cleared on recovery) with 再照会. The aux
+ * from the error notice, cleared on recovery) with the 最終取得時刻
+ * (unknown-honest when no fetch ever succeeded) and 再照会. The aux
  * fetches (flags / preview probe) are fire-and-track: they must never
  * delay the next poll schedule (codex条件6). visibilitychange/focus
  * trigger an immediate requery.
@@ -131,6 +139,11 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       {stale ? (
         <div className="card" data-testid="stale-banner">
           <p>状態の更新が途切れています（再接続中）</p>
+          <p className="field-hint" data-testid="stale-last-fetch">
+            {fetchedAt !== null
+              ? `最終取得 ${clockOfEpoch(fetchedAt)}（${formatElapsed(now - fetchedAt)}前）`
+              : "最終取得 不明（一度も成功していません）"}
+          </p>
           <p className="field-hint">安全な中止は未実装です。</p>
           <button
             type="button"
