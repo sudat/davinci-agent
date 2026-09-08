@@ -440,4 +440,138 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
       "確認できません（試し編集の情報を取得できません）",
     );
   });
+
+  it("probe失敗でもvideo要素・src・再生位置を保持し、今回claimだけ落とす（previewOkはnullへ）", async () => {
+    let preview = previewResponse(206, probeHeaders("run-new", "v2"));
+    let seq = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
+      if (url.endsWith("/preview")) return Promise.resolve(preview);
+      if (url.endsWith("/review-chat/apply")) {
+        return Promise.resolve(
+          jsonResponse(url, 200, {
+            applied: BINDING_APPLIED,
+            rebuild: BINDING_REBUILD_PLAN,
+          }),
+        );
+      }
+      if (url.endsWith("/review-chat")) {
+        return Promise.resolve(
+          jsonResponse(url, 200, { received: true, sequence: 1, draft: BINDING_DRAFT }),
+        );
+      }
+      if (url.endsWith("/rebuild")) {
+        return Promise.resolve(jsonResponse(url, 202, BINDING_REBUILD_SCHEDULED));
+      }
+      if (url.endsWith("/consultation")) {
+        return Promise.resolve(consultationOk());
+      }
+      if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
+      seq += 1;
+      return Promise.resolve(
+        jsonResponse(url, 200, bindingStatusPayload(seq, "run-new", "v2")),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<EpisodeView episodeId="ep-bind01" />);
+    await flushAux();
+    const before = screen.getByTestId("preview-player") as HTMLVideoElement;
+    expect(before.getAttribute("src")).toBe(
+      "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-new-v2",
+    );
+
+    // previewOk=true を rebuild-phase（done）で確定させる
+    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+      target: { value: "この後2秒残して" },
+    });
+    fireEvent.click(screen.getByTestId("review-chat-send"));
+    await flushAux();
+    fireEvent.click(screen.getByTestId("review-apply-button"));
+    await flushAux();
+    expect(screen.getByTestId("rebuild-phase").textContent).toBe(
+      "再build完了（試し編集の更新を確認済み）",
+    );
+
+    // 再生中の位置を付けてから次のpollのprobeを失敗させる
+    before.currentTime = 42.5;
+    preview = previewResponse(500, {});
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
+
+    // 同一DOM要素・同一src・再生位置を保持し、今回claimだけ落とす
+    const after = screen.getByTestId("preview-player") as HTMLVideoElement;
+    expect(after).toBe(before);
+    expect(after.getAttribute("src")).toBe(
+      "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-new-v2",
+    );
+    expect(after.currentTime).toBeCloseTo(42.5, 5);
+    expect(screen.getByTestId("preview-binding").textContent).toBe(
+      "確認できません（試し編集の情報を取得できません）",
+    );
+    expect(screen.getByTestId("rebuild-phase").textContent).toBe(
+      "試し編集完了・確認してください",
+    );
+  });
+
+  it("回復時は同hashで要素を維持し、別hashでは正当に作り直す（stale再生をしない）", async () => {
+    let preview = previewResponse(206, probeHeaders("run-new", "v2"));
+    let seq = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
+      if (url.endsWith("/preview")) return Promise.resolve(preview);
+      if (url.endsWith("/consultation")) {
+        return Promise.resolve(consultationOk());
+      }
+      if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
+      seq += 1;
+      return Promise.resolve(
+        jsonResponse(url, 200, bindingStatusPayload(seq, "run-new", "v2")),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<EpisodeView episodeId="ep-bind01" />);
+    await flushAux();
+    const first = screen.getByTestId("preview-player") as HTMLVideoElement;
+    expect(first.getAttribute("src")).toBe(
+      "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-new-v2",
+    );
+    first.currentTime = 10;
+
+    // 失敗 → 同一要素を保持
+    preview = previewResponse(500, {});
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
+    expect(screen.getByTestId("preview-player")).toBe(first);
+    expect((screen.getByTestId("preview-player") as HTMLVideoElement).currentTime).toBeCloseTo(
+      10,
+      5,
+    );
+
+    // 同hashで回復 → 依然同一要素、binding行も復帰
+    preview = previewResponse(206, probeHeaders("run-new", "v2"));
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
+    const recovered = screen.getByTestId("preview-player") as HTMLVideoElement;
+    expect(recovered).toBe(first);
+    expect(recovered.getAttribute("src")).toBe(
+      "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-new-v2",
+    );
+    expect(screen.getByTestId("preview-binding").textContent).toBe(
+      "今回の実行の試し編集です（対象版 v2）",
+    );
+
+    // 別hash（新しい試し編集）→ 正当に作り直す
+    preview = previewResponse(206, probeHeaders("run-next", "v3"));
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
+    const rekeyed = screen.getByTestId("preview-player") as HTMLVideoElement;
+    expect(rekeyed).not.toBe(first);
+    expect(rekeyed.getAttribute("src")).toBe(
+      "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-next-v3",
+    );
+  });
 });

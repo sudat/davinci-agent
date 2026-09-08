@@ -11,7 +11,9 @@ type PreviewPlayerProps = {
   /** probeが検証したcontent hash。既知ならURLにcontent_hashを付け、
    *  要素をhashでkeyingする — hashが変わればvideoを実reloadedする
    *  （前回実行の.encodeをstale再生しない）。null = 不明（旧バックエンド
-   *  等）→ 従来どおりの固定URL。hashは捏造しない。 */
+   *  等）→ 従来どおりの固定URL。hashは捏造しない。呼び出し側はprobe失敗
+   *  時にnullへ戻さず最後の再生可能hashを渡し続ける — key/srcが変わると
+   *  video要素が作り直され再生位置を失う。 */
   contentHash: string | null;
   videoRef: RefObject<HTMLVideoElement | null>;
 };

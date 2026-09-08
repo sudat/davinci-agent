@@ -71,6 +71,11 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const [probeObservation, setProbeObservation] = useState<PreviewProbeObservation | null>(
     null,
   );
+  /** 最後にprobe成功で得た再生可能なcontent hash。probe失敗時はこのhashを
+   *  playerへ渡し続ける — video要素の作り直し（再生位置消失）を防ぐ。
+   *  今回の対応claim（binding行/previewOk）はprobeObservationのまま即座に
+   *  落とす。成功時の既知値のみ記録し、hashは捏造しない。 */
+  const [playableHash, setPlayableHash] = useState<string | null>(null);
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -99,6 +104,12 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         if (previewResult.status === "fulfilled") {
           setProbeObservation({ kind: "probed", probe: previewResult.value });
           setPlayerState(previewResult.value.available ? "available" : "not_generated");
+          if (
+            previewResult.value.available &&
+            previewResult.value.content_hash !== null
+          ) {
+            setPlayableHash(previewResult.value.content_hash);
+          }
         } else {
           // probe失敗は専用状態（確認できません）。直前の再生可能videoは
           // 消さず、binding行とpreviewOkだけ即座に今回claimを落とす。
@@ -154,8 +165,11 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
   const binding = derivePreviewBinding(probeObservation, status);
   const previewOk = previewAllowsCompletion(binding);
+  // 再生hashは最後の再生可能値を保持する: probe成功時は今回のhash（不明な
+  // らnullのまま）、probe失敗時は直前の再生可能hash — playerのkey/srcを
+  // 変えずvideo要素を作り直さない。未取得の失敗時はnull（固定URL）のまま。
   const probedHash =
-    probeObservation?.kind === "probed" ? probeObservation.probe.content_hash : null;
+    probeObservation?.kind === "probed" ? probeObservation.probe.content_hash : playableHash;
 
   return (
     <div>
