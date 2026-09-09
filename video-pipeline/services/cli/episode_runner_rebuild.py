@@ -1014,9 +1014,23 @@ def _execute(  # noqa: PLR0913 (re-entry wiring: store/ctx/root/stages + reserva
     *,
     reservation_sequence: int | None = None,
     job_status: str | None = None,
-) -> None:
+    defer_terminal_success: bool = False,
+) -> tuple[str, str] | None:
+    """Run the re-entry stages; returns the deferred terminal (stage, adopted).
+
+    When ``defer_terminal_success`` is set, the FINAL executed stage's work
+    still runs (render + publish included) but its ``succeeded`` row + log
+    line are NOT recorded here — the (stage, adopted) pair is returned so
+    the caller can record it only AFTER durably writing the
+    rebuild-metrics record (metrics-before-completion: the observable
+    完了 state must never precede its recorded evidence). Failures behave
+    as before (the frontier is blocked, the exception propagates, nothing
+    is deferred). Without deferral (or with no executed stages) returns
+    None.
+    """
     carried = ReentryState()
-    for stage in stages.executed:
+    last_index = len(stages.executed) - 1
+    for index, stage in enumerate(stages.executed):
         record_stage(store, ctx, stage, "running")
         log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="running")
         try:
@@ -1036,8 +1050,11 @@ def _execute(  # noqa: PLR0913 (re-entry wiring: store/ctx/root/stages + reserva
                 status="failed_blocked", code=error.code,
             )
             raise
+        if defer_terminal_success and index == last_index:
+            return stage, adopted
         record_stage(store, ctx, stage, "succeeded", adopted=adopted)
         log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="succeeded")
+    return None
 
 
 def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/state/log + run/reservation/preview binding)
@@ -1132,7 +1149,17 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
 
 
 def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log: BinaryIO) -> int:
-    """Execute one validated --from-stage re-entry; returns the exit code."""
+    """Execute one validated --from-stage re-entry; returns the exit code.
+
+    Metrics-before-completion: the rebuild-metrics record is durably
+    appended BEFORE the terminal preview ``succeeded`` row (the state
+    transition that surfaces the observable 再build完了) is recorded, so
+    no poll can ever observe 完了 without its recorded evidence.
+    ``wall_seconds`` covers the stage execution itself — measured up to
+    the metrics write, excluding only the terminal bookkeeping row/log
+    writes that follow it (the metrics write itself is likewise excluded,
+    since writing it first is the whole point).
+    """
 
     from services.cli.episode_runner import EXIT_SUCCESS  # noqa: PLC0415 (avoids import cycle)
 
@@ -1154,17 +1181,25 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
             f"rebuild re-entry needs {REQUIRED_STATUS}, job is at {snapshot.job.status}",
         )
     started = time.monotonic()
-    _execute(
+    deferred = _execute(
         store,
         ctx,
         call.episode_root,
         stages,
         reservation_sequence=call.reservation_sequence,
         job_status=snapshot.job.status,
+        defer_terminal_success=True,
     )
     wall = time.monotonic() - started
     if call.applied_command is not None:
         _append_metric(call.episode_root, call.applied_command, stages, wall)
+    if deferred is not None:
+        terminal_stage, terminal_adopted = deferred
+        record_stage(store, ctx, terminal_stage, "succeeded", adopted=terminal_adopted)
+        log_event(
+            log, "rebuild_stage", run_id=ctx.run_id, stage=terminal_stage,
+            status="succeeded",
+        )
     log_event(
         log, "rebuild_finished", run_id=ctx.run_id,
         stages=list(stages.executed), wall_seconds=round(wall, 3),

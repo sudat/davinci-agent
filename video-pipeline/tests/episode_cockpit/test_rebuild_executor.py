@@ -59,6 +59,7 @@ from services.review_command.store import HeadState, load_head
 if TYPE_CHECKING:
     from typing import BinaryIO
 
+    from services.cli.episode_runner_state import RunContext
     from services.contracts.timeline_ir import TimelineIr0C
 
 
@@ -403,6 +404,84 @@ def test_remove_section_rebuild_executes_stop_bounded_lineage(
     skipped = [event for event in events if event["event"] == "rebuild_stage_skipped"]
     assert [event["stage"] for event in skipped] == ["resolve_build", "qc", "render"]
     _assert_publish_events(episode_dir, events)
+
+
+# ---------------------------------------------------------------------------
+# (a3) metrics-before-completion invariant (live-lane ordering fix): the
+#      rebuild-metrics.jsonl record must be durably written BEFORE the
+#      terminal preview ``succeeded`` row — the state transition behind the
+#      observable 再build完了. A status poll landing between those two
+#      writes would otherwise observe 完了 with no recorded evidence.
+# ---------------------------------------------------------------------------
+
+
+def test_rebuild_metrics_written_before_terminal_preview_success(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """INVARIANT metrics-before-completion: metrics file precedes 完了 state.
+
+    When the terminal preview ``succeeded`` stage row is recorded, the
+    rebuild-metrics.jsonl record for this run's applied command must
+    already exist. Fails on the old write order (metrics appended after
+    the terminal row); passes with the deferred-terminal-success order
+    in ``run_reentry``.
+    """
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                     monkeypatch)
+    applied = _apply_remove(client, episode_id)
+    command_id = str(applied["command_id"])
+    monkeypatch.setattr(episode_runner_rebuild, "stage_preview", _fake_stage_preview)
+    real_record_stage = episode_runner_rebuild.record_stage
+    terminal_checks: list[bool] = []
+    # Collected (not raised) inside the spy: episode_runner.run swallows
+    # any stage-recording exception into runner_crashed/EXIT_BLOCKED, so a
+    # raise here would surface only as an exit-code mismatch. Assert after.
+    violations: list[str] = []
+
+    def spying_record_stage(
+        store: StateStore, ctx: RunContext, stage: str, status: str, **kwargs: object
+    ) -> None:
+        if stage == "preview" and status == "succeeded":
+            terminal_checks.append(True)
+            try:
+                raw_lines = (episode_dir / "rebuild-metrics.jsonl").read_bytes().splitlines()
+            except OSError:
+                raw_lines = []
+            if not any(
+                json.loads(line).get("applied_command") == command_id
+                for line in raw_lines if line.strip()
+            ):
+                violations.append(command_id)
+        real_record_stage(store, ctx, stage, status, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(episode_runner_rebuild, "record_stage", spying_record_stage)
+    exit_code = _locked_reentry_run(
+        episode_dir,
+        state_store_path=workspace["state_store"],
+        from_stage="plan",
+        applied_command=command_id,
+    )
+
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    assert terminal_checks, "the terminal preview succeeded row was never recorded"
+    assert not violations, (
+        "INVARIANT metrics-before-completion violated: the terminal "
+        "preview succeeded row was recorded before rebuild-metrics.jsonl "
+        f"contained {command_id}"
+    )
+    metric_lines = (episode_dir / "rebuild-metrics.jsonl").read_bytes().splitlines()
+    assert len(metric_lines) == 1
+    assert json.loads(metric_lines[0])["applied_command"] == command_id
+    with StateStore.open(workspace["state_store"]) as store:
+        preview_rows = [
+            run for run in store.get_job_snapshot(episode_id).stage_runs
+            if run.stage_name == "preview" and run.status == "succeeded"
+        ]
+    assert len(preview_rows) == 2
+    assert all(run.first_output_arrived_at is not None for run in preview_rows)
 
 
 # ---------------------------------------------------------------------------
