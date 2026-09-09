@@ -82,9 +82,9 @@ def _fake_chain_factory(
 ) -> Callable[..., None]:
     """Build a fake chain driving the chain's own StateStore store to PREVIEW_READY."""
 
-    def fake_chain(
+    def fake_chain(  # noqa: PLR0913 (mirrors the run_real_chain seam)
         episode_root: Path, stop: str, out_dir: Path, *, env: dict[str, str] | None = None,
-        policy_path: Path | None = None,
+        policy_path: Path | None = None, editorial_runtime: Path | None = None,
     ) -> None:
         captured["env"] = dict(env or {})
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -416,7 +416,8 @@ CRASH_BOOTSTRAP = textwrap.dedent(
     from services.job_runner.cas import apply_transition, current_job_state
     from services.job_runner.state_store import StateStore
 
-    def crashing_chain(episode_root, stop, out_dir, *, env=None, policy_path=None):
+    def crashing_chain(episode_root, stop, out_dir, *, env=None, policy_path=None,
+                       editorial_runtime=None):
         out_dir.mkdir(parents=True, exist_ok=True)
         with StateStore.open(out_dir / "state.sqlite3") as chain:
             chain.create_job(job_id="job-real-episode-run",
@@ -500,9 +501,10 @@ def test_typed_chain_error_blocks_running_frontier(
 ) -> None:
     monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
 
-    def failing_chain(
+    def failing_chain(  # noqa: PLR0913 (mirrors the run_real_chain seam)
         episode_root: Path, stop: str, out_dir: Path, *,
         env: dict[str, str] | None = None, policy_path: Path | None = None,
+        editorial_runtime: Path | None = None,
     ) -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
         with StateStore.open(out_dir / "state.sqlite3") as chain:

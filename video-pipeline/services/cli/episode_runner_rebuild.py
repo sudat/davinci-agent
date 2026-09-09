@@ -479,6 +479,17 @@ def _connected_outcome(  # noqa: PLR0913 (outcome evidence contract; kwargs are 
     )
 
 
+def _director_interpretable(env: dict[str, str], runtime_path: Path | None) -> bool:
+    """Whether the resolved director path can interpret an adopted policy.
+
+    The deterministic-baseline director cannot (honest typed refusal
+    upstream); both live paths (metered openai-api, flat-rate codex-exec)
+    can. The resolved editorial runtime decides — never the key alone.
+    """
+
+    return director_mode(env, runtime_path) != "deterministic-baseline"
+
+
 def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: pin/budget/director/derive/commit checkpoints in one stage fn)
     episode_root: Path,
     log: BinaryIO,
@@ -488,6 +499,7 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
     run_id: str | None = None,
     job_status: str | None = None,
     deadline_monotonic: float | None = None,
+    runtime_path: Path | None = None,
 ) -> str:
     """Re-run the director under the adopted policy; commit a new version.
 
@@ -591,7 +603,7 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
             "重複利用を避けて再実行を止めました。",
         )
     stage_plan(episode_root)
-    if director_mode(dict(os.environ)) == "deterministic-baseline":
+    if not _director_interpretable(dict(os.environ), runtime_path):
         reason = "編集長が決定論化モードのため方針を解釈できませんでした"
         _failed_outcome(
             episode_root, policy, (reason,),
@@ -627,7 +639,7 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
     director_started = time.monotonic()
     try:
         rerun = episode_runner_selection.rerun_director_with_policy(
-            episode_root, policy, dict(os.environ)
+            episode_root, policy, dict(os.environ), runtime_path
         )
     except episode_runner_selection.SelectionRerunError as error:
         if attempt is not None:
@@ -1029,6 +1041,7 @@ def _execute(  # noqa: PLR0913 (re-entry wiring: store/ctx/root/stages + reserva
     reservation_sequence: int | None = None,
     job_status: str | None = None,
     defer_terminal_success: bool = False,
+    editorial_runtime: Path | None = None,
 ) -> tuple[str, str] | None:
     """Run the re-entry stages; returns the deferred terminal (stage, adopted).
 
@@ -1056,6 +1069,7 @@ def _execute(  # noqa: PLR0913 (re-entry wiring: store/ctx/root/stages + reserva
                 run_id=ctx.run_id,
                 reservation_sequence=reservation_sequence,
                 job_status=job_status,
+                editorial_runtime=editorial_runtime,
             )
         except RebuildStageError as error:
             block_stage(store, ctx, stage, error.code)
@@ -1080,6 +1094,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
     run_id: str,
     reservation_sequence: int | None = None,
     job_status: str | None = None,
+    editorial_runtime: Path | None = None,
 ) -> str:
     """One re-entry stage against the carried state; returns its adopted hash.
 
@@ -1129,6 +1144,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
                 run_id=run_id,
                 job_status=job_status,
                 deadline_monotonic=deadline,
+                runtime_path=editorial_runtime,
             )
         else:
             policy = latest_adopted_policy(episode_root)
@@ -1138,7 +1154,9 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
                     "selection re-entry needs an adopted consultation policy; "
                     "none is on the table",
                 )
-            adopted = stage_selection(episode_root, log, policy=policy)
+            adopted = stage_selection(
+                episode_root, log, policy=policy, runtime_path=editorial_runtime
+            )
         carried.head = stage_plan(episode_root)
         carried.plan = None
         carried.ir = None
@@ -1213,6 +1231,7 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
         reservation_sequence=call.reservation_sequence,
         job_status=snapshot.job.status,
         defer_terminal_success=True,
+        editorial_runtime=call.editorial_runtime,
     )
     wall = time.monotonic() - started
     if call.applied_command is not None:

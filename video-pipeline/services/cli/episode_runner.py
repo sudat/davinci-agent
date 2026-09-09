@@ -196,7 +196,11 @@ def _catch_up(store: StateStore, ctx: RunContext, chain_state: Path) -> None:
 
 
 def _advance_chain(
-    store: StateStore, ctx: RunContext, episode_root: Path, chain_env: dict[str, str]
+    store: StateStore,
+    ctx: RunContext,
+    episode_root: Path,
+    chain_env: dict[str, str],
+    editorial_runtime: Path | None = None,
 ) -> None:
     """Run the real chain under the live mirror; settle state on any outcome."""
 
@@ -207,7 +211,13 @@ def _advance_chain(
     )
     watcher.start()
     try:
-        run_real_chain(episode_root, ctx.stop, episode_root / RUN_DIR_NAME, env=chain_env)
+        run_real_chain(
+            episode_root,
+            ctx.stop,
+            episode_root / RUN_DIR_NAME,
+            env=chain_env,
+            editorial_runtime=editorial_runtime,
+        )
     except RealChainError as error:
         stop_event.set()
         watcher.join(timeout=10)
@@ -344,7 +354,7 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
             raise RunnerBlockedError(error.code, error.detail) from error
         log_event(log, "chain_manifest_written", run_id=run_id, video=str(video))
         record_stage(store, ctx, "ingest", "running")
-        _advance_chain(store, ctx, call.episode_root, chain_env)
+        _advance_chain(store, ctx, call.episode_root, chain_env, call.editorial_runtime)
         _verify_reached(store, ctx)
         if call.stop == "PREVIEW_READY":
             publish_preview(call.episode_root, log, run_id=run_id)

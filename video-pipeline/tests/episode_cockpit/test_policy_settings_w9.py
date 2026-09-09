@@ -386,7 +386,9 @@ def test_stage_selection_records_applied_settings_in_journal(
     monkeypatch.setenv("EDITORIAL_DIRECTOR_NETWORK_ENABLED", "1")
     captured: dict[str, Any] = {}
 
-    def fake_rerun(episode_root: Path, policy: Any, env: dict[str, str]) -> object:
+    def fake_rerun(
+        episode_root: Path, policy: Any, env: dict[str, str], runtime_path: Any = None
+    ) -> object:
         captured["policy"] = policy
         namespace = SimpleNamespace(outcome=SimpleNamespace(request_hash="req-w9"))
         captured["rerun_marker"] = namespace

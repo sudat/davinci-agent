@@ -148,9 +148,9 @@ def _seed_plan() -> EditPlan0C:
 def _fake_chain_factory(captured: dict[str, object]) -> Callable[..., None]:
     """Fake chain to PREVIEW_READY leaving a real review store + bundle."""
 
-    def fake_chain(
+    def fake_chain(  # noqa: PLR0913 (mirrors the run_real_chain seam)
         episode_root: Path, stop: str, out_dir: Path, *, env: dict[str, str] | None = None,
-        policy_path: Path | None = None,
+        policy_path: Path | None = None, editorial_runtime: Path | None = None,
     ) -> None:
         captured["out_dir"] = out_dir
         out_dir.mkdir(parents=True, exist_ok=True)

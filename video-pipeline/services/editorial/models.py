@@ -128,7 +128,7 @@ class EditorialMetadata(StrictModel):
     pin_version: str
     requested_model: str
     observed_model: str | None = None
-    transport_kind: Literal["replay", "live-stub", "live-http"]
+    transport_kind: Literal["replay", "live-stub", "live-http", "live-codex-exec"]
     prompt_bundle_hash: str
     evidence_lineage: tuple[str, ...] = ()
 

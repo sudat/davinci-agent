@@ -36,6 +36,7 @@ class RealChainReport(StrictModel):
     edit_source_world_sha256: Sha256
     director_mode: str | None = None
     director_served_by: str | None = None
+    director_transport: str | None = None
     director_request_hash: Sha256 | None = None
     selection_version: int | None = None
     selection_plan_sha256: Sha256 | None = None
@@ -78,6 +79,7 @@ def build_report(facts: RunFacts, stop: str) -> RealChainReport:
         edit_source_world_sha256=facts.edit_source_world_sha256,
         director_mode=director.mode if director is not None else None,
         director_served_by=director.served_by if director is not None else None,
+        director_transport=director.transport if director is not None else None,
         director_request_hash=director.request_hash if director is not None else None,
         selection_version=selection.version if selection is not None else None,
         selection_plan_sha256=selection.plan_sha256 if selection is not None else None,

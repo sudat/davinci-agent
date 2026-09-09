@@ -250,7 +250,9 @@ def _fake_ok(  # noqa: PLR0913 (fake-seam wiring: monkeypatch + capture + behavi
     fail_code: str | None = None,
     fail_detail: str = "boom",
 ) -> None:
-    def fake_rerun(episode_root: Path, policy: Any, env: dict[str, str]) -> object:
+    def fake_rerun(
+        episode_root: Path, policy: Any, env: dict[str, str], runtime_path: Any = None
+    ) -> object:
         captured["calls"] = captured.get("calls", 0) + 1
         if on_call is not None:
             on_call(episode_root, policy)

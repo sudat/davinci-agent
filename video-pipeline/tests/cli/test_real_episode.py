@@ -60,6 +60,21 @@ GAP_SECONDS = 2
 LOCK = Path("config/toolchains/phase-1-technical-v2.json")
 
 
+def _heuristic_env(root: Path) -> dict[str, str]:
+    """Pin the diagnostic editorial runtime so the baseline tests stay hermetic.
+
+    The director resolves explicit > EDITORIAL_RUNTIME_CONFIG env > repo
+    default (shipped production+codex-exec): without this pin the chain
+    would take the flat-rate live path and probe the real codex CLI.
+    """
+
+    config = root / "editorial-runtime-heuristic.json"
+    config.write_text(
+        json.dumps({"mode": "heuristic_diagnostic"}), encoding="utf-8"
+    )
+    return {"EDITORIAL_RUNTIME_CONFIG": str(config)}
+
+
 @dataclass(frozen=True, slots=True)
 class RealRig:
     root: Path
@@ -218,7 +233,9 @@ def rig(tmp_path_factory: pytest.TempPathFactory) -> RealRig:
     root = tmp_path_factory.mktemp("real-episode")
     episode_root = _build_episode(root)
     out_dir = root / "out"
-    outcome = run_real_chain(episode_root, "PREVIEW_READY", out_dir, env={})
+    outcome = run_real_chain(
+        episode_root, "PREVIEW_READY", out_dir, env=_heuristic_env(root)
+    )
     assert outcome.bundle_file is not None
     bundle = load_bundle(outcome.bundle_file)
     assert bundle.fixture_only is False
@@ -287,8 +304,11 @@ def test_00_chain_reaches_preview_ready_with_baseline_label(rig: RealRig) -> Non
     assert report["schema_version"] == "real-chain-report-v1"
     assert report["director_mode"] == "deterministic-baseline"
     assert report["director_served_by"] == "deterministic-baseline-v1:no-model-involved"
+    assert report["director_transport"] == "deterministic-baseline"
     assert "deterministic-baseline-v1" in report["selection_producer"]
-    assert director_mode({}) == "deterministic-baseline"
+    assert director_mode(
+        {"EDITORIAL_RUNTIME_CONFIG": str(rig.root / "editorial-runtime-heuristic.json")}
+    ) == "deterministic-baseline"
     versions = json.loads((rig.out_dir / "selection-plan" / "versions.json").read_bytes())
     assert versions["episode_id"] == EPISODE_ID
 
@@ -554,6 +574,8 @@ def test_52_phase1_cli_rejects_a_root_with_neither_manifest(tmp_path: Path) -> N
 
 
 def test_53_phase1_cli_serves_the_real_path(rig: RealRig, tmp_path: Path) -> None:
+    heuristic = tmp_path / "editorial-runtime-heuristic.json"
+    heuristic.write_text(json.dumps({"mode": "heuristic_diagnostic"}), encoding="utf-8")
     result = subprocess.run(
         [
             sys.executable,
@@ -571,7 +593,11 @@ def test_53_phase1_cli_serves_the_real_path(rig: RealRig, tmp_path: Path) -> Non
         text=True,
         check=False,
         cwd=Path.cwd(),
-        env={**os.environ, CREDENTIALS_ENV: ""},
+        env={
+            **os.environ,
+            CREDENTIALS_ENV: "",
+            "EDITORIAL_RUNTIME_CONFIG": str(heuristic),
+        },
         timeout=900,
     )
     assert result.returncode == 0, result.stderr

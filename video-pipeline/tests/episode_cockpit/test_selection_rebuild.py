@@ -135,7 +135,7 @@ def _fake_seams(
     monkeypatch: pytest.MonkeyPatch, captured: dict[str, Any], *, fail_derive: bool = False
 ) -> None:
     def fake_rerun(
-        episode_root: Path, policy: Any, env: dict[str, str]
+        episode_root: Path, policy: Any, env: dict[str, str], runtime_path: Any = None
     ) -> object:
         captured["policy"] = policy
         captured["env_keys"] = sorted(env)
@@ -156,7 +156,7 @@ def _fake_seams(
         return head.plan.model_copy(update={"artifact_id": "edit-plan-policy-v2"})
 
     def recording_rerun(
-        episode_root: Path, policy: Any, env: dict[str, str]
+        episode_root: Path, policy: Any, env: dict[str, str], runtime_path: Any = None
     ) -> object:
         marker = fake_rerun(episode_root, policy, env)
         captured["rerun_marker"] = marker
@@ -230,6 +230,12 @@ def test_selection_baseline_mode_fails_honestly_without_interpreting(
     episode_root = _episode_with_policy(tmp_path)
     monkeypatch.delenv("EDITORIAL_DIRECTOR_API_KEY", raising=False)
     monkeypatch.delenv("EDITORIAL_DIRECTOR_NETWORK_ENABLED", raising=False)
+    # Pin the diagnostic runtime explicitly: the director resolves explicit >
+    # env > repo default (shipped production+codex-exec), so the baseline
+    # refusal needs a declared heuristic runtime, not just missing keys.
+    heuristic = tmp_path / "editorial-runtime-heuristic.json"
+    heuristic.write_text('{"mode": "heuristic_diagnostic"}', encoding="utf-8")
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(heuristic))
     policy = latest_adopted_policy(episode_root)
     assert policy is not None
 

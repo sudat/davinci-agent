@@ -59,14 +59,17 @@ class EditorialDirector:
         transport: EditorialTransport,
         pin: EditorialDirectorPin | None = None,
         policy_decider: PolicyDecider | None = None,
-        transport_kind: Literal["replay", "live-stub", "live-http"] | None = None,
+        transport_kind: Literal["replay", "live-stub", "live-http", "live-codex-exec"]
+        | None = None,
     ) -> None:
         self._transport = transport
         self._pin = pin if pin is not None else load_pin()
         self._policy_decider = policy_decider if policy_decider is not None else (
             decide_transport_policy
         )
-        self._transport_kind: Literal["replay", "live-stub", "live-http"] = (
+        self._transport_kind: Literal[
+            "replay", "live-stub", "live-http", "live-codex-exec"
+        ] = (
             transport_kind
             if transport_kind is not None
             else ("live-stub" if isinstance(transport, LiveTransport) else "replay")

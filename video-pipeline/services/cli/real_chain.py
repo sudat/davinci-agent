@@ -98,13 +98,14 @@ def _normalize(
     return record, mezzanine
 
 
-def run_real_chain(  # noqa: C901, PLR0915
+def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out + env/policy/runtime)
     episode_root: Path,
     stop: str,
     out_dir: Path,
     *,
     env: dict[str, str] | None = None,
     policy_path: Path | None = None,
+    editorial_runtime: Path | None = None,
 ) -> RealRunOutcome:
     environment = env if env is not None else dict(os.environ)
     if stop not in STAGE_ORDER:
@@ -181,6 +182,7 @@ def run_real_chain(  # noqa: C901, PLR0915
             policy_path=policy_path,
             out_dir=out_dir,
             env=environment,
+            runtime_path=editorial_runtime,
         )
         episode_record = CommittedEpisodeRecord(
             episode_id=manifest.episode_id,

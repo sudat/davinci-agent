@@ -1,6 +1,6 @@
 """The real-episode Editorial Director: two honestly-labeled modes (Todo 46).
 
-DETERMINISTIC BASELINE (no credentials): keep-all-speech — every speech segment
+DETERMINISTIC BASELINE (no live route): keep-all-speech — every speech segment
 selected, must-include all, no removals — assembled through the Todo-40
 candidate machinery with producer ``deterministic-baseline-v1`` and an
 explicit no-model-involved marker; zero model calls, zero network. LIVE
@@ -9,6 +9,28 @@ urllib transport, bounded evidence via the Todo-37 MediaQueryApi over the
 REAL index, transcript transport authorized by the Todo-12 gate over the
 resolved production policy (deny-by-default); a live refusal is honest
 failure — the chain NEVER silently falls back.
+
+FLAT-RATE LIVE (runtime ``production_model`` + ``codex-exec``): the SAME
+Todo-39 adapter over the pinned ``codex exec`` transport
+(``CodexEditorialTransport``) — the same ``DirectorRequest`` in, the same
+``parse_response`` validation downstream, so selection semantics are
+identical to the metered path; only the transport wrapper differs. The model
+id rides the runner call from the director pin. Transport precedence: the
+resolved editorial runtime decides (explicit ``runtime_path`` arg >
+``EDITORIAL_RUNTIME_CONFIG`` env > repo-default
+``config/editorial-runtime.json``); the openai-api key alone never diverts a
+codex-exec runtime and codex-exec never fires under a heuristic runtime —
+never silently mixed. Note this resolution is the director seam's own: the
+cockpit runner's ``editorial_mode`` gate (missing config means diagnostic)
+is separate and untouched — pass the same runtime file via
+``--editorial-runtime``/``EDITORIAL_RUNTIME_CONFIG`` to keep the two
+consistent.
+
+BUDGET: the director's codex-exec call is the chain's own cost (like the
+analyze stage) — it is NOT billed to the consultation budget, which covers
+the consultation LLM only. The outcome records which transport/model served
+(``served_by`` + ``transport``, journaled into run-report.json) mirroring
+the consultation GenerationCall honesty — no false live claims.
 """
 
 from __future__ import annotations
@@ -20,6 +42,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, Literal
 
 from services.cli.live_editorial import LiveHttpTransport
+from services.cli.live_editorial_codex import (
+    CodexEditorialTransport,
+    CodexTransportGatedError,
+)
+from services.cli.real_director_runtime import (
+    DirectorMode,
+    DirectorTransport,
+    RealDirectorError,
+    resolve_director_route,
+)
 from services.cli.real_policy import load_policy, write_policy_snapshot
 from services.cli.real_pool import evidence_index_for, rules_for
 from services.cli.real_selection_inputs import save_selection_inputs
@@ -43,7 +75,6 @@ from services.editorial.pin import load_pin
 from services.editorial.policy import decide_production_transport_policy
 from services.editorial.proposal_builder import build_selection_proposal
 from services.editorial.reconcile import reconcile
-from services.editorial.transport import CREDENTIALS_ENV
 from services.fixtures.manifest_phase1 import EditorialRules, EditSourceSpec
 from services.media_query.api import MediaQueryApi
 from services.policy.redaction import redact_text
@@ -52,7 +83,9 @@ if TYPE_CHECKING:
     from services.cli.real_analyze import RealAnalysis
     from services.cli.real_pool import SpeechSegment
     from services.config.models import ResolvedConfig
+    from services.editorial.pin import EditorialDirectorPin
     from services.editorial.reconcile import ReconciliationResult
+    from services.editorial.transport import EditorialTransport
 
 BASELINE_PRODUCER = ProposalProducer(
     model_role_id="deterministic-baseline-v1",
@@ -65,11 +98,8 @@ LIVE_PRODUCER = ProposalProducer(
 NEUTRAL_SCORE = 5
 
 
-class RealDirectorError(Exception):
-    def __init__(self, code: str, detail: str) -> None:
-        super().__init__(f"{code}: {detail}")
-        self.code = code
-        self.detail = detail
+def director_mode(env: dict[str, str], runtime_path: Path | None = None) -> DirectorMode:
+    return resolve_director_route(env, runtime_path).mode
 
 
 RESIDUAL_SECRET_RE: Final = re.compile(
@@ -77,8 +107,6 @@ RESIDUAL_SECRET_RE: Final = re.compile(
     r"|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
     r"|\d{7,}"
 )
-
-type DirectorMode = Literal["deterministic-baseline", "live"]
 
 
 def redacted_speech_text(speech_text: dict[str, str]) -> dict[str, str]:
@@ -107,10 +135,7 @@ class DirectorOutcome:
     proposal: EditorialSelectionProposal
     request_hash: str
     served_by: str
-
-
-def director_mode(env: dict[str, str]) -> DirectorMode:
-    return "live" if env.get(CREDENTIALS_ENV) else "deterministic-baseline"
+    transport: DirectorTransport = "deterministic-baseline"
 
 
 def director_request(  # noqa: PLR0913 (declared-candidate table from the real pool)
@@ -167,16 +192,22 @@ def _baseline_document(
     )
 
 
-def _live(
-    request: DirectorRequest, index_path: str, policy: ResolvedConfig, env: dict[str, str]
+def _serve(  # noqa: PLR0913 (live assembly: request/index/policy/transport + serve records)
+    request: DirectorRequest,
+    index_path: str,
+    policy: ResolvedConfig,
+    transport: EditorialTransport,
+    *,
+    transport_kind: Literal["live-http", "live-codex-exec"],
+    served_by_fallback: str,
+    served_transport: DirectorTransport,
 ) -> DirectorOutcome:
-    pin = load_pin()
-    transport = LiveHttpTransport(request=request, pin=pin, env=env)
+    pin: EditorialDirectorPin = load_pin()
     director = EditorialDirector(
         transport=transport,
         pin=pin,
         policy_decider=lambda episode: decide_production_transport_policy(episode, policy),
-        transport_kind="live-http",
+        transport_kind=transport_kind,
     )
     with MediaQueryApi.open(Path(index_path)) as api:
         result = director.run(request, api=api)
@@ -194,7 +225,42 @@ def _live(
         mode="live",
         proposal=result.proposal,
         request_hash=result.envelope.request_hash,
-        served_by=result.metadata.observed_model or f"live:{pin.model_id}",
+        served_by=result.metadata.observed_model or served_by_fallback,
+        transport=served_transport,
+    )
+
+
+def _live(
+    request: DirectorRequest, index_path: str, policy: ResolvedConfig, env: dict[str, str]
+) -> DirectorOutcome:
+    pin = load_pin()
+    return _serve(
+        request,
+        index_path,
+        policy,
+        LiveHttpTransport(request=request, pin=pin, env=env),
+        transport_kind="live-http",
+        served_by_fallback=f"live:{pin.model_id}",
+        served_transport="openai-api",
+    )
+
+
+def _live_codex(
+    request: DirectorRequest, index_path: str, policy: ResolvedConfig
+) -> DirectorOutcome:
+    pin = load_pin()
+    try:
+        transport = CodexEditorialTransport(request=request, pin=pin)
+    except CodexTransportGatedError as error:
+        raise RealDirectorError(error.code, error.detail) from error
+    return _serve(
+        request,
+        index_path,
+        policy,
+        transport,
+        transport_kind="live-codex-exec",
+        served_by_fallback=f"codex-exec:{pin.model_id}",
+        served_transport="codex-exec",
     )
 
 
@@ -211,8 +277,10 @@ def select(  # noqa: PLR0913 (director wiring: pool + rules + policy + env + evi
     policy: ResolvedConfig,
     env: dict[str, str],
     adopted_policy: AdoptedPolicySummaryV1 | None = None,
+    runtime_path: Path | None = None,
 ) -> DirectorOutcome:
-    if director_mode(env) == "deterministic-baseline":
+    route = resolve_director_route(env, runtime_path)
+    if route.mode == "deterministic-baseline":
         digest = hashlib.sha256(
             f"baseline:{episode_id}:{':'.join(speech_ids)}".encode()
         ).hexdigest()
@@ -221,12 +289,15 @@ def select(  # noqa: PLR0913 (director wiring: pool + rules + policy + env + evi
             proposal=_baseline_document(episode_id, speech_ids),
             request_hash=digest,
             served_by="deterministic-baseline-v1:no-model-involved",
+            transport="deterministic-baseline",
         )
     request = director_request(
         episode_id=episode_id, source_id=source_id, total_frames=total_frames,
         rules=rules, pool=pool, speech_text=redacted_speech_text(speech_text),
         adopted_policy=adopted_policy,
     )
+    if route.transport == "codex-exec":
+        return _live_codex(request, index_path, policy)
     return _live(request, index_path, policy, env)
 
 
@@ -261,6 +332,7 @@ def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real 
     out_dir: Path,
     env: dict[str, str],
     adopted_policy: AdoptedPolicySummaryV1 | None = None,
+    runtime_path: Path | None = None,
 ) -> tuple[DirectorOutcome, SelectionPlanProposal, ReconciliationResult, Path]:
     policy_file = policy_path if policy_path is not None else write_policy_snapshot(
         episode_id, out_dir
@@ -273,7 +345,7 @@ def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real 
         rules=rules, pool=pool, speech_ids=speech_ids,
         speech_text={segment.segment_id: segment.text for segment in speech},
         index_path=analysis.record.index_path, policy=load_policy(policy_file), env=env,
-        adopted_policy=adopted_policy,
+        adopted_policy=adopted_policy, runtime_path=runtime_path,
     )
     selection = selection_proposal(episode_id, rules, pool, evidence_index, outcome)
     reconciled = reconcile(outcome.proposal, pool, evidence_index)

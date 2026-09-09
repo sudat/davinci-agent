@@ -95,7 +95,10 @@ def rebuild_analysis(inputs: SelectionInputsV1) -> RealAnalysis:
 
 
 def rerun_director_with_policy(
-    episode_root: Path, policy: AdoptedPolicyV1, env: dict[str, str]
+    episode_root: Path,
+    policy: AdoptedPolicyV1,
+    env: dict[str, str],
+    runtime_path: Path | None = None,
 ) -> SelectionRerun:
     """Re-run the initial chain's director seam with the adopted policy."""
 
@@ -129,6 +132,7 @@ def rerun_director_with_policy(
             out_dir=run_dir,
             env=env,
             adopted_policy=policy_summary(policy),
+            runtime_path=runtime_path,
         )
     except RealDirectorError as error:
         raise SelectionRerunError(error.code, error.detail) from error
