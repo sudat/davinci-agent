@@ -93,7 +93,10 @@ Workspace = Annotated[CockpitWorkspace, Depends(_workspace)]
 @router.post("/episodes")
 def create_episode(request: EpisodeCreateRequest, workspace: Workspace) -> dict[str, object]:
     return workspace.create_episode(
-        source_folder=request.source_folder, brief_text=request.brief_text
+        source_folder=request.source_folder,
+        brief_text=request.brief_text,
+        channel=request.channel,
+        style_version=request.style_version,
     )
 
 

@@ -171,6 +171,20 @@ def intake_created_at(episode_dir: Path) -> str | None:
         return None
 
 
+def intake_applied_style(episode_dir: Path) -> dict[str, object] | None:
+    """The 工程3 style pin recorded at create time (None = unpinned)."""
+
+    try:
+        record = IntakeRecordV1.model_validate_json(
+            (episode_dir / "intake.json").read_bytes()
+        )
+    except (OSError, ValidationError):
+        return None
+    if record.channel is None:
+        return None
+    return {"channel": record.channel, "version": record.style_version}
+
+
 def stage_row(run: StageRunRow) -> dict[str, object]:
     row: dict[str, object] = {
         "stage_name": run.stage_name,
@@ -224,6 +238,7 @@ def build_status_payload(snapshot: JobSnapshot, episode_dir: Path) -> dict[str, 
     created_at = intake_created_at(episode_dir)
     if created_at is not None:
         payload["intake_created_at"] = created_at
+    payload["applied_style"] = intake_applied_style(episode_dir)
     arrived = next(
         (
             run.first_output_arrived_at for run in snapshot.stage_runs
@@ -240,6 +255,7 @@ def build_status_payload(snapshot: JobSnapshot, episode_dir: Path) -> dict[str, 
 __all__ = [
     "build_status_payload",
     "derive_current_run",
+    "intake_applied_style",
     "last_worker_report",
     "load_rebuild_entries",
     "pending_rebuild",

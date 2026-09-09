@@ -15,7 +15,10 @@ snapshot guard) and four single-purpose mixins:
 - ``ApprovalSessionsOps`` — pending approvals bundled into at most two
   normal blocking sessions (task 51);
 - ``KitPreviewOps`` — task-11 kit preview manifest reads + runtime
-  operator selection record (kit-previews/kit-selections files only).
+   operator selection record (kit-previews/kit-selections files only).
+- ``ChannelStyleOps`` — 工程3 explicit operator-saved channel styles
+   (one channel-styles.json at the episodes root; channel-file state,
+   never episode job/lock/state).
 
 No method here may introduce a second state machine: every write goes
 through an existing service API, and cockpit-owned files are
@@ -28,6 +31,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from services.episode_cockpit.approval_sessions import ApprovalSessionsOps
+from services.episode_cockpit.channel_styles import ChannelStyleOps
 from services.episode_cockpit.episode_files import FileOps
 from services.episode_cockpit.episode_ops import JobOps
 from services.episode_cockpit.finishing_status import FinishingStatusOps
@@ -43,6 +47,7 @@ class CockpitWorkspace(
     ApprovalSessionsOps,
     KitPreviewOps,
     FinishingStatusOps,
+    ChannelStyleOps,
 ):
     """All cockpit state access, rooted at one StateStore path + episodes root."""
 

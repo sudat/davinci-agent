@@ -20,6 +20,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from services.episode_cockpit.channel_styles import validate_style_pin
 from services.episode_cockpit.errors import (
     CockpitConflictError,
     CockpitUnprocessableError,
@@ -84,12 +85,29 @@ PUBLISH_PACKAGE_RELATIVE = ("publish", "package.json")
 class JobOps(WorkspaceContext):
     """Episode lifecycle reads/writes against the existing StateStore."""
 
-    def create_episode(self, *, source_folder: str, brief_text: str) -> dict[str, object]:
+    def create_episode(
+        self,
+        *,
+        source_folder: str,
+        brief_text: str,
+        channel: str | None = None,
+        style_version: int | None = None,
+    ) -> dict[str, object]:
         folder = Path(source_folder)
         if not folder.is_dir():
             raise CockpitUnprocessableError(
                 "source-folder-not-found", f"source folder does not exist: {folder}"
             )
+        if style_version is not None and channel is None:
+            raise CockpitUnprocessableError(
+                "style-version-unknown", "style_version requires a channel pin"
+            )
+        pinned_version: int | None = None
+        if channel is not None:
+            record = validate_style_pin(
+                self._episodes_root, channel=channel, style_version=style_version
+            )
+            pinned_version = style_version if style_version is not None else record.current
         episode_id = "ep-" + hashlib.sha256(str(folder.resolve()).encode()).hexdigest()[:16]
         try:
             with StateStore.open(self._state_store_path) as store:
@@ -116,6 +134,8 @@ class JobOps(WorkspaceContext):
                     source_folder=str(folder.resolve()),
                     brief_text=brief_text,
                     created_at=datetime.now(UTC).isoformat(),
+                    channel=channel,
+                    style_version=pinned_version,
                 )
             ),
         )

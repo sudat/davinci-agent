@@ -30,10 +30,19 @@ type ProposalKind = Literal["command-bundle", "alternatives"]
 
 
 class EpisodeCreateRequest(StrictModel):
-    """POST /episodes — intake: source folder plus natural-language brief."""
+    """POST /episodes — intake: source folder plus natural-language brief.
+
+    工程3 (additive, backward compatible): optional ``channel`` +
+    ``style_version`` pin records which saved channel style version the
+    episode started with. Validation (channel exists, version exists
+    for that channel) lives in ``JobOps.create_episode``; a pin without
+    a channel is a typed 422.
+    """
 
     source_folder: NonEmpty
     brief_text: NonEmpty
+    channel: Identifier | None = None
+    style_version: SequenceNumber | None = None
 
 
 class BriefPutRequest(StrictModel):
@@ -92,6 +101,9 @@ class IntakeRecordV1(StrictModel):
     re-deriving it from the episode id; the BriefDraft schema stays
     untouched (this is a cockpit-owned communication file, never job
     state — the StateStore remains the only authority).
+
+    工程3 (additive): ``channel``/``style_version`` persist the style
+    pin validated at create time (absent on legacy lines = unpinned).
     """
 
     schema_version: Literal["cockpit-intake-v1"] = "cockpit-intake-v1"
@@ -99,6 +111,8 @@ class IntakeRecordV1(StrictModel):
     source_folder: NonEmpty
     brief_text: NonEmpty
     created_at: NonEmpty
+    channel: Identifier | None = None
+    style_version: SequenceNumber | None = None
 
 
 class FrameMaterial(StrictModel):
