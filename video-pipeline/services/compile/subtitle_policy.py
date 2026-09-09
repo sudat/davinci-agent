@@ -12,12 +12,16 @@ cannot be expressed anywhere.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from services.contracts.primitives import Frame, Identifier, PositiveInteger, StrictModel
+from services.outputs.geometry import subtitle_chars_for_output
+
+if TYPE_CHECKING:
+    from services.outputs.geometry import OutputId
 
 CueSpan = Annotated[
     "FrameCueSpan | SampleCueSpan",
@@ -103,6 +107,21 @@ class SubtitleQcPolicy(StrictModel):
                 {"ref": self.default_style_ref},
             )
         return self
+
+    def for_output(self, output_id: OutputId) -> SubtitleQcPolicy:
+        """The policy re-derived for one output canvas (landscape identical).
+
+        The vertical canvas is narrower, so the cue line-wrap width scales
+        by the canvas width ratio; all other limits are canvas-agnostic.
+        """
+
+        return self.model_copy(
+            update={
+                "max_chars_per_line": subtitle_chars_for_output(
+                    self.max_chars_per_line, output_id
+                )
+            }
+        )
 
 
 __all__ = [

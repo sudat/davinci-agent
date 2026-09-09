@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
 PREVIEW_WIDTH: Final = 640
 PREVIEW_HEIGHT: Final = 360
+PREVIEW_VERTICAL_WIDTH: Final = 360
+PREVIEW_VERTICAL_HEIGHT: Final = 640
 MARKER_SIZE: Final = 24
 MARKER_MARGIN: Final = 8
 MARKER_BORDER: Final = 4
@@ -84,13 +86,22 @@ def _binding_path(bindings: PreviewMediaBindings, item_id: str) -> Path:
     return Path(binding.media_path)
 
 
-def build_render_command(
+def preview_size_for(output_id: str) -> tuple[int, int]:
+    """Low-resolution preview canvas: 640x360 landscape, 360x640 vertical."""
+    if output_id == "vertical":
+        return (PREVIEW_VERTICAL_WIDTH, PREVIEW_VERTICAL_HEIGHT)
+    return (PREVIEW_WIDTH, PREVIEW_HEIGHT)
+
+
+def build_render_command(  # noqa: PLR0913 (render argv contract: layout/bindings/tools/output/subtitle/size)
     *,
     layout: PreviewLayout,
     bindings: PreviewMediaBindings,
     tools: PinnedTools,
     output: Path,
     subtitle_srt: Path | None,
+    preview_width: int = PREVIEW_WIDTH,
+    preview_height: int = PREVIEW_HEIGHT,
 ) -> RenderCommand:
     rate = layout.rate
     argv: list[str] = [str(tools.ffmpeg), "-nostdin", "-y", "-v", "error"]
@@ -107,7 +118,7 @@ def build_render_command(
         )
         video_pads.append(f"[v{index}]")
     video_filters.append(f"{''.join(video_pads)}concat=n={len(video_pads)}:v=1:a=0[vcut]")
-    video_filters.append(f"[vcut]scale={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}[vscaled]")
+    video_filters.append(f"[vcut]scale={preview_width}:{preview_height}[vscaled]")
     marker_input = inputs.lavfi(
         f"color=c=black:s={MARKER_SIZE}x{MARKER_SIZE}:r={rate.num}/{rate.den}:"
         f"d={_marker_duration_micros(layout.total_record_frames, rate)}"
@@ -188,4 +199,4 @@ def build_render_command(
     )
 
 
-__all__ = ["RenderCommand", "build_render_command"]
+__all__ = ["RenderCommand", "build_render_command", "preview_size_for"]

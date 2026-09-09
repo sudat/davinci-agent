@@ -47,8 +47,6 @@ from services.cli.bundle import (
 )
 from services.cli.episode_runner_state import RunContext, block_stage, log_event, record_stage
 from services.cli.episode_runner_workspace import (
-    COCKPIT_REVIEW_LOG_RELATIVE,
-    COCKPIT_REVIEW_STORE_RELATIVE,
     RUN_DIR_NAME,
     publish_preview,
 )
@@ -104,6 +102,11 @@ from services.episode_cockpit.policy_settings import (
 )
 from services.episode_cockpit.review_chat import PIPELINE_STAGES
 from services.foundation_io import sha256_file
+from services.outputs.geometry import (
+    DEFAULT_OUTPUT_ID,
+    OutputId,
+    review_store_relatives,
+)
 from services.preview.models import AppliedDecision
 from services.preview.render import PREVIEW_NAME, TRACE_NAME
 from services.review_command.policy_commit import (
@@ -896,10 +899,13 @@ def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log
     return preview_sha
 
 
-def _review_store(episode_root: Path) -> tuple[Path, Path]:
+def _review_store(
+    episode_root: Path, output_id: OutputId = DEFAULT_OUTPUT_ID
+) -> tuple[Path, Path]:
+    log_rel, store_rel = review_store_relatives(output_id)
     return (
-        episode_root.joinpath(*COCKPIT_REVIEW_LOG_RELATIVE),
-        episode_root.joinpath(*COCKPIT_REVIEW_STORE_RELATIVE),
+        episode_root.joinpath(*log_rel),
+        episode_root.joinpath(*store_rel),
     )
 
 

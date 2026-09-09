@@ -16,11 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from services.cli.bundle import load_bundle
-from services.cli.episode_runner_workspace import (
-    COCKPIT_REVIEW_LOG_RELATIVE,
-    COCKPIT_REVIEW_STORE_RELATIVE,
-    RUN_DIR_NAME,
-)
+from services.cli.episode_runner_workspace import RUN_DIR_NAME
 from services.cli.review_common import mezzanine_for, store_ir, store_plan
 from services.creative_plan.quality_domains import (
     DomainExecutionV1,
@@ -29,6 +25,12 @@ from services.creative_plan.quality_domains import (
 )
 from services.mcp_client.client import McpToolCallError
 from services.mcp_execution.plan_payloads import AudioMetricReadback
+from services.outputs.geometry import (
+    DEFAULT_OUTPUT_ID,
+    OutputId,
+    chain_store_relatives,
+    review_store_relatives,
+)
 from services.production_kit.preview import (
     KitPreviewError,
     KitSelectionRecordV1,
@@ -101,30 +103,36 @@ class FinishingPlans:
     notes: tuple[str, ...]
 
 
-def resolve_review_store(episode_root: Path) -> tuple[Path, Path]:
-    """Cockpit live store first; the frozen chain genesis second."""
+def resolve_review_store(
+    episode_root: Path, output_id: OutputId = DEFAULT_OUTPUT_ID
+) -> tuple[Path, Path]:
+    """Cockpit live store first; the frozen chain genesis second (per output)."""
 
+    cockpit_rel = review_store_relatives(output_id)
+    chain_rel = chain_store_relatives(output_id)
     cockpit = (
-        episode_root.joinpath(*COCKPIT_REVIEW_LOG_RELATIVE),
-        episode_root.joinpath(*COCKPIT_REVIEW_STORE_RELATIVE),
+        episode_root.joinpath(*cockpit_rel[0]),
+        episode_root.joinpath(*cockpit_rel[1]),
     )
     if (cockpit[1] / "versions.json").is_file():
         return cockpit
     chain = (
-        episode_root / RUN_DIR_NAME / "review-store" / "events.jsonl",
-        episode_root / RUN_DIR_NAME / "review-store",
+        episode_root.joinpath(*chain_rel[0]),
+        episode_root.joinpath(*chain_rel[1]),
     )
     if (chain[1] / "versions.json").is_file():
         return chain
     raise FinishingError(
         "review-store-missing",
-        f"no committed review store under {episode_root} (looked at "
-        f"{'/'.join(COCKPIT_REVIEW_STORE_RELATIVE)} and {RUN_DIR_NAME}/review-store); "
+        f"no committed review store under {episode_root} for output {output_id} "
+        f"(looked at {'/'.join(cockpit_rel[1])} and {'/'.join(chain_rel[1])}); "
         "the episode must reach PREVIEW_READY first",
     )
 
 
-def load_episode_context(episode_root: Path) -> EpisodeContext:
+def load_episode_context(
+    episode_root: Path, output_id: OutputId = DEFAULT_OUTPUT_ID
+) -> EpisodeContext:
     """Bundle (episode id + verified mezzanine) + the head plan/IR."""
 
     if not episode_root.is_dir():
@@ -138,7 +146,7 @@ def load_episode_context(episode_root: Path) -> EpisodeContext:
             f"no run/review-bundle.json under {episode_root}; "
             "finishing needs a PREVIEW_READY-or-later episode",
         )
-    log_path, plan_dir = resolve_review_store(episode_root)
+    log_path, plan_dir = resolve_review_store(episode_root, output_id)
     try:
         bundle = load_bundle(bundle_file)
         head = load_head(log_path, plan_dir)
@@ -177,7 +185,9 @@ def load_kit_selections(episode_root: Path) -> KitSelectionRecordV1:
 
 
 def execution_facts(
-    run_report: McpExecutionRunReportV1, episode_id: str
+    run_report: McpExecutionRunReportV1,
+    episode_id: str,
+    output_id: OutputId = DEFAULT_OUTPUT_ID,
 ) -> ExecutionFactsV1:
     rows = []
     for domain, actions in DOMAIN_ACTIONS.items():
@@ -195,7 +205,9 @@ def execution_facts(
                 domain=cast("QualityDomainName", domain), outcome=outcome
             )
         )
-    return ExecutionFactsV1(episode_id=episode_id, domains=tuple(rows))
+    return ExecutionFactsV1(
+        episode_id=episode_id, output_id=output_id, domains=tuple(rows)
+    )
 
 
 class FakePlanExecutor:

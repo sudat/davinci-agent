@@ -70,6 +70,7 @@ from services.resolve_bridge.lifecycle import (
 if TYPE_CHECKING:
     from services.contracts.primitives import RationalFrameRate
     from services.fixtures.manifest_phase3 import Phase3FixtureManifest
+    from services.outputs.geometry import OutputGeometryV1
     from services.resolve_bridge.connection import ResolveConnection
     from services.resolve_bridge.fixed_presentation_models import FixedProjectApi
 
@@ -93,6 +94,7 @@ class AudioLiveFlow:
         manifest: Phase3FixtureManifest,
         frame_rate: RationalFrameRate,
         render_deadline: float,
+        geometry: OutputGeometryV1 | None = None,
     ) -> None:
         self.connection = connection
         self.bundle = bundle
@@ -102,6 +104,7 @@ class AudioLiveFlow:
         self.manifest = manifest
         self.frame_rate = frame_rate
         self.render_deadline = render_deadline
+        self.geometry = geometry
         self.passed = False
         self.rung = "none"
         self.reason = ""
@@ -192,10 +195,14 @@ class AudioLiveFlow:
             self.connection.project_manager(), owned_project_name()
         )
         project = cast("FixedProjectApi", project_api)
+        if self.geometry is None:
+            width, height = "1920", "1080"
+        else:
+            width, height = str(self.geometry.width), str(self.geometry.height)
         for key, value in (
             ("timelineFrameRate", str(RATE_NUM)),
-            ("timelineResolutionWidth", "1920"),
-            ("timelineResolutionHeight", "1080"),
+            ("timelineResolutionWidth", width),
+            ("timelineResolutionHeight", height),
         ):
             if not project.SetSetting(key, value):
                 raise AudioLiveError("setup_failed", f"SetSetting({key}) failed")

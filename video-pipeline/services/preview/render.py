@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
-from services.preview.ffmpeg_cmd import build_render_command
+from services.preview.ffmpeg_cmd import build_render_command, preview_size_for
 from services.preview.models import (
     AppliedDecision,
     MediaBinding,
@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from services.presentation.styling_models import StyledPresentation
 
 PREVIEW_NAME: Final = "preview.mp4"
+PREVIEW_VERTICAL_NAME: Final = "preview-vertical.mp4"
 TRACE_NAME: Final = "preview-trace.json"
 AUDIO_SAMPLE_RATE_HZ: Final = 48000
 GENERATED_SRT_NAME: Final = "preview-subtitles.generated.srt"
@@ -180,6 +181,13 @@ def _verify_subtitle_binding(layout: PreviewLayout, bindings: PreviewMediaBindin
         )
 
 
+def preview_name_for(output_id: str) -> str:
+    """Preview file name per output (landscape keeps the LEGACY preview.mp4)."""
+    if output_id == "vertical":
+        return PREVIEW_VERTICAL_NAME
+    return PREVIEW_NAME
+
+
 def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     edit_plan: EditPlan0C | None,
     timeline_ir: TimelineIr0C,
@@ -190,6 +198,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     decision: AppliedDecision | None = None,
     styled: StyledPresentation | None = None,
     timeout_seconds: float | None = None,
+    output_id: str = "landscape",
 ) -> PreviewTraceManifest:
     tools.verify_current()
     plan_version = plan_version_of(edit_plan)
@@ -206,7 +215,8 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     _verify_av_media(layout, media_bindings, tools, timeout_seconds)
     _verify_subtitle_binding(layout, media_bindings)
     out_dir.mkdir(parents=True, exist_ok=True)
-    output = out_dir / PREVIEW_NAME
+    preview_width, preview_height = preview_size_for(output_id)
+    output = out_dir / preview_name_for(output_id)
     generated_srt: Path | None = None
     if layout.subtitle_items:
         cues = expected_subtitle_cues(layout.subtitle_items, layout.rate)
@@ -219,6 +229,8 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             tools=tools,
             output=output,
             subtitle_srt=generated_srt,
+            preview_width=preview_width,
+            preview_height=preview_height,
         )
         render_timeout = (
             FFMPEG_TIMEOUT_SECONDS
@@ -239,6 +251,8 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             rate=timeline_ir.rate,
             subtitle_expected=bool(layout.subtitle_items),
             timeout_seconds=timeout_seconds,
+            expected_width=preview_width,
+            expected_height=preview_height,
         )
         context = TraceContext(
             ir=timeline_ir,
@@ -247,6 +261,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             plan_version=plan_version,
             decision=decision,
             styled=style_table,
+            output_id="vertical" if output_id == "vertical" else "landscape",
         )
         manifest = build_trace(
             context, output, summary,
@@ -261,7 +276,9 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
 
 __all__ = [
     "PREVIEW_NAME",
+    "PREVIEW_VERTICAL_NAME",
     "TRACE_NAME",
     "extract_layout",
+    "preview_name_for",
     "render_preview",
 ]

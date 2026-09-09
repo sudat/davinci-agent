@@ -27,6 +27,18 @@ if TYPE_CHECKING:
 CANVAS_W: Final = 1920
 CANVAS_H: Final = 1080
 FRAME_BYTES: Final = CANVAS_W * CANVAS_H * 3
+
+
+def canvas_for(output_id: str) -> tuple[int, int]:
+    """QA canvas px for one enumerated output (landscape default, byte-identical)."""
+    if output_id == "vertical":
+        return (1080, 1920)
+    return (CANVAS_W, CANVAS_H)
+
+
+def frame_bytes_for(output_id: str) -> int:
+    width, height = canvas_for(output_id)
+    return width * height * 3
 DECODED_INK_THRESHOLD: Final = 64
 DECODED_CENTERING_ERROR: Final = 24
 CARD_PNG_SAMPLES: Final = (1632, 1654, 1676)
@@ -61,9 +73,12 @@ class CardSpanReport(TypedDict):
     sampled_pngs: list[str]
 
 
-def save_png(frame: bytes | memoryview, path: Path) -> None:
+def save_png(
+    frame: bytes | memoryview, path: Path, canvas: tuple[int, int] | None = None
+) -> None:
+    canvas_w, canvas_h = canvas if canvas is not None else (CANVAS_W, CANVAS_H)
     try:
-        Image.frombytes("RGB", (CANVAS_W, CANVAS_H), frame).save(
+        Image.frombytes("RGB", (canvas_w, canvas_h), frame).save(
             path, format="PNG", compress_level=1
         )
     except OSError as error:
@@ -83,19 +98,24 @@ def _peak(hist: list[int]) -> int:
     return max((index for index, count in enumerate(hist) if count), default=0)
 
 
-def _background_peak(frame: bytes | memoryview, bounds: tuple[int, int, int, int]) -> int:
+def _background_peak(
+    frame: bytes | memoryview,
+    bounds: tuple[int, int, int, int],
+    canvas: tuple[int, int],
+) -> int:
     """Peak luma outside the ink bounding box dilated by the anti-alias margin."""
 
+    canvas_w, canvas_h = canvas
     left, top, right, bottom = bounds
     x0, y0 = max(0, left - BACKGROUND_MARGIN_PX), max(0, top - BACKGROUND_MARGIN_PX)
-    x1 = min(CANVAS_W, right + BACKGROUND_MARGIN_PX)
-    y1 = min(CANVAS_H, bottom + BACKGROUND_MARGIN_PX)
-    gray = Image.frombytes("RGB", (CANVAS_W, CANVAS_H), frame).convert("L")
+    x1 = min(canvas_w, right + BACKGROUND_MARGIN_PX)
+    y1 = min(canvas_h, bottom + BACKGROUND_MARGIN_PX)
+    gray = Image.frombytes("RGB", (canvas_w, canvas_h), frame).convert("L")
     strips = (
-        gray.crop((0, 0, CANVAS_W, y0)),
-        gray.crop((0, y1, CANVAS_W, CANVAS_H)),
+        gray.crop((0, 0, canvas_w, y0)),
+        gray.crop((0, y1, canvas_w, canvas_h)),
         gray.crop((0, y0, x0, y1)),
-        gray.crop((x1, y0, CANVAS_W, y1)),
+        gray.crop((x1, y0, canvas_w, y1)),
     )
     return max(_peak(strip.histogram()) for strip in strips if strip.size[0] and strip.size[1])
 
@@ -129,7 +149,7 @@ def _enforce_static_card(
 
 
 def _decoded_bounds(
-    frame: bytes | memoryview, index: int
+    frame: bytes | memoryview, index: int, canvas: tuple[int, int]
 ) -> tuple[tuple[int, int, int, int], float]:
     """Structural report for one card frame; typed refusal when it fails."""
 
@@ -137,6 +157,7 @@ def _decoded_bounds(
         frame,
         ink_threshold=DECODED_INK_THRESHOLD,
         centering_error=DECODED_CENTERING_ERROR,
+        canvas=canvas,
     )
     raw_bounds = report["bounds"]
     raw_fraction = report["ink_fraction"]
@@ -166,14 +187,14 @@ def _exclusive_raw_span(qa_dir: Path) -> Path:
     return Path(name)
 
 
-def _iter_raw_frames(raw_path: Path, count: int) -> Iterator[bytes]:
+def _iter_raw_frames(raw_path: Path, count: int, frame_bytes: int = FRAME_BYTES) -> Iterator[bytes]:
     """Yield one frame at a time; the span never materializes as one object."""
 
     try:
         with raw_path.open("rb") as handle:
             for index in range(count):
-                frame = handle.read(FRAME_BYTES)
-                if len(frame) != FRAME_BYTES:
+                frame = handle.read(frame_bytes)
+                if len(frame) != frame_bytes:
                     raise ChapterCardQAError(
                         "card-extract-failed",
                         f"raw span file ended early at frame {index} of {count}",
@@ -196,21 +217,25 @@ class _SpanScan:
     png_frames: dict[int, bytes] = field(default_factory=dict)
 
 
-def _canvas() -> FrameGeometry:
-    return FrameGeometry(CANVAS_W, CANVAS_H)
+def _canvas(output_id: str = "landscape") -> FrameGeometry:
+    width, height = canvas_for(output_id)
+    return FrameGeometry(width, height)
 
 
-def _scan_span(
+def _scan_span(  # noqa: PLR0913 (span scan contract: tools/master/dump/frames/output)
     tools: PinnedTools,
     master: Path,
     raw_path: Path,
     *,
     record_frame: int,
     card_frames: int,
+    output_id: str = "landscape",
 ) -> _SpanScan:
     """Dump the span once, then stream every per-frame check from the file."""
 
-    window = FrameWindow(_canvas(), record_frame, card_frames)
+    canvas = canvas_for(output_id)
+    frame_bytes = frame_bytes_for(output_id)
+    window = FrameWindow(_canvas(output_id), record_frame, card_frames)
     try:
         dump_frames_raw(tools, master, window, raw_path)
     except ChapterCardMediaError as error:
@@ -218,14 +243,14 @@ def _scan_span(
     wanted_png = frozenset({0} | {sample - record_frame for sample in CARD_PNG_SAMPLES})
     scan = _SpanScan()
     previous: bytes | None = None
-    for index, frame in enumerate(_iter_raw_frames(raw_path, card_frames)):
-        bounds, fraction = _decoded_bounds(frame, index)
+    for index, frame in enumerate(_iter_raw_frames(raw_path, card_frames, frame_bytes)):
+        bounds, fraction = _decoded_bounds(frame, index, canvas)
         scan.whites.append(max(frame))
-        scan.backgrounds.append(_background_peak(frame, bounds))
+        scan.backgrounds.append(_background_peak(frame, bounds, canvas))
         if scan.first_bounds is None:
             scan.first_bounds, scan.first_fraction = bounds, fraction
         if previous is not None:
-            diff = frame_diff(previous, frame, _canvas())
+            diff = frame_diff(previous, frame, _canvas(output_id))
             scan.neighbor_max = max(scan.neighbor_max, diff.max_abs)
             scan.neighbor_mean = max(scan.neighbor_mean, diff.mean_abs)
         previous = frame
@@ -252,13 +277,14 @@ def _span_report(scan: _SpanScan, card_frames: int) -> CardSpanReport:
     }
 
 
-def verify_card_span(
+def verify_card_span(  # noqa: PLR0913 (card span contract: tools/master/frames/dir/output)
     tools: PinnedTools,
     master: Path,
     *,
     record_frame: int,
     card_frames: int,
     qa_dir: Path,
+    output_id: str = "landscape",
 ) -> CardSpanReport:
     """Stream all card frames from a raw dump: white glyphs, black field, static.
 
@@ -270,16 +296,19 @@ def verify_card_span(
     raw_path = _exclusive_raw_span(qa_dir)
     try:
         scan = _scan_span(
-            tools, master, raw_path, record_frame=record_frame, card_frames=card_frames
+            tools, master, raw_path, record_frame=record_frame, card_frames=card_frames,
+            output_id=output_id,
         )
     finally:
         with suppress(OSError):
             raw_path.unlink(missing_ok=True)
+    canvas = canvas_for(output_id)
     for output_frame in CARD_PNG_SAMPLES:
         save_png(
-            scan.png_frames[output_frame - record_frame], qa_dir / f"frame-{output_frame:06d}.png"
+            scan.png_frames[output_frame - record_frame], qa_dir / f"frame-{output_frame:06d}.png",
+            canvas,
         )
-    save_png(scan.png_frames[0], qa_dir / "card-first.png")
+    save_png(scan.png_frames[0], qa_dir / "card-first.png", canvas)
     return _span_report(scan, card_frames)
 
 
@@ -289,6 +318,8 @@ __all__ = [
     "FRAME_BYTES",
     "CardSpanReport",
     "ChapterCardQAError",
+    "canvas_for",
+    "frame_bytes_for",
     "require_qa_dir",
     "save_png",
     "verify_card_span",

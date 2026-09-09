@@ -29,6 +29,7 @@ from services.cli.real_episode import (
     load_real_episode,
 )
 from services.cli.real_plan import RealPlanError
+from services.cli.real_policy import load_episode_grant
 from services.cli.real_pool import (
     RealPoolError,
     pool_for,
@@ -115,6 +116,12 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
         lock = load_lock(PHASE1_LOCK)
     except (RealEpisodeError, ValueError) as error:
         raise RealChainError("episode_invalid", str(error)) from error
+    try:
+        editorial_grant = load_episode_grant(episode_root)
+    except ValueError as error:
+        raise RealChainError(
+            "editorial-grant-invalid", f"cannot parse the episode grant: {error}"
+        ) from error
     if not isinstance(lock, Phase1TechnicalToolchainLock):
         raise RealChainError("lock_wrong", f"{PHASE1_LOCK} is not the phase-1 toolchain lock")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -167,6 +174,7 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
         episode_id=manifest.episode_id,
         eligibility=eligibility,
         edit_source_world_sha256=analysis.record.edit_source_sha256,
+        editorial_grant=editorial_grant,
     )
     if stop == "ANALYZED":
         return _finish(build_report(facts, stop), out_dir, None)
@@ -183,6 +191,7 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
             out_dir=out_dir,
             env=environment,
             runtime_path=editorial_runtime,
+            editorial_grant=editorial_grant,
         )
         episode_record = CommittedEpisodeRecord(
             episode_id=manifest.episode_id,
@@ -212,6 +221,7 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
         eligibility=eligibility,
         edit_source_world_sha256=analysis.record.edit_source_sha256,
         director=outcome,
+        editorial_grant=editorial_grant,
         selection_producer=(
             f"{selection.producer.model_role_id}:{selection.producer.contract_version}"
         ),

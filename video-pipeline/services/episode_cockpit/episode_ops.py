@@ -25,9 +25,14 @@ from services.episode_cockpit.errors import (
     CockpitConflictError,
     CockpitUnprocessableError,
 )
-from services.episode_cockpit.models import BriefDraft, IntakeRecordV1
+from services.episode_cockpit.models import (
+    BriefDraft,
+    EditorialGrantRequest,
+    EpisodeEditorialGrantV1,
+    IntakeRecordV1,
+)
 from services.episode_cockpit.status_view import build_status_payload
-from services.episode_cockpit.workspace_context import WorkspaceContext
+from services.episode_cockpit.workspace_context import WorkspaceContext, validated_episode_id
 from services.foundation_io import atomic_write, canonical_model_bytes
 from services.job_runner.state_errors import StateStoreError
 from services.job_runner.state_store import StateStore
@@ -37,6 +42,7 @@ from services.publish.models import PublishPackageV1
 INTAKE_STAGE = "intake"
 BRIEF_NAME = "brief.json"
 INTAKE_NAME = "intake.json"
+GRANT_NAME = "editorial-grant.json"
 RUNNER_LOG_NAME = "runner.log"
 RUNNER_LOCK_NAME = "runner.lock"
 RUNNER_MODULE = "services.cli.episode_runner"
@@ -92,6 +98,7 @@ class JobOps(WorkspaceContext):
         brief_text: str,
         channel: str | None = None,
         style_version: int | None = None,
+        editorial_grant: EditorialGrantRequest | None = None,
     ) -> dict[str, object]:
         folder = Path(source_folder)
         if not folder.is_dir():
@@ -122,6 +129,8 @@ class JobOps(WorkspaceContext):
                 ) from error
             raise
         self._episode_dir(episode_id).mkdir(parents=True, exist_ok=True)
+        if editorial_grant is not None:
+            self._write_grant(episode_id, editorial_grant)
         atomic_write(
             self._episode_dir(episode_id) / BRIEF_NAME,
             canonical_model_bytes(BriefDraft(episode_id=episode_id, brief_text=brief_text)),
@@ -166,6 +175,45 @@ class JobOps(WorkspaceContext):
             "brief_status": "draft",
             "pipeline": "started",
         }
+
+    def _write_grant(self, episode_id: str, grant: EditorialGrantRequest) -> dict[str, object]:
+        """Persist one operator-supplied grant declaration (grant AND revoke).
+
+        Always overwrites with a fresh ``granted_at`` — an idempotent
+        re-grant refreshes the timestamp, a revoke persists
+        ``granted=False`` explicitly (never a silent delete).
+        """
+
+        record = EpisodeEditorialGrantV1(
+            episode_id=episode_id,
+            granted=grant.granted,
+            data_class=grant.data_class,
+            stage=grant.stage,
+            granted_at=datetime.now(UTC).isoformat(),
+            note=grant.note,
+        )
+        atomic_write(
+            self._episode_dir(episode_id) / GRANT_NAME,
+            canonical_model_bytes(record),
+        )
+        return record.model_dump(mode="json")
+
+    def set_editorial_grant(
+        self, episode_id: str, grant: EditorialGrantRequest
+    ) -> dict[str, object]:
+        """POST /episodes/{id}/editorial-grant — declare or revoke the grant."""
+
+        validated = validated_episode_id(episode_id)
+        self._require_snapshot(validated)
+        return self._write_grant(validated, grant)
+
+    def load_editorial_grant(self, episode_id: str) -> EpisodeEditorialGrantV1 | None:
+        """Read the persisted grant; None = never declared (local_only stays)."""
+
+        path = self._episode_dir(episode_id) / GRANT_NAME
+        if not path.is_file():
+            return None
+        return EpisodeEditorialGrantV1.model_validate_json(path.read_bytes())
 
     def list_episodes(self) -> dict[str, object]:
         return {"episodes": self._list_job_rows()}

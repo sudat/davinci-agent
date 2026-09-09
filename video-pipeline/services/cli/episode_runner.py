@@ -72,7 +72,8 @@ from services.cli.episode_runner_workspace import (
     write_chain_manifest,
 )
 from services.cli.real_chain import STAGE_ORDER, RealChainError, run_real_chain
-from services.episode_cockpit.models import IntakeRecordV1
+from services.cli.real_policy import GRANT_FILE_NAME, load_episode_grant
+from services.episode_cockpit.models import EpisodeEditorialGrantV1, IntakeRecordV1
 from services.foundation_io import sha256_file
 from services.job_runner.cas import current_job_state
 from services.job_runner.state_errors import StateStoreError
@@ -181,6 +182,26 @@ def _load_intake(episode_root: Path) -> IntakeRecordV1:
         ) from error
     except ValidationError as error:
         raise RunnerMalformedError("intake-invalid", str(error)) from error
+
+
+def _load_grant(episode_root: Path) -> EpisodeEditorialGrantV1 | None:
+    """Read the episode's operator grant for the runner-log provenance line.
+
+    The grant rides the persisted episode metadata ONLY (like intake.json)
+    — no CLI/env lane by design, so it can never arrive through ambient
+    configuration. The chain itself re-reads the same file as the snapshot
+    authority (``run_real_chain``); this read only evidences the decision
+    in runner.log. Absent file = never declared = local_only. A malformed
+    file is a typed malformed refusal (fail-closed, never ignored).
+    """
+
+    try:
+        return load_episode_grant(episode_root)
+    except ValidationError as error:
+        raise RunnerMalformedError(
+            "editorial-grant-invalid",
+            f"cannot parse {episode_root / GRANT_FILE_NAME}: {error}",
+        ) from error
 
 
 def _gate_error(error: EditorialGateError) -> Exception:
@@ -354,6 +375,14 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
             raise RunnerBlockedError(error.code, error.detail) from error
         log_event(log, "chain_manifest_written", run_id=run_id, video=str(video))
         record_stage(store, ctx, "ingest", "running")
+        grant = _load_grant(call.episode_root)
+        log_event(
+            log,
+            "editorial_grant",
+            run_id=run_id,
+            granted=grant.granted if grant is not None else None,
+            granted_at=grant.granted_at if grant is not None else None,
+        )
         _advance_chain(store, ctx, call.episode_root, chain_env, call.editorial_runtime)
         _verify_reached(store, ctx)
         if call.stop == "PREVIEW_READY":

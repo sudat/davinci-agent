@@ -13,7 +13,7 @@ import argparse
 import sys
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from pydantic import ValidationError
 
@@ -75,11 +75,14 @@ def _scope_guard_package() -> None:
         )
 
 
-def run_qc(
+def run_qc(  # noqa: PLR0913 (QC entry contract: render/policy/out/bindings/orientation/output)
     render: Path,
     policy_path: Path,
     out: Path,
     extra: OptionalBindings | None = None,
+    *,
+    declared_orientation: str | None = None,
+    output_id: str = "landscape",
 ) -> QcReport:
     """Execute every deterministic check; writes and returns the report."""
 
@@ -109,7 +112,7 @@ def run_qc(
                 (QcMeasured(name="probe", value="failed"),),
             )
         )
-        return _finish(issues, (), loaded, versions, out)
+        return _finish(issues, (), loaded, versions, out, output_id)
     video = next((s for s in report.streams if s.codec_type == "video"), None)
     audio = next((s for s in report.streams if s.codec_type == "audio"), None)
     if video is None or audio is None:
@@ -136,7 +139,10 @@ def run_qc(
                     render=render,
                     report=report,
                     render_streams_raw=tuple(raw),
-                    expectation=expected_orientation(loaded.source_manifest),
+                    expectation=expected_orientation(
+                        loaded.source_manifest,
+                        declared_orientation=declared_orientation,
+                    ),
                     ir=loaded.ir,
                     edit_source=loaded.edit_source,
                     frame_source=tools_frame_source(tools),
@@ -157,20 +163,25 @@ def run_qc(
         loaded.declarations, policy.threshold_version, inputs
     )
     issues.extend(privacy_issues)
-    return _finish(issues, gates, loaded, versions, out)
+    return _finish(issues, gates, loaded, versions, out, output_id)
 
 
-def _finish(
+def _finish(  # noqa: PLR0913, PLR0917 (report assembly: issues/gates/inputs/versions/out/output)
     issues: list[QcIssue],
     gates: tuple[UnresolvedHumanGate, ...],
     loaded: LoadedInputs,
     versions: QcToolVersions,
     out: Path,
+    output_id: str = "landscape",
 ) -> QcReport:
     issues.sort(key=lambda i: (i.rule_id, i.detail))
     typed_gates = tuple(sorted(gates, key=lambda g: g.gate_id))
+    bound_output: Literal["landscape", "vertical"] = (
+        "vertical" if output_id == "vertical" else "landscape"
+    )
     report_out = QcReport(
         schema_version="qc-report-v1",
+        output_id=bound_output,
         verdict=compute_verdict(tuple(issues), typed_gates),
         issues=tuple(issues),
         unresolved_human_gates=typed_gates,

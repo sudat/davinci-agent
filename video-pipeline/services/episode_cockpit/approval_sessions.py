@@ -18,19 +18,22 @@ from services.episode_cockpit.approvals import (
     bundle_approvals,
     count_blocking_sessions,
 )
-from services.episode_cockpit.side_desks import APPROVALS_RELATIVE
 from services.episode_cockpit.workspace_context import WorkspaceContext
+from services.outputs.geometry import DEFAULT_OUTPUT_ID, OutputId, approvals_relatives
 
 
 class ApprovalSessionsOps(WorkspaceContext):
     """Bundled approval sessions read from the append-only ledger."""
 
-    def approval_sessions(self, episode_id: str) -> dict[str, object]:
+    def approval_sessions(
+        self, episode_id: str, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> dict[str, object]:
         episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
-        records_path = episode_dir.joinpath(*APPROVALS_RELATIVE)
+        records_path = episode_dir.joinpath(*approvals_relatives(output_id))
         if not records_path.is_file():
             return {
                 "available": False,
+                "output_id": output_id,
                 "sessions": [],
                 "blocking_session_count": 0,
                 "decided": [],
@@ -51,6 +54,7 @@ class ApprovalSessionsOps(WorkspaceContext):
         ]
         return {
             "available": bool(latest),
+            "output_id": output_id,
             "sessions": [_bundle_payload(bundle) for bundle in bundles.bundles],
             "blocking_session_count": count_blocking_sessions(bundles),
             "decided": decided,

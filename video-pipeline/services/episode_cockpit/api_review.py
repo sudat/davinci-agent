@@ -24,6 +24,7 @@ from pydantic import BeforeValidator, Field
 
 from services.contracts.primitives import StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
+from services.episode_cockpit.errors import CockpitUnprocessableError
 
 # Runtime imports (NOT TYPE_CHECKING): FastAPI resolves request-model
 # annotations at decoration time via get_type_hints (task-44 convention).
@@ -33,6 +34,7 @@ from services.episode_cockpit.models import (  # noqa: TC001
     SequenceNumber,
 )
 from services.episode_cockpit.review_chat import ReviewCommandDraft
+from services.outputs.geometry import normalize_output_id
 
 router = APIRouter()
 
@@ -59,6 +61,7 @@ class ReviewChatApplyRequest(StrictModel):
     at_seconds: Seconds | None = None
     drafts: DraftSequence | None = Field(default=None, min_length=1)
     sequence: SequenceNumber | None = None
+    output_id: str | None = None
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -70,26 +73,43 @@ Workspace = Annotated[CockpitWorkspace, Depends(_workspace)]
 
 
 @router.get("/episodes/{episode_id}/approval-sessions")
-def approval_sessions(episode_id: str, workspace: Workspace) -> dict[str, object]:
-    return workspace.approval_sessions(episode_id)
+def approval_sessions(
+    episode_id: str, workspace: Workspace, output: str | None = None
+) -> dict[str, object]:
+    try:
+        output_id = normalize_output_id(output)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
+    return workspace.approval_sessions(episode_id, output_id)
 
 
 @router.post("/episodes/{episode_id}/review-chat/apply")
 def review_chat_apply(
     episode_id: str, request: ReviewChatApplyRequest, workspace: Workspace
 ) -> dict[str, object]:
+    try:
+        output_id = normalize_output_id(request.output_id)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
     return workspace.apply_review_command(
         episode_id,
         text=request.text,
         at_seconds=request.at_seconds,
         drafts=request.drafts,
         sequence=request.sequence,
+        output_id=output_id,
     )
 
 
 @router.post("/episodes/{episode_id}/review-chat/revert")
-def review_chat_revert(episode_id: str, workspace: Workspace) -> dict[str, object]:
-    return workspace.revert_review_plan(episode_id)
+def review_chat_revert(
+    episode_id: str, workspace: Workspace, output: str | None = None
+) -> dict[str, object]:
+    try:
+        output_id = normalize_output_id(output)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
+    return workspace.revert_review_plan(episode_id, output_id)
 
 
 __all__ = ["router"]

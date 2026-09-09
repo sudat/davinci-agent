@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from services.foundation_io import canonical_model_bytes, sha256_file
 
@@ -119,6 +119,7 @@ class TraceContext:
     plan_version: str
     decision: AppliedDecision | None
     styled: TraceStyleTable | None = None
+    output_id: Literal["landscape", "vertical"] = "landscape"
 
 
 def _trace_inputs(context: TraceContext) -> tuple[TraceInput, ...]:
@@ -161,6 +162,7 @@ def build_trace(
     decision_entries = decisions(context.plan_version, context.decision)
     return PreviewTraceManifest(
         schema_version="preview-trace-v1",
+        output_id=context.output_id,
         preview=PreviewFile(
             path=str(preview),
             sha256=sha256_file(preview),

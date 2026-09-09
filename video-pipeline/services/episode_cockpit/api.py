@@ -16,13 +16,14 @@ from pydantic import BeforeValidator
 
 from services.contracts.primitives import Identifier, StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
-from services.episode_cockpit.errors import CockpitConflictError
+from services.episode_cockpit.errors import CockpitConflictError, CockpitUnprocessableError
 
 # Runtime imports (NOT TYPE_CHECKING): FastAPI resolves parameter annotations
 # at decoration time via get_type_hints, so these model imports stay top-level.
 from services.episode_cockpit.models import (
     ApprovalExecuteRequest,
     BriefPutRequest,
+    EditorialGrantRequest,
     EpisodeCreateRequest,
     NonEmpty,
     RebuildRequest,
@@ -48,6 +49,8 @@ from services.episode_cockpit.review_reactions import (
     investigation_state,
     reaction_chat_response,
 )
+from services.episode_cockpit.workspace_context import validated_episode_id
+from services.outputs.geometry import normalize_output_id, preview_relatives
 from services.reference_learning.domain_extract import extract_domains_seeded
 
 router = APIRouter()
@@ -73,13 +76,22 @@ class RebuildRequestWithCommand(RebuildRequest):
     rebuild-requests model stays untouched while the route can carry the
     applied review-command reference whose lineage derives the stage hint.
     ``applied_commands`` (V44-1) names a BATCH of applied commands whose
-    lineage stage sets are unioned into ONE rebuild.
+    lineage stage sets are unioned into ONE rebuild. ``output_id``
+    (工程5) selects the output chain the rebuild renders (default
+    landscape, byte-identical).
     """
 
     applied_command: Identifier | None = None
     applied_commands: (
         Annotated[tuple[Identifier, ...], BeforeValidator(tuple)] | None
     ) = None
+    output_id: str | None = None
+
+
+class OutputRegisterRequest(StrictModel):
+    """POST /episodes/{id}/outputs — register the vertical output."""
+
+    output_id: str
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -97,7 +109,33 @@ def create_episode(request: EpisodeCreateRequest, workspace: Workspace) -> dict[
         brief_text=request.brief_text,
         channel=request.channel,
         style_version=request.style_version,
+        editorial_grant=request.editorial_grant,
     )
+
+
+@router.post("/episodes/{episode_id}/editorial-grant")
+def set_editorial_grant(
+    episode_id: str, request: EditorialGrantRequest, workspace: Workspace
+) -> dict[str, object]:
+    """Declare (or revoke with granted:false) the transcript→editorial_direct grant.
+
+    Scope wider than the single grantable pair is a typed 422 at the
+    request-model boundary — never a silent widen.
+    """
+
+    return workspace.set_editorial_grant(episode_id, request)
+
+
+@router.get("/episodes/{episode_id}/editorial-grant")
+def get_editorial_grant(episode_id: str, workspace: Workspace) -> dict[str, object]:
+    """Read the persisted grant; never-declared reads granted:null (local_only)."""
+
+    validated = validated_episode_id(episode_id)
+    workspace.episode_status(validated)
+    grant = workspace.load_editorial_grant(validated)
+    if grant is None:
+        return {"episode_id": validated, "granted": None}
+    return {"episode_id": validated, **grant.model_dump(mode="json")}
 
 
 @router.get("/episodes")
@@ -124,7 +162,10 @@ def put_brief(
 
 @router.get("/episodes/{episode_id}/preview")
 def episode_preview(
-    episode_id: str, workspace: Workspace, content_hash: str | None = None
+    episode_id: str,
+    workspace: Workspace,
+    content_hash: str | None = None,
+    output: str | None = None,
 ) -> FileResponse:
     """Serve the preview video; ``X-Cockpit-Preview-*`` headers ONLY on a
     full cross-check (publish record + succeeded preview stage row + review
@@ -132,10 +173,15 @@ def episode_preview(
     (200/206, 404 when absent) is unchanged and never partial-headed. A
     ``content_hash`` query differing from the bound record's is a 409
     without the video; an unknown binding cannot differ, so it serves.
+    ``output=vertical`` serves the vertical canvas (landscape default).
     """
 
-    path = workspace.preview_path(episode_id)
-    binding = workspace.preview_binding(episode_id)
+    try:
+        output_id = normalize_output_id(output)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
+    path = workspace.preview_path(episode_id, output_id)
+    binding = workspace.preview_binding(episode_id, output_id)
     if (
         content_hash is not None
         and binding is not None
@@ -147,13 +193,22 @@ def episode_preview(
         )
     headers = binding_headers(binding) if binding is not None else None
     return FileResponse(
-        path, media_type="video/mp4", filename="preview.mp4", headers=headers
+        path,
+        media_type="video/mp4",
+        filename=preview_relatives(output_id)[-1],
+        headers=headers,
     )
 
 
 @router.get("/episodes/{episode_id}/flags")
-def episode_flags(episode_id: str, workspace: Workspace) -> dict[str, object]:
-    return workspace.review_flags(episode_id)
+def episode_flags(
+    episode_id: str, workspace: Workspace, output: str | None = None
+) -> dict[str, object]:
+    try:
+        output_id = normalize_output_id(output)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
+    return workspace.review_flags(episode_id, output_id)
 
 
 @router.post("/episodes/{episode_id}/review-chat")
@@ -255,17 +310,40 @@ def _plain_review_chat(
 def rebuild(
     episode_id: str, request: RebuildRequestWithCommand, workspace: Workspace
 ) -> dict[str, object]:
+    try:
+        output_id = normalize_output_id(request.output_id)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
     return workspace.record_rebuild(
         episode_id,
         stage_hint=request.stage_hint,
         applied_command=request.applied_command,
         applied_commands=request.applied_commands,
+        output_id=output_id,
     )
 
 
+@router.get("/episodes/{episode_id}/outputs")
+def list_outputs(episode_id: str, workspace: Workspace) -> dict[str, object]:
+    return workspace.list_outputs(episode_id)
+
+
+@router.post("/episodes/{episode_id}/outputs")
+def register_output(
+    episode_id: str, request: OutputRegisterRequest, workspace: Workspace
+) -> dict[str, object]:
+    return workspace.register_output(episode_id, request.output_id)
+
+
 @router.get("/episodes/{episode_id}/approvals")
-def list_approvals(episode_id: str, workspace: Workspace) -> dict[str, object]:
-    return workspace.list_approvals(episode_id)
+def list_approvals(
+    episode_id: str, workspace: Workspace, output: str | None = None
+) -> dict[str, object]:
+    try:
+        output_id = normalize_output_id(output)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
+    return workspace.list_approvals(episode_id, output_id)
 
 
 @router.post("/episodes/{episode_id}/approvals/{approval_id}")
@@ -274,12 +352,18 @@ def execute_approval(
     approval_id: str,
     request: ApprovalExecuteRequest,
     workspace: Workspace,
+    output: str | None = None,
 ) -> dict[str, object]:
+    try:
+        output_id = normalize_output_id(output)
+    except ValueError as error:
+        raise CockpitUnprocessableError("unknown-output", str(error)) from error
     return workspace.execute_approval(
         episode_id,
         approval_id,
         decision=request.decision,
         actor_id=request.actor_id,
+        output_id=output_id,
     )
 
 

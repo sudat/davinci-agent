@@ -168,6 +168,7 @@ class TraceStyleTable(StrictModel):
 
 class PreviewTraceManifest(StrictModel):
     schema_version: Literal["preview-trace-v1"]
+    output_id: Literal["landscape", "vertical"] = "landscape"
     preview: PreviewFile
     timeline_binding: TimelineBinding
     inputs: Sequence[TraceInput] = Field(min_length=1)

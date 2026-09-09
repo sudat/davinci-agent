@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -30,18 +31,13 @@ from services.cli.real_director import (
     select,
 )
 from services.cli.real_director_runtime import DirectorRoute
-from services.config.models import (
-    BudgetPolicy,
-    CloudAllowlistEntry,
-    EpisodeConfig,
-    NetworkPosture,
-    PathAllowlist,
-    ResolvedConfig,
-    RetentionPolicy,
-    StageDataClasses,
-    SystemConfig,
+from services.cli.real_policy import (
+    load_policy,
+    local_only_policy,
+    policy_for_grant,
+    write_policy_snapshot,
 )
-from services.config.resolver import resolve
+from services.cli.real_report import RunFacts, build_report
 from services.contracts.editorial_model import EditorialSelectionProposal, SelectionEntry
 from services.contracts.primitives import ArtifactRef
 from services.editorial.candidate_models import (
@@ -52,9 +48,16 @@ from services.editorial.candidate_models import (
 )
 from services.editorial.models import AdoptedPolicySummaryV1
 from services.editorial.pin import load_pin
+from services.editorial.prompt import UNTRUSTED_DATA_NOTICE
 from services.editorial.transport import CREDENTIALS_ENV, EditorialStrictResponse
+from services.episode_cockpit.models import EpisodeEditorialGrantV1
 from services.foundation_io import canonical_model_bytes
+from services.ingest.eligibility import EligibilityResult
+from services.policy.data_policy import authorize_cloud_transport
 from tests.editorial.support import build_index, load_manifest
+
+if TYPE_CHECKING:
+    from services.config.models import ResolvedConfig
 
 FIXTURE_ID = "p1-ref-01-clean-ja"
 RUNTIME_ENV = "EDITORIAL_RUNTIME_CONFIG"
@@ -87,32 +90,23 @@ def _write_runtime(tmp_path: Path, name: str, mode: str, transport: str | None) 
     return path
 
 
-def _allowing_policy() -> ResolvedConfig:
-    system = SystemConfig(
-        schema_version="system-config-v1",
-        retention=RetentionPolicy(authoritative="permanent", rebuildable_days=30),
-        data_classes=(
-            StageDataClasses(stage="review_translate", classes=("review_instruction_text",)),
-            StageDataClasses(stage="editorial_direct", classes=("transcript",)),
-        ),
-        cloud_allowlist=(
-            CloudAllowlistEntry(
-                data_class="transcript", stage="editorial_direct", fixture_only=False
-            ),
-        ),
-        network=NetworkPosture(
-            builder="loopback", builder_endpoint="unix:///run/davinci-agent/editorial.sock"
-        ),
-        path_allowlist=PathAllowlist(roots=("/video-pipeline/jobs",)),
-        budget=BudgetPolicy(
-            transient_max_attempts=3,
-            permanent_max_attempts=1,
-            blocking_human_max_attempts=1,
-            max_stage_cost_units=1000,
-            max_job_cost_units=10000,
-        ),
+def _operator_grant(episode_id: str = FIXTURE_ID) -> EpisodeEditorialGrantV1:
+    """The operator's PRD §8 declaration the product path persists per episode."""
+
+    return EpisodeEditorialGrantV1(
+        episode_id=episode_id,
+        granted=True,
+        data_class="transcript",
+        stage="editorial_direct",
+        granted_at="2026-09-09T00:00:00+00:00",
+        note="r3 verification lane",
     )
-    return resolve(system, episode=EpisodeConfig(episode_id=FIXTURE_ID))
+
+
+def _allowing_policy() -> ResolvedConfig:
+    """Allowing snapshot via the REAL grant path (never a hand-built allowlist)."""
+
+    return policy_for_grant(FIXTURE_ID, _operator_grant())
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,3 +367,117 @@ def test_f_runtime_precedence_explicit_over_env_over_default(
     with pytest.raises(RealDirectorError) as bad_info:
         resolve_director_route({RUNTIME_ENV: str(bad)}, None)
     assert bad_info.value.code == "editorial-runtime-mode-invalid"
+
+
+def test_g_grant_snapshot_carries_only_the_grantable_pair(tmp_path: Path) -> None:
+    granted_file = write_policy_snapshot(FIXTURE_ID, tmp_path, _operator_grant())
+    granted = load_policy(granted_file)
+    assert [
+        (entry.data_class, entry.stage, entry.fixture_only)
+        for entry in granted.cloud_allowlist
+    ] == [("transcript", "editorial_direct", False)]
+    decision = authorize_cloud_transport(
+        granted, data_class="transcript", stage="editorial_direct", episode_id=FIXTURE_ID
+    )
+    assert decision.allowed is True
+
+
+def test_g2_bare_snapshot_stays_local_only(tmp_path: Path) -> None:
+    out = tmp_path / "bare"
+    out.mkdir()
+    snapshot = load_policy(write_policy_snapshot(FIXTURE_ID, out, None))
+    assert list(snapshot.cloud_allowlist) == []
+
+
+def test_h_no_grant_denies_before_transport_with_grant_guidance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seam = _seam(tmp_path)
+    runtime = _write_runtime(tmp_path, "codex.json", "production_model", "codex-exec")
+    fake = _stub_codex(monkeypatch, FakeCodexRunner())
+    env = {RUNTIME_ENV: str(runtime)}
+
+    kwargs = _select_kwargs(seam, env)
+    kwargs["policy"] = local_only_policy(FIXTURE_ID)
+    with pytest.raises(RealDirectorError) as exc_info:
+        select(**kwargs)  # type: ignore[arg-type]
+
+    assert exc_info.value.code == "director_failed"
+    assert "transport_code=None" in str(exc_info.value)
+    assert "editorial-grant" in str(exc_info.value)
+    assert fake.calls == []
+
+
+def test_i_revoked_grant_denies_like_never_declared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seam = _seam(tmp_path)
+    runtime = _write_runtime(tmp_path, "codex.json", "production_model", "codex-exec")
+    fake = _stub_codex(monkeypatch, FakeCodexRunner())
+    env = {RUNTIME_ENV: str(runtime)}
+    revoked = _operator_grant().model_copy(update={"granted": False})
+
+    kwargs = _select_kwargs(seam, env)
+    kwargs["policy"] = policy_for_grant(FIXTURE_ID, revoked)
+    with pytest.raises(RealDirectorError) as exc_info:
+        select(**kwargs)  # type: ignore[arg-type]
+
+    assert exc_info.value.code == "director_failed"
+    assert "transport_code=None" in str(exc_info.value)
+    assert fake.calls == []
+
+
+def test_j_granted_run_sends_transcript_with_untrusted_notice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seam = _seam(tmp_path)
+    runtime = _write_runtime(tmp_path, "codex.json", "production_model", "codex-exec")
+    canned = _canned_proposal(seam)
+    fake = _stub_codex(
+        monkeypatch,
+        FakeCodexRunner(replies=[canonical_model_bytes(canned).decode("utf-8")]),
+    )
+    env = {RUNTIME_ENV: str(runtime)}
+
+    outcome = select(**_select_kwargs(seam, env))  # type: ignore[arg-type]
+
+    assert outcome.mode == "live"
+    assert len(fake.calls) == 1
+    prompt = str(fake.calls[0]["prompt"])
+    assert UNTRUSTED_DATA_NOTICE in prompt
+    assert any(text for text in seam.speech_text.values() if text in prompt)
+
+
+def test_k_run_report_records_grant_provenance() -> None:
+    eligibility = EligibilityResult(
+        episode_id=FIXTURE_ID,
+        status="supported",
+        contract_id="talking-head-mvp-v1",
+        reasons=(),
+        human_gates=(),
+    )
+    granted_report = build_report(
+        RunFacts(
+            episode_id=FIXTURE_ID,
+            eligibility=eligibility,
+            edit_source_world_sha256="ab" * 32,
+            editorial_grant=_operator_grant(),
+        ),
+        "ANALYZED",
+    )
+    assert granted_report.editorial_grant_granted is True
+    assert granted_report.editorial_grant_data_class == "transcript"
+    assert granted_report.editorial_grant_stage == "editorial_direct"
+    assert granted_report.editorial_grant_granted_at == "2026-09-09T00:00:00+00:00"
+    assert granted_report.editorial_grant_note == "r3 verification lane"
+
+    bare_report = build_report(
+        RunFacts(
+            episode_id=FIXTURE_ID,
+            eligibility=eligibility,
+            edit_source_world_sha256="ab" * 32,
+        ),
+        "ANALYZED",
+    )
+    assert bare_report.editorial_grant_granted is None
+    assert bare_report.editorial_grant_note is None

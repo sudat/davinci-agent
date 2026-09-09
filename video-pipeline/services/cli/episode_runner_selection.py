@@ -23,6 +23,7 @@ from services.cli.compile_ir import qc_policy
 from services.cli.project import ProjectionError, ReviewSubtitle, project_plan
 from services.cli.real_director import select_and_reconcile
 from services.cli.real_plan import EDIT_BASE, REAL_PRODUCER, compile_ir, planner_input
+from services.cli.real_policy import load_episode_grant
 from services.cli.real_pool import SpeechSegment, cue_source_for
 from services.cli.real_selection_inputs import (
     SelectionInputsError,
@@ -111,6 +112,12 @@ def rerun_director_with_policy(
         inputs = load_selection_inputs(run_dir)
     except SelectionInputsError as error:
         raise SelectionRerunError(error.code, error.detail) from error
+    try:
+        editorial_grant = load_episode_grant(episode_root)
+    except ValueError as error:
+        raise SelectionRerunError(
+            "editorial-grant-invalid", f"cannot parse the episode grant: {error}"
+        ) from error
     speech = tuple(
         SpeechSegment(
             segment_id=segment.segment_id,
@@ -133,6 +140,7 @@ def rerun_director_with_policy(
             env=env,
             adopted_policy=policy_summary(policy),
             runtime_path=runtime_path,
+            editorial_grant=editorial_grant,
         )
     except RealDirectorError as error:
         raise SelectionRerunError(error.code, error.detail) from error

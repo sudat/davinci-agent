@@ -23,6 +23,7 @@ from services.contracts.primitives import Producer
 from services.episode_cockpit.errors import CockpitNotFoundError, CockpitUnprocessableError
 from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
+from services.outputs.geometry import DEFAULT_OUTPUT_ID, OutputId, approvals_relatives
 from services.reference_learning.ingest import (
     LocalReferenceUnavailable,
     ingest_local_reference,
@@ -34,15 +35,23 @@ LIBRARY_NAME = "reference-library.json"
 
 
 class ApprovalOps(WorkspaceContext):
-    """Purpose-bound approval records, read + automation-class append."""
+    """Purpose-bound approval records, read + automation-class append.
 
-    def list_approvals(self, episode_id: str) -> dict[str, object]:
+    Each output approves independently: ``landscape`` keeps the LEGACY
+    ledger so existing records read unchanged; ``vertical`` appends to a
+    sibling ledger. Approving one output never approves the other.
+    """
+
+    def list_approvals(
+        self, episode_id: str, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> dict[str, object]:
         episode_dir = self._require_snapshot(episode_id).job.episode_id
         records = OperationRecordStore(
-            self._episode_dir(episode_dir).joinpath(*APPROVALS_RELATIVE)
+            self._episode_dir(episode_dir).joinpath(*approvals_relatives(output_id))
         ).all_records()
         return {
             "available": bool(records),
+            "output_id": output_id,
             "approvals": [
                 {
                     "record_id": record.record_id,
@@ -58,11 +67,17 @@ class ApprovalOps(WorkspaceContext):
         }
 
     def execute_approval(
-        self, episode_id: str, approval_id: str, *, decision: str, actor_id: str
+        self,
+        episode_id: str,
+        approval_id: str,
+        *,
+        decision: str,
+        actor_id: str,
+        output_id: OutputId = DEFAULT_OUTPUT_ID,
     ) -> dict[str, object]:
         episode_dir = self._require_snapshot(episode_id).job.episode_id
         store = OperationRecordStore(
-            self._episode_dir(episode_dir).joinpath(*APPROVALS_RELATIVE)
+            self._episode_dir(episode_dir).joinpath(*approvals_relatives(output_id))
         )
         target = next((r for r in store.all_records() if r.record_id == approval_id), None)
         if target is None:
@@ -82,6 +97,7 @@ class ApprovalOps(WorkspaceContext):
             "superseded_record_id": appended.superseded_record_id,
             "runner_class": appended.runner_class,
             "fixture_only": appended.fixture_only,
+            "output_id": output_id,
         }
 
 

@@ -234,6 +234,7 @@ class ExecutionFactsV1(StrictModel):
     """Adapter seam for task 39's ``mcp-execution-report-v1`` (module docstring)."""
 
     episode_id: Identifier
+    output_id: Literal["landscape", "vertical"] = "landscape"
     domains: Annotated[tuple[DomainExecutionV1, ...], BeforeValidator(to_tuple)] = ()
 
     @model_validator(mode="after")

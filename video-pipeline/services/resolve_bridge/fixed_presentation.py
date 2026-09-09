@@ -49,6 +49,7 @@ from services.resolve_bridge.lifecycle import (
 
 if TYPE_CHECKING:
     from services.fixtures.manifest import Phase0AFixtureManifest
+    from services.outputs.geometry import OutputGeometryV1
     from services.resolve_bridge.base_cut_models import (
         BaseCutMediaPoolApi,
         BaseCutRequest,
@@ -112,12 +113,28 @@ def ensure_fixed_layout(timeline: FixedTimelineApi) -> None:
             raise BaseCutError("AddTrack failed: subtitle")
 
 
-def apply_project_settings(project: FixedProjectApi, manifest: Phase0AFixtureManifest) -> None:
+def apply_project_settings(
+    project: FixedProjectApi,
+    manifest: Phase0AFixtureManifest,
+    *,
+    geometry: OutputGeometryV1 | None = None,
+) -> None:
+    """Project canvas setup; explicit geometry wins over the mezzanine dims.
+
+    The default (``None``) keeps the frozen landscape behavior byte-identical;
+    the vertical output passes its resolved geometry so the project no longer
+    follows the landscape mezzanine.
+    """
+
     recipe = manifest.recipe
+    if geometry is None:
+        width, height = recipe.source.width, recipe.source.height
+    else:
+        width, height = geometry.width, geometry.height
     for key, value in (
         ("timelineFrameRate", str(recipe.source.frame_rate.num)),
-        ("timelineResolutionWidth", str(recipe.source.width)),
-        ("timelineResolutionHeight", str(recipe.source.height)),
+        ("timelineResolutionWidth", str(width)),
+        ("timelineResolutionHeight", str(height)),
     ):
         if not project.SetSetting(key, value):
             raise BaseCutError(f"SetSetting({key}) failed")

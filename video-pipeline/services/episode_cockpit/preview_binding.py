@@ -60,6 +60,7 @@ class PreviewBinding(StrictModel):
     target_version: str
     content_hash: Sha256
     output_arrived_at: str
+    output_id: Literal["landscape", "vertical"] = "landscape"
 
 
 def latest_publish_record(runner_log: Path) -> dict[str, object] | None:
@@ -96,14 +97,18 @@ def published_target_version(runner_log: Path) -> str | None:
 
 
 def derive_preview_binding(
-    episode_dir: Path, stage_runs: Sequence[StageRunRow]
+    episode_dir: Path,
+    stage_runs: Sequence[StageRunRow],
+    output_id: Literal["landscape", "vertical"] = "landscape",
 ) -> PreviewBinding | None:
     """Bind the served preview to run+version ONLY on the full cross-check.
 
     All three must agree: the latest publish record is complete; a SUCCEEDED
     ``preview`` stage row exists with the SAME run and the SAME adopted
     hash; and the chain bundle ``current`` names the same version and hash.
-    Anything else is None — unknown, never partially bound.
+    Anything else is None — unknown, never partially bound. The binding is
+    stamped with the requested ``output_id`` so evidence names which
+    canvas it describes.
     """
 
     record = latest_publish_record(episode_dir / RUNNER_LOG_NAME)
@@ -128,6 +133,7 @@ def derive_preview_binding(
         target_version=parsed.target_version,
         content_hash=parsed.content_hash,
         output_arrived_at=parsed.ts,
+        output_id=output_id,
     )
 
 

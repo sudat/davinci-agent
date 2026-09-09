@@ -34,6 +34,17 @@ _BAND_PADDING: Final[dict[ThemeVariant, tuple[int, int]]] = {
 }
 
 
+def _band_padding_for(
+    variant: ThemeVariant, canvas_w: int, canvas_h: int
+) -> tuple[int, int]:
+    """Band padding px for one canvas (landscape values byte-identical)."""
+    if (canvas_w, canvas_h) == (_CANVAS_W, _CANVAS_H):
+        return _BAND_PADDING[variant]
+    if variant == "opening":
+        return (int(canvas_w * 0.012), int(canvas_h * 0.018))
+    return (int(canvas_w * 0.008), int(canvas_h * 0.012))
+
+
 class ThemeTextError(Exception):
     def __init__(self, code: str, detail: str) -> None:
         super().__init__(f"{code}: {detail}")
@@ -109,17 +120,25 @@ def _tier(ch: str) -> int:
     return 2
 
 
-def _variant_box(variant: ThemeVariant) -> _VariantBox:
+def _variant_box(
+    variant: ThemeVariant, canvas: tuple[int, int] | None = None
+) -> _VariantBox:
+    canvas_w, canvas_h = canvas if canvas is not None else (_CANVAS_W, _CANVAS_H)
+    open_x, open_w = int(canvas_w * 0.05), int(canvas_w * 0.85)
+    open_base, open_min = int(canvas_h * 0.09), int(canvas_h * 0.06)
+    pers_x, pers_y = int(canvas_w * 0.025), int(canvas_h * 0.025)
+    pers_w = int(canvas_w * 0.325)
+    pers_base, pers_min = int(canvas_h * 0.04), int(canvas_h * 0.025)
     if variant == "opening":
         return _VariantBox(
-            x=_OPEN_X, y=0, w=_OPEN_W, h=_CANVAS_H,
-            base_size=_OPEN_BASE, min_size=_OPEN_MIN, center_vertically=True,
+            x=open_x, y=0, w=open_w, h=canvas_h,
+            base_size=open_base, min_size=open_min, center_vertically=True,
         )
     if variant == "persistent":
         return _VariantBox(
-            x=_PERS_X, y=_PERS_Y, w=_PERS_W,
-            h=_CANVAS_H - _PERS_Y - int(_CANVAS_H * 0.025),
-            base_size=_PERS_BASE, min_size=_PERS_MIN, center_vertically=False,
+            x=pers_x, y=pers_y, w=pers_w,
+            h=canvas_h - pers_y - int(canvas_h * 0.025),
+            base_size=pers_base, min_size=pers_min, center_vertically=False,
         )
     raise ThemeTextError("invalid-variant", f"unknown variant: {variant}")
 
@@ -132,10 +151,16 @@ def _measure(draw: ImageDraw.ImageDraw, text: str, ctx: _SizeContext) -> tuple[i
     return (int(raw[0]), int(raw[1]), int(raw[2]), int(raw[3]))
 
 
-def _placement(ctx: _SizeContext, w: int, h: int) -> tuple[int, int] | None:
+def _placement(
+    ctx: _SizeContext,
+    w: int,
+    h: int,
+    canvas: tuple[int, int] | None = None,
+) -> tuple[int, int] | None:
+    canvas_w, canvas_h = canvas if canvas is not None else (_CANVAS_W, _CANVAS_H)
     left = ctx.box.x
-    top = (_CANVAS_H - h) // 2 if ctx.box.center_vertically else ctx.box.y
-    if left + w > _CANVAS_W or top + h > _CANVAS_H:
+    top = (canvas_h - h) // 2 if ctx.box.center_vertically else ctx.box.y
+    if left + w > canvas_w or top + h > canvas_h:
         return None
     return left, top
 
@@ -154,12 +179,14 @@ def _fit_bounds(
     )
 
 
-def _single_line_fit(text: str, ctx: _SizeContext) -> ThemeTextFit | None:
+def _single_line_fit(
+    text: str, ctx: _SizeContext, canvas: tuple[int, int] | None = None
+) -> ThemeTextFit | None:
     bbox = _measure(ctx.draw, text, ctx)
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     if w > ctx.box.w or h > ctx.box.h:
         return None
-    placement = _placement(ctx, w, h)
+    placement = _placement(ctx, w, h, canvas)
     if placement is None:
         return None
     return _fit_bounds(ctx, (text,), bbox, placement)
@@ -172,7 +199,9 @@ def _split_candidates(text: str) -> list[tuple[int, int, list[str]]]:
     ]
 
 
-def _split_line_fit(text: str, ctx: _SizeContext) -> ThemeTextFit | None:
+def _split_line_fit(
+    text: str, ctx: _SizeContext, canvas: tuple[int, int] | None = None
+) -> ThemeTextFit | None:
     fitting: list[tuple[int, int, int, int, list[str], _MeasuredFit]] = []
     for tier, idx, lines in _split_candidates(text):
         bbox = _measure(ctx.draw, "\n".join(lines), ctx)
@@ -182,7 +211,7 @@ def _split_line_fit(text: str, ctx: _SizeContext) -> ThemeTextFit | None:
         r0 = ctx.draw.textbbox((0, 0), lines[0], font=ctx.font, stroke_width=ctx.stroke)
         r1 = ctx.draw.textbbox((0, 0), lines[1], font=ctx.font, stroke_width=ctx.stroke)
         w0, w2 = int(r0[2]) - int(r0[0]), int(r1[2]) - int(r1[0])
-        placement = _placement(ctx, w, h)
+        placement = _placement(ctx, w, h, canvas)
         if placement is None:
             continue
         fitting.append((tier, max(w0, w2), abs(w0 - w2), idx, lines, (bbox, placement)))
@@ -207,15 +236,21 @@ def _size_context(
     )
 
 
-def fit_theme_text(text: str, *, variant: ThemeVariant, font_path: Path) -> ThemeTextFit:
+def fit_theme_text(
+    text: str,
+    *,
+    variant: ThemeVariant,
+    font_path: Path,
+    canvas: tuple[int, int] | None = None,
+) -> ThemeTextFit:
     _verify_font(font_path)
-    box = _variant_box(variant)
+    box = _variant_box(variant, canvas)
     for size in range(box.base_size, box.min_size - 1, -1):
         ctx = _size_context(variant, font_path, box, size)
-        fit = _single_line_fit(text, ctx)
+        fit = _single_line_fit(text, ctx, canvas)
         if fit is not None:
             return fit
-        fit = _split_line_fit(text, ctx)
+        fit = _split_line_fit(text, ctx, canvas)
         if fit is not None:
             return fit
     raise ThemeTextError(
@@ -224,22 +259,32 @@ def fit_theme_text(text: str, *, variant: ThemeVariant, font_path: Path) -> Them
     )
 
 
-def _band_rect(fit: ThemeTextFit) -> tuple[int, int, int, int]:
-    pad_x, pad_y = _BAND_PADDING[fit.variant]
+def _band_rect(
+    fit: ThemeTextFit, canvas: tuple[int, int] | None = None
+) -> tuple[int, int, int, int]:
+    canvas_w, canvas_h = canvas if canvas is not None else (_CANVAS_W, _CANVAS_H)
+    pad_x, pad_y = _band_padding_for(fit.variant, canvas_w, canvas_h)
     left, top, right, bottom = fit.bounds
     return (
         max(0, left - pad_x),
         max(0, top - pad_y),
-        min(_CANVAS_W, right + pad_x),
-        min(_CANVAS_H, bottom + pad_y),
+        min(canvas_w, right + pad_x),
+        min(canvas_h, bottom + pad_y),
     )
 
 
-def render_theme_text(text: str, *, variant: ThemeVariant, font_path: Path) -> Image.Image:
-    fit = fit_theme_text(text, variant=variant, font_path=font_path)
-    img = Image.new("RGBA", (_CANVAS_W, _CANVAS_H), (0, 0, 0, 0))
+def render_theme_text(
+    text: str,
+    *,
+    variant: ThemeVariant,
+    font_path: Path,
+    canvas: tuple[int, int] | None = None,
+) -> Image.Image:
+    canvas_w, canvas_h = canvas if canvas is not None else (_CANVAS_W, _CANVAS_H)
+    fit = fit_theme_text(text, variant=variant, font_path=font_path, canvas=canvas)
+    img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.rectangle(_band_rect(fit), fill=_BAND_FILL)
+    draw.rectangle(_band_rect(fit, canvas), fill=_BAND_FILL)
     font = ImageFont.truetype(str(font_path), fit.font_size)
     txt = "\n".join(fit.lines)
     sp = int(fit.font_size * 0.2)

@@ -42,6 +42,7 @@ from services.mcp_execution.step_builders import (
     mcp_or_executor,
     step_from,
 )
+from services.outputs.geometry import DEFAULT_OUTPUT_ID, OutputId, geometry_for
 
 if TYPE_CHECKING:
     from services.creative_plan.audio_finishing import AudioFinishingPlanV1
@@ -308,9 +309,11 @@ def render_native_steps(
     ir_v2: TimelineIrV2,
     caps: CapabilityView,  # noqa: ARG001 (uniform emitter signature)
     wide: int,
+    output_id: OutputId = DEFAULT_OUTPUT_ID,
 ) -> list[McpExecutionStepV1]:
     """One deterministic native render step at the end of the plan."""
 
+    geometry = geometry_for(output_id)
     custom_name = f"finishing-native-{ir_v2.episode_id}"
     rung: FallbackRung = "mcp_verified_workflow"
     record = None
@@ -322,8 +325,8 @@ def render_native_steps(
                 custom_name=custom_name,
                 format_id="mp4",
                 codec_id="H264",
-                width=1920,
-                height=1080,
+                width=geometry.width,
+                height=geometry.height,
                 frame_rate=30.0,
                 select_all_frames=True,
                 export_video=True,

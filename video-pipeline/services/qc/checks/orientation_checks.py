@@ -59,14 +59,23 @@ def tools_frame_source(tools: QcTools) -> FrameSource:
 
 @dataclass(frozen=True, slots=True)
 class ExpectedOrientation:
-    """Display orientation the Source Manifest records for the video."""
+    """Display orientation the Source Manifest records for the video.
+
+    ``declared_display_portrait`` carries an OUTPUT-declared display class
+    (the vertical output declares portrait): when set, it wins over the
+    source-derived math so a portrait render from a landscape source
+    passes. ``None`` keeps the frozen source-derived behavior.
+    """
 
     rotation_degrees: int
     source_width: int
     source_height: int
+    declared_display_portrait: bool | None = None
 
     @property
     def display_portrait(self) -> bool:
+        if self.declared_display_portrait is not None:
+            return self.declared_display_portrait
         rotated_quarter = self.rotation_degrees % _HALF_TURN_DEGREES == _QUARTER_DEGREES
         source_portrait = self.source_width < self.source_height
         return source_portrait != rotated_quarter
@@ -76,16 +85,48 @@ class ExpectedOrientation:
         return (self.rotation_degrees // _QUARTER_DEGREES) % 4
 
 
-def expected_orientation(manifest: SourceManifest) -> ExpectedOrientation:
+def expected_orientation(
+    manifest: SourceManifest,
+    *,
+    declared_orientation: str | None = None,
+) -> ExpectedOrientation:
+    """Display orientation expectation for one render.
+
+    The default (``None``) derives the class from the SOURCE manifest —
+    the frozen landscape behavior. An output that DECLARES its orientation
+    (the vertical output declares ``portrait``) overrides the display
+    class: a portrait render from a landscape source then passes when the
+    output geometry declares portrait.
+    """
+
     video = next(
         (s for s in manifest.streams if isinstance(s, VideoStreamRecord)), None
     )
     if video is None:
         raise ValueError("source manifest has no video stream")
-    return ExpectedOrientation(
-        rotation_degrees=video.rotation_degrees or 0,
-        source_width=video.width,
-        source_height=video.height,
+    if declared_orientation is None:
+        return ExpectedOrientation(
+            rotation_degrees=video.rotation_degrees or 0,
+            source_width=video.width,
+            source_height=video.height,
+        )
+    if declared_orientation == "portrait":
+        return ExpectedOrientation(
+            rotation_degrees=video.rotation_degrees or 0,
+            source_width=video.width,
+            source_height=video.height,
+            declared_display_portrait=True,
+        )
+    if declared_orientation == "landscape":
+        return ExpectedOrientation(
+            rotation_degrees=video.rotation_degrees or 0,
+            source_width=video.width,
+            source_height=video.height,
+            declared_display_portrait=False,
+        )
+    raise ValueError(
+        f"unknown declared orientation {declared_orientation!r}; "
+        "expected 'landscape', 'portrait', or None"
     )
 
 

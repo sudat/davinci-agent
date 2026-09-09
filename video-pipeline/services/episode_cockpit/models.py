@@ -29,6 +29,21 @@ type ProposalOutcome = Literal["applied", "chosen", "rejected"]
 type ProposalKind = Literal["command-bundle", "alternatives"]
 
 
+class EditorialGrantRequest(StrictModel):
+    """Operator-supplied cloud-data declaration for the editorial director.
+
+    The ONLY grantable pair is transcript → editorial_direct (PRD §8
+    「Cloudへ送るデータ種別はEpisode Configで明示する」). Scope is pinned
+    by Literals: any wider ask (frames, audio, another stage) is a typed
+    422, never a silent widen. ``granted=False`` is an explicit revoke.
+    """
+
+    granted: bool
+    data_class: Literal["transcript"] = "transcript"
+    stage: Literal["editorial_direct"] = "editorial_direct"
+    note: str = ""
+
+
 class EpisodeCreateRequest(StrictModel):
     """POST /episodes — intake: source folder plus natural-language brief.
 
@@ -37,12 +52,40 @@ class EpisodeCreateRequest(StrictModel):
     episode started with. Validation (channel exists, version exists
     for that channel) lives in ``JobOps.create_episode``; a pin without
     a channel is a typed 422.
+
+    r3 grant (additive, backward compatible): optional ``editorial_grant``
+    carries the operator's PRD §8 cloud-data declaration for the
+    editorial director (transcript → editorial_direct ONLY). Operator-
+    supplied only — never defaulted, never inferred; absent means the
+    episode stays local_only.
     """
 
     source_folder: NonEmpty
     brief_text: NonEmpty
     channel: Identifier | None = None
     style_version: SequenceNumber | None = None
+    editorial_grant: EditorialGrantRequest | None = None
+
+
+class EpisodeEditorialGrantV1(StrictModel):
+    """Persisted per-episode editorial grant (episode-dir/editorial-grant.json).
+
+    Written ONLY from an operator-supplied ``EditorialGrantRequest`` —
+    never defaulted, never inferred. ``granted_at`` is refreshed on every
+    (idempotent) re-grant; revoke persists ``granted=False`` explicitly
+    (the file is never silently deleted). Provenance note: the loopback
+    API has no auth, so ``note`` + ``granted_at`` are the recorded
+    provenance — the operator identity is NOT authenticated (documented
+    limitation, same as every other cockpit write).
+    """
+
+    schema_version: Literal["episode-editorial-grant-v1"] = "episode-editorial-grant-v1"
+    episode_id: Identifier
+    granted: bool
+    data_class: Literal["transcript"] = "transcript"
+    stage: Literal["editorial_direct"] = "editorial_direct"
+    granted_at: NonEmpty
+    note: str = ""
 
 
 class BriefPutRequest(StrictModel):
@@ -216,6 +259,7 @@ class RebuildRequestEntry(StrictModel):
     base_plan_sha256: str | None = None
     failure_code: str | None = None
     detail: str | None = None
+    output_id: Literal["landscape", "vertical"] | None = None
 
 
 class ReviewProposalConsumed(StrictModel):
@@ -243,7 +287,9 @@ __all__ = [
     "ApprovalExecuteRequest",
     "BriefDraft",
     "BriefPutRequest",
+    "EditorialGrantRequest",
     "EpisodeCreateRequest",
+    "EpisodeEditorialGrantV1",
     "IntakeRecordV1",
     "ProposalKind",
     "ProposalOutcome",

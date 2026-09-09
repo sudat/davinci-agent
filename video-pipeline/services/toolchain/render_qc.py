@@ -18,8 +18,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
+from pydantic_core import PydanticCustomError
+
 from services.contracts.primitives import StrictModel
 from services.foundation_io import atomic_write
+from services.outputs.geometry import geometry_for as _geometry_for
 
 COMPLETION_FIELD: str = "CompletionPercentage"
 COMPLETION_VALUE: int = 100
@@ -41,6 +45,56 @@ class RenderPreset(StrictModel):
     audio_codec: Literal["aac"]
     audio_sample_rate: Literal[48000]
     audio_channels: Literal[2]
+
+
+class RenderGeometry(StrictModel):
+    """Parameterized render canvas for one enumerated output.
+
+    The frozen ``RenderPreset`` above stays the landscape contract
+    (byte-identical validation); this object carries the resolved
+    ``OutputGeometryV1`` dimensions into render setup + QC validation.
+    """
+
+    output_id: Literal["landscape", "vertical"]
+    width: int
+    height: int
+
+    @model_validator(mode="after")
+    def require_pinned_dimensions(self) -> RenderGeometry:
+        pinned = _geometry_for(self.output_id)
+        if (self.width, self.height) != (pinned.width, pinned.height):
+            raise PydanticCustomError(
+                "geometry_mismatch",
+                "{output_id} render geometry must be {width}x{height}",
+                {
+                    "output_id": self.output_id,
+                    "width": pinned.width,
+                    "height": pinned.height,
+                },
+            )
+        return self
+
+
+def geometry_for_output(output_id: Literal["landscape", "vertical"]) -> RenderGeometry:
+    pinned = _geometry_for(output_id)
+    return RenderGeometry(output_id=output_id, width=pinned.width, height=pinned.height)
+
+
+def verify_render_geometry(
+    section: RenderQcSection, geometry: RenderGeometry | None = None
+) -> None:
+    """Contract check; ``None`` means the frozen landscape preset behavior."""
+
+    verify_render_qc_contract(section)
+    if geometry is None:
+        if (section.preset.width, section.preset.height) != (1920, 1080):
+            raise RenderQcSmokeError("the frozen landscape preset stays 1920x1080")
+        return
+    if (section.preset.width, section.preset.height) != (geometry.width, geometry.height):
+        raise RenderQcSmokeError(
+            f"preset {section.preset.width}x{section.preset.height} does not match "
+            f"the {geometry.output_id} geometry {geometry.width}x{geometry.height}"
+        )
 
 
 class RenderQcSection(StrictModel):
@@ -126,10 +180,13 @@ __all__ = [
     "COMPLETION_FIELD",
     "COMPLETION_VALUE",
     "RenderCompletionContract",
+    "RenderGeometry",
     "RenderPreset",
     "RenderQcSection",
     "RenderQcSmokeError",
+    "geometry_for_output",
     "render_complete",
     "run_render_qc_smoke",
+    "verify_render_geometry",
     "verify_render_qc_contract",
 ]

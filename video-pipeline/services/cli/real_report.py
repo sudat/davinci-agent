@@ -16,6 +16,7 @@ from services.contracts.primitives import Sha256, StrictModel
 
 if TYPE_CHECKING:
     from services.cli.real_director import DirectorOutcome
+    from services.episode_cockpit.models import EpisodeEditorialGrantV1
     from services.ingest.eligibility import EligibilityResult
     from services.validate.selection_models import SelectionCommitOutcome
 
@@ -49,6 +50,11 @@ class RealChainReport(StrictModel):
     preview_sha256: Sha256 | None = None
     preview_trace_sha256: Sha256 | None = None
     bundle_path: str | None = None
+    editorial_grant_granted: bool | None = None
+    editorial_grant_data_class: str | None = None
+    editorial_grant_stage: str | None = None
+    editorial_grant_granted_at: str | None = None
+    editorial_grant_note: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,11 +71,13 @@ class RunFacts:
     director: DirectorOutcome | None = None
     selection_producer: str | None = None
     selection: SelectionCommitOutcome | None = None
+    editorial_grant: EpisodeEditorialGrantV1 | None = None
 
 
 def build_report(facts: RunFacts, stop: str) -> RealChainReport:
     director = facts.director
     selection = facts.selection
+    grant = facts.editorial_grant
     return RealChainReport(
         schema_version="real-chain-report-v1",
         episode_id=facts.episode_id,
@@ -84,6 +92,11 @@ def build_report(facts: RunFacts, stop: str) -> RealChainReport:
         selection_version=selection.version if selection is not None else None,
         selection_plan_sha256=selection.plan_sha256 if selection is not None else None,
         selection_producer=facts.selection_producer,
+        editorial_grant_granted=grant.granted if grant is not None else None,
+        editorial_grant_data_class=grant.data_class if grant is not None else None,
+        editorial_grant_stage=grant.stage if grant is not None else None,
+        editorial_grant_granted_at=grant.granted_at if grant is not None else None,
+        editorial_grant_note=grant.note if grant is not None else None,
     )
 
 

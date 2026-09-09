@@ -46,15 +46,22 @@ class _ProbeFacts:
     frame_count: str | None
 
 
-def _video_mismatches(
-    facts: _ProbeFacts, rate_text: str, total_frames: int, expected_ms: Fraction
+def _video_mismatches(  # noqa: PLR0913, PLR0917 (video verification contract: facts/rate/count/duration/size)
+    facts: _ProbeFacts,
+    rate_text: str,
+    total_frames: int,
+    expected_ms: Fraction,
+    expected_width: int = PREVIEW_WIDTH,
+    expected_height: int = PREVIEW_HEIGHT,
 ) -> list[str]:
     video = facts.video
     mismatches: list[str] = []
     if video.codec_name != "h264":
         mismatches.append(f"video codec {video.codec_name} != h264")
-    if video.width != PREVIEW_WIDTH or video.height != PREVIEW_HEIGHT:
-        mismatches.append(f"video size {video.width}x{video.height} != 640x360")
+    if video.width != expected_width or video.height != expected_height:
+        mismatches.append(
+            f"video size {video.width}x{video.height} != {expected_width}x{expected_height}"
+        )
     if video.r_frame_rate != rate_text or video.avg_frame_rate != rate_text:
         mismatches.append(f"frame rate {video.r_frame_rate}/{video.avg_frame_rate} != {rate_text}")
     # At 30/1 only multiples of 3 frames are exact milliseconds. The real
@@ -109,15 +116,19 @@ def _audio_subtitle_mismatches(
     return mismatches
 
 
-def _stream_mismatches(
+def _stream_mismatches(  # noqa: PLR0913 (stream verification contract: facts/rate/count/duration/subtitle/size)
     facts: _ProbeFacts,
     rate_text: str,
     total_frames: int,
     expected_ms: Fraction,
     *,
     subtitle_expected: bool,
+    expected_width: int = PREVIEW_WIDTH,
+    expected_height: int = PREVIEW_HEIGHT,
 ) -> list[str]:
-    mismatches = _video_mismatches(facts, rate_text, total_frames, expected_ms)
+    mismatches = _video_mismatches(
+        facts, rate_text, total_frames, expected_ms, expected_width, expected_height
+    )
     mismatches += _audio_subtitle_mismatches(
         facts.audio, facts.subtitle, facts.stream_count, subtitle_expected=subtitle_expected
     )
@@ -139,6 +150,8 @@ def verify_preview_output(  # noqa: PLR0913 (preview verification contract: tool
     rate: RationalFrameRate,
     subtitle_expected: bool,
     timeout_seconds: float | None = None,
+    expected_width: int = PREVIEW_WIDTH,
+    expected_height: int = PREVIEW_HEIGHT,
 ) -> FfprobeSummary:
     tools.verify_current()
     report = probe_file(tools, output, count_frames=True, timeout_seconds=timeout_seconds)
@@ -165,6 +178,8 @@ def verify_preview_output(  # noqa: PLR0913 (preview verification contract: tool
         total_frames,
         expected_ms,
         subtitle_expected=subtitle_expected,
+        expected_width=expected_width,
+        expected_height=expected_height,
     )
     if mismatches:
         raise PreviewVerificationError(f"preview drift detected: {'; '.join(mismatches)}")

@@ -87,6 +87,7 @@ def compile_execution_plan(  # noqa: PLR0913 (task-mandated compiler signature)
     kit_selections: Mapping[str, RecipeSelection],
     capability_statuses: Mapping[str, str] | None = None,
     telop_cards: Sequence[TelopCardPayload] = (),
+    output_id: str = "landscape",
 ) -> McpExecutionPlanV1:
     """Compile IR v2 + the four committed plans into a deterministic plan.
 
@@ -156,7 +157,12 @@ def compile_execution_plan(  # noqa: PLR0913 (task-mandated compiler signature)
     steps.extend(transition_steps(ir_v2, caps))
     steps.extend(audio_plan_steps(audio_plan, caps, wide))
     steps.extend(color_steps(color_plan, caps, wide, ir_v2))
-    steps.extend(render_native_steps(ir_v2, caps, wide))
+    steps.extend(
+        render_native_steps(
+            ir_v2, caps, wide,
+            output_id=("vertical" if output_id == "vertical" else "landscape"),
+        )
+    )
     ordered = tuple(sorted(steps, key=step_sort_key))
     return McpExecutionPlanV1(
         schema_version="mcp-execution-plan-v1",

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Final, Protocol
 
 from services.contracts.primitives import RecordFrameSpan
+from services.outputs.geometry import scale_px_for_output
 from services.presentation.overlay_models import (
     OverlayControlRequest,
     OverlayControlValue,
@@ -30,6 +31,23 @@ GEO: Final = OverlayGeometry(
     region_width_px=480,
     region_height_px=270,
 )
+
+
+def geo_for(output_id: str) -> OverlayGeometry:
+    """Overlay geometry for one enumerated output (landscape default).
+
+    The vertical canvas is narrower and taller: the safe margin scales by
+    canvas width while the region keeps its 16:9 shape scaled to fit.
+    """
+    if output_id != "vertical":
+        return GEO
+    return OverlayGeometry(
+        timeline_width=1080,
+        timeline_height=1920,
+        safe_margin_px=scale_px_for_output(96, "vertical"),
+        region_width_px=scale_px_for_output(480, "vertical"),
+        region_height_px=scale_px_for_output(270, "vertical"),
+    )
 
 
 MARKER: Final = "overlay-live:"

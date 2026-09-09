@@ -130,6 +130,7 @@ class QcToolVersions(StrictModel):
 
 class QcReport(StrictModel):
     schema_version: Literal["qc-report-v1"]
+    output_id: Literal["landscape", "vertical"] = "landscape"
     verdict: QcVerdict
     issues: tuple[QcIssue, ...] = ()
     unresolved_human_gates: tuple[UnresolvedHumanGate, ...] = ()

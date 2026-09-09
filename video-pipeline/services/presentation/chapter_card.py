@@ -69,9 +69,19 @@ def ink_fraction(
     return inked / (width * height)
 
 
-def render_chapter_card(title: str, *, font_path: Path) -> ChapterCardFrame:
+def canvas_size_for(output_id: str) -> tuple[int, int]:
+    """Deliverable canvas px for one enumerated output (landscape default)."""
+    if output_id == "vertical":
+        return (1080, 1920)
+    return (CANVAS_W, CANVAS_H)
+
+
+def render_chapter_card(
+    title: str, *, font_path: Path, canvas: tuple[int, int] | None = None
+) -> ChapterCardFrame:
     """Render the approved card: pure black, one centered white line, no stroke/band."""
 
+    canvas_w, canvas_h = canvas if canvas is not None else (CANVAS_W, CANVAS_H)
     if not title or "\n" in title or "\r" in title or not title.strip():
         raise ChapterCardError(
             "title-not-single-line", f"title must be one non-empty line: {title!r}"
@@ -85,33 +95,33 @@ def render_chapter_card(title: str, *, font_path: Path) -> ChapterCardFrame:
     probe = font.getbbox(title[:1] or " ")
     if probe is None or (probe[2] - probe[0]) == 0:
         raise ChapterCardError("font-missing-japanese", f"font lacks usable glyphs: {font_path}")
-    image = Image.new("RGB", (CANVAS_W, CANVAS_H), (0, 0, 0))
+    image = Image.new("RGB", (canvas_w, canvas_h), (0, 0, 0))
     draw = ImageDraw.Draw(image)
     left, top, raw_right, raw_bottom = draw.textbbox((0, 0), title, font=font)
     width, height = raw_right - left, raw_bottom - top
-    if not 0 < width < CANVAS_W or not 0 < height < MAX_LINE_HEIGHT:
+    if not 0 < width < canvas_w or not 0 < height < MAX_LINE_HEIGHT:
         raise ChapterCardError(
             "title-does-not-fit",
             f"title ink is {width}x{height} at {FONT_SIZE_PX}px; expected one line under "
-            f"{MAX_LINE_HEIGHT}px on {CANVAS_W}x{CANVAS_H}",
+            f"{MAX_LINE_HEIGHT}px on {canvas_w}x{canvas_h}",
         )
-    base_x, base_y = (CANVAS_W - width) // 2 - left, (CANVAS_H - height) // 2 - top
-    scratch = Image.new("RGB", (CANVAS_W, CANVAS_H), (0, 0, 0))
+    base_x, base_y = (canvas_w - width) // 2 - left, (canvas_h - height) // 2 - top
+    scratch = Image.new("RGB", (canvas_w, canvas_h), (0, 0, 0))
     ImageDraw.Draw(scratch).text((base_x, base_y), title, font=font, fill=(255, 255, 255))
-    scratch_ink = ink_bounds(scratch.tobytes(), width=CANVAS_W, height=CANVAS_H)
+    scratch_ink = ink_bounds(scratch.tobytes(), width=canvas_w, height=canvas_h)
     if scratch_ink is None:
         raise ChapterCardError("card-blank", "rendered card carries no ink")
     ink_left, ink_top, ink_right, ink_bottom = scratch_ink
     draw.text(
         (
-            base_x + (CANVAS_W - (ink_right - ink_left)) // 2 - ink_left,
-            base_y + (CANVAS_H - (ink_bottom - ink_top)) // 2 - ink_top,
+            base_x + (canvas_w - (ink_right - ink_left)) // 2 - ink_left,
+            base_y + (canvas_h - (ink_bottom - ink_top)) // 2 - ink_top,
         ),
         title,
         font=font,
         fill=(255, 255, 255),
     )
-    bounds = ink_bounds(image.tobytes(), width=CANVAS_W, height=CANVAS_H)
+    bounds = ink_bounds(image.tobytes(), width=canvas_w, height=canvas_h)
     if bounds is None:
         raise ChapterCardError("card-blank", "rendered card carries no ink")
     face = font.getname()
@@ -130,6 +140,7 @@ def card_structural_report(
     *,
     ink_threshold: int = INK_THRESHOLD,
     centering_error: int = MAX_CENTERING_ERROR,
+    canvas: tuple[int, int] | None = None,
 ) -> dict[str, object]:
     """Decoded-frame check: black field, one compact centered ink line, sparse ink.
 
@@ -137,17 +148,18 @@ def card_structural_report(
     a higher threshold (limited-range black decodes to ~16, white to ~235).
     """
 
-    bounds = ink_bounds(frame, width=CANVAS_W, height=CANVAS_H, ink_threshold=ink_threshold)
+    canvas_w, canvas_h = canvas if canvas is not None else (CANVAS_W, CANVAS_H)
+    bounds = ink_bounds(frame, width=canvas_w, height=canvas_h, ink_threshold=ink_threshold)
     if bounds is None:
         return {"ok": False, "reason": "no-ink", "bounds": None, "ink_fraction": 0.0}
     left, top, right, bottom = bounds
-    fraction = ink_fraction(frame, width=CANVAS_W, height=CANVAS_H, ink_threshold=ink_threshold)
+    fraction = ink_fraction(frame, width=canvas_w, height=canvas_h, ink_threshold=ink_threshold)
     reasons: list[str] = []
     if bottom - top >= MAX_LINE_HEIGHT:
         reasons.append(f"ink-height-{bottom - top}")
-    if abs(left - (CANVAS_W - right)) > centering_error:
+    if abs(left - (canvas_w - right)) > centering_error:
         reasons.append(f"not-centered-x-{left}-{right}")
-    if abs(top - (CANVAS_H - bottom)) > centering_error:
+    if abs(top - (canvas_h - bottom)) > centering_error:
         reasons.append(f"not-centered-y-{top}-{bottom}")
     if fraction >= MAX_INK_FRACTION:
         reasons.append(f"ink-fraction-{fraction:.4f}")
@@ -166,6 +178,7 @@ __all__ = [
     "FONT_SIZE_PX",
     "ChapterCardError",
     "ChapterCardFrame",
+    "canvas_size_for",
     "card_structural_report",
     "ink_bounds",
     "ink_fraction",

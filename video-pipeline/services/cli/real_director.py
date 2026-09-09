@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     from services.editorial.pin import EditorialDirectorPin
     from services.editorial.reconcile import ReconciliationResult
     from services.editorial.transport import EditorialTransport
+    from services.episode_cockpit.models import EpisodeEditorialGrantV1
 
 BASELINE_PRODUCER = ProposalProducer(
     model_role_id="deterministic-baseline-v1",
@@ -127,6 +128,19 @@ def redacted_speech_text(speech_text: dict[str, str]) -> dict[str, str]:
                 "than shipping it to the cloud prompt",
             )
     return cleaned
+
+
+#: Operator-facing guidance appended (only) to a production-policy
+#: ``local_only_denial``: the gate still denies with zero model calls — the
+#: text just names the missing grant and how to declare it. The fixture-
+#: binding denial path is untouched.
+GRANT_MISSING_GUIDANCE: Final = (
+    "実素材の transcript を編集長(codex-exec)へ送るには、操作者の宣言"
+    "(editorial-grant: transcript→editorial_direct)が必要です。"
+    "POST /episodes/{episode_id}/editorial-grant に "
+    '{"granted": true, "note": "<用途メモ>"} を送って宣言してください。'
+    "宣言なしでは local_only のまま model 呼び出しは行いません。"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,9 +226,15 @@ def _serve(  # noqa: PLR0913 (live assembly: request/index/policy/transport + se
     with MediaQueryApi.open(Path(index_path)) as api:
         result = director.run(request, api=api)
     if result.error is not None:
+        detail = result.error.detail
+        if (
+            result.error.code == "local_only_denial"
+            and result.policy.binding_scope == "production-policy"
+        ):
+            detail = f"{detail} {GRANT_MISSING_GUIDANCE}"
         raise RealDirectorError(
             "director_failed",
-            f"{result.envelope.status}: {result.error.detail} "
+            f"{result.envelope.status}: {detail} "
             f"(transport_code={result.error.transport_code})",
         )
     if result.proposal is None:
@@ -333,9 +353,10 @@ def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real 
     env: dict[str, str],
     adopted_policy: AdoptedPolicySummaryV1 | None = None,
     runtime_path: Path | None = None,
+    editorial_grant: EpisodeEditorialGrantV1 | None = None,
 ) -> tuple[DirectorOutcome, SelectionPlanProposal, ReconciliationResult, Path]:
     policy_file = policy_path if policy_path is not None else write_policy_snapshot(
-        episode_id, out_dir
+        episode_id, out_dir, editorial_grant
     )
     rules = rules_for(total_frames, tuple(segment.segment_id for segment in speech))
     evidence_index = evidence_index_for(analysis.evidence, analysis.record.edit_source_sha256)

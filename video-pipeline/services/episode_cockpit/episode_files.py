@@ -88,6 +88,16 @@ from services.episode_cockpit.review_proposals import (
 )
 from services.episode_cockpit.workspace_context import WorkspaceContext
 from services.foundation_io import atomic_write, canonical_model_bytes
+from services.outputs.geometry import (
+    DEFAULT_OUTPUT_ID,
+    OutputId,
+    OutputRegistryError,
+    load_registry,
+    normalize_output_id,
+    preview_relatives,
+    register_output,
+    review_store_relatives,
+)
 from services.preview.render import PREVIEW_NAME
 from services.review_command.events import RESTORED_EVENT_KIND
 from services.review_command.restore import commit_restore
@@ -116,12 +126,29 @@ NOT_EXECUTABLE_REASON = "command kind not rebuild-executable yet"
 _SELECTION_STAGES = ("selection", "plan", "compile", "preview")
 
 
-def _review_base_pin(episode_dir: Path) -> tuple[str | None, str | None]:
+def review_store_location(
+    episode_dir: Path, output_id: OutputId = DEFAULT_OUTPUT_ID
+) -> ReviewStoreLocation:
+    """One output's review_command store (sealed log + plan dir).
+
+    ``landscape`` keeps the LEGACY paths so existing episodes read
+    unchanged; ``vertical`` lives at sibling paths that a vertical build
+    alone ever writes.
+    """
+
+    log_rel, store_rel = review_store_relatives(output_id)
+    return ReviewStoreLocation(
+        log_path=episode_dir.joinpath(*log_rel),
+        plan_dir=episode_dir.joinpath(*store_rel),
+    )
+
+
+def _review_base_pin(
+    episode_dir: Path, output_id: OutputId = DEFAULT_OUTPUT_ID
+) -> tuple[str | None, str | None]:
     try:
-        head = load_head(
-            episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
-            episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
-        )
+        store = review_store_location(episode_dir, output_id)
+        head = load_head(store.log_path, store.plan_dir)
     except (ReviewCommitError, OSError):
         return None, None
     entry = head.index.versions.get(str(head.version))
@@ -177,24 +204,66 @@ class FileOps(WorkspaceContext):
             "status": updated.status,
         }
 
-    def preview_path(self, episode_id: str) -> Path:
+    def preview_path(
+        self, episode_id: str, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> Path:
         episode_dir = self._require_snapshot(episode_id).job.episode_id
-        path = self._episode_dir(episode_dir).joinpath(*PREVIEW_RELATIVE)
+        path = self._episode_dir(episode_dir).joinpath(*preview_relatives(output_id))
         if not path.is_file():
             raise CockpitNotFoundError("preview-not-found", f"no rendered preview at {path}")
         return path
 
-    def preview_binding(self, episode_id: str) -> PreviewBinding | None:
+    def preview_binding(
+        self, episode_id: str, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> PreviewBinding | None:
         """The verified run/version binding of the served preview (None = unknown)."""
 
         snapshot = self._require_snapshot(episode_id)
         episode_dir = self._episode_dir(snapshot.job.episode_id)
-        return derive_preview_binding(episode_dir, snapshot.stage_runs)
+        return derive_preview_binding(episode_dir, snapshot.stage_runs, output_id=output_id)
 
-    def review_flags(self, episode_id: str) -> dict[str, object]:
+    def list_outputs(self, episode_id: str) -> dict[str, object]:
+        """The episode's registered outputs (default: landscape only)."""
+
+        episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
+        registry = load_registry(episode_dir)
+        return {
+            "outputs": [output.model_dump(mode="json") for output in registry.outputs],
+        }
+
+    def register_output(self, episode_id: str, output_id: str) -> dict[str, object]:
+        """Register the vertical output (idempotent); seeds its review chain.
+
+        The new output's review chain starts from the landscape head's
+        content (same editorial plan, same time coordinates) and then
+        evolves independently — approving one never approves the other.
+        """
+
+        try:
+            normalized = normalize_output_id(output_id)
+        except ValueError as error:
+            raise CockpitUnprocessableError("unknown-output", str(error)) from error
+        episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
+        try:
+            registry, created = register_output(episode_dir, normalized)
+        except OutputRegistryError as error:
+            raise CockpitUnprocessableError(
+                error.code.replace("_", "-"), error.detail
+            ) from error
+        if created and normalized != DEFAULT_OUTPUT_ID:
+            self._bootstrap_review_store_if_needed(episode_dir, normalized)
+        return {
+            "outputs": [output.model_dump(mode="json") for output in registry.outputs],
+            "registered": normalized,
+            "idempotent": not created,
+        }
+
+    def review_flags(
+        self, episode_id: str, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> dict[str, object]:
         base = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
-        events_log = base.joinpath(*REVIEW_EVENTS_RELATIVE)
-        plan_dir = base.joinpath(*REVIEW_STORE_RELATIVE)
+        store = review_store_location(base, output_id)
+        events_log, plan_dir = store.log_path, store.plan_dir
         if not events_log.is_file() or not plan_dir.is_dir():
             return {"flags": [], "not_yet_generated": True}
         try:
@@ -254,6 +323,7 @@ class FileOps(WorkspaceContext):
         responds_to_set: int | None = None,
         reaction_kind: ReviewReactionKind | None = None,
         proposal_kind: ProposalKind | None = None,
+        output_id: OutputId = DEFAULT_OUTPUT_ID,
     ) -> None:
         """Persist the previewed proposal set (brief §5.3 adoption authority).
 
@@ -270,10 +340,7 @@ class FileOps(WorkspaceContext):
         """
 
         episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
-        store = ReviewStoreLocation(
-            log_path=episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
-            plan_dir=episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
-        )
+        store = review_store_location(episode_dir, output_id)
         try:
             base_plan_version: str | None = (
                 f"v{load_head(store.log_path, store.plan_dir).version}"
@@ -360,14 +427,31 @@ class FileOps(WorkspaceContext):
         episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
         return extract_review_frames(episode_dir, at_seconds, max_frames=max_frames)
 
-    def _bootstrap_review_store_if_needed(self, episode_dir: Path) -> bool:
-        if (episode_dir.joinpath(*REVIEW_STORE_RELATIVE) / "versions.json").is_file():
+    def _bootstrap_review_store_if_needed(
+        self, episode_dir: Path, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> bool:
+        log_rel, store_rel = review_store_relatives(output_id)
+        if (episode_dir.joinpath(*store_rel) / "versions.json").is_file():
             return False
-        source_dir = episode_dir.joinpath(*_RUN_REVIEW_STORE_RELATIVE)
+        if output_id == DEFAULT_OUTPUT_ID:
+            source_dir = episode_dir.joinpath(*_RUN_REVIEW_STORE_RELATIVE)
+        else:
+            landscape = review_store_location(episode_dir, DEFAULT_OUTPUT_ID)
+            source_dir = (
+                landscape.plan_dir
+                if (landscape.plan_dir / "versions.json").is_file()
+                else episode_dir.joinpath(*_RUN_REVIEW_STORE_RELATIVE)
+            )
+            if source_dir == landscape.plan_dir:
+                log_target = episode_dir.joinpath(*log_rel)
+                store_target = episode_dir.joinpath(*store_rel)
+                return self._copy_review_store(
+                    source_dir, landscape.log_path, log_target, store_target
+                )
         if not (source_dir / "versions.json").is_file():
             return False
-        log_target = episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE)
-        store_target = episode_dir.joinpath(*REVIEW_STORE_RELATIVE)
+        log_target = episode_dir.joinpath(*log_rel)
+        store_target = episode_dir.joinpath(*store_rel)
         store_target.mkdir(parents=True, exist_ok=True)
         log_target.parent.mkdir(parents=True, exist_ok=True)
         copied = 0
@@ -384,7 +468,37 @@ class FileOps(WorkspaceContext):
         _LOGGER.info("review_store_bootstrapped files=%s source=%s", copied, source_dir)
         return copied > 0
 
-    def apply_review_command(
+    @staticmethod
+    def _copy_review_store(
+        source_dir: Path, source_log: Path, log_target: Path, store_target: Path
+    ) -> bool:
+        """Seed one output's chain from an initialized sibling store (same base)."""
+
+        store_target.mkdir(parents=True, exist_ok=True)
+        log_target.parent.mkdir(parents=True, exist_ok=True)
+        copied = 0
+        try:
+            shutil.copyfile(source_log, log_target)
+            copied += 1
+        except OSError:
+            return False
+        try:
+            seal = source_log.parent / f"{source_log.name}.seal"
+            shutil.copyfile(seal, log_target.parent / f"{log_target.name}.seal")
+            copied += 1
+        except OSError:
+            pass
+        for entry in sorted(source_dir.iterdir()):
+            if not entry.is_file():
+                continue
+            shutil.copyfile(entry, store_target / entry.name)
+            copied += 1
+        _LOGGER.info(
+            "review_store_bootstrapped files=%s source=%s", copied, source_dir
+        )
+        return copied > 0
+
+    def apply_review_command(  # noqa: PLR0913 (apply contract: episode + text + drafts/sequence/output refs)
         self,
         episode_id: str,
         *,
@@ -392,6 +506,7 @@ class FileOps(WorkspaceContext):
         at_seconds: float | None,
         drafts: tuple[ReviewCommandDraft, ...] | None = None,
         sequence: int | None = None,
+        output_id: OutputId = DEFAULT_OUTPUT_ID,
     ) -> dict[str, object]:
         """Apply a SAVED proposal set + rebuild plan (brief §5.3).
 
@@ -410,11 +525,8 @@ class FileOps(WorkspaceContext):
 
         snapshot = self._require_snapshot(episode_id)
         episode_dir = self._episode_dir(snapshot.job.episode_id)
-        self._bootstrap_review_store_if_needed(episode_dir)
-        store = ReviewStoreLocation(
-            log_path=episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
-            plan_dir=episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
-        )
+        self._bootstrap_review_store_if_needed(episode_dir, output_id)
+        store = review_store_location(episode_dir, output_id)
         try:
             head_version: int | None = load_head(store.log_path, store.plan_dir).version
         except (ReviewCommitError, OSError):
@@ -457,7 +569,9 @@ class FileOps(WorkspaceContext):
             ]
         return result
 
-    def revert_review_plan(self, episode_id: str) -> dict[str, object]:
+    def revert_review_plan(
+        self, episode_id: str, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> dict[str, object]:
         """Restore the previous plan version as a NEW version + rebuild.
 
         One apply-step per call: head vN commits vN+1 whose content equals
@@ -475,11 +589,8 @@ class FileOps(WorkspaceContext):
 
         snapshot = self._require_snapshot(episode_id)
         episode_dir = self._episode_dir(snapshot.job.episode_id)
-        self._bootstrap_review_store_if_needed(episode_dir)
-        store = ReviewStoreLocation(
-            log_path=episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
-            plan_dir=episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
-        )
+        self._bootstrap_review_store_if_needed(episode_dir, output_id)
+        store = review_store_location(episode_dir, output_id)
         head = load_head(store.log_path, store.plan_dir)
         if head.version <= 1:
             raise CockpitConflictError(
@@ -504,12 +615,13 @@ class FileOps(WorkspaceContext):
         if creating is not None and creating.kind == RESTORED_EVENT_KIND:
             restored_from = int(creating.base_plan_version[1:]) - 1
             marker = f"revert-v{restored_from}"
-            if not self._revert_rebuild_spawned(rebuild_log, marker):
+            if not self._revert_rebuild_spawned(rebuild_log, marker, output_id):
                 return self._launch_revert_rebuild(
                     episode_dir,
                     stages,
                     restored_from_version=f"v{restored_from}",
                     new_version=f"v{head.version}",
+                    output_id=output_id,
                 )
         restored_from = head.version - 1
         decision = OperatorDecision0C(
@@ -523,6 +635,7 @@ class FileOps(WorkspaceContext):
             stages,
             restored_from_version=f"v{restored_from}",
             new_version=f"v{outcome.version}",
+            output_id=output_id,
         )
 
     def _launch_revert_rebuild(
@@ -532,6 +645,7 @@ class FileOps(WorkspaceContext):
         *,
         restored_from_version: str,
         new_version: str,
+        output_id: OutputId = DEFAULT_OUTPUT_ID,
     ) -> dict[str, object]:
         """Spawn the revert runner once and record the truthful spawn state.
 
@@ -541,6 +655,8 @@ class FileOps(WorkspaceContext):
         """
 
         marker = f"revert-{restored_from_version}"
+        if output_id != DEFAULT_OUTPUT_ID:
+            marker = f"revert-{output_id}-{restored_from_version}"
         rebuild_log = episode_dir / REBUILD_LOG_NAME
 
         rebuild: dict[str, object] = {
@@ -580,6 +696,7 @@ class FileOps(WorkspaceContext):
                     stage_hint=",".join(stages),
                     marker=marker,
                     spawned=False,
+                    output_id=output_id,
                 ),
             )
             rebuild["scheduled"] = False
@@ -595,6 +712,7 @@ class FileOps(WorkspaceContext):
                     spawned=True,
                     run_id=run_id,
                     target_version=new_version,
+                    output_id=output_id,
                 ),
             )
             rebuild["scheduled"] = True
@@ -605,9 +723,13 @@ class FileOps(WorkspaceContext):
             "rebuild": rebuild,
         }
 
-    def _revert_rebuild_spawned(self, rebuild_log: Path, marker: str) -> bool:
+    def _revert_rebuild_spawned(
+        self, rebuild_log: Path, marker: str, output_id: OutputId = DEFAULT_OUTPUT_ID
+    ) -> bool:
         """True iff a spawned-marker entry exists for this revert marker."""
 
+        if output_id != DEFAULT_OUTPUT_ID and marker.startswith("revert-v"):
+            marker = f"revert-{output_id}-{marker[len('revert-'):]}"
         if not rebuild_log.is_file():
             return False
         for line in rebuild_log.read_bytes().splitlines():
@@ -626,6 +748,7 @@ class FileOps(WorkspaceContext):
         stage_hint: str | None,
         applied_command: str | None = None,
         applied_commands: tuple[str, ...] | None = None,
+        output_id: OutputId = DEFAULT_OUTPUT_ID,
     ) -> dict[str, object]:
         """Record one rebuild intent; with applied command(s), schedule it (task 9).
 
@@ -648,6 +771,7 @@ class FileOps(WorkspaceContext):
                 log_path,
                 stage_hint=stage_hint,
                 applied_commands=applied_commands,
+                output_id=output_id,
             )
         if applied_command is not None:
             applied = load_applied_command(episode_dir, applied_command)
@@ -658,9 +782,12 @@ class FileOps(WorkspaceContext):
                 stage_hint=stage_hint,
                 applied=[applied],
                 stages=tuple(plan.stages),
+                output_id=output_id,
             )
         entry = RebuildRequestEntry(
-            sequence=self._next_sequence(log_path), stage_hint=stage_hint
+            sequence=self._next_sequence(log_path),
+            stage_hint=stage_hint,
+            output_id=output_id,
         )
         self._append_jsonl(log_path, entry)
         return {
@@ -676,6 +803,7 @@ class FileOps(WorkspaceContext):
         *,
         stage_hint: str | None,
         applied_commands: tuple[str, ...],
+        output_id: OutputId = DEFAULT_OUTPUT_ID,
     ) -> dict[str, object]:
         if not applied_commands:
             raise CockpitUnprocessableError(
@@ -695,9 +823,10 @@ class FileOps(WorkspaceContext):
             stage_hint=stage_hint,
             applied=applied,
             stages=union,
+            output_id=output_id,
         )
 
-    def _schedule_rebuild(
+    def _schedule_rebuild(  # noqa: PLR0913 (rebuild reservation: episode/log + hint/applied/stages/output refs)
         self,
         episode_dir: Path,
         log_path: Path,
@@ -705,6 +834,7 @@ class FileOps(WorkspaceContext):
         stage_hint: str | None,
         applied: list[AppliedCommand],
         stages: tuple[str, ...],
+        output_id: OutputId = DEFAULT_OUTPUT_ID,
     ) -> dict[str, object]:
         resolved_hint = stage_hint if stage_hint is not None else ",".join(stages)
         target_version = next(
@@ -716,6 +846,7 @@ class FileOps(WorkspaceContext):
             sequence=self._next_sequence(log_path),
             stage_hint=resolved_hint,
             target_version=target_version,
+            output_id=output_id,
         )
         self._append_jsonl(log_path, entry)  # the 予約 (pre-spawn reservation)
         primary = applied[0]
@@ -780,7 +911,7 @@ class FileOps(WorkspaceContext):
         return result
 
     def record_consultation_rebuild(
-        self, episode_id: str, *, judgment_id: str
+        self, episode_id: str, *, judgment_id: str, output_id: OutputId = DEFAULT_OUTPUT_ID
     ) -> dict[str, object]:
         """Schedule a selection rebuild for an adopted consultation judgment.
 
@@ -834,7 +965,7 @@ class FileOps(WorkspaceContext):
             stop = PIPELINE_STAGES.index("preview")
             stages = tuple(PIPELINE_STAGES[start : stop + 1])
             marker = f"consultation-{judgment_id}"
-            base_version, base_sha = _review_base_pin(episode_dir)
+            base_version, base_sha = _review_base_pin(episode_dir, output_id)
             reservation = RebuildRequestEntry(
                 sequence=self._next_sequence(log_path),
                 stage_hint=",".join(stages),
@@ -843,6 +974,7 @@ class FileOps(WorkspaceContext):
                 policy_sha256=canonical_policy_sha256(policy),
                 base_plan_version=base_version,
                 base_plan_sha256=base_sha,
+                output_id=output_id,
             )
             self._append_jsonl(log_path, reservation)  # the 予約 (pre-spawn reservation)
         run_id = uuid.uuid4().hex[:12]
