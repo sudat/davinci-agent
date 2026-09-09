@@ -145,7 +145,11 @@ export type ConsultationRebuild = {
  *  Every field may be absent on old data — renderers must read them
  *  defensively (see `outcomeLineOf` in ConsultationEntryList) and never
  *  fabricate values. */
-export type ConsultationPolicyOutcomeStatus = "honored" | "failed";
+export type ConsultationPolicyOutcomeStatus = "honored" | "connected" | "failed";
+
+/** Slice-2 P1-4 connection evidence (backend `DirectorConnection`).
+ *  `null`/absent on old data — renderers fall back honestly, never assume. */
+export type ConsultationDirectorConnection = "confirmed" | "not_started" | "unknown";
 
 export type ConsultationPolicyOutcomeEntry = {
   kind: "policy_outcome";
@@ -158,6 +162,16 @@ export type ConsultationPolicyOutcomeEntry = {
   reasons: string[];
   note: string | null;
   recorded_at: string;
+  /** Slice-2 P1-4 evidence fields (backend `ConsultationPolicyOutcomeV1`):
+   *  absent/null on old data — renderers read them null-safely. */
+  director_connection?: ConsultationDirectorConnection | null;
+  realized_checks?: string[] | null;
+  unaddressed?: string[] | null;
+  unconfirmed?: string[] | null;
+  failure_code?: string | null;
+  reservation_sequence?: number | null;
+  run_id?: string | null;
+  commit_event_id?: string | null;
 };
 
 /** One row of the consultation journal: either a message entry or a

@@ -32,19 +32,54 @@ function nonEmptyText(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
-/** Slice-2 outcome line. Every field is read defensively: old data may
- *  omit them, so absence renders as 不明 — never fabricated, never a crash. */
+function verbatimList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => nonEmptyText(item) !== null);
+}
+
+/** Slice-2 P1-4 outcome line (design `docs/prd/ux-slice2-p1-fix-design.md`
+ *  §P1-4). New writers emit only `connected`/`failed`; legacy `honored`
+ *  rows still load but never claim 反映されました. Every field is read
+ *  defensively: old data may omit them, so absence renders as 不明 — never
+ *  fabricated, never a crash. */
 export function outcomeLineOf(entry: ConsultationPolicyOutcomeEntry): string {
   const status: unknown = entry.status;
-  if (status === "honored") {
-    return `採用した方針の反映結果：反映されました（対象版 ${nonEmptyText(entry.plan_version) ?? "不明"}）`;
+  if (status === "connected") {
+    const version = nonEmptyText(entry.plan_version) ?? "不明";
+    const realized = verbatimList(entry.realized_checks);
+    const unaddressed = verbatimList(entry.unaddressed);
+    let line =
+      `採用した方針は編集長への入力に接続されました（対象版 ${version}）。` +
+      `内容どおりに実現したかは、確認済みの項目だけを表示しています。`;
+    if (realized.length > 0) line += `確認済み: ${realized.join("、")}。`;
+    if (unaddressed.length > 0) line += `未確認: ${unaddressed.join("、")}。`;
+    return line;
   }
   if (status === "failed") {
-    const reasons: unknown = entry.reasons;
-    const list = Array.isArray(reasons)
-      ? reasons.filter((reason): reason is string => nonEmptyText(reason) !== null)
-      : [];
+    const reasons = verbatimList(entry.reasons);
+    const reasonLine = reasons.length > 0 ? `理由：${reasons.join("、")}。` : "";
+    const recorded = nonEmptyText(entry.plan_version);
+    const recordedLine =
+      recorded !== null ? `編集の記録は ${recorded} まで残っています。` : "";
+    const connection: unknown = entry.director_connection;
+    if (connection === "confirmed") {
+      return `方針は編集長に渡されましたが、編集版の確定に失敗しました。${reasonLine}${recordedLine}`;
+    }
+    if (connection === "not_started") {
+      return `方針は編集長に渡していません。理由を確認して相談へ戻れます。${reasonLine}${recordedLine}`;
+    }
+    if (connection === "unknown") {
+      return "方針が編集長へ届いたか確認できません。重複利用を避けて停止しました。";
+    }
+    const list = reasons;
     return `採用した方針の反映結果：反映できませんでした：${list.length > 0 ? list.join("、") : "理由は不明"}`;
+  }
+  if (status === "honored") {
+    const version = nonEmptyText(entry.plan_version) ?? "不明";
+    return (
+      `採用した方針は編集長への入力に接続された旧記録です（対象版 ${version}）。` +
+      `当時の検証範囲は記録されていません。`
+    );
   }
   return "採用した方針の反映結果：不明";
 }

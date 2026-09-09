@@ -59,16 +59,19 @@ function entryKeyOf(entry: ConsultationEntry, index: number): string {
 function rebuildLineOf(rebuild: ConsultationRebuild | null | undefined): string | null {
   if (rebuild === null || rebuild === undefined) return null;
   const status: unknown = rebuild.status;
-  if (status === "requested" || status === "running") {
-    return "採用した方針を反映中です";
+  if (status === "requested") {
+    return "採用した方針を反映する再編集を準備しています";
+  }
+  if (status === "running") {
+    return "再編集を実行しています";
   }
   if (status === "succeeded") {
     const version: unknown = rebuild.target_version;
-    return `反映しました（対象版 ${typeof version === "string" && version !== "" ? version : "不明"}）`;
+    return `再編集が完了しました（対象版 ${typeof version === "string" && version !== "" ? version : "不明"}）——結果は下の反映結果行で確認してください`;
   }
   if (status === "failed") {
     const detail: unknown = rebuild.detail;
-    return `反映できませんでした：${typeof detail === "string" && detail !== "" ? detail : "詳細は不明"}。相談を続けられます`;
+    return `再編集に失敗しました：${typeof detail === "string" && detail !== "" ? detail : "詳細は不明"}。相談を続けられます`;
   }
   return null;
 }

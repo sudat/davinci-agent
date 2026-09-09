@@ -459,7 +459,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     note: "",
   };
 
-  const honoredOutcome: ConsultationPolicyOutcomeEntry = {
+  const legacyHonoredOutcome: ConsultationPolicyOutcomeEntry = {
     kind: "policy_outcome",
     outcome_id: "o-1",
     consultation_id: "c-1",
@@ -485,7 +485,79 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     recorded_at: "2026-09-08T10:11:00Z",
   };
 
-  it("採用の判断（202）は再編集の準備告知と「反映中」を出し、pollで成功→失敗が切り替わり、失敗後も判断できる", async () => {
+  const connectedOutcome: ConsultationPolicyOutcomeEntry = {
+    kind: "policy_outcome",
+    outcome_id: "o-3",
+    consultation_id: "c-1",
+    judgment_id: "j-3",
+    proposal_id: "p-1",
+    plan_version: "v4",
+    status: "connected",
+    reasons: [],
+    note: null,
+    recorded_at: "2026-09-08T10:12:00Z",
+    director_connection: "confirmed",
+    realized_checks: ["planner_feasibility", "edit_plan_generation"],
+    unaddressed: ["字幕と見た目が実映像で方針どおりか"],
+  };
+
+  const failedConfirmedOutcome: ConsultationPolicyOutcomeEntry = {
+    kind: "policy_outcome",
+    outcome_id: "o-4",
+    consultation_id: "c-1",
+    judgment_id: "j-4",
+    proposal_id: "p-1",
+    plan_version: null,
+    status: "failed",
+    reasons: ["policy-commit-failed: 版の確定に失敗しました"],
+    note: null,
+    recorded_at: "2026-09-08T10:13:00Z",
+    director_connection: "confirmed",
+  };
+
+  const failedNotStartedOutcome: ConsultationPolicyOutcomeEntry = {
+    kind: "policy_outcome",
+    outcome_id: "o-5",
+    consultation_id: "c-1",
+    judgment_id: "j-5",
+    proposal_id: "p-1",
+    plan_version: null,
+    status: "failed",
+    reasons: ["policy-not-interpretable: 編集長が決定論化モードのため方針を解釈できませんでした"],
+    note: null,
+    recorded_at: "2026-09-08T10:14:00Z",
+    director_connection: "not_started",
+  };
+
+  const failedUnknownOutcome: ConsultationPolicyOutcomeEntry = {
+    kind: "policy_outcome",
+    outcome_id: "o-6",
+    consultation_id: "c-1",
+    judgment_id: "j-6",
+    proposal_id: "p-1",
+    plan_version: null,
+    status: "failed",
+    reasons: ["director_timeout: 応答がありませんでした"],
+    note: null,
+    recorded_at: "2026-09-08T10:15:00Z",
+    director_connection: "unknown",
+  };
+
+  const failedRecordedVersionOutcome: ConsultationPolicyOutcomeEntry = {
+    kind: "policy_outcome",
+    outcome_id: "o-7",
+    consultation_id: "c-1",
+    judgment_id: "j-7",
+    proposal_id: "p-1",
+    plan_version: "v2",
+    status: "failed",
+    reasons: ["policy-commit-recovery-failed: 版ファイルの回復を確認できません"],
+    note: null,
+    recorded_at: "2026-09-08T10:16:00Z",
+    director_connection: "confirmed",
+  };
+
+  it("採用の判断（202）は再編集の準備告知を出し、pollで準備→実行→完了→失敗が切り替わり、失敗後も判断できる", async () => {
     vi.useFakeTimers();
     let rebuild: ConsultationPayload["rebuild"] = {
       status: "requested",
@@ -526,14 +598,20 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
       "採用した方針を反映する再編集を準備しています",
     );
     expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
-      "反映中",
+      "採用した方針を反映する再編集を準備しています",
+    );
+
+    rebuild = { status: "running", target_version: null, detail: null };
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
+      "再編集を実行しています",
     );
 
     rebuild = { status: "succeeded", target_version: "v3", detail: null };
     await vi.advanceTimersByTimeAsync(2000);
-    expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
-      "反映しました（対象版 v3）",
-    );
+    const done = screen.getByTestId("consultation-rebuild-state").textContent ?? "";
+    expect(done).toContain("再編集が完了しました（対象版 v3）");
+    expect(done).toContain("結果は下の反映結果行で確認してください");
 
     rebuild = {
       status: "failed",
@@ -542,7 +620,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     };
     await vi.advanceTimersByTimeAsync(2000);
     const failed = screen.getByTestId("consultation-rebuild-state").textContent ?? "";
-    expect(failed).toContain("反映できませんでした");
+    expect(failed).toContain("再編集に失敗しました");
     expect(failed).toContain("対象の版が見つかりませんでした");
     expect(failed).toContain("相談を続けられます");
 
@@ -571,20 +649,93 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     expect(screen.queryByTestId("consultation-rebuild-state")).toBeNull();
   });
 
-  it("採用した方針の反映結果エントリを表示する（反映／失敗と理由）", async () => {
+  it("接続された方針の実装結果エントリを表示する（接続・旧記録・接続なし失敗の防御形）", async () => {
     const { fetchImpl } = recordingFetch(() =>
       jsonResponse({
-        consultations: [{ ...entryOne, policy_outcomes: [honoredOutcome, failedOutcome] }],
+        consultations: [
+          {
+            ...entryOne,
+            policy_outcomes: [connectedOutcome, legacyHonoredOutcome, failedOutcome],
+          },
+        ],
       }),
     );
     renderPanel(fetchImpl);
 
     const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
-    expect(outcomes).toHaveLength(2);
-    expect(outcomes[0]!.textContent).toContain("反映されました（対象版 v3）");
-    expect(outcomes[1]!.textContent).toContain(
+    expect(outcomes).toHaveLength(3);
+    const connected = outcomes[0]!.textContent ?? "";
+    expect(connected).toContain(
+      "採用した方針は編集長への入力に接続されました（対象版 v4）",
+    );
+    expect(connected).toContain("確認済みの項目だけを表示しています");
+    expect(connected).toContain("確認済み: planner_feasibility、edit_plan_generation");
+    expect(connected).toContain("未確認: 字幕と見た目が実映像で方針どおりか");
+    expect(connected).not.toContain("反映されました");
+    const legacy = outcomes[1]!.textContent ?? "";
+    expect(legacy).toContain(
+      "採用した方針は編集長への入力に接続された旧記録です（対象版 v3）",
+    );
+    expect(legacy).toContain("当時の検証範囲は記録されていません");
+    expect(legacy).not.toContain("反映されました");
+    expect(outcomes[2]!.textContent).toContain(
       "反映できませんでした：対象の版が見つかりませんでした、方針の範囲が空でした",
     );
+  });
+
+  it("失敗の接続状態ごとに正直な文言を出す（渡した・渡していない・届いたか不明）", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({
+        consultations: [
+          {
+            ...entryOne,
+            policy_outcomes: [
+              failedConfirmedOutcome,
+              failedNotStartedOutcome,
+              failedUnknownOutcome,
+            ],
+          },
+        ],
+      }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(3);
+    const confirmed = outcomes[0]!.textContent ?? "";
+    expect(confirmed).toContain(
+      "方針は編集長に渡されましたが、編集版の確定に失敗しました",
+    );
+    expect(confirmed).toContain("policy-commit-failed");
+    const notStarted = outcomes[1]!.textContent ?? "";
+    expect(notStarted).toContain(
+      "方針は編集長に渡していません。理由を確認して相談へ戻れます",
+    );
+    expect(notStarted).toContain("policy-not-interpretable");
+    const unknown = outcomes[2]!.textContent ?? "";
+    expect(unknown).toContain(
+      "方針が編集長へ届いたか確認できません。重複利用を避けて停止しました",
+    );
+    for (const outcome of outcomes) {
+      expect(outcome.textContent).not.toContain("反映されました");
+    }
+  });
+
+  it("失敗でも記録に残った版は記録事実として出す（成功とは言わない）", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({
+        consultations: [{ ...entryOne, policy_outcomes: [failedRecordedVersionOutcome] }],
+      }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(1);
+    const line = outcomes[0]!.textContent ?? "";
+    expect(line).toContain("方針は編集長に渡されましたが、編集版の確定に失敗しました");
+    expect(line).toContain("編集の記録は v2 まで残っています");
+    expect(line).not.toContain("反映されました");
+    expect(line).not.toContain("接続されました");
   });
 
   it("新フィールドのない旧viewは従来どおり表示し、再編集の行も不明も出さない", async () => {
@@ -612,7 +763,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     const first = renderPanel(fetchImpl);
     await waitFor(() => {
       expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
-        "反映しました（対象版 v3）",
+        "再編集が完了しました（対象版 v3）",
       );
     });
     first.unmount();
@@ -620,7 +771,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     renderPanel(fetchImpl);
     await waitFor(() => {
       expect(screen.getByTestId("consultation-rebuild-state").textContent).toContain(
-        "反映しました（対象版 v3）",
+        "再編集が完了しました（対象版 v3）",
       );
     });
   });

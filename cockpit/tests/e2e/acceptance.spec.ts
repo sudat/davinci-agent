@@ -784,7 +784,7 @@ test("consultation slice2: REJECT判断は200で再生成なし（告知のみ�
   expect(consoleErrors, `console errors: ${consoleErrors.join(" | ")}`).toEqual([]);
 });
 
-test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗終端＋反映結果行", async ({
+test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗終端＋実装結果行", async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -806,34 +806,43 @@ test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗
   await entry.getByTestId("consultation-judgment-submit").click();
 
   // 202 path: the announcement names the scheduled re-edit, and the
-  // rebuild-state line shows 反映中 from the POST view (policy/rebuild ride
-  // on the journal view row — the wire shape this test pins).
+  // rebuild-state line shows the preparation line from the POST view
+  // (policy/rebuild ride on the journal view row — the wire shape this
+  // test pins).
   await expect(page.getByTestId("consultation-announcement")).toHaveText(
     "採用した方針を反映する再編集を準備しています",
     { timeout: 15_000 },
   );
   await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
-    "反映中",
+    "採用した方針を反映する再編集を準備しています",
     { timeout: 15_000 },
   );
 
-  // Honest terminal in the synthetic episode: no run/ artifacts exist, so
-  // the detached selection rebuild fails fast and appends a REAL failed
-  // policy-outcome to the journal (deterministic-baseline mode) — the
-  // rebuild-state line flips to the honest failure and the panel merges
-  // the outcome rider as its own 反映結果 row on poll.
+  // Honest terminal in the synthetic episode: the backend boots with no
+  // model credentials, so director_mode is deterministic-baseline and the
+  // detached selection rebuild stops BEFORE any director contact — the
+  // journal carries a REAL failed policy-outcome with
+  // director_connection=not_started ("方針は編集長に渡していません"),
+  // and the rebuild-state line flips to the factual failure. The outcome
+  // rider merges as its own 実装結果 row on poll.
   await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
-    "反映できませんでした",
+    "再編集に失敗しました",
     { timeout: 180_000 },
   );
   await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
     "相談を続けられます",
   );
+  await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
+    "方針を解釈できませんでした",
+  );
   const outcome = page.getByTestId("consultation-policy-outcome");
-  await expect(outcome.first()).toContainText("採用した方針の反映結果", {
-    timeout: 30_000,
-  });
-  await expect(outcome.first()).toContainText("反映できませんでした", {
+  await expect(outcome.first()).toContainText(
+    "方針は編集長に渡していません。理由を確認して相談へ戻れます",
+    {
+      timeout: 30_000,
+    },
+  );
+  await expect(outcome.first()).toContainText("方針を解釈できませんでした", {
     timeout: 30_000,
   });
 
