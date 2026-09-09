@@ -91,13 +91,22 @@ class AdoptedPolicySummaryV1(StrictModel):
 
 
 class DirectorRequest(StrictModel):
-    """Declared inputs for one editorial-director run (frozen Phase-1 shape)."""
+    """Declared inputs for one editorial-director run (frozen Phase-1 shape).
+
+    ``refusal_feedback`` carries a previous attempt's typed refusal back to
+    the model for ONE bounded re-proposal (the r8 keep_remove_contradiction
+    retry): it rides the prompt bundle as DATA, exactly like the adopted
+    policy text. None on first attempts; the bundle records the field
+    explicitly either way, so a retried prompt hashes differently from the
+    refused one.
+    """
 
     episode_id: Identifier
     edit_source: EditSourceSpec
     rules: EditorialRules
     candidates: tuple[DeclaredCandidate, ...] = Field(min_length=1)
     adopted_policy: AdoptedPolicySummaryV1 | None = None
+    refusal_feedback: str | None = None
 
 
 class EditorialPolicyEnvelope(StrictModel):

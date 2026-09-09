@@ -21,7 +21,7 @@ from services.artifact_registry.registry import ArtifactRegistry
 from services.artifact_store.store import ArtifactStore
 from services.cli.real_analyze import RealAnalyzerError, run_real_analyzers
 from services.cli.real_commit import commit_selection
-from services.cli.real_director import RealDirectorError, select_and_reconcile
+from services.cli.real_director import RealDirectorError, select_and_reconcile_with_retry
 from services.cli.real_episode import (
     EPISODE_MANIFEST_NAME,
     RealEpisodeError,
@@ -180,19 +180,6 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
         return _finish(build_report(facts, stop), out_dir, None)
 
     try:
-        outcome, selection, reconciled, policy_file = select_and_reconcile(
-            episode_id=manifest.episode_id,
-            source_id=source_id,
-            total_frames=total_frames,
-            analysis=analysis,
-            pool=pool,
-            speech=speech,
-            policy_path=policy_path,
-            out_dir=out_dir,
-            env=environment,
-            runtime_path=editorial_runtime,
-            editorial_grant=editorial_grant,
-        )
         episode_record = CommittedEpisodeRecord(
             episode_id=manifest.episode_id,
             contract_id=eligibility.contract_id,
@@ -203,6 +190,21 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
             source_id=source_id,
             edit_source_sha=analysis.record.edit_source_sha256,
             total_frames=total_frames,
+        )
+        outcome, selection, reconciled, policy_file = select_and_reconcile_with_retry(
+            episode_id=manifest.episode_id,
+            source_id=source_id,
+            total_frames=total_frames,
+            analysis=analysis,
+            pool=pool,
+            speech=speech,
+            policy_path=policy_path,
+            out_dir=out_dir,
+            env=environment,
+            episode=episode_record,
+            facts=edit_facts,
+            runtime_path=editorial_runtime,
+            editorial_grant=editorial_grant,
         )
         selection_outcome = commit_selection(
             state=state,

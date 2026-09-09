@@ -30,17 +30,35 @@ BUDGET: the director's codex-exec call is the chain's own cost (like the
 analyze stage) — it is NOT billed to the consultation budget, which covers
 the consultation LLM only. The outcome records which transport/model served
 (``served_by`` + ``transport``, journaled into run-report.json) mirroring
-the consultation GenerationCall honesty — no false live claims.
+the consultation GenerationCall honesty — no false live claims. The single
+bounded contradiction retry appends one ``director-calls.jsonl`` ledger
+line per completed call (attempt 1, then attempt 2 only on retry), so both
+calls are accounted even when the retry also fails validation.
+
+RETRY: when the semantic validator refuses a proposal with ONLY
+``keep_remove_contradiction`` (the r8 measured blocker: one span carrying
+both keep and remove intents without a parent relation), the director is
+re-invoked EXACTLY ONCE with the refusal appended to the original request
+(``refusal_feedback`` rides the prompt bundle as DATA). Any other refusal
+(schema, other semantic codes, lock, capability, contract) never retries —
+it flows to the commit authority unchanged. A twice-refused proposal
+propagates the same typed refusal with nothing committed and no third
+attempt.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Literal
 
+from services.cli.director_call_ledger import (
+    DirectorCallEntryV1,
+    append_director_call,
+    now_stamp,
+)
 from services.cli.live_editorial import LiveHttpTransport
 from services.cli.live_editorial_codex import (
     CodexEditorialTransport,
@@ -48,6 +66,7 @@ from services.cli.live_editorial_codex import (
 )
 from services.cli.real_director_runtime import (
     DirectorMode,
+    DirectorRoute,
     DirectorTransport,
     RealDirectorError,
     resolve_director_route,
@@ -76,8 +95,11 @@ from services.editorial.policy import decide_production_transport_policy
 from services.editorial.proposal_builder import build_selection_proposal
 from services.editorial.reconcile import reconcile
 from services.fixtures.manifest_phase1 import EditorialRules, EditSourceSpec
+from services.gates.phase0a import PHASE_0A_CAPABILITIES
 from services.media_query.api import MediaQueryApi
 from services.policy.redaction import redact_text
+from services.validate.selection_models import ValidationContext
+from services.validate.selection_semantic import validate_semantic
 
 if TYPE_CHECKING:
     from services.cli.real_analyze import RealAnalysis
@@ -87,6 +109,11 @@ if TYPE_CHECKING:
     from services.editorial.reconcile import ReconciliationResult
     from services.editorial.transport import EditorialTransport
     from services.episode_cockpit.models import EpisodeEditorialGrantV1
+    from services.validate.selection_models import (
+        CommittedEpisodeRecord,
+        EditSourceFacts,
+        ValidationRefusal,
+    )
 
 BASELINE_PRODUCER = ProposalProducer(
     model_role_id="deterministic-baseline-v1",
@@ -150,6 +177,65 @@ class DirectorOutcome:
     request_hash: str
     served_by: str
     transport: DirectorTransport = "deterministic-baseline"
+    attempts_made: int = 1
+    first_refusal: str | None = None
+
+
+#: The only semantic refusal code that earns exactly one director retry.
+CONTRADICTION_RETRY_CODE: Final = "keep_remove_contradiction"
+
+
+def refusal_feedback_text(reason: str) -> str:
+    """The refusal appendage for the single bounded contradiction retry."""
+
+    return (
+        f"前回の提案は次の理由で確定を拒否されました: {reason}。"
+        "制約を守って再提案してください。"
+    )
+
+
+def is_contradiction_refusal(refusal: ValidationRefusal) -> bool:
+    """Whether this refusal is the retryable semantic contradiction (and only it)."""
+
+    return refusal.validator == "semantic" and refusal.code == CONTRADICTION_RETRY_CODE
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionRetryAttempt:
+    """One validated director attempt: its call identity plus its refusal, if any."""
+
+    attempt: int
+    request_hash: str
+    served_by: str
+    refusal_code: str | None
+    refusal_detail: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ContradictionRetryInput:
+    """The single grouped input for the bounded contradiction retry."""
+
+    request: DirectorRequest
+    index_path: str
+    policy: ResolvedConfig
+    env: dict[str, str]
+    pool: CandidatePool
+    evidence_index: EvidenceIndex
+    rules: EditorialRules
+    speech_ids: tuple[str, ...]
+    episode: CommittedEpisodeRecord
+    facts: EditSourceFacts
+    ledger_dir: Path | None = None
+    runtime_path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ContradictionRetryResult:
+    """The final outcome/proposal plus the honest per-attempt record."""
+
+    outcome: DirectorOutcome
+    selection: SelectionPlanProposal
+    attempts: tuple[SelectionRetryAttempt, ...]
 
 
 def director_request(  # noqa: PLR0913 (declared-candidate table from the real pool)
@@ -161,6 +247,7 @@ def director_request(  # noqa: PLR0913 (declared-candidate table from the real p
     pool: CandidatePool,
     speech_text: dict[str, str],
     adopted_policy: AdoptedPolicySummaryV1 | None = None,
+    refusal_feedback: str | None = None,
 ) -> DirectorRequest:
     return DirectorRequest(
         episode_id=episode_id,
@@ -186,6 +273,7 @@ def director_request(  # noqa: PLR0913 (declared-candidate table from the real p
             for record in pool.segments
         ),
         adopted_policy=adopted_policy,
+        refusal_feedback=refusal_feedback,
     )
 
 
@@ -284,6 +372,19 @@ def _live_codex(
     )
 
 
+def _direct_request(
+    request: DirectorRequest,
+    route: DirectorRoute,
+    *,
+    index_path: str,
+    policy: ResolvedConfig,
+    env: dict[str, str],
+) -> DirectorOutcome:
+    if route.transport == "codex-exec":
+        return _live_codex(request, index_path, policy)
+    return _live(request, index_path, policy, env)
+
+
 def select(  # noqa: PLR0913 (director wiring: pool + rules + policy + env + evidence)
     *,
     episode_id: str,
@@ -316,9 +417,9 @@ def select(  # noqa: PLR0913 (director wiring: pool + rules + policy + env + evi
         rules=rules, pool=pool, speech_text=redacted_speech_text(speech_text),
         adopted_policy=adopted_policy,
     )
-    if route.transport == "codex-exec":
-        return _live_codex(request, index_path, policy)
-    return _live(request, index_path, policy, env)
+    return _direct_request(
+        request, route, index_path=index_path, policy=policy, env=env
+    )
 
 
 def selection_proposal(
@@ -340,6 +441,25 @@ def selection_proposal(
     )
 
 
+def _selection_prelude(  # noqa: PLR0913 (prelude bundles the chain's persisted inputs)
+    *,
+    episode_id: str,
+    total_frames: int,
+    analysis: RealAnalysis,
+    speech: tuple[SpeechSegment, ...],
+    policy_path: Path | None,
+    out_dir: Path,
+    editorial_grant: EpisodeEditorialGrantV1 | None,
+) -> tuple[Path, EditorialRules, EvidenceIndex, tuple[str, ...]]:
+    policy_file = policy_path if policy_path is not None else write_policy_snapshot(
+        episode_id, out_dir, editorial_grant
+    )
+    rules = rules_for(total_frames, tuple(segment.segment_id for segment in speech))
+    evidence_index = evidence_index_for(analysis.evidence, analysis.record.edit_source_sha256)
+    speech_ids = tuple(segment.segment_id for segment in speech)
+    return policy_file, rules, evidence_index, speech_ids
+
+
 def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real analysis)
     *,
     episode_id: str,
@@ -355,12 +475,11 @@ def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real 
     runtime_path: Path | None = None,
     editorial_grant: EpisodeEditorialGrantV1 | None = None,
 ) -> tuple[DirectorOutcome, SelectionPlanProposal, ReconciliationResult, Path]:
-    policy_file = policy_path if policy_path is not None else write_policy_snapshot(
-        episode_id, out_dir, editorial_grant
+    policy_file, rules, evidence_index, speech_ids = _selection_prelude(
+        episode_id=episode_id, total_frames=total_frames, analysis=analysis,
+        speech=speech, policy_path=policy_path, out_dir=out_dir,
+        editorial_grant=editorial_grant,
     )
-    rules = rules_for(total_frames, tuple(segment.segment_id for segment in speech))
-    evidence_index = evidence_index_for(analysis.evidence, analysis.record.edit_source_sha256)
-    speech_ids = tuple(segment.segment_id for segment in speech)
     outcome = select(
         episode_id=episode_id, source_id=source_id, total_frames=total_frames,
         rules=rules, pool=pool, speech_ids=speech_ids,
@@ -375,3 +494,169 @@ def select_and_reconcile(  # noqa: PLR0913 (director stage wiring over the real 
         total_frames=total_frames, analysis=analysis, pool=pool, speech=speech,
     )
     return outcome, selection, reconciled, policy_file
+
+
+def _record_call(
+    ledger_dir: Path | None,
+    request: DirectorRequest,
+    outcome: DirectorOutcome,
+    *,
+    attempt: int,
+    triggered_by: str | None,
+) -> None:
+    if ledger_dir is None:
+        return
+    append_director_call(
+        ledger_dir,
+        DirectorCallEntryV1(
+            episode_id=request.episode_id,
+            attempt=attempt,
+            request_hash=outcome.request_hash,
+            served_by=outcome.served_by,
+            transport=outcome.transport,
+            triggered_by_refusal=triggered_by,
+            created_at=now_stamp(),
+        ),
+    )
+
+
+def _direct_once(
+    source: ContradictionRetryInput,
+    request: DirectorRequest,
+    *,
+    attempt: int,
+    triggered_by: str | None,
+) -> DirectorOutcome:
+    route = resolve_director_route(source.env, source.runtime_path)
+    if route.mode == "deterministic-baseline":
+        digest = hashlib.sha256(
+            f"baseline:{request.episode_id}:{':'.join(source.speech_ids)}".encode()
+        ).hexdigest()
+        outcome = DirectorOutcome(
+            mode="deterministic-baseline",
+            proposal=_baseline_document(request.episode_id, source.speech_ids),
+            request_hash=digest,
+            served_by="deterministic-baseline-v1:no-model-involved",
+            transport="deterministic-baseline",
+        )
+    else:
+        outcome = _direct_request(
+            request, route, index_path=source.index_path,
+            policy=source.policy, env=source.env,
+        )
+    _record_call(source.ledger_dir, request, outcome, attempt=attempt, triggered_by=triggered_by)
+    return outcome
+
+
+def _retry_attempt(
+    attempt: int, outcome: DirectorOutcome, refusal: ValidationRefusal | None
+) -> SelectionRetryAttempt:
+    return SelectionRetryAttempt(
+        attempt=attempt,
+        request_hash=outcome.request_hash,
+        served_by=outcome.served_by,
+        refusal_code=refusal.code if refusal is not None else None,
+        refusal_detail=refusal.detail if refusal is not None else None,
+    )
+
+
+def select_proposal_with_contradiction_retry(
+    source: ContradictionRetryInput,
+) -> ContradictionRetryResult:
+    """Run the director, validate semantically, and retry ONCE on contradiction.
+
+    Attempt 1 is the original request. When the semantic validator refuses it
+    with ONLY ``keep_remove_contradiction``, attempt 2 re-invokes the
+    director with the refusal appended (``refusal_feedback``); anything else
+    — a clean proposal or any other refusal — returns after attempt 1 with
+    no retry. A twice-refused proposal returns attempt 2 as-is: the caller
+    commits (or refuses) through the commit authority, so the same typed
+    refusal propagates with nothing committed and no third attempt. Each
+    completed director call appends one ledger line, so both calls are
+    accounted even when the retry also fails.
+    """
+
+    context = ValidationContext(
+        episode=source.episode,
+        edit_source=source.facts,
+        capability_allowlist=tuple(PHASE_0A_CAPABILITIES),
+        locks=(),
+        mandatory_candidate_ids=(),
+    )
+    outcome1 = _direct_once(source, source.request, attempt=1, triggered_by=None)
+    selection1 = selection_proposal(
+        source.request.episode_id, source.rules, source.pool,
+        source.evidence_index, outcome1,
+    )
+    refusal1 = validate_semantic(selection1, context)
+    attempt1 = _retry_attempt(1, outcome1, refusal1)
+    if refusal1 is None or not is_contradiction_refusal(refusal1):
+        return ContradictionRetryResult(outcome1, selection1, (attempt1,))
+    reason = f"{refusal1.code}: {refusal1.detail}"
+    request2 = source.request.model_copy(
+        update={"refusal_feedback": refusal_feedback_text(reason)}
+    )
+    outcome2 = _direct_once(source, request2, attempt=2, triggered_by=reason)
+    retried = replace(outcome2, attempts_made=2, first_refusal=reason)
+    selection2 = selection_proposal(
+        request2.episode_id, source.rules, source.pool,
+        source.evidence_index, retried,
+    )
+    refusal2 = validate_semantic(selection2, context)
+    return ContradictionRetryResult(
+        retried, selection2, (attempt1, _retry_attempt(2, retried, refusal2))
+    )
+
+
+def select_and_reconcile_with_retry(  # noqa: PLR0913 (retry seam mirrors select_and_reconcile)
+    *,
+    episode_id: str,
+    source_id: str,
+    total_frames: int,
+    analysis: RealAnalysis,
+    pool: CandidatePool,
+    speech: tuple[SpeechSegment, ...],
+    policy_path: Path | None,
+    out_dir: Path,
+    env: dict[str, str],
+    episode: CommittedEpisodeRecord,
+    facts: EditSourceFacts,
+    adopted_policy: AdoptedPolicySummaryV1 | None = None,
+    runtime_path: Path | None = None,
+    editorial_grant: EpisodeEditorialGrantV1 | None = None,
+) -> tuple[DirectorOutcome, SelectionPlanProposal, ReconciliationResult, Path]:
+    """The initial-chain selection seam with the bounded contradiction retry.
+
+    Identical inputs/outputs to :func:`select_and_reconcile`, except a
+    semantically contradicting first proposal earns exactly one director
+    re-invocation with the refusal fed back. The commit authority downstream
+    still validates everything, so non-semantic refusals and a twice-refused
+    proposal behave exactly as before (typed refusal, nothing committed).
+    """
+
+    policy_file, rules, evidence_index, speech_ids = _selection_prelude(
+        episode_id=episode_id, total_frames=total_frames, analysis=analysis,
+        speech=speech, policy_path=policy_path, out_dir=out_dir,
+        editorial_grant=editorial_grant,
+    )
+    speech_text = {segment.segment_id: segment.text for segment in speech}
+    request = director_request(
+        episode_id=episode_id, source_id=source_id, total_frames=total_frames,
+        rules=rules, pool=pool, speech_text=redacted_speech_text(speech_text),
+        adopted_policy=adopted_policy,
+    )
+    retried = select_proposal_with_contradiction_retry(
+        ContradictionRetryInput(
+            request=request, index_path=analysis.record.index_path,
+            policy=load_policy(policy_file), env=env, pool=pool,
+            evidence_index=evidence_index, rules=rules, speech_ids=speech_ids,
+            episode=episode, facts=facts, ledger_dir=out_dir,
+            runtime_path=runtime_path,
+        )
+    )
+    reconciled = reconcile(retried.outcome.proposal, pool, evidence_index)
+    save_selection_inputs(
+        out_dir, episode_id=episode_id, source_id=source_id,
+        total_frames=total_frames, analysis=analysis, pool=pool, speech=speech,
+    )
+    return retried.outcome, retried.selection, reconciled, policy_file
