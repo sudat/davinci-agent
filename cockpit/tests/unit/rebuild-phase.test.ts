@@ -147,6 +147,15 @@ describe("useRebuildPhase — run対応の状態遷移（U30失敗先行fixture�
     const arrived = baseStatus({
       current_run: "run-18b",
       preview_first_arrived_at: iso(30),
+      rebuild_requests: [
+        {
+          ...CHAIN_ENTRY,
+          sequence: 18,
+          spawned: true,
+          run_id: "run-18b",
+          target_version: "v3",
+        },
+      ],
       stage_runs: [
         {
           stage_name: "compile",
@@ -176,6 +185,15 @@ describe("useRebuildPhase — run対応の状態遷移（U30失敗先行fixture�
     const arrived = baseStatus({
       current_run: "run-18b",
       preview_first_arrived_at: iso(30),
+      rebuild_requests: [
+        {
+          ...CHAIN_ENTRY,
+          sequence: 18,
+          spawned: true,
+          run_id: "run-18b",
+          target_version: "v3",
+        },
+      ],
     });
     expect(deriveRebuildPhase(SCHEDULED, arrived, true)).toBe("done");
     // probe結果が2xxでない間は完了にしない
@@ -246,5 +264,121 @@ describe("useRebuildPhase — 再読込復元（U30 hydration / codex独立レ�
 
   it("server連鎖の無いnull読み出しは表示しない（無関係episodeで線を出さない）", () => {
     expect(deriveRebuildPhase(null, baseStatus({}), null)).toBeNull();
+  });
+});
+
+describe("useRebuildPhase — stale-poll honesty（V44-1 live lane）", () => {
+  /** Live flash replica: POST /rebuild accepted (client result set) but the
+   *  2s poll still serves the PRE-rebuild server state — old current_run,
+   *  old preview arrival, old bound probe (previewOk true). */
+  const STALE_PRE_REBUILD = baseStatus({
+    current_run: "run-A",
+    current_target_version: "v1",
+    preview_first_arrived_at: iso(300),
+    rebuild_requests: [],
+    stage_runs: [
+      {
+        stage_name: "compile",
+        status: "succeeded",
+        retry_count: 0,
+        last_error_code: null,
+        run_id: "run-A",
+        first_output_arrived_at: iso(320),
+      },
+      {
+        stage_name: "preview",
+        status: "succeeded",
+        retry_count: 0,
+        last_error_code: null,
+        run_id: "run-A",
+        first_output_arrived_at: iso(300),
+      },
+    ],
+  });
+
+  function spawnedEntry(sequence: number, runId: string): {
+    schema_version: string;
+    stage_hint: string;
+    marker: null;
+    reserves_sequence: null;
+    sequence: number;
+    spawned: boolean;
+    run_id: string;
+    target_version: string;
+  } {
+    return {
+      ...CHAIN_ENTRY,
+      sequence,
+      spawned: true,
+      run_id: runId,
+      target_version: "v2",
+    };
+  }
+
+  function completedRunStatus(runId: string, sequences: number[]): EpisodeStatus {
+    return baseStatus({
+      current_run: runId,
+      current_target_version: "v2",
+      preview_first_arrived_at: iso(30),
+      rebuild_requests: sequences.map((sequence) => spawnedEntry(sequence, runId)),
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "succeeded",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: runId,
+          first_output_arrived_at: iso(60),
+        },
+        {
+          stage_name: "preview",
+          status: "succeeded",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: runId,
+          first_output_arrived_at: iso(30),
+        },
+      ],
+    });
+  }
+
+  it("受付直後の旧poll（旧run到達+旧probe 2xx）は完了にしない——受付済みどまり", () => {
+    const baseline = { currentRun: "run-A", latestSequence: null };
+    expect(deriveRebuildPhase(SCHEDULED, STALE_PRE_REBUILD, true, baseline)).toBe(
+      "scheduled",
+    );
+    const text = rebuildPhaseText(
+      deriveRebuildPhase(SCHEDULED, STALE_PRE_REBUILD, true, baseline),
+    );
+    expect(text).toContain("再build予約済み");
+    expect(text).not.toContain("完了");
+  });
+
+  it("baseline無しでも連鎖証拠の無い旧到達だけでは完了にしない", () => {
+    expect(deriveRebuildPhase(SCHEDULED, STALE_PRE_REBUILD, true)).toBe("scheduled");
+    expect(deriveRebuildPhase(SCHEDULED, STALE_PRE_REBUILD, true)).not.toBe("done");
+  });
+
+  it("serverがTHIS runを示したら完了する（新run+到達+probe 2xx）", () => {
+    const baseline = { currentRun: "run-A", latestSequence: null };
+    const done = completedRunStatus("run-B", [1]);
+    expect(deriveRebuildPhase(SCHEDULED, done, true, baseline)).toBe("done");
+    expect(deriveRebuildPhase(SCHEDULED, done, false, baseline)).toBe(
+      "awaiting_confirmation",
+    );
+  });
+
+  it("cross-run pin: 旧runの成功到達はNEW requestを完了にしない", () => {
+    // 2回目のrebuild受付直後: serverはまだ前回run-Bの完了状態を示す。
+    const baseline = { currentRun: "run-B", latestSequence: 0 };
+    const stale = completedRunStatus("run-B", [0]);
+    expect(deriveRebuildPhase(SCHEDULED, stale, true, baseline)).toBe("scheduled");
+    expect(deriveRebuildPhase(SCHEDULED, stale, true, baseline)).not.toBe("done");
+  });
+
+  it("連鎖が受付後に伸びたらTHIS runの証拠になる（同run名でも完了できる）", () => {
+    const baseline = { currentRun: "run-new", latestSequence: null };
+    const done = completedRunStatus("run-new", [0]);
+    expect(deriveRebuildPhase(SCHEDULED, done, true, baseline)).toBe("done");
   });
 });

@@ -238,7 +238,12 @@ const BINDING_REBUILD_SCHEDULED = {
   runner_log: "/tmp/episodes/ep-bind01/runner.log",
 };
 
-function bindingStatusPayload(seq: number, run: string, version: string): object {
+function bindingStatusPayload(
+  seq: number,
+  run: string,
+  version: string,
+  chain: object[] = [],
+): object {
   return {
     episode_id: "ep-bind01",
     job_id: "ep-bind01",
@@ -259,7 +264,7 @@ function bindingStatusPayload(seq: number, run: string, version: string): object
     current_run: run,
     current_target_version: version,
     pending_rebuild: null,
-    rebuild_requests: [],
+    rebuild_requests: chain,
     last_worker_report_at: null,
     last_worker_report_event: null,
     unreviewed_proposal_set: false,
@@ -281,6 +286,20 @@ const probeHeaders = (run: string, version: string): Record<string, string> => (
   "x-cockpit-preview-output-arrived-at": "2026-09-09T00:00:00+00:00",
 });
 
+/** POST /rebuild後にserverが記録するspawned連鎖: 受付前のpoll（空連鎖）
+ *  と受付後のpollを区別するTHIS-run証拠。受付前のbaselineは空連鎖なので、
+ *  このentryの出現がserverの前進を証明する。 */
+const SPAWNED_RUN_NEW = {
+  schema_version: "cockpit-rebuild-request-v1",
+  sequence: 1,
+  stage_hint: "plan,compile,preview,resolve_build,qc,render",
+  marker: null,
+  spawned: true,
+  run_id: "run-new",
+  target_version: "v2",
+  reserves_sequence: null,
+};
+
 async function flushAux(): Promise<void> {
   for (let i = 0; i < 8; i += 1) {
     await vi.advanceTimersByTimeAsync(0);
@@ -291,6 +310,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
   it("旧run/旧版ヘッダ→「前回の実行のものです（再生成待ち）」+ previewOk false（完了を出さない）。一致ヘッダの次pollで「今回の実行の試し編集です」+ true", async () => {
     let preview = previewResponse(206, probeHeaders("run-old", "v1"));
     let seq = 0;
+    let rebuilt = false;
     const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
       const url = String(input);
       if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
@@ -309,6 +329,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
         );
       }
       if (url.endsWith("/rebuild")) {
+        rebuilt = true;
         return Promise.resolve(jsonResponse(url, 202, BINDING_REBUILD_SCHEDULED));
       }
       if (url.endsWith("/consultation")) {
@@ -317,7 +338,11 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
       seq += 1;
       return Promise.resolve(
-        jsonResponse(url, 200, bindingStatusPayload(seq, "run-new", "v2")),
+        jsonResponse(
+          url,
+          200,
+          bindingStatusPayload(seq, "run-new", "v2", rebuilt ? [SPAWNED_RUN_NEW] : []),
+        ),
       );
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -337,6 +362,11 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
     fireEvent.click(screen.getByTestId("review-apply-button"));
     await flushAux();
     expect(screen.getByTestId("rebuild-indicator")).toBeTruthy();
+    // 受付直後の旧pollでは完了も到達claimも出さない（stale-poll honesty）。
+    // 次のpollでserverがTHIS runの連鎖を示したら、previewOk=falseのまま
+    // 到達確認待ちになる（今回claimを出さない観測はここで保つ）。
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
     expect(screen.getByTestId("rebuild-phase").textContent).toBe(
       "試し編集完了・確認してください",
     );
@@ -356,6 +386,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
   it("ヘッダなしの旧バックエンド→「不明（対象となる実行を特定できません）」。previewOk null では完了を出さない", async () => {
     let preview = previewResponse(206, {});
     let seq = 0;
+    let rebuilt = false;
     const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
       const url = String(input);
       if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
@@ -374,6 +405,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
         );
       }
       if (url.endsWith("/rebuild")) {
+        rebuilt = true;
         return Promise.resolve(jsonResponse(url, 202, BINDING_REBUILD_SCHEDULED));
       }
       if (url.endsWith("/consultation")) {
@@ -382,7 +414,11 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
       seq += 1;
       return Promise.resolve(
-        jsonResponse(url, 200, bindingStatusPayload(seq, "run-new", "v2")),
+        jsonResponse(
+          url,
+          200,
+          bindingStatusPayload(seq, "run-new", "v2", rebuilt ? [SPAWNED_RUN_NEW] : []),
+        ),
       );
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -400,7 +436,10 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
     await flushAux();
     fireEvent.click(screen.getByTestId("review-apply-button"));
     await flushAux();
-    // previewOk null → 完了（done）には絶対に出ない
+    // 次のpollでserver連鎖が出たら到達確認待ち。previewOk null →
+    // 完了（done）には絶対に出ない
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
     expect(screen.getByTestId("rebuild-phase").textContent).toBe(
       "試し編集完了・確認してください",
     );
@@ -444,6 +483,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
   it("probe失敗でもvideo要素・src・再生位置を保持し、今回claimだけ落とす（previewOkはnullへ）", async () => {
     let preview = previewResponse(206, probeHeaders("run-new", "v2"));
     let seq = 0;
+    let rebuilt = false;
     const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
       const url = String(input);
       if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
@@ -462,6 +502,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
         );
       }
       if (url.endsWith("/rebuild")) {
+        rebuilt = true;
         return Promise.resolve(jsonResponse(url, 202, BINDING_REBUILD_SCHEDULED));
       }
       if (url.endsWith("/consultation")) {
@@ -470,7 +511,11 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
       seq += 1;
       return Promise.resolve(
-        jsonResponse(url, 200, bindingStatusPayload(seq, "run-new", "v2")),
+        jsonResponse(
+          url,
+          200,
+          bindingStatusPayload(seq, "run-new", "v2", rebuilt ? [SPAWNED_RUN_NEW] : []),
+        ),
       );
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -482,13 +527,16 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
       "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-new-v2",
     );
 
-    // previewOk=true を rebuild-phase（done）で確定させる
+    // previewOk=true を rebuild-phase（done）で確定させる: 受付後のpollで
+    // server連鎖が出てからTHIS runの完了になる
     fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
     await flushAux();
     fireEvent.click(screen.getByTestId("review-apply-button"));
+    await flushAux();
+    await vi.advanceTimersByTimeAsync(2100);
     await flushAux();
     expect(screen.getByTestId("rebuild-phase").textContent).toBe(
       "再build完了（試し編集の更新を確認済み）",

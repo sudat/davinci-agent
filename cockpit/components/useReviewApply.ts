@@ -12,7 +12,7 @@ import {
   type ReviewApplyResult,
   type ReviewRevertResult,
 } from "@/lib/api";
-import { useRebuildPhase } from "@/components/useRebuildPhase";
+import { useRebuildPhase, rebuildBaselineOf, type RebuildRequestBaseline } from "@/components/useRebuildPhase";
 
 type UseReviewApplyOptions = {
   episodeId: string;
@@ -43,10 +43,22 @@ export function useReviewApply({
   const [applyBusy, setApplyBusy] = useState(false);
   const [applyResult, setApplyResult] = useState<ReviewApplyResult | null>(null);
   const [rebuildResult, setRebuildResult] = useState<RebuildResult | null>(null);
-  const { phase: rebuildPhase } = useRebuildPhase(rebuildResult, status, previewOk);
+  /** Accept-time server generation (pre-request poll snapshot): 完了 derives
+   *  only from a NEWER server state, never from a stale pre-rebuild poll. */
+  const [rebuildBaseline, setRebuildBaseline] = useState<RebuildRequestBaseline | null>(null);
+  const { phase: rebuildPhase } = useRebuildPhase(
+    rebuildResult,
+    status,
+    previewOk,
+    rebuildBaseline,
+  );
 
   const applyDrafts = async (input: ReviewApplyInput) => {
     setApplyBusy(true);
+    // Snapshot BEFORE the POSTs: this closure's status is the pre-request
+    // poll (the 2s poll may still serve it after accept — that stale
+    // repeat must never complete THIS request).
+    const baseline = rebuildBaselineOf(status);
     try {
       const applied = await applyReviewCommand(episodeId, input, fetchImpl);
       setApplyResult(applied);
@@ -62,6 +74,7 @@ export function useReviewApply({
         },
         fetchImpl,
       );
+      setRebuildBaseline(baseline);
       setRebuildResult(rebuilt);
     } catch (cause) {
       onError(apiFailure(cause));
@@ -75,12 +88,14 @@ export function useReviewApply({
    *  the same phase machinery as the apply flow. */
   const adoptRevertReadout = (reverted: ReviewRevertResult) => {
     setApplyResult(null);
+    setRebuildBaseline(rebuildBaselineOf(status));
     setRebuildResult(revertRebuildReadout(reverted));
   };
 
   /** A fresh preview replaces the previous apply/rebuild readout. */
   const reset = () => {
     setApplyResult(null);
+    setRebuildBaseline(null);
     setRebuildResult(null);
   };
 

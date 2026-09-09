@@ -50,6 +50,16 @@ function previewArrivedThisRun(
  * preview first-output arrival; 完了 additionally needs the preview probe
  * (2xx). The old baseline-count comparison is REMOVED — legacy payloads
  * without run scoping can never claim 完了 from unscoped success rows.
+ *
+ * Stale-poll honesty (V44-1 live lane): POST /rebuild resolves instantly
+ * while the 2s status poll still serves the PRE-rebuild server state
+ * (old current_run + old preview arrival + old bound probe). Combining
+ * that stale server state with the fresh client rebuildResult used to
+ * derive done for ~2s. 完了 now requires server-recorded evidence of
+ * THIS rebuild run — a newer current_run or a newer rebuild-requests
+ * chain entry than the accept-time baseline (useReviewApply snapshots it
+ * from the pre-request poll). The client result alone drives at most the
+ * transient accepted state (予約済み) or in-progress, never completion.
  */
 /** U30 hydration (codex P1-1): a reload starts with rebuildResult=null, but
  * the SERVER chain is the authority — a live reservation or a spawned run
@@ -64,10 +74,62 @@ function hasServerRebuildChain(status: EpisodeStatus | null): boolean {
   return typeof status.current_run === "string" && status.current_run !== "";
 }
 
+/** Accept-time server generation for THIS rebuild request: what the
+ *  polled status named when POST /rebuild was accepted. A stale pre-rebuild
+ *  poll repeats exactly this generation; only a NEWER server state (a
+ *  different current run, or a newer rebuild-requests chain entry) proves
+ *  the server has recorded THIS request. null fields = none/unknown. */
+export type RebuildRequestBaseline = {
+  readonly currentRun: string | null;
+  readonly latestSequence: number | null;
+};
+
+/** Snapshot the accept-time baseline from the pre-request poll. */
+export function rebuildBaselineOf(status: EpisodeStatus | null): RebuildRequestBaseline {
+  const sequences = (status?.rebuild_requests ?? []).map((entry) => entry.sequence);
+  return {
+    currentRun: status?.current_run ?? null,
+    latestSequence: sequences.length > 0 ? Math.max(...sequences) : null,
+  };
+}
+
+function latestChainSequence(status: EpisodeStatus): number | null {
+  const sequences = (status.rebuild_requests ?? []).map((entry) => entry.sequence);
+  return sequences.length > 0 ? Math.max(...sequences) : null;
+}
+
+/**
+ * Server-recorded evidence that THIS rebuild request moved. With a
+ * baseline: the server names a different current run, or its
+ * rebuild-requests chain grew past the accept moment. Without a baseline
+ * (direct/legacy callers): a spawned chain entry must name the current
+ * run — bare rows and the global preview arrival alone never prove THIS
+ * rebuild, so an old run's succeeded preview can never complete a new
+ * request (no cross-run mixing).
+ */
+function serverProvesThisRebuild(
+  status: EpisodeStatus,
+  runId: string,
+  baseline: RebuildRequestBaseline | null,
+): boolean {
+  if (baseline !== null) {
+    if (runId !== baseline.currentRun) return true;
+    const latest = latestChainSequence(status);
+    if (latest !== null && (baseline.latestSequence === null || latest > baseline.latestSequence)) {
+      return true;
+    }
+    return false;
+  }
+  return (status.rebuild_requests ?? []).some(
+    (entry) => entry.spawned && entry.run_id === runId,
+  );
+}
+
 export function deriveRebuildPhase(
   rebuildResult: RebuildResult | null,
   status: EpisodeStatus | null,
   previewOk: boolean | null,
+  baseline?: RebuildRequestBaseline | null,
 ): RebuildPhase | null {
   if (rebuildResult === null && !hasServerRebuildChain(status)) return null;
   if (rebuildResult !== null && !rebuildResult.scheduled) return "recorded";
@@ -76,17 +138,28 @@ export function deriveRebuildPhase(
     return "scheduled";
   }
   const runId = status.current_run ?? null;
-  if (runId !== null) {
-    const runRows = status.stage_runs.filter((row) => row.run_id === runId);
-    if (runRows.some((row) => row.status === "running")) return "running";
-    if (runRows.some((row) => row.status === "failed_blocked")) return "failed";
-    if (previewArrivedThisRun(status, runRows)) {
-      return previewOk === true ? "done" : "awaiting_confirmation";
-    }
-    return "running";
+  if (runId === null) {
+    if (status.stage_runs.some((row) => row.status === "running")) return "running";
+    return "scheduled";
   }
-  if (status.stage_runs.some((row) => row.status === "running")) return "running";
-  return "scheduled";
+  const runRows = status.stage_runs.filter((row) => row.run_id === runId);
+  if (runRows.some((row) => row.status === "running")) return "running";
+  if (runRows.some((row) => row.status === "failed_blocked")) return "failed";
+  if (rebuildResult !== null && !serverProvesThisRebuild(status, runId, baseline ?? null)) {
+    // 受付済みだがpolled statusがまだTHIS runを示していないstale poll:
+    // 進行中どまり — 完了も試し編集の到達claimも出さない。run無し
+    // legacy行の実行中だけは活動として実行中のまま。
+    if (
+      status.stage_runs.some((row) => row.status === "running" && row.run_id === undefined)
+    ) {
+      return "running";
+    }
+    return "scheduled";
+  }
+  if (previewArrivedThisRun(status, runRows)) {
+    return previewOk === true ? "done" : "awaiting_confirmation";
+  }
+  return "running";
 }
 
 /**
@@ -98,10 +171,11 @@ export function useRebuildPhase(
   rebuildResult: RebuildResult | null,
   status: EpisodeStatus | null,
   previewOk: boolean | null,
+  baseline?: RebuildRequestBaseline | null,
 ): { phase: RebuildPhase | null } {
   const phase = useMemo<RebuildPhase | null>(
-    () => deriveRebuildPhase(rebuildResult, status, previewOk),
-    [rebuildResult, status, previewOk],
+    () => deriveRebuildPhase(rebuildResult, status, previewOk, baseline ?? null),
+    [rebuildResult, status, previewOk, baseline],
   );
   return { phase };
 }
