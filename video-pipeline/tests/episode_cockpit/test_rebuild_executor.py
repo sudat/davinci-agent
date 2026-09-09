@@ -220,6 +220,7 @@ def _fake_stage_preview(  # noqa: PLR0913 (mirrors the real stage_preview seam)
     run_id: str,
     selection_attempt: object = None,
     preview_timeout_seconds: float | None = None,
+    presentation: object = None,
 ) -> str:
     """Rebuild preview seam: version-tagged bytes, then the REAL ordering —
     bundle hand-off (_update_bundle) BEFORE publish; the publish event's

@@ -91,6 +91,45 @@ class PreviewLayout(StrictModel):
     samples_per_frame: int = Field(gt=0, strict=True)
 
 
+class PresentationRenderSettings(StrictModel):
+    """Applied presentation overrides for one preview render (deterministic).
+
+    ``subtitle_max_chars_per_line`` re-wraps cue text with the frozen
+    Todo-44 greedy rule; ``bgm_gain_mb`` is an integer-millibel cut applied
+    to a bound BGM input. ``None`` on both is never constructed — the
+    render path uses a missing settings object for plain rebuilds.
+    """
+
+    subtitle_max_chars_per_line: int | None = Field(default=None, gt=0, strict=True)
+    bgm_gain_mb: int | None = None
+
+    @model_validator(mode="after")
+    def require_one_setting(self) -> PresentationRenderSettings:
+        if self.subtitle_max_chars_per_line is None and self.bgm_gain_mb is None:
+            raise PydanticCustomError(
+                "presentation_empty", "render settings must carry at least one override"
+            )
+        return self
+
+
+class TracePresentationNote(StrictModel):
+    """An honestly-unimplemented presentation kind recorded on the trace."""
+
+    command_id: Identifier
+    command_kind: str = Field(min_length=1, strict=True)
+    code: Literal["no-review-plane-knob"] = "no-review-plane-knob"
+    detail: str = Field(min_length=1, strict=True)
+
+
+class TracePresentation(StrictModel):
+    """Intent → setting → render traceability for applied presentation."""
+
+    applied_command_ids: Sequence[Identifier] = ()
+    subtitle_max_chars_per_line: int | None = Field(default=None, gt=0, strict=True)
+    bgm_gain_mb: int | None = None
+    notes: Sequence[TracePresentationNote] = ()
+
+
 class TraceInput(StrictModel):
     item_id: Identifier
     kind: Literal["video", "audio", "subtitle"]
@@ -177,6 +216,7 @@ class PreviewTraceManifest(StrictModel):
     strategy_notes: StrategyNotes
     ffprobe_summary: FfprobeSummary
     presentation_style: TraceStyleTable | None = None
+    presentation: TracePresentation | None = None
 
     @model_validator(mode="after")
     def require_full_record_coverage(self) -> PreviewTraceManifest:
@@ -239,6 +279,7 @@ __all__ = [
     "FfprobeSummary",
     "ItemBinding",
     "MediaBinding",
+    "PresentationRenderSettings",
     "PreviewBindingError",
     "PreviewError",
     "PreviewFile",
@@ -255,5 +296,7 @@ __all__ = [
     "TimelineBinding",
     "TraceDecision",
     "TraceInput",
+    "TracePresentation",
+    "TracePresentationNote",
     "TraceStyleTable",
 ]

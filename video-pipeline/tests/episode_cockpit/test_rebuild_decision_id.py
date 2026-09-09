@@ -183,7 +183,7 @@ def _trace_appending_render(
 ) -> Callable[..., None]:
     """Fake render that records the decision and appends it like build_trace."""
 
-    def fake_render(
+    def fake_render(  # noqa: PLR0913 (mirrors the real render_review_preview seam)
         _plan: EditPlan0C,
         _ir: TimelineIr0C,
         _mezzanine: Path,
@@ -192,6 +192,8 @@ def _trace_appending_render(
         tools: object,
         decision: AppliedDecision,
         timeout_seconds: float | None = None,
+        presentation: object = None,
+        presentation_trace: object = None,
     ) -> None:
         captured.append(decision)
         preview_dir.mkdir(parents=True, exist_ok=True)

@@ -10,6 +10,7 @@ from __future__ import annotations
 from pydantic import model_validator
 from pydantic_core import PydanticCustomError
 
+from services.compile.subtitle_cues import wrap_lines
 from services.contracts.primitives import (
     RationalFrameRate,
     RecordFrameSpan,
@@ -114,10 +115,41 @@ def expected_subtitle_cues(
     return tuple(sorted(cues, key=lambda cue: (cue.start_ms, cue.end_ms, cue.text)))
 
 
+def wrap_cue_text(text: str, max_chars_per_line: int) -> str:
+    """Re-wrap cue text with the frozen Todo-44 greedy rule (subtitle_shorter).
+
+    Single-line cues that already fit are returned verbatim, so the
+    override only changes SRT bytes where the width actually bites.
+    """
+
+    lines = wrap_lines(text, max_chars_per_line)
+    if len(lines) <= 1:
+        return text
+    return "\n".join(lines)
+
+
+def expected_subtitle_cues_wrapped(
+    items: tuple[TimelineItem0C, ...],
+    rate: RationalFrameRate,
+    max_chars_per_line: int,
+) -> tuple[SubtitleCue, ...]:
+    """Cues with presentation-shorted text; timings are verbatim."""
+
+    cues = [
+        cue_from_record_span(
+            item.record_span, rate, wrap_cue_text(item.subtitle_text or "", max_chars_per_line)
+        )
+        for item in items
+    ]
+    return tuple(sorted(cues, key=lambda cue: (cue.start_ms, cue.end_ms, cue.text)))
+
+
 __all__ = [
     "SubtitleCue",
     "cue_from_record_span",
     "expected_subtitle_cues",
+    "expected_subtitle_cues_wrapped",
     "parse_srt",
     "render_srt",
+    "wrap_cue_text",
 ]

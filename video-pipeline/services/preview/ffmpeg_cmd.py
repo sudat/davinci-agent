@@ -102,6 +102,7 @@ def build_render_command(  # noqa: PLR0913 (render argv contract: layout/binding
     subtitle_srt: Path | None,
     preview_width: int = PREVIEW_WIDTH,
     preview_height: int = PREVIEW_HEIGHT,
+    bgm_gain_mb: int | None = None,
 ) -> RenderCommand:
     rate = layout.rate
     argv: list[str] = [str(tools.ffmpeg), "-nostdin", "-y", "-v", "error"]
@@ -146,8 +147,12 @@ def build_render_command(  # noqa: PLR0913 (render argv contract: layout/binding
     audio_filters.append(f"{''.join(audio_pads)}concat=n={len(audio_pads)}:v=0:a=1[acat]")
     if bindings.bgm is not None:
         bgm_input = inputs.media(Path(bindings.bgm.media_path))
+        bgm_source = f"[{bgm_input}:a]"
+        if bgm_gain_mb is not None:
+            audio_filters.append(f"{bgm_source}volume={bgm_gain_mb / 1000:.3f}dB[bgmvol]")
+            bgm_source = "[bgmvol]"
         audio_filters.append(
-            f"[acat][{bgm_input}:a]amix=inputs=2:duration=first:"
+            f"[acat]{bgm_source}amix=inputs=2:duration=first:"
             "dropout_transition=0:normalize=0[aout]"
         )
     else:

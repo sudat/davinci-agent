@@ -14,18 +14,26 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from services.foundation_io import atomic_write, canonical_model_bytes, sha256_file
+from services.outputs.geometry import subtitle_chars_for_output
 from services.preview.ffmpeg_cmd import build_render_command, preview_size_for
 from services.preview.models import (
     AppliedDecision,
     MediaBinding,
+    PresentationRenderSettings,
     PreviewBindingError,
     PreviewLayout,
     PreviewLayoutError,
     PreviewMediaBindings,
     PreviewRenderError,
     PreviewTraceManifest,
+    TracePresentation,
 )
-from services.preview.srt import expected_subtitle_cues, parse_srt, render_srt
+from services.preview.srt import (
+    expected_subtitle_cues,
+    expected_subtitle_cues_wrapped,
+    parse_srt,
+    render_srt,
+)
 from services.preview.styling import carry_styled
 from services.preview.tools import (
     FFMPEG_TIMEOUT_SECONDS,
@@ -213,7 +221,11 @@ def _verify_av_media(
             raise PreviewBindingError(f"bgm fixture {bgm} lacks a 48 kHz audio stream")
 
 
-def _verify_subtitle_binding(layout: PreviewLayout, bindings: PreviewMediaBindings) -> None:
+def _verify_subtitle_binding(
+    layout: PreviewLayout,
+    bindings: PreviewMediaBindings,
+    subtitle_wrap_chars: int | None = None,
+) -> None:
     if not layout.subtitle_items:
         return
     subtitle_paths = {
@@ -223,7 +235,12 @@ def _verify_subtitle_binding(layout: PreviewLayout, bindings: PreviewMediaBindin
     if len(subtitle_paths) != 1:
         raise PreviewBindingError("all subtitle items must bind one subtitle table")
     cues = parse_srt(Path(next(iter(subtitle_paths))).read_bytes())
-    if cues != expected_subtitle_cues(layout.subtitle_items, layout.rate):
+    expected = (
+        expected_subtitle_cues_wrapped(layout.subtitle_items, layout.rate, subtitle_wrap_chars)
+        if subtitle_wrap_chars is not None
+        else expected_subtitle_cues(layout.subtitle_items, layout.rate)
+    )
+    if cues != expected:
         raise PreviewBindingError(
             "bound subtitle table does not match the IR subtitle items "
             "(record-coordinate shift required)"
@@ -248,6 +265,8 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     styled: StyledPresentation | None = None,
     timeout_seconds: float | None = None,
     output_id: str = "landscape",
+    presentation: PresentationRenderSettings | None = None,
+    presentation_trace: TracePresentation | None = None,
 ) -> PreviewTraceManifest:
     tools.verify_current()
     plan_version = plan_version_of(edit_plan)
@@ -257,16 +276,27 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
         _check_decision_plan_agreement(edit_plan, decision, plan_version)
     layout = extract_layout(timeline_ir)
     style_table = carry_styled(layout, styled) if styled is not None else None
+    subtitle_wrap_chars: int | None = None
+    if presentation is not None and presentation.subtitle_max_chars_per_line is not None:
+        subtitle_wrap_chars = subtitle_chars_for_output(
+            presentation.subtitle_max_chars_per_line,
+            "vertical" if output_id == "vertical" else "landscape",
+        )
     for item in (*layout.video_items, *layout.audio_items, *layout.subtitle_items):
         _require_binding(media_bindings, item.item_id, item.kind)
     _verify_av_media(layout, media_bindings, tools, timeout_seconds)
-    _verify_subtitle_binding(layout, media_bindings)
+    _verify_subtitle_binding(layout, media_bindings, subtitle_wrap_chars)
     out_dir.mkdir(parents=True, exist_ok=True)
     preview_width, preview_height = preview_size_for(output_id)
     output = out_dir / preview_name_for(output_id)
     generated_srt: Path | None = None
     if layout.subtitle_items:
-        cues = expected_subtitle_cues(layout.subtitle_items, layout.rate)
+        if subtitle_wrap_chars is not None:
+            cues = expected_subtitle_cues_wrapped(
+                layout.subtitle_items, layout.rate, subtitle_wrap_chars
+            )
+        else:
+            cues = expected_subtitle_cues(layout.subtitle_items, layout.rate)
         generated_srt = out_dir / GENERATED_SRT_NAME
         atomic_write(generated_srt, render_srt(cues))
     try:
@@ -278,6 +308,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             subtitle_srt=generated_srt,
             preview_width=preview_width,
             preview_height=preview_height,
+            bgm_gain_mb=presentation.bgm_gain_mb if presentation is not None else None,
         )
         render_timeout = (
             FFMPEG_TIMEOUT_SECONDS
@@ -309,6 +340,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             decision=decision,
             styled=style_table,
             output_id="vertical" if output_id == "vertical" else "landscape",
+            presentation=presentation_trace,
         )
         manifest = build_trace(
             context, output, summary,

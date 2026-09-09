@@ -16,11 +16,17 @@ from services.preview.models import (
     AppliedDecision,
     ItemBinding,
     MediaBinding,
+    PresentationRenderSettings,
     PreviewMediaBindings,
     PreviewTraceManifest,
+    TracePresentation,
 )
 from services.preview.render import render_preview
-from services.preview.srt import expected_subtitle_cues, render_srt
+from services.preview.srt import (
+    expected_subtitle_cues,
+    expected_subtitle_cues_wrapped,
+    render_srt,
+)
 
 if TYPE_CHECKING:
     from services.contracts.edit_plan_0c import EditPlan0C
@@ -28,23 +34,31 @@ if TYPE_CHECKING:
     from services.preview.tools import PinnedTools
 
 
-def _subtitle_table(ir: TimelineIr0C, out_dir: Path) -> Path:
-    cues = expected_subtitle_cues(
-        tuple(
-            item for track in ir.tracks if track.track.kind == "subtitle" for item in track.items
-        ),
-        ir.rate,
+def _subtitle_table(
+    ir: TimelineIr0C, out_dir: Path, subtitle_wrap_chars: int | None = None
+) -> Path:
+    items = tuple(
+        item for track in ir.tracks if track.track.kind == "subtitle" for item in track.items
     )
+    if subtitle_wrap_chars is not None:
+        cues = expected_subtitle_cues_wrapped(items, ir.rate, subtitle_wrap_chars)
+    else:
+        cues = expected_subtitle_cues(items, ir.rate)
     path = out_dir / "subtitle-table.srt"
     atomic_write(path, render_srt(cues))
     return path
 
 
-def _bindings(ir: TimelineIr0C, mezzanine: Path, media_dir: Path) -> PreviewMediaBindings:
+def _bindings(
+    ir: TimelineIr0C,
+    mezzanine: Path,
+    media_dir: Path,
+    subtitle_wrap_chars: int | None = None,
+) -> PreviewMediaBindings:
     subtitle_items = tuple(
         item for track in ir.tracks if track.track.kind == "subtitle" for item in track.items
     )
-    table = _subtitle_table(ir, media_dir) if subtitle_items else None
+    table = _subtitle_table(ir, media_dir, subtitle_wrap_chars) if subtitle_items else None
     items: list[ItemBinding] = []
     for track in ir.tracks:
         for item in track.items:
@@ -71,14 +85,25 @@ def render_review_preview(  # noqa: PLR0913 (preview adapter contract: plan/IR/m
     tools: PinnedTools,
     decision: AppliedDecision | None = None,
     timeout_seconds: float | None = None,
+    presentation: PresentationRenderSettings | None = None,
+    presentation_trace: TracePresentation | None = None,
 ) -> PreviewTraceManifest:
-    """Render the review-plane preview bound to the synthesized mezzanine."""
+    """Render the review-plane preview bound to the synthesized mezzanine.
+
+    ``presentation`` carries applied presentation overrides (subtitle
+    re-wrap width, BGM gain); the bound subtitle table is wrapped with
+    the same width so the render-time binding check agrees.
+    """
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    bindings = _bindings(ir, mezzanine, out_dir.parent / "media")
+    subtitle_wrap_chars = (
+        presentation.subtitle_max_chars_per_line if presentation is not None else None
+    )
+    bindings = _bindings(ir, mezzanine, out_dir.parent / "media", subtitle_wrap_chars)
     return render_preview(
         plan, ir, bindings, out_dir, tools=tools, decision=decision,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=timeout_seconds, presentation=presentation,
+        presentation_trace=presentation_trace,
     )
 
 

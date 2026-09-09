@@ -102,6 +102,10 @@ from services.episode_cockpit.policy_settings import (
     PolicySettingEntryV1,
     derive_policy_settings,
 )
+from services.episode_cockpit.presentation_overrides import (
+    PresentationOverrideSet,
+    consume_presentation_intents,
+)
 from services.episode_cockpit.review_chat import PIPELINE_STAGES
 from services.foundation_io import sha256_file
 from services.outputs.geometry import (
@@ -330,6 +334,7 @@ class ReentryState:
     plan: EditPlan0C | None = None
     ir: TimelineIr0C | None = None
     attempt: SelectionAttempt | None = None
+    presentation: PresentationOverrideSet | None = None
 
 
 def reentry_stages(from_stage: str) -> ReentryStages:
@@ -863,6 +868,7 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
     run_id: str,
     selection_attempt: SelectionAttempt | None = None,
     preview_timeout_seconds: float | None = None,
+    presentation: PresentationOverrideSet | None = None,
 ) -> str:
     """Re-render the review-plane preview from the new version + republish.
 
@@ -933,6 +939,10 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
             plan, ir, mezzanine_for(bundle_file, bundle), preview_dir,
             tools=load_tools(), decision=decision,
             timeout_seconds=preview_timeout_seconds,
+            presentation=presentation.to_render_settings() if presentation is not None else None,
+            presentation_trace=(
+                presentation.to_trace_presentation() if presentation is not None else None
+            ),
         )
     except Exception as error:
         if attempt is not None:
@@ -957,6 +967,48 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
     _update_bundle(bundle_file, bundle, head, preview_sha)
     publish_preview(episode_root, log, source_dir=f"preview-v{head.version}", run_id=run_id)
     return preview_sha
+
+
+def _consume_presentation(
+    episode_root: Path, carried: ReentryState, log: BinaryIO, run_id: str
+) -> None:
+    """Derive + manifest-record the journal's presentation intents (r9e gap).
+
+    Runs wherever compile re-materializes plan+IR: the override set is
+    stashed on the carried state for the preview stage, and the honest
+    unimplemented notes ride the runner log as typed lines.
+    """
+
+    if carried.head is None or carried.presentation is not None:
+        return
+    _, plan_dir = _review_store(episode_root)
+    override_set = consume_presentation_intents(
+        episode_root,
+        plan_dir,
+        head_version=carried.head.version,
+        plan_version=f"v{carried.head.version}",
+    )
+    carried.presentation = override_set
+    if override_set.is_empty():
+        return
+    log_event(
+        log, "presentation_overrides", run_id=run_id,
+        applied_commands=list(override_set.applied_command_ids()),
+        overrides=[
+            {
+                "command_id": entry.command_id,
+                "command_kind": entry.command_kind,
+                "setting": entry.setting,
+                "value": entry.value,
+            }
+            for entry in override_set.overrides
+        ],
+        unimplemented=[
+            {"command_id": note.command_id, "command_kind": note.command_kind,
+             "code": note.code, "detail": note.detail}
+            for note in override_set.notes
+        ],
+    )
 
 
 def _review_store(
@@ -1236,9 +1288,11 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
         carried.head = stage_plan(episode_root)
     if stage == "compile":
         carried.plan, carried.ir = stage_compile(episode_root, carried.head)
+        _consume_presentation(episode_root, carried, log, run_id)
         return carried.head.index.versions[str(carried.head.version)].ir_sha256
     if carried.plan is None or carried.ir is None:
         carried.plan, carried.ir = stage_compile(episode_root, carried.head)
+        _consume_presentation(episode_root, carried, log, run_id)
     preview_timeout: float | None = None
     if carried.attempt is not None and reservation_sequence is not None:
         assert_reservation_fresh(
@@ -1255,6 +1309,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
     return stage_preview(
         episode_root, carried.head, carried.plan, carried.ir, log, run_id=run_id,
         selection_attempt=carried.attempt, preview_timeout_seconds=preview_timeout,
+        presentation=carried.presentation,
     )
 
 

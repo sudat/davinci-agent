@@ -33,6 +33,7 @@ from services.preview.models import (
     TimelineBinding,
     TraceDecision,
     TraceInput,
+    TracePresentation,
     TraceStyleTable,
 )
 
@@ -132,6 +133,7 @@ class TraceContext:
     decision: AppliedDecision | None
     styled: TraceStyleTable | None = None
     output_id: Literal["landscape", "vertical"] = "landscape"
+    presentation: TracePresentation | None = None
 
 
 def _trace_inputs(context: TraceContext) -> tuple[TraceInput, ...]:
@@ -193,6 +195,7 @@ def build_trace(
         strategy_notes=strategy_notes(context),
         ffprobe_summary=summary,
         presentation_style=context.styled,
+        presentation=context.presentation,
     )
 
 
