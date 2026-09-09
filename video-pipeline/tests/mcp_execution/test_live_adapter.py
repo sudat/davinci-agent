@@ -361,20 +361,32 @@ def test_prepare_project_maps_to_real_tool_sequence_and_readback() -> None:
     second_params = transport.calls[2][2]
     assert second_params["name"] == "timelineFrameRate"
     assert second_params["value"] == "30"
+    # Canvas geometry follows the resolved output (landscape default is the
+    # frozen 1920x1080 — the fps payload above stays byte-identical).
+    assert transport.calls[3] == (
+        "project_settings",
+        "set_setting",
+        {"name": "timelineResolutionWidth", "value": "1920"},
+    )
+    assert transport.calls[4] == (
+        "project_settings",
+        "set_setting",
+        {"name": "timelineResolutionHeight", "value": "1080"},
+    )
     # DESIGN §11: the fresh project also pins perfRenderCacheMode=smart,
     # write + readback-verified (loud typed failure when refused).
-    assert transport.calls[3][0] == "project_settings"
-    assert transport.calls[3][1] == "set_setting"
-    assert transport.calls[3][2] == {"name": "perfRenderCacheMode", "value": "smart"}
-    assert transport.calls[4] == (
+    assert transport.calls[5][0] == "project_settings"
+    assert transport.calls[5][1] == "set_setting"
+    assert transport.calls[5][2] == {"name": "perfRenderCacheMode", "value": "smart"}
+    assert transport.calls[6] == (
         "project_settings",
         "get_setting",
         {"name": "perfRenderCacheMode"},
     )
-    assert transport.calls[5] == ("media_pool", "create_timeline", {"name": TIMELINE_NAME})
-    assert transport.calls[6] == ("timeline", "set_current", {"name": TIMELINE_NAME})
-    assert transport.calls[7][0] == "timeline"
-    assert transport.calls[7][1] == "get_current"
+    assert transport.calls[7] == ("media_pool", "create_timeline", {"name": TIMELINE_NAME})
+    assert transport.calls[8] == ("timeline", "set_current", {"name": TIMELINE_NAME})
+    assert transport.calls[9][0] == "timeline"
+    assert transport.calls[9][1] == "get_current"
     assert all(tool != "prepare_project" for tool, _, _ in transport.calls)
     expected = ProjectReadback(kind="project", project_name=TIMELINE_NAME, timeline_frame_rate="30")
     verification = verify_readback(expected, result)
@@ -818,6 +830,8 @@ def test_prepare_load_missing_project_falls_back_to_create_sequence() -> None:
     assert actions == [
         ("project_manager", "load"),
         ("project_manager", "create"),
+        ("project_settings", "set_setting"),
+        ("project_settings", "set_setting"),
         ("project_settings", "set_setting"),
         ("project_settings", "set_setting"),
         ("project_settings", "get_setting"),

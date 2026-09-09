@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from services.creative_plan.presentation_intents import PresentationIntentV2
     from services.creative_plan.subtitle_models import SubtitlePlanV1
     from services.mcp_execution.plan_payloads import TelopCardPayload
+    from services.outputs.geometry import OutputId
     from services.production_kit.recipe_select import RecipeSelection
 
 _MATRIX_PATH: Final[Path] = (
@@ -139,7 +140,8 @@ def compile_execution_plan(  # noqa: PLR0913 (task-mandated compiler signature)
     # Kit gate first: a not-accepted accepted_only binding refuses the whole
     # compile before any other step is minted.
     steps.extend(kit_steps(resolved_intents, kit_selections, caps))
-    steps.append(prepare_step(ir_v2, caps))
+    resolved_output: OutputId = "vertical" if output_id == "vertical" else "landscape"
+    steps.append(prepare_step(ir_v2, caps, resolved_output))
     steps.extend(import_steps(ir_v2, caps))
     steps.extend(video_steps(ir_v2, caps))
     steps.extend(audio_track_steps(ir_v2, caps))
@@ -160,7 +162,7 @@ def compile_execution_plan(  # noqa: PLR0913 (task-mandated compiler signature)
     steps.extend(
         render_native_steps(
             ir_v2, caps, wide,
-            output_id=("vertical" if output_id == "vertical" else "landscape"),
+            output_id=resolved_output,
         )
     )
     ordered = tuple(sorted(steps, key=step_sort_key))

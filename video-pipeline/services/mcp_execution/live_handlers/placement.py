@@ -46,6 +46,7 @@ from services.mcp_execution.plan_payloads import (
     PlaceOverlayParams,
     PrepareProjectParams,
 )
+from services.outputs.geometry import geometry_for
 
 RANGE_PAIR_LENGTH: Final = 2
 
@@ -93,8 +94,9 @@ def prepare_project(
     p = validate_params(PrepareProjectParams, params)
     fps = _fps_str(p.fps_num, p.fps_den)
     # Resume-first: a typed not-ok load means the project is absent, so
-    # fall through to the create path; fps is pinned there only, because
-    # Resolve refuses timelineFrameRate changes once a timeline exists.
+    # fall through to the create path; fps and canvas geometry are pinned
+    # there only, because Resolve refuses timelineFrameRate changes once a
+    # timeline exists.
     # Project identity prefers the create readback's own echo; the load
     # response exposes none, so the validated request name is the only
     # source on the resume arms.
@@ -108,6 +110,12 @@ def prepare_project(
         if created.name is not None:
             project_name = created.name
         require_ok(McpActionOutcome.model_validate(ctx.transport("project_settings", "set_setting", {"name": "timelineFrameRate", "value": fps})), "set-fps")  # noqa: E501
+        geometry = geometry_for(p.output_id)
+        for key, value, label in (
+            ("timelineResolutionWidth", str(geometry.width), "set-resolution-width"),
+            ("timelineResolutionHeight", str(geometry.height), "set-resolution-height"),
+        ):
+            require_ok(McpActionOutcome.model_validate(ctx.transport("project_settings", "set_setting", {"name": key, "value": value})), label)  # noqa: E501
         _pin_perf_render_cache_mode(ctx)
         require_ok(TimelineResult.model_validate(ctx.transport("media_pool", "create_timeline", {"name": p.timeline_name})), "create-timeline")  # noqa: E501
         require_ok(McpActionOutcome.model_validate(ctx.transport("timeline", "set_current", {"name": p.timeline_name})), "set-current")  # noqa: E501

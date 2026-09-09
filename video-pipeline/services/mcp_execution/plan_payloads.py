@@ -36,6 +36,7 @@ from services.creative_plan.ir_models_v2 import (  # noqa: TC001 (pydantic field
 from services.creative_plan.subtitle_models import (  # noqa: TC001 (pydantic field type)
     SubtitlePathKind,
 )
+from services.outputs.geometry import DEFAULT_OUTPUT_ID, OutputId
 
 _NonEmpty = Annotated[str, Field(min_length=1, strict=True)]
 
@@ -72,6 +73,9 @@ class PrepareProjectParams(StrictModel):
     timeline_name: _NonEmpty
     fps_num: int = Field(gt=0, strict=True)
     fps_den: int = Field(gt=0, strict=True)
+    #: Which enumerated output canvas the fresh project is bootstrapped
+    #: for (default keeps stored pre-output plans parsing byte-identically).
+    output_id: OutputId = DEFAULT_OUTPUT_ID
 
 
 class ImportMediaParams(StrictModel):

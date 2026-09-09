@@ -41,6 +41,7 @@ from services.mcp_execution.step_builders import (
     mcp_or_executor,
     step_from,
 )
+from services.outputs.geometry import DEFAULT_OUTPUT_ID, OutputId, geometry_for
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -68,10 +69,15 @@ _VIDEO_ROLE_ORDER: Final[dict[str, int]] = {
 OVERLAY_TRACK_INDEX: Final = 2
 
 
-def prepare_step(ir: TimelineIrV2, caps: CapabilityView) -> McpExecutionStepV1:
+def prepare_step(
+    ir: TimelineIrV2,
+    caps: CapabilityView,
+    output_id: OutputId = DEFAULT_OUTPUT_ID,
+) -> McpExecutionStepV1:
     rung, record = caps.rung_for("project-timeline-creation", "project bootstrap")
     timeline_name = f"{ir.episode_id}-timeline"
     rate = str(ir.rate.num) if ir.rate.den == 1 else str(ir.rate.num / ir.rate.den)
+    geometry = geometry_for(output_id)
     return step_from(
         f"stp-prepare-{ir.episode_id}",
         PrepareProjectParams(
@@ -79,6 +85,7 @@ def prepare_step(ir: TimelineIrV2, caps: CapabilityView) -> McpExecutionStepV1:
             timeline_name=timeline_name,
             fps_num=ir.rate.num,
             fps_den=ir.rate.den,
+            output_id=geometry.output_id,
         ),
         ProjectReadback(kind="project", project_name=timeline_name, timeline_frame_rate=rate),
         mcp_or_executor(rung, "prepare_project"),
