@@ -36,12 +36,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast, get_args
+from typing import TYPE_CHECKING, Final, Literal, cast, get_args
 
 from pydantic import BaseModel, ValidationError
 
@@ -322,10 +323,11 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--editorial-runtime",
         type=Path,
-        default=EDITORIAL_RUNTIME_PATH,
+        default=None,
         help=(
-            "editorial runtime config (mode + model pins); production_model "
-            "BLOCKS without the credential/network env gate"
+            "editorial runtime config (mode + model pins); absent follows "
+            "EDITORIAL_RUNTIME_CONFIG env, then the repo default; "
+            "production_model BLOCKS without the credential/network env gate"
         ),
     )
 
@@ -458,7 +460,7 @@ class _RunInputs:
     taste_path: Path | None
     source_media: Path | None
     rate: RationalFrameRate
-    editorial_runtime: Path
+    editorial_runtime: Path | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -543,13 +545,33 @@ def _input_ref(path: Path) -> ArtifactFileRef:
     return ArtifactFileRef(path=str(path), sha256=sha256_file(path))
 
 
+# Contract note: SAME env name as
+# episode_runner_editorial.EDITORIAL_RUNTIME_ENV, mirrored (not imported) —
+# this lane keeps CLI-side imports lazy. Keep in sync.
+_EDITORIAL_RUNTIME_ENV: Final = "EDITORIAL_RUNTIME_CONFIG"
+
+
+def _resolve_runtime_path(
+    runtime_path: Path | None, environment: Mapping[str, str]
+) -> Path:
+    """Precedence mirrored from ``episode_runner_editorial._resolve_config_path``:
+    explicit ``runtime_path`` > ``EDITORIAL_RUNTIME_CONFIG`` env > repo default."""
+
+    if runtime_path is not None:
+        return runtime_path
+    from_env = environment.get(_EDITORIAL_RUNTIME_ENV)
+    if from_env:
+        return Path(from_env)
+    return EDITORIAL_RUNTIME_PATH
+
+
 def _stage_director(  # noqa: PLR0913 (director wiring: brief + api + the keyword-only seams)
     brief: EpisodeBriefV1,
     api: MediaQueryApiV2,
     taste: DerivedTasteProfileV1 | None,
     *,
     source_id: str,
-    runtime_path: Path = EDITORIAL_RUNTIME_PATH,
+    runtime_path: Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> ThreePassResult:
     """Editorial brain selection per the editorial-runtime config (task 3).
@@ -564,7 +586,9 @@ def _stage_director(  # noqa: PLR0913 (director wiring: brief + api + the keywor
     banner.
     """
 
-    runtime = load_editorial_runtime(runtime_path)
+    runtime = load_editorial_runtime(
+        _resolve_runtime_path(runtime_path, os.environ if env is None else env)
+    )
     llm_call: LlmCallV2 | None = None
     if runtime.mode == "production_model":
         pin = load_editorial_pin(Path(runtime.director_pin_path))

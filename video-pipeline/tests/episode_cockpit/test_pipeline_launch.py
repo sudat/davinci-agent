@@ -193,8 +193,13 @@ def test_run_advances_episode_to_preview_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
-    # A leaked credential must never turn a config-absent diagnostic run live.
+    # Leaked credentials must never turn a config-absent diagnostic run live.
     monkeypatch.setenv("EDITORIAL_DIRECTOR_API_KEY", "sk-leaked-must-be-stripped")
+    monkeypatch.setenv("EDITORIAL_DIRECTOR_NETWORK_ENABLED", "1")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-leaked-must-be-stripped")
+    monkeypatch.setenv("GEMINI_NETWORK_ENABLED", "1")
+    monkeypatch.setenv("ZAI_API_KEY", "zai-leaked-must-be-stripped")
+    monkeypatch.setenv("ZAI_NETWORK_ENABLED", "1")
     captured: dict[str, object] = {}
     monkeypatch.setattr(
         episode_runner, "run_real_chain", _fake_chain_factory(captured)
@@ -215,6 +220,11 @@ def test_run_advances_episode_to_preview_ready(
     assert exit_code == episode_runner.EXIT_SUCCESS
     chain_env = cast("dict[str, str]", captured["env"])
     assert "EDITORIAL_DIRECTOR_API_KEY" not in chain_env  # diagnostic never goes live
+    assert "EDITORIAL_DIRECTOR_NETWORK_ENABLED" not in chain_env
+    assert "GEMINI_API_KEY" not in chain_env
+    assert "GEMINI_NETWORK_ENABLED" not in chain_env
+    assert "ZAI_API_KEY" not in chain_env
+    assert "ZAI_NETWORK_ENABLED" not in chain_env
     status = client.get(f"/episodes/{episode_id}").json()
     assert status["status"] == "PREVIEW_READY"
     stage_runs = status["stage_runs"]

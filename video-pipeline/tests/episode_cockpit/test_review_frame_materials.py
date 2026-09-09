@@ -222,6 +222,37 @@ def test_frame_gate_parses_enabled_and_max_frames(tmp_path: Path) -> None:
     assert frame_gate(runtime_path=malformed) == (False, 3)
 
 
+def test_frame_gate_honors_env_override_over_repo_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    override = tmp_path / "override.json"
+    override.write_text(
+        '{"mode": "heuristic_diagnostic", '
+        '"review_frame_materials": {"enabled": true, "max_frames": 2}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(override))
+
+    assert frame_gate() == (True, 2)
+
+
+def test_frame_gate_explicit_path_wins_over_env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    enabled = tmp_path / "enabled.json"
+    enabled.write_text(
+        '{"review_frame_materials": {"enabled": true, "max_frames": 2}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(enabled))
+    disabled = tmp_path / "disabled.json"
+    disabled.write_text(
+        '{"review_frame_materials": {"enabled": false}}', encoding="utf-8"
+    )
+
+    assert frame_gate(runtime_path=disabled) == (False, 3)
+
+
 # ---------------------------------------------------------------------------
 # Route behavior: gate OFF (default)
 # ---------------------------------------------------------------------------

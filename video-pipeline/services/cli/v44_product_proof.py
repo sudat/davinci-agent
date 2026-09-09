@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from pydantic import ValidationError
 
@@ -222,8 +223,21 @@ def _resolve_commit_sha() -> str:
     return "0" * _COMMIT_SHA_LEN
 
 
+# Contract note: SAME env name as
+# episode_runner_editorial.EDITORIAL_RUNTIME_ENV, mirrored (not imported).
+# Keep in sync.
+_EDITORIAL_RUNTIME_ENV: Final = "EDITORIAL_RUNTIME_CONFIG"
+
+
 def _runtime_config_candidates() -> list[Path]:
+    # The env candidate comes FIRST (explicit flag N/A on this lane —
+    # run-arm carries no --editorial-runtime flag); the remaining hardcoded
+    # candidates and the production_model default-on-missing bias below are
+    # unchanged (production-proof lane semantics).
+    from_env = os.environ.get(_EDITORIAL_RUNTIME_ENV)
+    first: list[Path] = [Path(from_env)] if from_env else []
     return [
+        *first,
         repo_root() / "video-pipeline" / "config" / "editorial-runtime.json",
         Path("config/editorial-runtime.json").resolve(),
         Path(__file__).resolve().parents[2] / "config" / "editorial-runtime.json",

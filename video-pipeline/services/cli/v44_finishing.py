@@ -92,6 +92,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--pin", type=Path, default=DEFAULT_MCP_PIN)
     run_parser.add_argument("--backends", type=Path, default=DEFAULT_BACKENDS)
+    # Audit decision (external-call audit fix list item 6): this flag stays
+    # flag-only (no EDITORIAL_RUNTIME_CONFIG env fallback) — the runtime is
+    # read for LINEAGE STRINGS only; this lane makes no model call, so there
+    # is no egress path for an env override to guard.
     run_parser.add_argument("--editorial-runtime", type=Path, default=DEFAULT_RUNTIME)
     run_parser.add_argument(
         "--qc-policy", type=Path, default=None, help="resolved QC policy JSON"

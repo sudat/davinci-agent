@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 import pytest
 from fastapi.testclient import TestClient
 
+from services.episode_cockpit import api as cockpit_api
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.review_chat import ReviewChatContext, interpret_command
 from services.episode_cockpit.review_interpreter import (
@@ -848,3 +849,106 @@ def test_review_chat_route_multi_proposal_returns_draft_and_drafts(
     assert [draft["target_seconds"] for draft in body["drafts"]] == [0.0, 2.0]
     assert all(draft["command_kind"] == "remove_section" for draft in body["drafts"])
     assert all(draft["needs_confirmation"] is False for draft in body["drafts"])
+
+
+# ---------------------------------------------------------------------------
+# runtime-config precedence (explicit > EDITORIAL_RUNTIME_CONFIG env > repo
+# default) — mirrors test_consultation_api.py's five precedence cases and
+# services.cli.episode_runner_editorial._resolve_config_path
+# ---------------------------------------------------------------------------
+
+
+def _write_env_runtime(tmp_path: Path, mode: str) -> Path:
+    path = tmp_path / "editorial-runtime-override.json"
+    path.write_text(json.dumps({"schema_version": "editorial-runtime-v1", "mode": mode}))
+    return path
+
+
+def _forbid_review_model_contact(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Given the factory under test, when either transport builder runs, then
+    the test fails — ANY construction attempt is production model contact."""
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("transport built — production model contact attempted")
+
+    monkeypatch.setattr(
+        "services.episode_cockpit.review_interpreter._codex_call", _refuse
+    )
+    monkeypatch.setattr(
+        "services.episode_cockpit.review_interpreter._openai_call", _refuse
+    )
+
+
+def test_env_override_to_heuristic_runtime_returns_none_without_model_contact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(
+        "EDITORIAL_RUNTIME_CONFIG",
+        str(_write_env_runtime(tmp_path, "heuristic_diagnostic")),
+    )
+    _forbid_review_model_contact(monkeypatch)
+
+    assert build_review_llm_call() is None
+
+
+def test_env_override_to_heuristic_runtime_route_stays_regex_only_without_model_contact(
+    client: TestClient,
+    source_folder: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cockpit_api, "build_review_llm_call", build_review_llm_call)
+    monkeypatch.setenv(
+        "EDITORIAL_RUNTIME_CONFIG",
+        str(_write_env_runtime(tmp_path, "heuristic_diagnostic")),
+    )
+    _forbid_review_model_contact(monkeypatch)
+    episode_id = _create_episode(client, source_folder)
+
+    response = client.post(
+        f"/episodes/{episode_id}/review-chat", json={"text": UNKNOWN_PHRASING}
+    )
+
+    assert response.status_code == 200
+    draft = response.json()["draft"]
+    assert draft["command_kind"] is None
+    assert draft["needs_confirmation"] is True
+
+
+def test_env_unset_keeps_repo_default_production_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+    runner = _ScriptedRunner([json.dumps({"proposals": [_proposal(target=1.0)]})])
+    _inject_codex_runner(monkeypatch, runner)
+
+    llm = build_review_llm_call()
+
+    assert llm is not None  # repo default (production_model + codex-exec) built as today
+
+
+def test_env_override_unreadable_config_degrades_to_regex_only_without_production_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    unreadable = tmp_path / "editorial-runtime-override.json"
+    unreadable.write_bytes(b"{not json")
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(unreadable))
+    # The repo default production config is NEVER substituted for the env file.
+    _forbid_review_model_contact(monkeypatch)
+
+    assert build_review_llm_call() is None
+
+
+def test_explicit_runtime_path_wins_over_env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(
+        "EDITORIAL_RUNTIME_CONFIG", str(_write_env_runtime(tmp_path, "production_model"))
+    )
+    _forbid_review_model_contact(monkeypatch)  # env names production; explicit must still win
+    explicit = tmp_path / "explicit-runtime.json"
+    explicit.write_text(
+        json.dumps({"schema_version": "editorial-runtime-v1", "mode": "heuristic_diagnostic"})
+    )
+
+    assert build_review_llm_call(runtime_path=explicit) is None

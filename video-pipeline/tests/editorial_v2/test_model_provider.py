@@ -26,6 +26,7 @@ Proves:
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -33,7 +34,12 @@ from typing import TYPE_CHECKING, Literal
 import pytest
 from pydantic import ValidationError
 
-from services.cli.episode0 import Episode0BlockedError, _stage_director
+from services.cli import v44_product_proof
+from services.cli.episode0 import (
+    Episode0BlockedError,
+    _resolve_runtime_path,
+    _stage_director,
+)
 from services.cli.live_editorial_codex import CodexTransportGatedError
 from services.cli.live_editorial_v2 import (
     CREDENTIALS_ENV,
@@ -44,6 +50,7 @@ from services.cli.live_editorial_v2 import (
 from services.editorial_v2.director_v2 import DirectorV2, ThreePassResult
 from services.editorial_v2.model_provider import (
     DIRECTOR_PIN_PATH,
+    EDITORIAL_RUNTIME_PATH,
     REQUEST_TIMEOUT_SECONDS,
     EditorialHttpResponseError,
     EditorialPinV2,
@@ -725,3 +732,61 @@ def test_stage_director_codex_transport_wires_injected_runner(
 
     assert result.moment_selection.proposal == baseline.moment_selection.proposal
     assert len(runner.calls) == 3
+
+
+# ---------------------------------------------------------------------------
+# runtime-config env precedence (external-call audit fix list): explicit >
+# EDITORIAL_RUNTIME_CONFIG env > repo default — episode0's resolver and the
+# product-proof candidate list. The product-proof production_model
+# default-on-missing bias is unchanged (production-proof lane semantics).
+# ---------------------------------------------------------------------------
+
+
+def test_episode0_explicit_runtime_path_wins_over_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_runtime = tmp_path / "env-runtime.json"
+    env_runtime.write_text(json.dumps({"mode": "production_model"}))
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(env_runtime))
+    explicit = tmp_path / "explicit-runtime.json"
+    explicit.write_text(json.dumps({"mode": "heuristic_diagnostic"}))
+
+    assert _resolve_runtime_path(explicit, dict(os.environ)) == explicit
+
+
+def test_episode0_env_runtime_used_when_no_explicit_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_runtime = tmp_path / "env-runtime.json"
+    env_runtime.write_text(json.dumps({"mode": "heuristic_diagnostic"}))
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(env_runtime))
+
+    assert _resolve_runtime_path(None, dict(os.environ)) == env_runtime
+
+
+def test_episode0_absent_env_falls_back_to_repo_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+
+    assert _resolve_runtime_path(None, dict(os.environ)) == EDITORIAL_RUNTIME_PATH
+
+
+def test_product_proof_env_candidate_comes_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_runtime = tmp_path / "env-runtime.json"
+    env_runtime.write_text(json.dumps({"mode": "heuristic_diagnostic"}))
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(env_runtime))
+
+    assert v44_product_proof._runtime_config_candidates()[0] == env_runtime
+
+
+def test_product_proof_mode_reads_env_pointed_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_runtime = tmp_path / "env-runtime.json"
+    env_runtime.write_text(json.dumps({"mode": "heuristic_diagnostic"}))
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(env_runtime))
+
+    assert v44_product_proof._editorial_mode() == "heuristic_diagnostic"

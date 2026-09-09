@@ -89,6 +89,10 @@ _PINNED_ENDPOINT = "https://api.openai.com/v1/responses"
 # codex-exec is the DEFAULT when the field is absent.
 _CODEX_TRANSPORT = "codex-exec"
 _OPENAI_TRANSPORT = "openai-api"
+# Contract note: SAME env name as episode_runner_editorial.EDITORIAL_RUNTIME_ENV
+# and api_consultation._EDITORIAL_RUNTIME_ENV, mirrored (not imported) — this
+# module keeps CLI-side imports lazy. Keep in sync.
+_EDITORIAL_RUNTIME_ENV: Final = "EDITORIAL_RUNTIME_CONFIG"
 # Mirrors services.editorial_v2.model_provider's codex contract markers
 # (kept local: the factory must not fork the payload builder, only wrap it).
 _CODEX_OUTPUT_CONTRACT = (
@@ -687,6 +691,21 @@ def _codex_call(model_id: str) -> ReviewLlmCall | None:
     return _stamp_image_capable(call, capable=True)
 
 
+def _resolve_runtime_config_path(
+    runtime_path: Path | None, environment: Mapping[str, str]
+) -> Path:
+    """Precedence mirrored from ``episode_runner_editorial._resolve_config_path``
+    (and ``api_consultation._resolve_runtime_config_path``): explicit
+    ``runtime_path`` > ``EDITORIAL_RUNTIME_CONFIG`` env > repo default."""
+
+    if runtime_path is not None:
+        return runtime_path
+    from_env = environment.get(_EDITORIAL_RUNTIME_ENV)
+    if from_env:
+        return Path(from_env)
+    return _CONFIG_ROOT / RUNTIME_CONFIG_RELATIVE
+
+
 def build_review_llm_call(
     *,
     runtime_path: Path | None = None,
@@ -696,10 +715,23 @@ def build_review_llm_call(
     """Tolerant, transport-aware factory: None (regex-only) unless the
     runtime mode, the pin's model_id, and the TRANSPORT's own gate are all
     available (``openai-api`` env gate / ``codex-exec`` binary+login
-    probe). Never raises."""
+    probe). Never raises. The runtime config path follows the
+    ``episode_runner_editorial`` precedence (explicit >
+    ``EDITORIAL_RUNTIME_CONFIG`` env > repo default); an unreadable
+    env-named config degrades to regex-only mode — the repo default
+    production config is never substituted for it. The pin path keeps
+    its repo default (pins have no env override)."""
 
-    runtime = _read_json_object(runtime_path or (_CONFIG_ROOT / RUNTIME_CONFIG_RELATIVE))
+    environment = os.environ if env is None else env
+    env_name = environment.get(_EDITORIAL_RUNTIME_ENV)
+    runtime = _read_json_object(_resolve_runtime_config_path(runtime_path, environment))
     if runtime is None or runtime.get("mode") != "production_model":
+        if runtime is None and runtime_path is None and env_name:
+            _LOGGER.warning(
+                "review-interpreter: EDITORIAL_RUNTIME_CONFIG %r is unreadable — "
+                "regex-only mode (no production fallback)",
+                env_name,
+            )
         return None
     pin = _read_json_object(pin_path or (_CONFIG_ROOT / PIN_RELATIVE))
     model_id = pin.get("model_id") if pin is not None else None
@@ -709,7 +741,6 @@ def build_review_llm_call(
     if not isinstance(transport, str) or not transport:
         transport = _CODEX_TRANSPORT  # EditorialRuntimeV1 default
     if transport == _OPENAI_TRANSPORT:
-        environment = dict(os.environ if env is None else env)
         return _openai_call(environment, pin, model_id)
     if transport == _CODEX_TRANSPORT:
         return _codex_call(model_id)

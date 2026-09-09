@@ -9,8 +9,9 @@ in — plus the task-3 production provider module, blocking with
 ``production-model-unavailable`` (never a silent heuristic fallback).
 A missing config must NOT masquerade as production: it means
 ``heuristic_diagnostic`` with an explicit warning line, and the
-diagnostic chain env strips the director credentials so a leaked
-environment can never silently turn a diagnostic run into a live one.
+diagnostic chain env strips the director + moment-review provider
+credentials so a leaked environment can never silently turn a
+diagnostic run into a live one.
 """
 
 from __future__ import annotations
@@ -35,6 +36,14 @@ OPENAI_TRANSPORT: Final = "openai-api"
 VALID_TRANSPORTS: Final = (CODEX_TRANSPORT, OPENAI_TRANSPORT)
 API_KEY_ENV: Final = "EDITORIAL_DIRECTOR_API_KEY"
 NETWORK_ENV: Final = "EDITORIAL_DIRECTOR_NETWORK_ENABLED"
+# Moment-review provider credentials (audit §7 hardening): the diagnostic
+# chain never constructs the Gemini/GLM providers, but the guarantee must
+# rest on stripping — not on that absence — so a leaked key can never turn
+# a diagnostic run live through a future provider wiring.
+GEMINI_KEY_ENV: Final = "GEMINI_API_KEY"
+GEMINI_NETWORK_ENV: Final = "GEMINI_NETWORK_ENABLED"
+ZAI_KEY_ENV: Final = "ZAI_API_KEY"
+ZAI_NETWORK_ENV: Final = "ZAI_NETWORK_ENABLED"
 PRODUCTION_RUNTIME_MODULE: Final = "services.editorial_v2.model_provider"
 PRODUCTION_UNAVAILABLE: Final = "production-model-unavailable"
 
@@ -52,7 +61,15 @@ def sanitized_env() -> dict[str, str]:
     return {
         key: value
         for key, value in os.environ.items()
-        if key not in (API_KEY_ENV, NETWORK_ENV)
+        if key
+        not in (
+            API_KEY_ENV,
+            NETWORK_ENV,
+            GEMINI_KEY_ENV,
+            GEMINI_NETWORK_ENV,
+            ZAI_KEY_ENV,
+            ZAI_NETWORK_ENV,
+        )
     }
 
 
@@ -172,12 +189,16 @@ __all__ = [
     "CODEX_TRANSPORT",
     "DIAGNOSTIC_MODE",
     "EDITORIAL_RUNTIME_ENV",
+    "GEMINI_KEY_ENV",
+    "GEMINI_NETWORK_ENV",
     "NETWORK_ENV",
     "OPENAI_TRANSPORT",
     "PRODUCTION_MODE",
     "PRODUCTION_RUNTIME_MODULE",
     "PRODUCTION_UNAVAILABLE",
     "VALID_TRANSPORTS",
+    "ZAI_KEY_ENV",
+    "ZAI_NETWORK_ENV",
     "EditorialGateError",
     "editorial_mode",
     "editorial_transport",

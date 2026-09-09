@@ -31,6 +31,7 @@ is only ever READ).
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
@@ -38,9 +39,8 @@ from typing import TYPE_CHECKING, Final, Protocol
 from services.episode_cockpit.episode_ops import INTAKE_NAME
 from services.episode_cockpit.models import FrameMaterial, IntakeRecordV1
 from services.episode_cockpit.review_interpreter import (
-    _CONFIG_ROOT,
-    RUNTIME_CONFIG_RELATIVE,
     _read_json_object,
+    _resolve_runtime_config_path,
 )
 from services.preview.models import PreviewError
 from services.preview.render import PREVIEW_NAME
@@ -68,12 +68,18 @@ class FrameMaterialWorkspace(Protocol):
     ) -> tuple[FrameMaterial, ...]: ...
 
 
-def frame_gate(runtime_path: Path | None = None) -> tuple[bool, int]:
+def frame_gate(
+    runtime_path: Path | None = None, env: Mapping[str, str] | None = None
+) -> tuple[bool, int]:
     """(enabled, max_frames) from the SAME editorial-runtime.json the
-    transport factory reads; anything absent/malformed is OFF."""
+    transport factory reads; anything absent/malformed is OFF. The config
+    path follows the ``episode_runner_editorial`` precedence (explicit >
+    ``EDITORIAL_RUNTIME_CONFIG`` env > repo default) so the frame-pixel
+    egress permission tracks the diagnostic runtime."""
 
+    environment = os.environ if env is None else env
     runtime: Mapping[str, object] | None = _read_json_object(
-        runtime_path or (_CONFIG_ROOT / RUNTIME_CONFIG_RELATIVE)
+        _resolve_runtime_config_path(runtime_path, environment)
     )
     raw: object = None if runtime is None else runtime.get(FRAME_MATERIALS_KEY)
     if not isinstance(raw, dict):

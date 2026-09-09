@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -120,3 +121,51 @@ def test_different_rerun_refuses_overwrite(
     # Then
     assert captured.value.code == "sidecar-conflict"
     assert proposal_path(case.root).read_bytes() == before
+
+
+def test_cli_env_runtime_used_when_flag_absent(
+    chapter_title_case: ChapterTitleCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: EDITORIAL_RUNTIME_CONFIG names the production runtime
+    case = chapter_title_case
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(case.runtime))
+
+    # When the flag is omitted
+    exit_code = main(
+        ["--episode-root", str(case.root)],
+        runner=runner(),
+        approved=case.approved,
+    )
+
+    # Then: the env-pointed runtime carries the proposal
+    assert exit_code == 0
+    assert ChapterTitleProposalSidecar.model_validate_json(
+        proposal_path(case.root).read_bytes()
+    ).proposal_only is True
+    assert "proposal ready" in capsys.readouterr().out
+
+
+def test_cli_explicit_flag_wins_over_env_runtime(
+    chapter_title_case: ChapterTitleCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: the env names a missing config (would refuse if consulted)
+    case = chapter_title_case
+    monkeypatch.setenv(
+        "EDITORIAL_RUNTIME_CONFIG", str(tmp_path / "absent-runtime.json")
+    )
+
+    # When: the explicit flag names the production runtime
+    exit_code = main(
+        ["--episode-root", str(case.root), "--editorial-runtime", str(case.runtime)],
+        runner=runner(),
+        approved=case.approved,
+    )
+
+    # Then: the explicit path wins, the env is ignored
+    assert exit_code == 0
+    assert "proposal ready" in capsys.readouterr().out
