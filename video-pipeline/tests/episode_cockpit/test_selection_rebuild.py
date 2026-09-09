@@ -143,7 +143,7 @@ def _fake_seams(
             outcome=SimpleNamespace(request_hash="test-request-hash"),
         )
 
-    def fake_derive(episode_root: Path, rerun: object) -> EditPlan0C:
+    def fake_derive(episode_root: Path, rerun: object, policy: Any = None) -> EditPlan0C:
         assert rerun is captured["rerun_marker"]
         if fail_derive:
             raise episode_runner_selection.PolicyDerivationError(

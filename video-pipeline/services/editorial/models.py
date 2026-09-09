@@ -27,6 +27,13 @@ from services.fixtures.manifest_phase1 import (  # noqa: TC001 (pydantic runtime
 # Strict models never coerce list→tuple; pin the consultation BeforeValidator convention.
 type _StringSequence = Annotated[tuple[str, ...], BeforeValidator(tuple)]
 
+# W9: the conditional-presentation aspect of a consultation policy (通常 /
+# 場所変更時のみ大テロップ / 局所的な例外). A closed vocabulary so
+# deterministic code can apply it to plan settings; the consultation model
+# classifies the operator-facing prose into it (LLM judges meaning, code
+# applies). "normal" is the backward-compatible default.
+type PresentationCondition = Literal["normal", "location_change_only", "local_exception"]
+
 
 class DeclaredCandidate(StrictModel):
     """One declared candidate from the frozen manifest transcript (evidence)."""
@@ -80,6 +87,7 @@ class AdoptedPolicySummaryV1(StrictModel):
     unused_reasons: str = ""
     unconfirmed: _StringSequence = ()
     note: str | None = None
+    presentation_condition: PresentationCondition = "normal"
 
 
 class DirectorRequest(StrictModel):
@@ -187,4 +195,5 @@ __all__ = [
     "EditorialErrorRecord",
     "EditorialMetadata",
     "EditorialPolicyEnvelope",
+    "PresentationCondition",
 ]

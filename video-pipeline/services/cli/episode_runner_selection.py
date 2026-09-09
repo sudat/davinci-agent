@@ -32,6 +32,10 @@ from services.cli.real_selection_inputs import (
 from services.compile.production_errors import CompileProductionError
 from services.contracts.primitives import RationalFrameRate
 from services.episode_cockpit.consultation_store import AdoptedPolicyV1, policy_summary
+from services.episode_cockpit.policy_settings import (
+    derive_policy_settings,
+    select_policy_subtitles,
+)
 from services.plan.constraint_planner import solve
 from services.plan.edit_plan_generate import EditPlanGenerationError, generate
 from services.plan.edit_plan_models import SelectionPlanRef
@@ -166,7 +170,32 @@ def selection_base_ref(episode_root: Path, episode_id: str) -> SelectionPlanRef:
     )
 
 
-def derive_policy_plan(episode_root: Path, rerun: SelectionRerun) -> EditPlan0C:
+def _kept_segments(rerun: SelectionRerun) -> frozenset[str]:
+    keep_ids = {
+        candidate.candidate_id
+        for candidate in rerun.selection.candidates
+        if candidate.intent == "keep"
+    }
+    return frozenset(
+        link.segment_id
+        for link in rerun.reconciled.segment_links
+        if set(link.candidate_ids) & keep_ids
+    )
+
+
+def _policy_subtitle_ids(rerun: SelectionRerun, policy: AdoptedPolicyV1 | None) -> tuple[str, ...]:
+    speech_ids = tuple(segment.segment_id for segment in rerun.speech)
+    if policy is None:
+        return speech_ids
+    record = derive_policy_settings(policy)
+    return select_policy_subtitles(
+        record, speech_ids, _kept_segments(rerun)
+    )
+
+
+def derive_policy_plan(
+    episode_root: Path, rerun: SelectionRerun, policy: AdoptedPolicyV1 | None = None
+) -> EditPlan0C:
     """Derive the review-plane plan through the chain's own pure functions.
 
     Planner infeasibility, generation, compile, and projection failures are
@@ -189,6 +218,7 @@ def derive_policy_plan(episode_root: Path, rerun: SelectionRerun) -> EditPlan0C:
         )
     try:
         ref = selection_base_ref(episode_root, rerun.selection.episode_id)
+        subtitle_ids = set(_policy_subtitle_ids(rerun, policy))
         plan = generate(
             rerun.selection,
             solution,
@@ -224,6 +254,7 @@ def derive_policy_plan(episode_root: Path, rerun: SelectionRerun) -> EditPlan0C:
                     end_frame=segment.end_frame,
                 )
                 for position, segment in enumerate(rerun.speech, start=1)
+                if segment.segment_id in subtitle_ids
             ),
         )
     except PolicyDerivationError:

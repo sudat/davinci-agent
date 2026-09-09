@@ -1,1 +1,1 @@
-{"intervals_limit": 3, "llm_calls_limit": 6, "preview_sample_seconds_limit": 30.0, "schema_version": "cockpit-consultation-config-v1", "wall_seconds_limit": 600.0}
+{"full_episode_llm_calls_limit": 6, "full_episode_wall_seconds_limit": 600.0, "intervals_limit": 3, "llm_calls_limit": 6, "max_input_bytes_per_call": null, "max_output_bytes_per_call": null, "per_model_llm_calls_limit": {}, "preview_sample_seconds_limit": 30.0, "schema_version": "cockpit-consultation-config-v1", "wall_seconds_limit": 600.0}

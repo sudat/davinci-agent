@@ -52,6 +52,9 @@ class CommitOutcome:
     event_id: str | None
     plan_path: Path | None
     ir_path: Path | None
+    # W10: True when an idempotent return names a version that is no
+    # longer the head (record-only past result, never currently applied).
+    superseded_by_head: bool = False
 
 
 def _anchor(events: tuple[ReviewEvent0C, ...]) -> tuple[int, str]:

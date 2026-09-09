@@ -23,10 +23,13 @@ intervals 3 / wall seconds 600) as fallback; ``cost_display`` stays
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
+import threading
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal, NamedTuple
@@ -34,7 +37,11 @@ from typing import TYPE_CHECKING, Annotated, Literal, NamedTuple
 from pydantic import BeforeValidator, Field, ValidationError
 
 from services.contracts.primitives import StrictModel
-from services.editorial.models import AdoptedPolicyScopeV1, AdoptedPolicySummaryV1
+from services.editorial.models import (
+    AdoptedPolicyScopeV1,
+    AdoptedPolicySummaryV1,
+    PresentationCondition,
+)
 from services.episode_cockpit.consultation_selection_budget import (
     DIRECTOR_WALL_ALLOWANCE_SECONDS,
     selection_budget_used,
@@ -44,6 +51,7 @@ from services.episode_cockpit.errors import (
     CockpitUnprocessableError,
 )
 from services.episode_cockpit.models import RebuildRequestEntry
+from services.episode_cockpit.policy_settings import PolicySettingEntryV1
 from services.foundation_io import canonical_model_bytes
 
 if TYPE_CHECKING:
@@ -98,6 +106,7 @@ CONNECTED_POLICY_FIELDS: tuple[str, ...] = (
     "unused_reasons",
     "unconfirmed",
     "note",
+    "presentation_condition",
 )
 
 SCOPE_UNADDRESSED_JA: dict[str, str] = {
@@ -154,6 +163,14 @@ class ConsultationProposalDetails(StrictModel):
     reference_mapping: str
     unused_reasons: str
     unconfirmed: StringSequence = ()
+    presentation_condition: PresentationCondition = Field(
+        default="normal",
+        description=(
+            "条件付き提示の分類: normal=通常表示、"
+            "location_change_only=場所変更時のみ大テロップ、"
+            "local_exception=局所的な例外。字幕の方針の条件部分を分類すること。"
+        ),
+    )
 
 
 class ConsultationProposalV1(StrictModel):
@@ -195,6 +212,13 @@ class ConsultationJudgmentV1(StrictModel):
 
     ``proposal_id=None`` judges the consultation as a whole
     (``both_wrong``/``delegate``). Judgments are never rewritten.
+
+    ``operation_id`` is the stable adoption-operation key (W1): a re-send
+    of the same adoption carries the same id (or none, in which case the
+    server derives it from the content fingerprint) and dedupes against
+    the WHOLE journal — never just the latest row. A deliberate
+    re-adoption is a NEW operation id and appends a new row. Absent
+    (None) on legacy lines.
     """
 
     schema_version: Literal["cockpit-consultation-judgment-v1"] = (
@@ -206,6 +230,7 @@ class ConsultationJudgmentV1(StrictModel):
     decision: ConsultationDecision
     scope: ConsultationScope
     note: str | None = None
+    operation_id: str | None = None
     created_at: str
 
 
@@ -214,7 +239,7 @@ class AdoptedPolicyV1(StrictModel):
 
     Deterministic extraction (no LLM): the LATEST judgment with decision
     adopt|revise and at least one scope flag, joined with its proposal's
-    ten text fields plus the judgment note. A NEWER reject/both_wrong (or
+    detail fields plus the judgment note. A NEWER reject/both_wrong (or
     an empty scope, or a missing proposal) yields NO policy — the operator
     withdrew, and the planning path must not reuse the older案.
     """
@@ -238,6 +263,7 @@ class AdoptedPolicyV1(StrictModel):
     unused_reasons: str
     unconfirmed: StringSequence = ()
     note: str | None = None
+    presentation_condition: PresentationCondition = "normal"
 
 
 type PolicyOutcomeStatus = Literal["honored", "connected", "failed"]
@@ -286,10 +312,26 @@ class ConsultationPolicyOutcomeV1(StrictModel):
     realized_checks: StringSequence = ()
     unaddressed: StringSequence = ()
     unconfirmed: StringSequence = ()
+    # W10: True when this outcome names a plan version that is NO LONGER
+    # the review-store head (a record-only past result, never "currently
+    # applied"). None on legacy lines = the distinction was not recorded.
+    superseded_by_head: bool | None = None
+    # W9: the deterministic field→setting rows actually applied to the
+    # derived plan (empty on reused/failed outcomes: nothing was derived).
+    applied_settings: tuple[PolicySettingEntryV1, ...] = ()
 
 
 class ConsultationBudgetEventV1(StrictModel):
-    """One generation's consumption; cumulative state = the journal sum."""
+    """One generation's consumption; cumulative state = the journal sum.
+
+    ``model_id`` attributes the spend to one production model (None =
+    unattributed, e.g. legacy lines or transports that do not report
+    it). ``input_bytes``/``output_bytes`` are measured transport sizes
+    (None = unmeasured). ``retry_index`` itemizes internal retries so a
+    retried generation settles one line per attempt. ``failure_code``
+    marks a failed generation's line — failures still consume budget,
+    never silently.
+    """
 
     schema_version: Literal["cockpit-consultation-budget-v1"] = (
         "cockpit-consultation-budget-v1"
@@ -298,6 +340,11 @@ class ConsultationBudgetEventV1(StrictModel):
     llm_calls: int = Field(ge=0)
     intervals: int = Field(ge=0)
     wall_seconds: Annotated[float, BeforeValidator(float)] = Field(ge=0.0)
+    model_id: str | None = None
+    input_bytes: int | None = Field(default=None, ge=0)
+    output_bytes: int | None = Field(default=None, ge=0)
+    retry_index: int = Field(default=0, ge=0)
+    failure_code: str | None = None
     created_at: str
 
 
@@ -320,6 +367,21 @@ class ConsultationBudgetLimits(StrictModel):
     )
     preview_sample_seconds_limit: Annotated[float, BeforeValidator(float)] = (
         DEFAULT_PREVIEW_SAMPLE_SECONDS_LIMIT
+    )
+    # W4: per-call transport size caps (None = unenforced). Measured in
+    # bytes at the consultation transport; a breach fails closed AFTER
+    # recording the spent call, never by silent truncation.
+    max_input_bytes_per_call: int | None = Field(default=None, ge=1)
+    max_output_bytes_per_call: int | None = Field(default=None, ge=1)
+    # W4: per-model call caps, enforced where the model id is known
+    # (the consultation proposal path). Absent model = unattributed.
+    per_model_llm_calls_limit: dict[str, int] = Field(default_factory=dict)
+    # W4: the sample→full-episode boundary. Full-episode attempts draw
+    # from these limits under the "full_episode" ledger scope and NEVER
+    # from the sample allowance above.
+    full_episode_llm_calls_limit: int = DEFAULT_LLM_CALLS_LIMIT
+    full_episode_wall_seconds_limit: Annotated[float, BeforeValidator(float)] = (
+        DEFAULT_WALL_SECONDS_LIMIT
     )
 
 
@@ -450,6 +512,7 @@ def latest_adopted_policy(episode_dir: Path) -> AdoptedPolicyV1 | None:
         unused_reasons=details.unused_reasons,
         unconfirmed=details.unconfirmed,
         note=latest.note,
+        presentation_condition=details.presentation_condition,
     )
 
 
@@ -474,6 +537,7 @@ def policy_summary(policy: AdoptedPolicyV1) -> AdoptedPolicySummaryV1:
         unused_reasons=policy.unused_reasons,
         unconfirmed=policy.unconfirmed,
         note=policy.note,
+        presentation_condition=policy.presentation_condition,
     )
 
 
@@ -557,7 +621,62 @@ def policy_for_judgment(episode_dir: Path, judgment_id: str) -> AdoptedPolicyV1:
         unused_reasons=details.unused_reasons,
         unconfirmed=details.unconfirmed,
         note=latest.note,
+        presentation_condition=details.presentation_condition,
     )
+
+
+_WRITE_LOCK_NAME = ".consultation-write.lock"
+_WRITE_THREAD_LOCK = threading.Lock()
+
+
+@contextmanager
+def consultation_write_locked(episode_dir: Path) -> Iterator[None]:
+    """The single-Writer boundary for consultation check/append/reserve.
+
+    Serializes concurrent POSTs across threads (process lock) and
+    across processes (an flock'd file in the consultation dir): the
+    judgment dedupe scan + append and the reservation check + append
+    each run atomically inside it, so a late re-send can neither slip
+    past the scan nor double-reserve.
+    """
+
+    lock_path = _consultation_dir(episode_dir) / _WRITE_LOCK_NAME
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _WRITE_THREAD_LOCK, lock_path.open("ab") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def judgment_operation_key(
+    *,
+    consultation_id: str,
+    proposal_id: str | None,
+    decision: ConsultationDecision,
+    scope: ConsultationScope,
+    note: str | None,
+) -> str:
+    """The stable adoption-operation key for one judgment request."""
+
+    canon = json.dumps(
+        {
+            "consultation_id": consultation_id,
+            "proposal_id": proposal_id,
+            "decision": decision,
+            "scope": {
+                "composition": scope.composition,
+                "appearance": scope.appearance,
+                "audio": scope.audio,
+            },
+            "note": note,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canon.encode()).hexdigest()
 
 
 def append_effective_judgment_once(  # noqa: PLR0913 (explicit judgment-fingerprint fields; kwargs are the contract)
@@ -568,36 +687,55 @@ def append_effective_judgment_once(  # noqa: PLR0913 (explicit judgment-fingerpr
     decision: ConsultationDecision,
     scope: ConsultationScope,
     note: str | None,
+    operation_id: str | None = None,
 ) -> tuple[ConsultationJudgmentV1, bool]:
-    judgments = load_judgments(episode_dir)
-    dedupe_applies = (
-        decision in ("adopt", "revise")
-        and proposal_id is not None
-        and (scope.composition or scope.appearance or scope.audio)
-    )
-    if dedupe_applies and judgments:
-        latest = judgments[-1]
-        if (
-            latest.consultation_id == consultation_id
-            and latest.proposal_id == proposal_id
-            and latest.decision == decision
-            and latest.scope.composition == scope.composition
-            and latest.scope.appearance == scope.appearance
-            and latest.scope.audio == scope.audio
-            and latest.note == note
-        ):
-            return latest, False
-    judgment = ConsultationJudgmentV1(
-        judgment_id=uuid.uuid4().hex[:12],
+    """Append one adoption judgment unless this operation already landed.
+
+    Dedupe scans the WHOLE journal for the stable operation key (the
+    explicit ``operation_id`` when the caller supplies one, else the
+    content fingerprint) — a delayed A re-send arriving after B matches
+    the original A row and reuses it, so B stays effective and no new
+    row overwrites it. A deliberate re-adoption carries a NEW operation
+    id and appends a new row. Scan + append hold the single-Writer lock.
+    """
+
+    key = operation_id or judgment_operation_key(
         consultation_id=consultation_id,
         proposal_id=proposal_id,
         decision=decision,
         scope=scope,
         note=note,
-        created_at=now_stamp(),
     )
-    append_judgment(episode_dir, judgment)
-    return judgment, True
+    dedupe_applies = (
+        decision in ("adopt", "revise")
+        and proposal_id is not None
+        and (scope.composition or scope.appearance or scope.audio)
+    )
+    with consultation_write_locked(episode_dir):
+        judgments = load_judgments(episode_dir)
+        if dedupe_applies:
+            for existing in judgments:
+                existing_key = existing.operation_id or judgment_operation_key(
+                    consultation_id=existing.consultation_id,
+                    proposal_id=existing.proposal_id,
+                    decision=existing.decision,
+                    scope=existing.scope,
+                    note=existing.note,
+                )
+                if existing_key == key:
+                    return existing, False
+        judgment = ConsultationJudgmentV1(
+            judgment_id=uuid.uuid4().hex[:12],
+            consultation_id=consultation_id,
+            proposal_id=proposal_id,
+            decision=decision,
+            scope=scope,
+            note=note,
+            operation_id=operation_id,
+            created_at=now_stamp(),
+        )
+        append_judgment(episode_dir, judgment)
+        return judgment, True
 
 
 def append_policy_outcome(episode_dir: Path, outcome: ConsultationPolicyOutcomeV1) -> None:
@@ -816,14 +954,21 @@ def budget_used(episode_dir: Path) -> ConsultationBudgetUsed:
     )
 
 
-def consume_budget(
+def consume_budget(  # noqa: PLR0913 (explicit budget-line fields; kwargs are the ledger contract)
     episode_dir: Path,
     consultation_id: str,
     *,
     llm_calls: int,
     intervals: int,
     wall_seconds: float,
+    model_id: str | None = None,
+    input_bytes: int | None = None,
+    output_bytes: int | None = None,
+    retry_index: int = 0,
+    failure_code: str | None = None,
 ) -> None:
+    """Record one generation's spend — successes AND failures alike."""
+
     append_budget_event(
         episode_dir,
         ConsultationBudgetEventV1(
@@ -831,6 +976,11 @@ def consume_budget(
             llm_calls=llm_calls,
             intervals=intervals,
             wall_seconds=wall_seconds,
+            model_id=model_id,
+            input_bytes=input_bytes,
+            output_bytes=output_bytes,
+            retry_index=retry_index,
+            failure_code=failure_code,
             created_at=now_stamp(),
         ),
     )
@@ -908,6 +1058,79 @@ def ensure_preview_budget_available(
         raise CockpitUnprocessableError(
             "consultation-preview-budget-exhausted",
             "見本映像は合計30秒の上限を超えるため、映像生成を始めませんでした。",
+        )
+
+
+def model_attributed_calls(episode_dir: Path, model_id: str) -> int:
+    """LLM calls attributed to one model across both ledgers."""
+
+    from services.episode_cockpit.consultation_selection_budget import (  # noqa: PLC0415 (deferred: store owns the combined view)
+        load_selection_budget_entries,
+    )
+
+    proposal = sum(
+        event.llm_calls
+        for event in _load_jsonl(
+            _consultation_dir(episode_dir) / BUDGET_NAME,
+            ConsultationBudgetEventV1,
+            "consultation-log-corrupt",
+        )
+        if event.model_id == model_id
+    )
+    ledger = sum(
+        entry.llm_calls_used
+        for entry in load_selection_budget_entries(episode_dir)
+        if entry.model_id == model_id and entry.phase == "director_settled"
+    )
+    return proposal + ledger
+
+
+def ensure_model_call_budget_available(
+    episode_dir: Path, limits: ConsultationBudgetLimits, model_id: str | None
+) -> None:
+    """Typed 422 BEFORE contacting a model past its per-model call cap.
+
+    Unconfigured models (no cap for this id) and unattributed calls
+    (model unknown) pass — the cap only binds what it names.
+    """
+
+    if model_id is None:
+        return
+    cap = limits.per_model_llm_calls_limit.get(model_id)
+    if cap is None:
+        return
+    if model_attributed_calls(episode_dir, model_id) + 1 > cap:
+        raise CockpitUnprocessableError(
+            "consultation-model-budget-exhausted",
+            f"model {model_id} reached its per-model call cap ({cap}); "
+            "no further calls are started for it.",
+        )
+
+
+def ensure_full_episode_budget_available(
+    episode_dir: Path, limits: ConsultationBudgetLimits
+) -> None:
+    """Typed 422 BEFORE a full-episode attempt past its own allowance.
+
+    The sample→full boundary: full-episode attempts draw ONLY from the
+    full-episode limits under the "full_episode" ledger scope — the
+    sample allowance is never touched by them, and the sample gate
+    never counts them.
+    """
+
+    from services.episode_cockpit.consultation_selection_budget import (  # noqa: PLC0415 (deferred: store owns the combined view)
+        selection_budget_used_in_scope,
+    )
+
+    used = selection_budget_used_in_scope(episode_dir, "full_episode")
+    if (
+        used.llm_calls + 1 > limits.full_episode_llm_calls_limit
+        or used.wall_seconds >= limits.full_episode_wall_seconds_limit
+    ):
+        raise CockpitUnprocessableError(
+            "consultation-full-episode-budget-exhausted",
+            "全編処理の予算上限に達したため、全編の処理を始めませんでした。"
+            "見本の予算とは別枠です。",
         )
 
 
@@ -1039,6 +1262,7 @@ __all__ = [
     "ConsultationScope",
     "DirectorConnection",
     "PolicyOutcomeStatus",
+    "PolicySettingEntryV1",
     "append_budget_event",
     "append_consultation",
     "append_effective_judgment_once",
@@ -1051,11 +1275,15 @@ __all__ = [
     "combined_llm_used",
     "combined_wall_used",
     "consultation_view",
+    "consultation_write_locked",
     "consume_budget",
     "derive_policy_rebuild",
     "ensure_budget_available",
+    "ensure_full_episode_budget_available",
+    "ensure_model_call_budget_available",
     "ensure_preview_budget_available",
     "ensure_selection_budget_available",
+    "judgment_operation_key",
     "latest_adopted_policy",
     "load_budget_limits",
     "load_consultations",
@@ -1063,6 +1291,7 @@ __all__ = [
     "load_latest_proposal_sets",
     "load_policy_outcomes",
     "load_policy_rebuild_entries",
+    "model_attributed_calls",
     "now_stamp",
     "policy_for_judgment",
     "policy_scope_list",

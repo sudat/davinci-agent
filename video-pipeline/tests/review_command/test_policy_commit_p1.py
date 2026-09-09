@@ -23,7 +23,11 @@ from services.contracts.primitives import Producer, RationalFrameRate, SourceFra
 from services.foundation_io import canonical_model_bytes
 from services.review_command import policy_commit
 from services.review_command.events import POLICY_EVENT_KIND
-from services.review_command.policy_commit import commit_policy
+from services.review_command.policy_commit import (
+    commit_policy,
+    locked_field_conflicts,
+    reuse_committed_policy,
+)
 from services.review_command.store import (
     INDEX_NAME,
     OperatorDecision0C,
@@ -291,3 +295,201 @@ def test_crash_after_policy_event_then_retry_recovers_idempotently(
     assert (plan_dir / "plan-v2.json").is_file()
     assert (plan_dir / "ir-v2.json").is_file()
     assert load_head(log_path, plan_dir).version == 2
+
+
+def _locked_seed_plan() -> EditPlan0C:
+    plan = _seed_plan()
+    items = tuple(
+        item.model_copy(update={"locked_fields": ("order",)})
+        if item.item_id == "v1"
+        else item
+        for item in plan.plan.items
+    )
+    return plan.model_copy(update={"plan": plan.plan.model_copy(update={"items": items})})
+
+
+def _locked_store(tmp_path: Path) -> tuple[Path, Path]:
+    log_path = tmp_path / "review" / "events.jsonl"
+    plan_dir = tmp_path / "review" / "store"
+    plan_dir.mkdir(parents=True)
+    initialize_store(_locked_seed_plan(), log_path, plan_dir)
+    return log_path, plan_dir
+
+
+def _reversed_plan(head_plan: EditPlan0C) -> EditPlan0C:
+    items = tuple(
+        item.model_copy(update={"locked_fields": ()})
+        for item in reversed(head_plan.plan.items)
+    )
+    return _with_items(head_plan, items, "edit-plan-policy-reversed")
+
+
+def _with_items(
+    head_plan: EditPlan0C,
+    items: tuple[EditPlanItem0C, ...],
+    artifact_id: str,
+) -> EditPlan0C:
+    return head_plan.model_copy(
+        update={
+            "artifact_id": artifact_id,
+            "plan": head_plan.plan.model_copy(update={"items": items}),
+        }
+    )
+
+
+def test_w2_locked_order_reversal_rejected_with_correct_cas(
+    tmp_path: Path,
+) -> None:
+    log_path, plan_dir = _locked_store(tmp_path)
+    head = load_head(log_path, plan_dir)
+    base_sha = head.index.versions["1"].plan_sha256
+    events_bytes = log_path.read_bytes()
+
+    with pytest.raises(ReviewCommitError) as exc_info:
+        commit_policy(
+            _reversed_plan(head.plan), _decision(), log_path, plan_dir,
+            judgment_id="j1", proposal_id="prop-1", policy_decision="adopt",
+            expected_base_version="v1",
+            expected_base_plan_sha256=base_sha,
+        )
+
+    assert exc_info.value.code == "policy-locked-field-conflict"
+    assert "v1.order" in str(exc_info.value)
+    assert load_head(log_path, plan_dir).version == 1
+    assert log_path.read_bytes() == events_bytes
+    assert not (plan_dir / "plan-v2.json").exists()
+
+
+def test_w2_dropped_locks_rejected_even_when_order_kept(
+    tmp_path: Path,
+) -> None:
+    log_path, plan_dir = _locked_store(tmp_path)
+    head = load_head(log_path, plan_dir)
+    stripped = _with_items(
+        head.plan,
+        tuple(
+            item.model_copy(update={"locked_fields": ()})
+            for item in head.plan.plan.items
+        ),
+        "edit-plan-policy-stripped",
+    )
+
+    with pytest.raises(ReviewCommitError) as exc_info:
+        commit_policy(
+            stripped, _decision(), log_path, plan_dir,
+            judgment_id="j1", proposal_id="prop-1", policy_decision="adopt",
+        )
+
+    assert exc_info.value.code == "policy-locked-field-conflict"
+    assert "v1.locks" in str(exc_info.value)
+    assert load_head(log_path, plan_dir).version == 1
+
+
+def test_w2_unlocked_change_commits_and_locks_propagate(
+    tmp_path: Path,
+) -> None:
+    log_path, plan_dir = _locked_store(tmp_path)
+    head = load_head(log_path, plan_dir)
+    items = tuple(
+        item.model_copy(
+            update={
+                "span": item.span.model_copy(
+                    update={"end_frame": item.span.end_frame - 5}
+                )
+            }
+        )
+        if item.item_id == "v2"
+        else item
+        for item in head.plan.plan.items
+    )
+    changed = _with_items(head.plan, items, "edit-plan-policy-v2")
+
+    committed = commit_policy(
+        changed, _decision(), log_path, plan_dir,
+        judgment_id="j1", proposal_id="prop-1", policy_decision="adopt",
+    )
+
+    assert committed.version == 2
+    assert committed.superseded_by_head is False
+    kept = {
+        item.item_id: item for item in load_head(log_path, plan_dir).plan.plan.items
+    }
+    assert "order" in kept["v1"].locked_fields
+    with pytest.raises(ReviewCommitError) as exc_info:
+        commit_policy(
+            _reversed_plan(load_head(log_path, plan_dir).plan),
+            _decision(), log_path, plan_dir,
+            judgment_id="j2", proposal_id="prop-1", policy_decision="adopt",
+        )
+    assert exc_info.value.code == "policy-locked-field-conflict"
+
+
+def test_w2_locked_field_conflicts_unit_shape() -> None:
+    plan = _locked_seed_plan()
+    assert locked_field_conflicts(plan, plan) == ()
+    assert "v1.order" in locked_field_conflicts(plan, _reversed_plan(plan))
+
+
+def test_w10_idempotent_return_marks_superseded_when_head_advanced(
+    tmp_path: Path,
+) -> None:
+    log_path, plan_dir = _store(tmp_path)
+    head = load_head(log_path, plan_dir)
+    plan_a = head.plan.model_copy(update={"artifact_id": "edit-plan-policy-a"})
+    plan_b = head.plan.model_copy(update={"artifact_id": "edit-plan-policy-b"})
+
+    first_a = commit_policy(
+        plan_a, _decision(), log_path, plan_dir,
+        judgment_id="j1", proposal_id="prop-1", policy_decision="adopt",
+    )
+    commit_policy(
+        plan_b, _decision(), log_path, plan_dir,
+        judgment_id="j2", proposal_id="prop-1", policy_decision="adopt",
+    )
+    assert load_head(log_path, plan_dir).version == 3
+
+    repeat_a = commit_policy(
+        plan_a, _decision(), log_path, plan_dir,
+        judgment_id="j1", proposal_id="prop-1", policy_decision="adopt",
+    )
+    repeat_b = commit_policy(
+        plan_b, _decision(), log_path, plan_dir,
+        judgment_id="j2", proposal_id="prop-1", policy_decision="adopt",
+    )
+
+    assert first_a.superseded_by_head is False
+    assert repeat_a.version == 2
+    assert repeat_a.idempotent is True
+    assert repeat_a.superseded_by_head is True
+    assert repeat_a.event_id == first_a.event_id
+    assert repeat_b.version == 3
+    assert repeat_b.superseded_by_head is False
+    assert load_head(log_path, plan_dir).version == 3
+    assert len(_policy_events(log_path, plan_dir)) == 2
+
+
+def test_w10_reuse_committed_policy_marks_superseded_record(
+    tmp_path: Path,
+) -> None:
+    log_path, plan_dir = _store(tmp_path)
+    head = load_head(log_path, plan_dir)
+    plan_a = head.plan.model_copy(update={"artifact_id": "edit-plan-policy-a"})
+    plan_b = head.plan.model_copy(update={"artifact_id": "edit-plan-policy-b"})
+    commit_policy(
+        plan_a, _decision(), log_path, plan_dir,
+        judgment_id="j1", proposal_id="prop-1", policy_decision="adopt",
+    )
+    commit_policy(
+        plan_b, _decision(), log_path, plan_dir,
+        judgment_id="j2", proposal_id="prop-1", policy_decision="adopt",
+    )
+
+    reused_old = reuse_committed_policy(log_path, plan_dir, "j1")
+    reused_head = reuse_committed_policy(log_path, plan_dir, "j2")
+
+    assert reused_old is not None
+    assert reused_old.superseded_by_head is True
+    assert reused_old.version == 2
+    assert reused_head is not None
+    assert reused_head.superseded_by_head is False
+    assert reused_head.version == 3

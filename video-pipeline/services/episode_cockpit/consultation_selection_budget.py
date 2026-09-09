@@ -36,9 +36,21 @@ type BudgetPhase = Literal[
     "director_reserved", "director_settled", "preview_reserved", "preview_settled"
 ]
 type BudgetResult = Literal["succeeded", "failed", "uncertain"]
+type BudgetScope = Literal["sample", "full_episode"]
 
 
 class SelectionBudgetEntryV1(StrictModel):
+    """One selection-attempt ledger line.
+
+    ``scope`` is the sample→full-episode boundary: "sample" lines feed
+    the sample allowance, "full_episode" lines feed only the
+    full-episode allowance — neither gate ever counts the other.
+    ``model_id`` attributes the line to one production model (None =
+    unattributed). ``retry_index`` itemizes internal retries so every
+    attempt of a retried call settles its own line. Absent (defaults)
+    on legacy lines.
+    """
+
     schema_version: Literal["cockpit-selection-budget-v1"] = (
         "cockpit-selection-budget-v1"
     )
@@ -55,6 +67,9 @@ class SelectionBudgetEntryV1(StrictModel):
     preview_seconds_used: Annotated[float, BeforeValidator(float)] = Field(ge=0.0)
     result: BudgetResult | None = None
     failure_code: str | None = None
+    scope: BudgetScope = "sample"
+    model_id: str | None = None
+    retry_index: int = Field(default=0, ge=0, strict=True)
     created_at: str
 
 
@@ -70,16 +85,22 @@ class SelectionAttempt:
     consultation_id: str
     judgment_id: str
     reservation_sequence: int
+    scope: BudgetScope = "sample"
 
 
 def attempt_for(
-    reservation_sequence: int, consultation_id: str, judgment_id: str
+    reservation_sequence: int,
+    consultation_id: str,
+    judgment_id: str,
+    scope: BudgetScope = "sample",
 ) -> SelectionAttempt:
+    suffix = "" if scope == "sample" else f"-{scope}"
     return SelectionAttempt(
-        attempt_id=f"selection-{reservation_sequence}",
+        attempt_id=f"selection-{reservation_sequence}{suffix}",
         consultation_id=consultation_id,
         judgment_id=judgment_id,
         reservation_sequence=reservation_sequence,
+        scope=scope,
     )
 
 
@@ -113,22 +134,41 @@ def load_selection_budget_entries(episode_dir: Path) -> list[SelectionBudgetEntr
 
 
 def selection_budget_used(episode_dir: Path) -> SelectionBudgetUsed:
+    """Sample-scope totals (the sample gate never counts full-episode)."""
+
+    return selection_budget_used_in_scope(episode_dir, "sample")
+
+
+def selection_budget_used_in_scope(
+    episode_dir: Path, scope: BudgetScope
+) -> SelectionBudgetUsed:
+    """Cumulative totals for one scope over the whole journal (no reset).
+
+    Every settled line counts — including failed results and every
+    internal retry's own settle line — so the ledger is the complete
+    call breakdown, not just the first observation per attempt. An open
+    reservation (no matching settle yet) counts as still reserved, so a
+    crash never replays a paid attempt for free.
+    """
+
     by_attempt: dict[str, list[SelectionBudgetEntryV1]] = {}
     for entry in load_selection_budget_entries(episode_dir):
+        if entry.scope != scope:
+            continue
         by_attempt.setdefault(entry.attempt_id, []).append(entry)
     calls = 0
     wall = 0.0
     preview = 0.0
     for rows in by_attempt.values():
-        director_settled = next(
-            (row for row in rows if row.phase == "director_settled"), None
-        )
-        preview_settled = next(
-            (row for row in rows if row.phase == "preview_settled"), None
-        )
-        if director_settled is not None:
-            calls += director_settled.llm_calls_used
-            wall += director_settled.wall_seconds_used
+        director_settled = [
+            row for row in rows if row.phase == "director_settled"
+        ]
+        preview_settled = [
+            row for row in rows if row.phase == "preview_settled"
+        ]
+        if director_settled:
+            calls += sum(row.llm_calls_used for row in director_settled)
+            wall += sum(row.wall_seconds_used for row in director_settled)
         else:
             reserved = next(
                 (row for row in rows if row.phase == "director_reserved"), None
@@ -136,9 +176,9 @@ def selection_budget_used(episode_dir: Path) -> SelectionBudgetUsed:
             if reserved is not None:
                 calls += reserved.llm_calls_reserved
                 wall += reserved.wall_seconds_reserved
-        if preview_settled is not None:
-            wall += preview_settled.wall_seconds_used
-            preview += preview_settled.preview_seconds_used
+        if preview_settled:
+            wall += sum(row.wall_seconds_used for row in preview_settled)
+            preview += sum(row.preview_seconds_used for row in preview_settled)
         else:
             reserved = next(
                 (row for row in rows if row.phase == "preview_reserved"), None
@@ -176,6 +216,8 @@ def _entry(  # noqa: PLR0913 (ledger-line factory; kwargs are the entry contract
     preview_used: float = 0.0,
     result: BudgetResult | None = None,
     failure_code: str | None = None,
+    model_id: str | None = None,
+    retry_index: int = 0,
 ) -> SelectionBudgetEntryV1:
     return SelectionBudgetEntryV1(
         attempt_id=attempt.attempt_id,
@@ -191,29 +233,42 @@ def _entry(  # noqa: PLR0913 (ledger-line factory; kwargs are the entry contract
         preview_seconds_used=preview_used,
         result=result,
         failure_code=failure_code,
+        scope=attempt.scope,
+        model_id=model_id,
+        retry_index=retry_index,
         created_at=_now(),
     )
 
 
 def reserve_director(
-    episode_dir: Path, attempt: SelectionAttempt, wall_allowance: float
+    episode_dir: Path,
+    attempt: SelectionAttempt,
+    wall_allowance: float,
+    *,
+    model_id: str | None = None,
 ) -> SelectionBudgetEntryV1:
-    entry = _entry(attempt, "director_reserved", calls_reserved=1, wall_reserved=wall_allowance)
+    entry = _entry(
+        attempt, "director_reserved", calls_reserved=1,
+        wall_reserved=wall_allowance, model_id=model_id,
+    )
     append_selection_budget_entry(episode_dir, entry)
     return entry
 
 
-def settle_director(
+def settle_director(  # noqa: PLR0913 (ledger-line settle; kwargs are the entry contract)
     episode_dir: Path,
     attempt: SelectionAttempt,
     *,
     wall_elapsed: float,
     result: BudgetResult,
     failure_code: str | None = None,
+    model_id: str | None = None,
+    retry_index: int = 0,
 ) -> SelectionBudgetEntryV1:
     entry = _entry(
         attempt, "director_settled", calls_used=1, wall_used=wall_elapsed,
         result=result, failure_code=failure_code,
+        model_id=model_id, retry_index=retry_index,
     )
     append_selection_budget_entry(episode_dir, entry)
     return entry
@@ -266,6 +321,7 @@ __all__ = [
     "SELECTION_BUDGET_NAME",
     "BudgetPhase",
     "BudgetResult",
+    "BudgetScope",
     "SelectionAttempt",
     "SelectionBudgetEntryV1",
     "SelectionBudgetUsed",
@@ -278,6 +334,7 @@ __all__ = [
     "reserve_director",
     "reserve_preview",
     "selection_budget_used",
+    "selection_budget_used_in_scope",
     "settle_director",
     "settle_preview",
 ]

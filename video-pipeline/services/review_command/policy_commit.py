@@ -15,6 +15,18 @@ before writing, and reports a mid-commit file failure honestly: a
 recovered version returns idempotently, a sealed-but-unrecovered event
 names its recorded version (never a blanket "not reflected"), and only a
 seal-absent failure reports no version.
+
+Item locks (W2): plan items carry ``locked_fields`` (span/text/order/
+source/selection). A policy commit may never change a locked field of a
+carried-over item — even with a correct expected base version and hash —
+nor silently drop the locks themselves: locks propagate through the
+version chain. A violation raises ``policy-locked-field-conflict``
+(surfaced as a conflict outcome, never applied silently).
+
+Record-only idempotency (W10): an idempotent same-policy return compares
+the sealed result version to the CURRENT head. When the head has since
+advanced, the outcome is marked ``superseded_by_head`` — a past result
+the UI must render as record-only, never as currently applied.
 """
 
 from __future__ import annotations
@@ -49,6 +61,55 @@ from services.review_command.store import (
 
 if TYPE_CHECKING:
     from services.contracts.edit_plan_0c import EditPlan0C
+
+
+def locked_field_conflicts(
+    base_plan: EditPlan0C, new_plan: EditPlan0C
+) -> tuple[str, ...]:
+    """Locked item fields the new plan would change or silently drop.
+
+    Compares by ``item_id`` against the CURRENT head plan (the lock
+    source): ``selection`` forbids removing a locked item, ``source``
+    its ``source_id``, ``span`` its frame span, ``text`` its subtitle
+    text, ``order`` its position in the item order. Carried-over items
+    must also keep every base lock (``<item>.locks`` when one is
+    dropped). New items are unconstrained and may carry their own
+    locks. Returns ``<item_id>.<field>`` conflicts, empty when clean.
+    (``presentation``/``audio`` policy aspects have no plan-item field
+    counterpart and are enforced at the outcome layer, not here.)
+    """
+
+    base_items = {item.item_id: item for item in base_plan.plan.items}
+    base_order = [item.item_id for item in base_plan.plan.items]
+    new_items = {item.item_id: item for item in new_plan.plan.items}
+    new_order = [item.item_id for item in new_plan.plan.items]
+    conflicts: list[str] = []
+    for item_id, base in base_items.items():
+        if not base.locked_fields:
+            continue
+        locked = set(base.locked_fields)
+        candidate = new_items.get(item_id)
+        if candidate is None:
+            if "selection" in locked or "order" in locked:
+                conflicts.append(f"{item_id}.selection")
+            continue
+        if "source" in locked and candidate.source_id != base.source_id:
+            conflicts.append(f"{item_id}.source")
+        if "span" in locked and (
+            candidate.span.start_frame != base.span.start_frame
+            or candidate.span.end_frame != base.span.end_frame
+        ):
+            conflicts.append(f"{item_id}.span")
+        if "text" in locked and candidate.subtitle_text != base.subtitle_text:
+            conflicts.append(f"{item_id}.text")
+        if "order" in locked and (
+            base_order.index(item_id) != new_order.index(item_id)
+            or candidate.track_index != base.track_index
+        ):
+            conflicts.append(f"{item_id}.order")
+        if not locked.issubset(set(candidate.locked_fields)):
+            conflicts.append(f"{item_id}.locks")
+    return tuple(conflicts)
 
 
 class PolicyRecoveryError(ReviewCommitError):
@@ -147,6 +208,7 @@ def reuse_committed_policy(
         event_id=event.event_id,
         plan_path=plan_path,
         ir_path=ir_path,
+        superseded_by_head=version != head.version,
     )
 
 
@@ -162,7 +224,13 @@ def commit_policy(  # noqa: PLR0913 (explicit append-only commit fields; kwargs 
     expected_base_version: str | None = None,
     expected_base_plan_sha256: str | None = None,
 ) -> CommitOutcome:
-    """Commit a policy-derived plan as a new version (one apply-step)."""
+    """Commit a policy-derived plan as a new version (one apply-step).
+
+    The pre-commit freshness check (reserved base version + hash) and
+    the seal run back-to-back inside this call with no interleaving
+    writer between them — that unbroken check→commit span IS the
+    no-interruption boundary callers rely on.
+    """
 
     if decision.actor_intent != "operator":
         raise ReviewCommitError(
@@ -189,6 +257,7 @@ def commit_policy(  # noqa: PLR0913 (explicit append-only commit fields; kwargs 
                 event_id=existing.event_id,
                 plan_path=plan_dir / f"plan-v{version}.json",
                 ir_path=plan_dir / f"ir-v{version}.json",
+                superseded_by_head=version != head.version,
             )
         raise ReviewCommitError(
             "policy-idempotency-conflict",
@@ -206,6 +275,13 @@ def commit_policy(  # noqa: PLR0913 (explicit append-only commit fields; kwargs 
                 "policy-base-version-changed",
                 "予約後に編集の版が変わりました。古い版を上書きしていません。",
             )
+    conflicts = locked_field_conflicts(head.plan, new_plan)
+    if conflicts:
+        raise ReviewCommitError(
+            "policy-locked-field-conflict",
+            "ロックされた項目の変更は確定しません "
+            f"({', '.join(conflicts)})。ロックの解除が先です。",
+        )
     new_version = head.version + 1
     plan_path = plan_dir / f"plan-v{new_version}.json"
     ir_path = plan_dir / f"ir-v{new_version}.json"
@@ -334,5 +410,6 @@ __all__ = [
     "build_policy_event",
     "commit_policy",
     "find_policy_event",
+    "locked_field_conflicts",
     "reuse_committed_policy",
 ]

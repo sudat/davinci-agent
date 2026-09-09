@@ -28,6 +28,7 @@ from pydantic import ValidationError
 
 from services.episode_cockpit.consultation_store import (
     canonical_policy_sha256,
+    consultation_write_locked,
     latest_adopted_policy,
     policy_for_judgment,
     policy_scope_list,
@@ -818,31 +819,32 @@ class FileOps(WorkspaceContext):
                 "予約した判断が変わりました。古い判断の編集は確定していません。",
             )
         log_path = episode_dir / REBUILD_LOG_NAME
-        existing = _latest_consultation_reservation(log_path, judgment_id)
-        if existing is not None:
-            return {
-                "stage_hint": existing.stage_hint,
-                "scheduled": bool(existing.run_id),
-                "stages": list(_SELECTION_STAGES),
-                "judgment_id": judgment_id,
-                "reservation_sequence": existing.sequence,
-                "reused": True,
-            }
-        start = PIPELINE_STAGES.index("selection")
-        stop = PIPELINE_STAGES.index("preview")
-        stages = tuple(PIPELINE_STAGES[start : stop + 1])
-        marker = f"consultation-{judgment_id}"
-        base_version, base_sha = _review_base_pin(episode_dir)
-        reservation = RebuildRequestEntry(
-            sequence=self._next_sequence(log_path),
-            stage_hint=",".join(stages),
-            judgment_id=judgment_id,
-            policy_scope=tuple(policy_scope_list(policy)),
-            policy_sha256=canonical_policy_sha256(policy),
-            base_plan_version=base_version,
-            base_plan_sha256=base_sha,
-        )
-        self._append_jsonl(log_path, reservation)  # the 予約 (pre-spawn reservation)
+        with consultation_write_locked(episode_dir):
+            existing = _latest_consultation_reservation(log_path, judgment_id)
+            if existing is not None:
+                return {
+                    "stage_hint": existing.stage_hint,
+                    "scheduled": bool(existing.run_id),
+                    "stages": list(_SELECTION_STAGES),
+                    "judgment_id": judgment_id,
+                    "reservation_sequence": existing.sequence,
+                    "reused": True,
+                }
+            start = PIPELINE_STAGES.index("selection")
+            stop = PIPELINE_STAGES.index("preview")
+            stages = tuple(PIPELINE_STAGES[start : stop + 1])
+            marker = f"consultation-{judgment_id}"
+            base_version, base_sha = _review_base_pin(episode_dir)
+            reservation = RebuildRequestEntry(
+                sequence=self._next_sequence(log_path),
+                stage_hint=",".join(stages),
+                judgment_id=judgment_id,
+                policy_scope=tuple(policy_scope_list(policy)),
+                policy_sha256=canonical_policy_sha256(policy),
+                base_plan_version=base_version,
+                base_plan_sha256=base_sha,
+            )
+            self._append_jsonl(log_path, reservation)  # the 予約 (pre-spawn reservation)
         run_id = uuid.uuid4().hex[:12]
         try:
             _spawn_runner(

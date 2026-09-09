@@ -40,6 +40,7 @@ _DETAILS = {
     "reference_mapping": "参考1の構成を踏襲",
     "unused_reasons": "未使用素材はなし",
     "unconfirmed": ["尺の希望"],
+    "presentation_condition": "normal",
 }
 
 

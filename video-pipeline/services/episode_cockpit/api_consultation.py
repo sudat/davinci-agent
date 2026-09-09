@@ -54,9 +54,11 @@ from services.episode_cockpit.consultation_store import (
     consume_budget,
     derive_policy_rebuild,
     ensure_budget_available,
+    ensure_model_call_budget_available,
     latest_adopted_policy,
     load_budget_limits,
     load_consultations,
+    load_policy_rebuild_entries,
     now_stamp,
     policy_for_judgment,
     require_consultation,
@@ -142,6 +144,9 @@ class ConsultationJudgmentRequest(StrictModel):
 
     ``proposal_id=None`` judges the consultation as a whole. An unknown
     decision word (or an empty one) fails validation → typed 4xx.
+    ``operation_id`` names the adoption operation for late re-sends: the
+    same id dedupes against the whole journal (never just the latest
+    row); a deliberate re-adoption carries a NEW id and appends anew.
     """
 
     consultation_id: NonEmpty
@@ -149,6 +154,7 @@ class ConsultationJudgmentRequest(StrictModel):
     decision: Literal["adopt", "revise", "reject", "both_wrong", "delegate"]
     scope: ConsultationScope
     note: str | None = None
+    operation_id: str | None = None
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -345,6 +351,16 @@ def build_consultation_llm_call(
     return None
 
 
+def _consultation_model_id() -> str | None:
+    """The pinned consultation model id, when the pin names one (None = unattributed)."""
+
+    pin = _read_json_object(_CONFIG_ROOT / PIN_RELATIVE)
+    if pin is None:
+        return None
+    model_id = pin.get("model_id")
+    return model_id if isinstance(model_id, str) and model_id else None
+
+
 @router.get("/episodes/{episode_id}/consultation")
 def consultation_list(episode_id: str, workspace: Workspace) -> dict[str, object]:
     episode_dir = _episode_dir(workspace, episode_id)
@@ -368,6 +384,23 @@ def consultation_message(
     episode_dir = _episode_dir(workspace, episode_id)
     limits = load_budget_limits()
     ensure_budget_available(episode_dir, limits)
+    model_id = _consultation_model_id()
+    ensure_model_call_budget_available(episode_dir, limits, model_id)
+    input_bytes = len(request.message.encode("utf-8"))
+    if (
+        limits.max_input_bytes_per_call is not None
+        and input_bytes > limits.max_input_bytes_per_call
+    ):
+        consume_budget(
+            episode_dir, "unassigned",
+            llm_calls=0, intervals=0, wall_seconds=0.0,
+            model_id=model_id, input_bytes=input_bytes,
+            failure_code="consultation-input-over-cap",
+        )
+        raise CockpitUnprocessableError(
+            "consultation-input-over-cap",
+            "相談文が1回あたりの上限を超えたため、AIに送りませんでした。",
+        )
     llm = build_consultation_llm_call()
     if llm is None:
         raise CockpitUnprocessableError(
@@ -380,11 +413,43 @@ def consultation_message(
     try:
         raw = llm(request.message)
     except Exception as error:
+        consume_budget(
+            episode_dir, "unassigned",
+            llm_calls=1, intervals=1,
+            wall_seconds=time.monotonic() - started,
+            model_id=model_id, input_bytes=input_bytes,
+            failure_code="consultation-llm-failed",
+        )
         raise CockpitUnprocessableError(
             "consultation-llm-failed", f"the consultation model call failed: {error}"
         ) from error
     wall_seconds = time.monotonic() - started
-    proposals = _proposals_from_response(raw)
+    output_bytes = len(json.dumps(raw, ensure_ascii=False).encode("utf-8"))
+    try:
+        proposals = _proposals_from_response(raw)
+    except CockpitUnprocessableError as error:
+        consume_budget(
+            episode_dir, "unassigned",
+            llm_calls=1, intervals=1, wall_seconds=wall_seconds,
+            model_id=model_id, input_bytes=input_bytes,
+            output_bytes=output_bytes, failure_code=error.code,
+        )
+        raise
+    if (
+        limits.max_output_bytes_per_call is not None
+        and output_bytes > limits.max_output_bytes_per_call
+    ):
+        consume_budget(
+            episode_dir, "unassigned",
+            llm_calls=1, intervals=1, wall_seconds=wall_seconds,
+            model_id=model_id, input_bytes=input_bytes,
+            output_bytes=output_bytes,
+            failure_code="consultation-output-over-cap",
+        )
+        raise CockpitUnprocessableError(
+            "consultation-output-over-cap",
+            "AIの回答が1回あたりの上限を超えたため、採用せず破棄しました。",
+        )
     record = ConsultationRecordV1(
         consultation_id=uuid.uuid4().hex[:12],
         created_at=now_stamp(),
@@ -405,9 +470,54 @@ def consultation_message(
         llm_calls=1,
         intervals=1,
         wall_seconds=wall_seconds,
+        model_id=model_id,
+        input_bytes=input_bytes,
+        output_bytes=output_bytes,
     )
     snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
     return consultation_view(episode_dir, record, limits, snapshot=snapshot)
+
+
+def _recover_unreserved_judgment(
+    workspace: CockpitWorkspace,
+    episode_id: str,
+    episode_dir: Path,
+    judgment_id: str,
+) -> str:
+    """One crash-window recovery step for a re-sent (deduped) judgment.
+
+    Returns "completed" when the re-send provably found no reservation
+    attempt (no rebuild-log row at all) for a still-latest adoptable
+    judgment with nothing running — the missing reservation is then
+    completed inline. Returns "deferred_running" when another rebuild
+    is active (the judgment stays saved-unreserved; the caller guides
+    a post-stop re-send instead of duplicating). Anything else —
+    unresolvable policy, superseded adoption, ambiguous rows — is an
+    honest stop: no reservation is attempted and "stopped" is returned.
+    """
+
+    try:
+        policy_for_judgment(episode_dir, judgment_id)
+    except Exception:  # noqa: BLE001 (unresolvable judgment: stop honestly)
+        return "stopped"
+    latest = latest_adopted_policy(episode_dir)
+    if latest is None or latest.judgment_id != judgment_id:
+        return "stopped"
+    linked = [
+        entry
+        for entry in load_policy_rebuild_entries(episode_dir)
+        if entry.judgment_id == judgment_id
+    ]
+    if linked:
+        return "stopped"
+    snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
+    if selection_rebuild_active(episode_dir, snapshot.stage_runs):
+        return "deferred_running"
+    try:
+        workspace.record_consultation_rebuild(episode_id, judgment_id=judgment_id)
+    except Exception:  # noqa: BLE001 (conflict/frozen/unready: stop honestly)
+        return "stopped"
+    return "completed"
 
 
 @router.post("/episodes/{episode_id}/consultation/judgment")
@@ -442,10 +552,22 @@ def consultation_judgment(
         decision=request.decision,
         scope=request.scope,
         note=request.note,
+        operation_id=request.operation_id,
     )
     judgment_id = judgment.judgment_id
     snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
     if not appended:
+        recovery = _recover_unreserved_judgment(
+            workspace, episode_id, episode_dir, judgment_id
+        )
+        if recovery == "completed":
+            refreshed = workspace._require_snapshot(episode_id)  # noqa: SLF001
+            return JSONResponse(
+                status_code=202,
+                content=consultation_view(
+                    episode_dir, record, limits, snapshot=refreshed
+                ),
+            )
         try:
             policy = policy_for_judgment(episode_dir, judgment_id)
         except Exception:  # noqa: BLE001 (unresolvable duplicate falls back to latest)
@@ -453,11 +575,25 @@ def consultation_judgment(
         state = derive_policy_rebuild(
             episode_dir, policy, snapshot.stage_runs
         ).get("status")
+        content = consultation_view(
+            episode_dir, record, limits, snapshot=snapshot
+        )
+        if recovery == "deferred_running":
+            content = {
+                **content,
+                "reservation_recovery": {
+                    "status": "deferred_running",
+                    "judgment_id": judgment_id,
+                    "detail": (
+                        "実行中の作り直しがあるため、この判断の予約はまだです。"
+                        "実行中の処理が終わってから同じ内容をもう一度送ると、"
+                        "重複なく予約します。"
+                    ),
+                },
+            }
         return JSONResponse(
             status_code=202 if state in ("requested", "running") else 200,
-            content=consultation_view(
-                episode_dir, record, limits, snapshot=snapshot
-            ),
+            content=content,
         )
     policy = latest_adopted_policy(episode_dir)
     scope_adopted = (

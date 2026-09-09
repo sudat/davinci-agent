@@ -88,6 +88,7 @@ def render_adopted_policy_text(summary: AdoptedPolicySummaryV1 | None) -> str | 
         f"subtitle_policy: {summary.subtitle_policy}",
         f"audio_policy: {summary.audio_policy}",
         f"tempo_policy: {summary.tempo_policy}",
+        f"presentation_condition: {summary.presentation_condition}",
         f"reference_mapping: {summary.reference_mapping}",
         f"unused_reasons: {summary.unused_reasons}",
         f"unconfirmed: {', '.join(summary.unconfirmed) or '—'}",

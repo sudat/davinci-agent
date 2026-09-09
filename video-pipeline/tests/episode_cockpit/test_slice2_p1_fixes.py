@@ -14,6 +14,7 @@ import hashlib
 import io
 import json
 import os
+import threading
 import time as time_module
 from collections.abc import Iterator
 from pathlib import Path
@@ -37,6 +38,7 @@ from services.contracts.edit_plan_0c import (
 )
 from services.contracts.primitives import Producer, RationalFrameRate, SourceFrameSpan
 from services.editorial.prompt import render_adopted_policy_text
+from services.episode_cockpit import api_consultation as consultation_api
 from services.episode_cockpit import episode_files
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.backend import CockpitWorkspace
@@ -45,12 +47,14 @@ from services.episode_cockpit.consultation_selection_budget import (
     reserve_director,
     reserve_preview,
     selection_budget_used,
+    selection_budget_used_in_scope,
     settle_director,
     settle_preview,
 )
 from services.episode_cockpit.consultation_store import (
     CONNECTED_POLICY_FIELDS,
     STRUCTURAL_REALIZED_CHECKS,
+    ConsultationBudgetLimits,
     ConsultationJudgmentV1,
     ConsultationPolicyOutcomeV1,
     ConsultationProposalDetails,
@@ -68,12 +72,15 @@ from services.episode_cockpit.consultation_store import (
     consultation_view,
     consume_budget,
     derive_policy_rebuild,
+    ensure_full_episode_budget_available,
+    ensure_model_call_budget_available,
     ensure_preview_budget_available,
     latest_adopted_policy,
     load_budget_limits,
     load_consultations,
     load_judgments,
     load_policy_outcomes,
+    model_attributed_calls,
     now_stamp,
     policy_for_judgment,
     policy_scope_list,
@@ -98,7 +105,11 @@ from services.job_runner.transitions import (
 from services.preview.tools import _capped
 from services.review_command import commit as commit_module
 from services.review_command import policy_commit as policy_commit_module
-from services.review_command.policy_commit import commit_policy, find_policy_event
+from services.review_command.policy_commit import (
+    commit_policy,
+    find_policy_event,
+    reuse_committed_policy,
+)
 from services.review_command.store import (
     OperatorDecision0C,
     initialize_store,
@@ -249,7 +260,7 @@ def _fake_ok(  # noqa: PLR0913 (fake-seam wiring: monkeypatch + capture + behavi
             outcome=SimpleNamespace(request_hash="req-hash-1"),
         )
 
-    def fake_derive(episode_root: Path, rerun: object) -> EditPlan0C:
+    def fake_derive(episode_root: Path, rerun: object, policy: object = None) -> EditPlan0C:
         if plan_factory is not None:
             return plan_factory(episode_root)
         head = load_head(
@@ -1236,7 +1247,10 @@ def test_connected_outcome_lists_only_structural_realized_checks(
         ),
         (
             {"composition": False, "appearance": False, "audio": True},
-            ("BGM・音量・音付きテンポが方針どおりか",),
+            (
+                "BGM・音量・音付きテンポが方針どおりか",
+                "audio_policy_detail: BGM・音量・音付きテンポの指定は見本の音設定にないため未対応",
+            ),
         ),
     ],
 )
@@ -1604,3 +1618,417 @@ def test_a_then_b_interleaving_preserves_b_as_current_policy(
     outcomes = load_policy_outcomes(episode_dir)
     assert outcomes[-2].status == "connected"
     assert outcomes[-1].status == "failed"
+
+
+def _judgment_kwargs(note: str = "構成だけ採用") -> dict[str, Any]:
+    return {
+        "consultation_id": "c1",
+        "proposal_id": "prop-1",
+        "decision": "adopt",
+        "scope": ConsultationScope(
+            composition=True, appearance=False, audio=False
+        ),
+        "note": note,
+    }
+
+
+def test_w1_late_resend_dedupes_against_journal_not_latest(
+    tmp_path: Path,
+) -> None:
+    episode_dir = tmp_path / "ep-w1-late"
+    episode_dir.mkdir()
+    _seed_consultation(episode_dir)
+
+    adopted_a, _ = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs("A案を採用")
+    )
+    adopted_b, _ = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs("B案へ変更")
+    )
+    late_a, appended = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs("A案を採用")
+    )
+
+    assert appended is False
+    assert late_a.judgment_id == adopted_a.judgment_id
+    assert len(load_judgments(episode_dir)) == 2
+    policy = latest_adopted_policy(episode_dir)
+    assert policy is not None
+    assert policy.judgment_id == adopted_b.judgment_id
+
+
+def test_w1_deliberate_readoption_with_new_operation_id_appends(
+    tmp_path: Path,
+) -> None:
+    episode_dir = tmp_path / "ep-w1-deliberate"
+    episode_dir.mkdir()
+    _seed_consultation(episode_dir)
+
+    first, _ = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs(), operation_id="op-1"
+    )
+    deliberate, appended_new = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs(), operation_id="op-2"
+    )
+    resend, appended_resend = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs(), operation_id="op-1"
+    )
+
+    assert appended_new is True
+    assert deliberate.judgment_id != first.judgment_id
+    assert appended_resend is False
+    assert resend.judgment_id == first.judgment_id
+    assert len(load_judgments(episode_dir)) == 2
+
+
+def test_w1_concurrent_posts_serialized_to_single_row(tmp_path: Path) -> None:
+    episode_dir = tmp_path / "ep-w1-race"
+    episode_dir.mkdir()
+    _seed_consultation(episode_dir)
+    barrier = threading.Barrier(8)
+    results: list[tuple[str, bool]] = []
+
+    def post_once() -> None:
+        barrier.wait()
+        judgment, appended = append_effective_judgment_once(
+            episode_dir, **_judgment_kwargs()
+        )
+        results.append((judgment.judgment_id, appended))
+
+    threads = [threading.Thread(target=post_once) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(load_judgments(episode_dir)) == 1
+    assert {judgment_id for judgment_id, _ in results} == {
+        load_judgments(episode_dir)[0].judgment_id
+    }
+    assert sum(1 for _, appended in results if appended) == 1
+
+
+def test_w3_crash_window_resend_completes_unattempted_reservation(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    episode_id, episode_dir = _api_episode_with_seed(client, workspace, source_folder)
+    judgment, _ = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs()
+    )
+    spawns_before = len(runner_spawn_calls)
+
+    resend = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_judgment_payload(),
+    )
+
+    assert resend.status_code == 202
+    assert resend.json()["judgments"][-1]["judgment_id"] == judgment.judgment_id
+    assert len(runner_spawn_calls) == spawns_before + 1
+    reserved = [
+        entry
+        for entry in load_rebuild_entries(episode_dir)
+        if entry.judgment_id == judgment.judgment_id and not entry.spawned
+    ]
+    assert len(reserved) == 1
+
+
+def test_w3_unknown_state_stops_honestly_without_reservation(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    episode_id, episode_dir = _api_episode_with_seed(client, workspace, source_folder)
+    older, _ = append_effective_judgment_once(
+        episode_dir, **_judgment_kwargs("古いA案")
+    )
+    newer = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_judgment_payload("新しいB案"),
+    )
+    assert newer.status_code == 202
+    rebuilds_before = _journal_counts(episode_dir)["rebuilds"]
+
+    resend_old = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_judgment_payload("古いA案"),
+    )
+
+    assert resend_old.status_code == 200
+    resend_ids = [
+        judgment["judgment_id"] for judgment in resend_old.json()["judgments"]
+    ]
+    assert resend_ids == [older.judgment_id, newer.json()["judgments"][-1]["judgment_id"]]
+    assert "reservation_recovery" not in resend_old.json()
+    assert _journal_counts(episode_dir)["rebuilds"] == rebuilds_before
+    assert not [
+        entry
+        for entry in load_rebuild_entries(episode_dir)
+        if entry.judgment_id == older.judgment_id
+    ]
+
+
+def test_w3_running_a_saved_b_guides_resume_without_duplication(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    episode_id, episode_dir = _api_episode_with_seed(client, workspace, source_folder)
+    first = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_judgment_payload("A案を採用"),
+    )
+    assert first.status_code == 202
+    saved_b = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_judgment_payload("B案へ変更"),
+    )
+    assert saved_b.status_code == 200
+    judgment_b = saved_b.json()["judgments"][-1]["judgment_id"]
+    rebuilds_before = _journal_counts(episode_dir)["rebuilds"]
+
+    guided = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_judgment_payload("B案へ変更"),
+    )
+
+    assert guided.status_code == 200
+    assert guided.json()["judgments"][-1]["judgment_id"] == judgment_b
+    recovery = guided.json()["reservation_recovery"]
+    assert recovery["status"] == "deferred_running"
+    assert recovery["judgment_id"] == judgment_b
+    assert _journal_counts(episode_dir)["rebuilds"] == rebuilds_before
+    assert not [
+        entry
+        for entry in load_rebuild_entries(episode_dir)
+        if entry.judgment_id == judgment_b
+    ]
+
+    argv = cast("list[str]", runner_spawn_calls[-1]["argv"])
+    run_id = argv[argv.index("--run-id") + 1]
+    with StateStore.open(workspace["state_store"]) as store:
+        record_stage(
+            store,
+            RunContext(
+                workspace["state_store"], episode_id, run_id, "PREVIEW_READY",
+                io.BytesIO(),
+            ),
+            "preview",
+            "succeeded",
+            adopted="0" * 64,
+        )
+
+    resumed = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_judgment_payload("B案へ変更"),
+    )
+
+    assert resumed.status_code == 202
+    reserved_b = [
+        entry
+        for entry in load_rebuild_entries(episode_dir)
+        if entry.judgment_id == judgment_b and not entry.spawned
+    ]
+    assert len(reserved_b) == 1
+
+
+def test_w4_proposal_transport_failure_consumes_cumulative_budget(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _api_episode_with_seed(client, workspace, source_folder)
+    before = budget_used(episode_dir)
+
+    def boom(_message: str) -> dict:
+        raise RuntimeError("line down")
+
+    monkeypatch.setattr(consultation_api, "build_consultation_llm_call", lambda: boom)
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/message",
+        json={"message": "短くしたい"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "consultation-llm-failed"
+    used = budget_used(episode_dir)
+    assert used.llm_calls == before.llm_calls + 1
+    assert used.intervals == before.intervals + 1
+
+
+def test_w4_unusable_envelope_still_settles_its_spend(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _api_episode_with_seed(client, workspace, source_folder)
+    before = budget_used(episode_dir)
+    monkeypatch.setattr(
+        consultation_api, "build_consultation_llm_call", lambda: (lambda _m: {})
+    )
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/message",
+        json={"message": "短くしたい"},
+    )
+
+    assert response.status_code == 422
+    assert budget_used(episode_dir).llm_calls == before.llm_calls + 1
+
+
+def test_w4_input_byte_cap_fails_closed_before_any_model_contact(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _api_episode_with_seed(client, workspace, source_folder)
+    before = _journal_counts(episode_dir)["budget"]
+
+    def tiny_limits() -> ConsultationBudgetLimits:
+        limits = load_budget_limits()
+        return limits.model_copy(update={"max_input_bytes_per_call": 1})
+
+    monkeypatch.setattr(consultation_api, "load_budget_limits", tiny_limits)
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/message",
+        json={"message": "短くしたい"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "consultation-input-over-cap"
+    assert _journal_counts(episode_dir)["budget"] == before + 1
+
+
+def test_w4_per_model_call_cap_binds_only_what_it_names(tmp_path: Path) -> None:
+    episode_dir = tmp_path / "ep-w4-model"
+    episode_dir.mkdir()
+    limits = ConsultationBudgetLimits(per_model_llm_calls_limit={"model-x": 1})
+
+    ensure_model_call_budget_available(episode_dir, limits, "model-x")
+    ensure_model_call_budget_available(episode_dir, limits, "unlisted-model")
+    ensure_model_call_budget_available(episode_dir, limits, None)
+    consume_budget(
+        episode_dir, "c1", llm_calls=1, intervals=1, wall_seconds=1.0,
+        model_id="model-x",
+    )
+
+    assert model_attributed_calls(episode_dir, "model-x") == 1
+    assert model_attributed_calls(episode_dir, "other-model") == 0
+    with pytest.raises(CockpitUnprocessableError) as exc_info:
+        ensure_model_call_budget_available(episode_dir, limits, "model-x")
+    assert exc_info.value.code == "consultation-model-budget-exhausted"
+    ensure_model_call_budget_available(episode_dir, limits, "unlisted-model")
+
+
+def test_w4_retry_breakdown_every_settle_line_counts(tmp_path: Path) -> None:
+    episode_dir = tmp_path / "ep-w4-retry"
+    episode_dir.mkdir()
+    attempt = attempt_for(1, "c1", "j1")
+
+    reserve_director(episode_dir, attempt, 120.0)
+    settle_director(
+        episode_dir, attempt, wall_elapsed=10.0,
+        result="failed", failure_code="director-timeout",
+    )
+    settle_director(
+        episode_dir, attempt, wall_elapsed=5.0,
+        result="succeeded", retry_index=1,
+    )
+
+    used = selection_budget_used(episode_dir)
+    assert used.llm_calls == 2
+    assert used.wall_seconds == pytest.approx(15.0)
+
+
+def test_w4_sample_full_episode_budget_boundary(tmp_path: Path) -> None:
+    episode_dir = tmp_path / "ep-w4-scope"
+    episode_dir.mkdir()
+    sample = attempt_for(1, "c1", "j1")
+    reserve_director(episode_dir, sample, 120.0)
+    settle_director(episode_dir, sample, wall_elapsed=10.0, result="succeeded")
+    full = attempt_for(2, "c1", "j1", scope="full_episode")
+    reserve_director(episode_dir, full, 120.0)
+    settle_director(episode_dir, full, wall_elapsed=20.0, result="succeeded")
+
+    assert selection_budget_used(episode_dir).llm_calls == 1
+    full_used = selection_budget_used_in_scope(episode_dir, "full_episode")
+    assert full_used.llm_calls == 1
+    assert full_used.wall_seconds == pytest.approx(20.0)
+    tight = ConsultationBudgetLimits(full_episode_llm_calls_limit=1)
+    with pytest.raises(CockpitUnprocessableError) as exc_info:
+        ensure_full_episode_budget_available(episode_dir, tight)
+    assert exc_info.value.code == "consultation-full-episode-budget-exhausted"
+    ensure_full_episode_budget_available(episode_dir, ConsultationBudgetLimits())
+
+
+def test_w4_remaining_deadline_applies_to_all_paths(tmp_path: Path) -> None:
+    episode_dir = _episode_with_policy(tmp_path)
+    reservation = _reserve(episode_dir, "j1")
+    attempt = attempt_for(reservation.sequence, "c1", "j1")
+    settle_director(
+        episode_dir, attempt, wall_elapsed=600.0,
+        result="failed", failure_code="director-timeout",
+    )
+
+    with pytest.raises(RebuildStageError) as exc_info:
+        episode_runner_rebuild._run_stage(
+            "compile", episode_dir, episode_runner_rebuild.ReentryState(),
+            io.BytesIO(), run_id="run-deadline-1",
+            reservation_sequence=reservation.sequence,
+            job_status="PREVIEW_READY",
+        )
+    assert exc_info.value.code == "consultation-selection-deadline-exceeded"
+
+
+def test_w10_reused_commit_records_superseded_outcome_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    episode_dir = _episode_with_policy(tmp_path)
+    _live_env(monkeypatch)
+    log_path = episode_dir / "review" / "events.jsonl"
+    plan_dir = episode_dir / "review" / "store"
+    head = load_head(log_path, plan_dir)
+    decision = OperatorDecision0C(
+        decision_id="dec-test", actor_intent="operator", note="adopt"
+    )
+    commit_policy(
+        head.plan.model_copy(update={"artifact_id": "edit-plan-policy-a"}),
+        decision, log_path, plan_dir,
+        judgment_id="j1", proposal_id="prop-1", policy_decision="adopt",
+    )
+    _judge(episode_dir, "j2", note="第二案")
+    commit_policy(
+        head.plan.model_copy(update={"artifact_id": "edit-plan-policy-b"}),
+        decision, log_path, plan_dir,
+        judgment_id="j2", proposal_id="prop-1", policy_decision="adopt",
+    )
+    reservation = _reserve(episode_dir, "j1")
+    reused = reuse_committed_policy(log_path, plan_dir, "j1")
+
+    assert reused is not None
+    assert reused.version == 2
+    assert reused.superseded_by_head is True
+    policy = policy_for_judgment(episode_dir, "j1")
+    episode_runner_rebuild._connected_outcome(
+        episode_dir, policy, plan_version="v2",
+        reservation_sequence=reservation.sequence, run_id=None,
+        commit_event_id=reused.event_id, director_request_hash=None,
+        reused=True, superseded_by_head=reused.superseded_by_head,
+    )
+
+    rows = [
+        outcome for outcome in load_policy_outcomes(episode_dir)
+        if outcome.judgment_id == "j1"
+    ]
+    assert rows[-1].plan_version == "v2"
+    assert rows[-1].superseded_by_head is True

@@ -98,6 +98,10 @@ from services.episode_cockpit.consultation_store import (
 )
 from services.episode_cockpit.errors import CockpitNotFoundError, CockpitUnprocessableError
 from services.episode_cockpit.models import RebuildRequestEntry
+from services.episode_cockpit.policy_settings import (
+    PolicySettingEntryV1,
+    derive_policy_settings,
+)
 from services.episode_cockpit.review_chat import PIPELINE_STAGES
 from services.foundation_io import sha256_file
 from services.preview.models import AppliedDecision
@@ -432,6 +436,9 @@ def _connected_outcome(  # noqa: PLR0913 (outcome evidence contract; kwargs are 
     commit_event_id: str | None,
     director_request_hash: str | None,
     reused: bool = False,
+    applied_settings: tuple[PolicySettingEntryV1, ...] = (),
+    settings_unaddressed: tuple[str, ...] = (),
+    superseded_by_head: bool | None = None,
 ) -> None:
     append_policy_outcome_once(
         episode_root,
@@ -464,8 +471,10 @@ def _connected_outcome(  # noqa: PLR0913 (outcome evidence contract; kwargs are 
             policy_prompt_sha256=_policy_prompt_sha(policy),
             connected_fields=tuple(CONNECTED_POLICY_FIELDS),
             realized_checks=tuple(STRUCTURAL_REALIZED_CHECKS),
-            unaddressed=unaddressed_for_scope(policy),
+            unaddressed=tuple(unaddressed_for_scope(policy)) + tuple(settings_unaddressed),
             unconfirmed=unconfirmed_for_policy(policy),
+            applied_settings=tuple(applied_settings),
+            superseded_by_head=superseded_by_head,
         ),
     )
 
@@ -521,6 +530,7 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
                         commit_event_id=reused.event_id,
                         director_request_hash=None,
                         reused=True,
+                        superseded_by_head=reused.superseded_by_head,
                     )
                     log_event(
                         log, "policy_selection_committed",
@@ -645,7 +655,7 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
             result="succeeded",
         )
     try:
-        new_plan = episode_runner_selection.derive_policy_plan(episode_root, rerun)
+        new_plan = episode_runner_selection.derive_policy_plan(episode_root, rerun, policy)
     except episode_runner_selection.PolicyDerivationError as error:
         _failed_outcome(
             episode_root, policy, (f"{error.code}: {error.detail}",),
@@ -753,6 +763,7 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
             director_request_hash=request_hash,
         )
         raise RebuildStageError(code, str(error)) from error
+    settings = derive_policy_settings(policy)
     _connected_outcome(
         episode_root, policy,
         plan_version=f"v{outcome.version}",
@@ -760,6 +771,9 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
         run_id=run_id,
         commit_event_id=outcome.event_id,
         director_request_hash=request_hash,
+        applied_settings=settings.entries,
+        settings_unaddressed=settings.unaddressed,
+        superseded_by_head=outcome.superseded_by_head,
     )
     log_event(
         log, "policy_selection_committed", policy=policy.judgment_id,
@@ -1072,11 +1086,21 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
     Entering at compile/preview hydrates the missing head/IR itself (the
     review store is an idempotent read), so every legal ``--from-stage``
     value is self-sufficient without re-running earlier stages. A
-    selection re-entry with a reservation executes the pinned judgment
+    selection     re-entry with a reservation executes the pinned judgment
     (never the latest policy); without one it keeps the legacy
     latest-policy behavior.
     """
 
+    if reservation_sequence is not None and stage != "selection":
+        # W4: the remaining wall budget bounds EVERY re-entry path, not
+        # just the director call and the preview render — a reserved run
+        # whose allowance is already spent stops before plan/compile work.
+        remaining = remaining_wall_seconds(episode_root, load_budget_limits())
+        if remaining <= 0:
+            raise RebuildStageError(
+                "consultation-selection-deadline-exceeded",
+                "この相談の処理時間上限に達したため、続きを確定していません。",
+            )
     if stage == "selection":
         if reservation_sequence is not None:
             remaining = remaining_wall_seconds(episode_root, load_budget_limits())
