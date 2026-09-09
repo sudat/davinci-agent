@@ -61,6 +61,35 @@ if TYPE_CHECKING:
 
     from services.contracts.timeline_ir import TimelineIr0C
 
+
+def _locked_reentry_run(
+    episode_dir: Path,
+    *,
+    state_store_path: Path,
+    from_stage: str,
+    applied_command: str,
+) -> int:
+    """Direct re-entry holding a real inherited-lock descriptor (P1 proof).
+
+    Production re-entries inherit ``runner.lock`` through the spawn; direct
+    test calls hold it explicitly and pass the descriptor, or the runner
+    refuses fail-closed with ``runner-lock-not-held``.
+    """
+
+    fd = os.open(episode_dir / "runner.lock", os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return episode_runner.run(
+            episode_root=episode_dir,
+            stop="PREVIEW_READY",
+            state_store_path=state_store_path,
+            from_stage=from_stage,
+            applied_command=applied_command,
+            runner_lock_fd=fd,
+        )
+    finally:
+        os.close(fd)
+
 PIPELINE_ROOT = Path(episode_ops.__file__).resolve().parents[2]
 RATE = RationalFrameRate(num=30, den=1)
 REMOVE_TEXT = "1秒のところを削除して"
@@ -180,6 +209,8 @@ def _fake_stage_preview(  # noqa: PLR0913 (mirrors the real stage_preview seam)
     log: BinaryIO,
     *,
     run_id: str,
+    selection_attempt: object = None,
+    preview_timeout_seconds: float | None = None,
 ) -> str:
     """Rebuild preview seam: version-tagged bytes, then the REAL ordering —
     bundle hand-off (_update_bundle) BEFORE publish; the publish event's
@@ -333,9 +364,8 @@ def test_remove_section_rebuild_executes_stop_bounded_lineage(
     )
 
     monkeypatch.setattr(episode_runner_rebuild, "stage_preview", _fake_stage_preview)
-    exit_code = episode_runner.run(
-        episode_root=episode_dir,
-        stop="PREVIEW_READY",
+    exit_code = _locked_reentry_run(
+        episode_dir,
         state_store_path=workspace["state_store"],
         from_stage="plan",
         applied_command=str(applied["command_id"]),
@@ -464,9 +494,8 @@ def test_multi_draft_apply_two_commands_one_union_rebuild(
     )
 
     monkeypatch.setattr(episode_runner_rebuild, "stage_preview", _fake_stage_preview)
-    exit_code = episode_runner.run(
-        episode_root=episode_dir,
-        stop="PREVIEW_READY",
+    exit_code = _locked_reentry_run(
+        episode_dir,
         state_store_path=workspace["state_store"],
         from_stage="plan",
         applied_command=str(body["applied_commands"][0]["command_id"]),
@@ -626,9 +655,8 @@ def test_reentry_blocked_when_episode_not_preview_ready(
     episode_id = str(body["episode_id"])
     episode_dir = workspace["episodes_root"] / episode_id
 
-    exit_code = episode_runner.run(
-        episode_root=episode_dir,
-        stop="PREVIEW_READY",
+    exit_code = _locked_reentry_run(
+        episode_dir,
         state_store_path=workspace["state_store"],
         from_stage="plan",
         applied_command="rcmd-neverapplied",
@@ -652,9 +680,8 @@ def test_reentry_at_preview_only_rerenders_latest_version(
     applied = _apply_remove(client, episode_id)
     monkeypatch.setattr(episode_runner_rebuild, "stage_preview", _fake_stage_preview)
 
-    exit_code = episode_runner.run(
-        episode_root=episode_dir,
-        stop="PREVIEW_READY",
+    exit_code = _locked_reentry_run(
+        episode_dir,
         state_store_path=workspace["state_store"],
         from_stage="preview",
         applied_command=str(applied["command_id"]),

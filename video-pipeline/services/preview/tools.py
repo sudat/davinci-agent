@@ -101,8 +101,16 @@ def load_pinned_tools(lock_path: Path = PHASE_0C_LOCK) -> PinnedTools:
     return tools
 
 
+def _capped(default_seconds: int, timeout_seconds: float | None) -> float:
+    if timeout_seconds is None:
+        return float(default_seconds)
+    return min(float(default_seconds), timeout_seconds)
+
+
 def run_bounded(
-    argv: tuple[str, ...] | list[str], *, timeout_seconds: int = FFMPEG_TIMEOUT_SECONDS
+    argv: tuple[str, ...] | list[str],
+    *,
+    timeout_seconds: float = FFMPEG_TIMEOUT_SECONDS,
 ) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
@@ -126,7 +134,13 @@ def _parse_probe(payload: str) -> ProbeReport:
     return report
 
 
-def probe_file(tools: PinnedTools, path: Path, *, count_frames: bool = False) -> ProbeReport:
+def probe_file(
+    tools: PinnedTools,
+    path: Path,
+    *,
+    count_frames: bool = False,
+    timeout_seconds: float | None = None,
+) -> ProbeReport:
     tools.verify_current()
     argv = [
         str(tools.ffprobe),
@@ -140,7 +154,9 @@ def probe_file(tools: PinnedTools, path: Path, *, count_frames: bool = False) ->
     if count_frames:
         argv.append("-count_frames")
     argv.append(str(path))
-    result = run_bounded(argv, timeout_seconds=PROBE_TIMEOUT_SECONDS)
+    result = run_bounded(
+        argv, timeout_seconds=_capped(PROBE_TIMEOUT_SECONDS, timeout_seconds)
+    )
     if result.returncode != 0 or not result.stdout.strip():
         raise PreviewVerificationError(
             f"ffprobe failed for {path}: exit={result.returncode} {result.stderr.strip()}"
@@ -148,7 +164,9 @@ def probe_file(tools: PinnedTools, path: Path, *, count_frames: bool = False) ->
     return _parse_probe(result.stdout)
 
 
-def decoded_video_sha256(tools: PinnedTools, path: Path) -> str:
+def decoded_video_sha256(
+    tools: PinnedTools, path: Path, *, timeout_seconds: float | None = None
+) -> str:
     """Full-decode semantic hash of the video stream (container bytes may differ)."""
 
     tools.verify_current()
@@ -168,7 +186,7 @@ def decoded_video_sha256(tools: PinnedTools, path: Path) -> str:
             "sha256",
             "-",
         ],
-        timeout_seconds=PROBE_TIMEOUT_SECONDS,
+        timeout_seconds=_capped(PROBE_TIMEOUT_SECONDS, timeout_seconds),
     )
     if result.returncode != 0 or not result.stdout.strip().startswith(HASH_PREFIX):
         raise PreviewVerificationError(
@@ -180,7 +198,9 @@ def decoded_video_sha256(tools: PinnedTools, path: Path) -> str:
     return digest
 
 
-def demux_subtitle(tools: PinnedTools, path: Path) -> bytes:
+def demux_subtitle(
+    tools: PinnedTools, path: Path, *, timeout_seconds: float | None = None
+) -> bytes:
     tools.verify_current()
     result = run_bounded(
         [
@@ -196,7 +216,7 @@ def demux_subtitle(tools: PinnedTools, path: Path) -> bytes:
             "srt",
             "-",
         ],
-        timeout_seconds=PROBE_TIMEOUT_SECONDS,
+        timeout_seconds=_capped(PROBE_TIMEOUT_SECONDS, timeout_seconds),
     )
     if result.returncode != 0:
         raise PreviewVerificationError(f"subtitle demux failed for {path}: {result.stderr.strip()}")

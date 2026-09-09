@@ -70,12 +70,16 @@ def render_review_preview(  # noqa: PLR0913 (preview adapter contract: plan/IR/m
     *,
     tools: PinnedTools,
     decision: AppliedDecision | None = None,
+    timeout_seconds: float | None = None,
 ) -> PreviewTraceManifest:
     """Render the review-plane preview bound to the synthesized mezzanine."""
 
     out_dir.mkdir(parents=True, exist_ok=True)
     bindings = _bindings(ir, mezzanine, out_dir.parent / "media")
-    return render_preview(plan, ir, bindings, out_dir, tools=tools, decision=decision)
+    return render_preview(
+        plan, ir, bindings, out_dir, tools=tools, decision=decision,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 __all__ = ["render_review_preview"]

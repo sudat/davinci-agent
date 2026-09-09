@@ -24,6 +24,7 @@ mirror discipline).
 
 from __future__ import annotations
 
+import hashlib
 import json as _json
 import os
 import time
@@ -33,7 +34,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Final
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from services.cli import episode_runner_selection
 from services.cli.bundle import (
@@ -62,18 +63,50 @@ from services.cli.review_common import (
     store_plan,
 )
 from services.contracts.primitives import StrictModel
+from services.editorial.prompt import render_adopted_policy_text
+from services.episode_cockpit.consultation_selection_budget import (
+    DIRECTOR_WALL_ALLOWANCE_SECONDS,
+    SelectionAttempt,
+    attempt_for,
+    has_open_director_reservation,
+    ir_preview_seconds,
+    plan_preview_seconds,
+    reserve_director,
+    reserve_preview,
+    settle_director,
+    settle_preview,
+)
 from services.episode_cockpit.consultation_store import (
+    CONNECTED_POLICY_FIELDS,
+    STRUCTURAL_REALIZED_CHECKS,
     AdoptedPolicyV1,
     ConsultationPolicyOutcomeV1,
-    append_policy_outcome,
+    DirectorConnection,
+    append_policy_outcome_once,
+    canonical_policy_sha256,
+    ensure_preview_budget_available,
+    ensure_selection_budget_available,
     latest_adopted_policy,
+    load_budget_limits,
     now_stamp,
+    policy_for_judgment,
+    policy_scope_list,
+    policy_summary,
+    remaining_wall_seconds,
+    unaddressed_for_scope,
+    unconfirmed_for_policy,
 )
+from services.episode_cockpit.errors import CockpitNotFoundError, CockpitUnprocessableError
+from services.episode_cockpit.models import RebuildRequestEntry
 from services.episode_cockpit.review_chat import PIPELINE_STAGES
 from services.foundation_io import sha256_file
 from services.preview.models import AppliedDecision
 from services.preview.render import PREVIEW_NAME, TRACE_NAME
-from services.review_command.policy_commit import commit_policy
+from services.review_command.policy_commit import (
+    PolicyRecoveryError,
+    commit_policy,
+    reuse_committed_policy,
+)
 from services.review_command.store import (
     HeadState,
     OperatorDecision0C,
@@ -93,6 +126,7 @@ BEYOND_STOP_STAGES: Final = ("resolve_build", "qc", "render")
 REQUIRED_STATUS: Final = "PREVIEW_READY"
 METRICS_NAME: Final = "rebuild-metrics.jsonl"
 BUNDLE_NAME: Final = "review-bundle.json"
+REBUILD_LOG_NAME: Final = "rebuild-requests.jsonl"
 
 
 class RebuildStageError(Exception):
@@ -102,6 +136,133 @@ class RebuildStageError(Exception):
         super().__init__(f"{code}: {detail}")
         self.code = code
         self.detail = detail
+
+
+def _reservation_entries(episode_root: Path) -> list[RebuildRequestEntry]:
+    try:
+        lines = (episode_root / REBUILD_LOG_NAME).read_bytes().splitlines()
+    except OSError:
+        return []
+    entries: list[RebuildRequestEntry] = []
+    for line in lines:
+        try:
+            entries.append(RebuildRequestEntry.model_validate_json(line))
+        except ValidationError:
+            continue
+    return entries
+
+
+def find_reservation(
+    episode_root: Path, reservation_sequence: int
+) -> RebuildRequestEntry | None:
+    for entry in _reservation_entries(episode_root):
+        if entry.sequence == reservation_sequence and not entry.spawned:
+            return entry
+    return None
+
+
+def assert_reservation_fresh(  # noqa: C901 (one linear pin checklist; each check is one fail-closed refusal)
+    episode_root: Path,
+    reservation_sequence: int,
+    *,
+    job_status: str | None = None,
+    deadline_monotonic: float | None = None,
+    for_preview: bool = False,
+) -> AdoptedPolicyV1:
+    """Refuse a stale selection reservation instead of using latest policy.
+
+    Verifies the reservation exists and is fully pinned, the pinned
+    judgment still resolves to the identical policy bytes and scope, the
+    judgment is still the latest adoption, the review-store head still
+    sits at the reserved base version and hash, the job is still
+    PREVIEW_READY and unfrozen, and the wall deadline has not passed.
+    Any mismatch raises a typed refusal and commits nothing. The
+    post-commit preview re-check (``for_preview``) keeps pins, policy
+    identity, job, and deadline but skips the latest-adoption and base
+    checks — the commit itself legitimately advanced the head.
+    """
+
+    if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+        raise RebuildStageError(
+            "consultation-selection-deadline-exceeded",
+            "この相談の処理時間上限に達したため、続きを確定していません。",
+        )
+    reservation = find_reservation(episode_root, reservation_sequence)
+    if reservation is None:
+        raise RebuildStageError(
+            "consultation-reservation-not-found",
+            "作り直しの予約記録が見つからないため、編集を始めませんでした。",
+        )
+    if (
+        not reservation.policy_scope
+        or reservation.policy_sha256 is None
+        or reservation.base_plan_version is None
+        or reservation.base_plan_sha256 is None
+    ):
+        raise RebuildStageError(
+            "consultation-reservation-unpinned",
+            "古い予約には対象の判断と編集版の記録が足りないため、"
+            "安全に再開できません。",
+        )
+    if job_status == "FROZEN":
+        raise RebuildStageError(
+            "job-frozen",
+            "この動画は確定済みのため、作り直しを行いませんでした。",
+        )
+    if job_status is not None and job_status != REQUIRED_STATUS:
+        raise RebuildStageError(
+            "episode-not-preview-ready",
+            f"rebuild re-entry needs {REQUIRED_STATUS}, job is at {job_status}",
+        )
+    if reservation.judgment_id is None:
+        raise RebuildStageError(
+            "consultation-reservation-unpinned",
+            "古い予約には対象の判断と編集版の記録が足りないため、"
+            "安全に再開できません。",
+        )
+    try:
+        policy = policy_for_judgment(episode_root, reservation.judgment_id)
+    except (CockpitNotFoundError, CockpitUnprocessableError) as error:
+        raise RebuildStageError(
+            "reserved-policy-changed",
+            "予約した判断が変わりました。古い判断の編集は確定していません。",
+        ) from error
+    if (
+        canonical_policy_sha256(policy) != reservation.policy_sha256
+        or policy_scope_list(policy) != list(reservation.policy_scope)
+    ):
+        raise RebuildStageError(
+            "reserved-policy-changed",
+            "予約した判断が変わりました。古い判断の編集は確定していません。",
+        )
+    latest = latest_adopted_policy(episode_root)
+    if not for_preview and (
+        latest is None or latest.judgment_id != reservation.judgment_id
+    ):
+        raise RebuildStageError(
+            "reserved-policy-changed",
+            "予約した判断が変わりました。古い判断の編集は確定していません。",
+        )
+    if for_preview:
+        return policy
+    try:
+        head = stage_plan(episode_root)
+    except RebuildStageError as error:
+        raise RebuildStageError(
+            "policy-base-version-changed",
+            "予約後に編集の版が変わりました。古い版を上書きしていません。",
+        ) from error
+    entry = head.index.versions.get(str(head.version))
+    if (
+        f"v{head.version}" != reservation.base_plan_version
+        or entry is None
+        or entry.plan_sha256 != reservation.base_plan_sha256
+    ):
+        raise RebuildStageError(
+            "policy-base-version-changed",
+            "予約後に編集の版が変わりました。古い版を上書きしていません。",
+        )
+    return policy
 
 
 class RebuildMetricV1(StrictModel):
@@ -137,6 +298,7 @@ class ReentryState:
     head: HeadState | None = None
     plan: EditPlan0C | None = None
     ir: TimelineIr0C | None = None
+    attempt: SelectionAttempt | None = None
 
 
 def reentry_stages(from_stage: str) -> ReentryStages:
@@ -166,29 +328,158 @@ def stage_plan(episode_root: Path) -> HeadState:
         raise RebuildStageError("review-store-unreadable", str(error)) from error
 
 
-def _failed_outcome(
+def _policy_prompt_sha(policy: AdoptedPolicyV1) -> str:
+    text = render_adopted_policy_text(policy_summary(policy))
+    if text is None:
+        raise RebuildStageError(
+            "policy-prompt-unrenderable",
+            "採用した方針を編集長への入力にできませんでした。",
+        )
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _failed_outcome(  # noqa: PLR0913 (outcome evidence contract; kwargs are the fields)
     episode_root: Path,
     policy: AdoptedPolicyV1,
     reasons: tuple[str, ...],
     note: str,
+    *,
+    plan_version: str | None = None,
+    reservation_sequence: int | None = None,
+    run_id: str | None = None,
+    commit_event_id: str | None = None,
+    failure_code: str | None = None,
+    director_connection: DirectorConnection | None = None,
+    director_request_hash: str | None = None,
 ) -> None:
-    append_policy_outcome(
+    append_policy_outcome_once(
         episode_root,
         ConsultationPolicyOutcomeV1(
             outcome_id=uuid.uuid4().hex[:12],
             consultation_id=policy.consultation_id,
             judgment_id=policy.judgment_id,
             proposal_id=policy.proposal_id,
-            plan_version=None,
+            plan_version=plan_version,
             status="failed",
             reasons=reasons,
             note=note,
             created_at=now_stamp(),
+            reservation_sequence=reservation_sequence,
+            run_id=run_id,
+            commit_event_id=commit_event_id,
+            failure_code=failure_code,
+            director_connection=director_connection,
+            director_request_hash=director_request_hash,
+            policy_prompt_sha256=_policy_prompt_sha(policy),
+            connected_fields=(
+                tuple(CONNECTED_POLICY_FIELDS)
+                if director_connection == "confirmed"
+                else ()
+            ),
+            realized_checks=(),
+            unaddressed=unaddressed_for_scope(policy),
+            unconfirmed=unconfirmed_for_policy(policy),
         ),
     )
 
 
-def stage_selection(episode_root: Path, log: BinaryIO, *, policy: AdoptedPolicyV1) -> str:
+def _refusal_policy(
+    episode_root: Path,
+    reservation_sequence: int,
+    fallback: AdoptedPolicyV1 | None,
+) -> AdoptedPolicyV1 | None:
+    """Best-effort outcome context for a freshness refusal (never raises)."""
+
+    reservation = find_reservation(episode_root, reservation_sequence)
+    if reservation is not None and reservation.judgment_id is not None:
+        try:
+            return policy_for_judgment(episode_root, reservation.judgment_id)
+        except (CockpitNotFoundError, CockpitUnprocessableError):
+            pass
+    return latest_adopted_policy(episode_root) or fallback
+
+
+def _refusal_with_outcome(  # noqa: PLR0913 (refusal evidence contract; kwargs are the fields)
+    episode_root: Path,
+    policy: AdoptedPolicyV1,
+    reservation_sequence: int | None,
+    run_id: str | None,
+    error: RebuildStageError,
+    *,
+    director_connection: DirectorConnection,
+    director_request_hash: str | None = None,
+) -> RebuildStageError:
+    """Record one failed outcome for a freshness refusal, then re-raise it."""
+
+    _failed_outcome(
+        episode_root, policy, (f"{error.code}: {error.detail}",), error.detail,
+        reservation_sequence=reservation_sequence,
+        run_id=run_id,
+        failure_code=error.code,
+        director_connection=director_connection,
+        director_request_hash=director_request_hash,
+    )
+    return RebuildStageError(error.code, error.detail)
+
+
+def _connected_outcome(  # noqa: PLR0913 (outcome evidence contract; kwargs are the fields)
+    episode_root: Path,
+    policy: AdoptedPolicyV1,
+    *,
+    plan_version: str,
+    reservation_sequence: int | None,
+    run_id: str | None,
+    commit_event_id: str | None,
+    director_request_hash: str | None,
+    reused: bool = False,
+) -> None:
+    append_policy_outcome_once(
+        episode_root,
+        ConsultationPolicyOutcomeV1(
+            outcome_id=uuid.uuid4().hex[:12],
+            consultation_id=policy.consultation_id,
+            judgment_id=policy.judgment_id,
+            proposal_id=policy.proposal_id,
+            plan_version=plan_version,
+            status="connected",
+            reasons=(
+                ("reused sealed policy commit without re-running the director",)
+                if reused
+                else (f"adopted {policy.decision} policy re-run by the director",)
+            ),
+            note=(
+                "確定済みの版を再利用しました。反映の検証は構造検証のみ。"
+                if reused
+                else "採用した方針を編集長への入力に接続しました。"
+                "反映の検証は構造検証のみ "
+                "(プランナー充足性・生成・コンパイル・版再読込)。"
+            ),
+            created_at=now_stamp(),
+            reservation_sequence=reservation_sequence,
+            run_id=run_id,
+            commit_event_id=commit_event_id,
+            failure_code=None,
+            director_connection="confirmed",
+            director_request_hash=director_request_hash,
+            policy_prompt_sha256=_policy_prompt_sha(policy),
+            connected_fields=tuple(CONNECTED_POLICY_FIELDS),
+            realized_checks=tuple(STRUCTURAL_REALIZED_CHECKS),
+            unaddressed=unaddressed_for_scope(policy),
+            unconfirmed=unconfirmed_for_policy(policy),
+        ),
+    )
+
+
+def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: pin/budget/director/derive/commit checkpoints in one stage fn)
+    episode_root: Path,
+    log: BinaryIO,
+    *,
+    policy: AdoptedPolicyV1 | None = None,
+    reservation_sequence: int | None = None,
+    run_id: str | None = None,
+    job_status: str | None = None,
+    deadline_monotonic: float | None = None,
+) -> str:
     """Re-run the director under the adopted policy; commit a new version.
 
     The §9.1:406 loop: load the review-store head, re-run the initial
@@ -198,39 +489,218 @@ def stage_selection(episode_root: Path, log: BinaryIO, *, policy: AdoptedPolicyV
     path. ANY failure appends a failed outcome (never a silent drop),
     marks the stage failed via the existing block path, and commits no
     version — the consultation UI then shows the failure (相談へ戻る).
+    With a reservation, the same freshness check runs before the director
+    call and again right before the commit — never the latest policy.
     """
 
+    if reservation_sequence is not None:
+        if job_status == "FROZEN":
+            raise RebuildStageError(
+                "job-frozen",
+                "この動画は確定済みのため、作り直しを行いませんでした。",
+            )
+        log_path, plan_dir = _review_store(episode_root)
+        pending = find_reservation(episode_root, reservation_sequence)
+        if pending is not None and pending.judgment_id is not None:
+            reused = reuse_committed_policy(
+                log_path, plan_dir, pending.judgment_id
+            )
+            if reused is not None:
+                try:
+                    reused_policy = policy_for_judgment(
+                        episode_root, pending.judgment_id
+                    )
+                except (CockpitNotFoundError, CockpitUnprocessableError):
+                    reused_policy = None
+                if reused_policy is not None:
+                    _connected_outcome(
+                        episode_root, reused_policy,
+                        plan_version=f"v{reused.version}",
+                        reservation_sequence=reservation_sequence,
+                        run_id=run_id,
+                        commit_event_id=reused.event_id,
+                        director_request_hash=None,
+                        reused=True,
+                    )
+                    log_event(
+                        log, "policy_selection_committed",
+                        policy=pending.judgment_id,
+                        plan_version=f"v{reused.version}",
+                        reservation_sequence=reservation_sequence,
+                        run_id=run_id,
+                        idempotent=True,
+                    )
+                    return plan_sha256(load_head(log_path, plan_dir).plan)
+        try:
+            policy = assert_reservation_fresh(
+                episode_root,
+                reservation_sequence,
+                job_status=job_status,
+                deadline_monotonic=deadline_monotonic,
+            )
+        except RebuildStageError as error:
+            outcome_policy = _refusal_policy(
+                episode_root, reservation_sequence, policy
+            )
+            if outcome_policy is None:
+                raise
+            raise _refusal_with_outcome(
+                episode_root, outcome_policy, reservation_sequence, run_id,
+                error, director_connection="not_started",
+            ) from error
+        attempt: SelectionAttempt | None = attempt_for(
+            reservation_sequence, policy.consultation_id, policy.judgment_id
+        )
+    else:
+        attempt = None
+    if policy is None:
+        policy = latest_adopted_policy(episode_root)
+        if policy is None:
+            raise RebuildStageError(
+                "no-adopted-policy",
+                "selection re-entry needs an adopted consultation policy; "
+                "none is on the table",
+            )
+    request_hash: str | None = None
+    if attempt is not None and has_open_director_reservation(
+        episode_root, attempt.attempt_id
+    ):
+        reason = "consultation-selection-attempt-uncertain"
+        _failed_outcome(
+            episode_root, policy, (reason,),
+            "前回のAI処理が完了したか確認できないため、"
+            "重複利用を避けて再実行を止めました。",
+            reservation_sequence=reservation_sequence,
+            run_id=run_id,
+            failure_code=reason,
+            director_connection="unknown",
+        )
+        raise RebuildStageError(
+            reason,
+            "前回のAI処理が完了したか確認できないため、"
+            "重複利用を避けて再実行を止めました。",
+        )
     stage_plan(episode_root)
     if director_mode(dict(os.environ)) == "deterministic-baseline":
         reason = "編集長が決定論化モードのため方針を解釈できませんでした"
         _failed_outcome(
             episode_root, policy, (reason,),
             "方針の解釈も検証も行っていません。公開モデル runtime で再実行してください。",
+            reservation_sequence=reservation_sequence,
+            run_id=run_id,
+            failure_code="policy-not-interpretable",
+            director_connection="not_started",
         )
         raise RebuildStageError("policy-not-interpretable", reason)
+    wall_allowance = 0.0
+    if attempt is not None:
+        try:
+            remaining = ensure_selection_budget_available(
+                episode_root, load_budget_limits()
+            )
+        except (CockpitNotFoundError, CockpitUnprocessableError) as error:
+            code = (
+                error.code
+                if isinstance(error, CockpitUnprocessableError)
+                else "consultation-selection-budget-exhausted"
+            )
+            _failed_outcome(
+                episode_root, policy, (f"{code}: {error}",), str(error),
+                reservation_sequence=reservation_sequence,
+                run_id=run_id,
+                failure_code=code,
+                director_connection="not_started",
+            )
+            raise RebuildStageError(code, str(error)) from error
+        wall_allowance = min(DIRECTOR_WALL_ALLOWANCE_SECONDS, remaining)
+        reserve_director(episode_root, attempt, wall_allowance)
+    director_started = time.monotonic()
     try:
         rerun = episode_runner_selection.rerun_director_with_policy(
             episode_root, policy, dict(os.environ)
         )
     except episode_runner_selection.SelectionRerunError as error:
+        if attempt is not None:
+            settle_director(
+                episode_root, attempt,
+                wall_elapsed=max(time.monotonic() - director_started, 0.001),
+                result="failed", failure_code=error.code,
+            )
         _failed_outcome(
             episode_root, policy, (f"{error.code}: {error.detail}",),
             "監督の再実行に失敗したため、方針の検証を行っていません。",
+            reservation_sequence=reservation_sequence,
+            run_id=run_id,
+            failure_code=error.code,
+            director_connection=(
+                "confirmed" if error.code == "director_refused" else "unknown"
+            ),
         )
         raise RebuildStageError(error.code, error.detail) from error
+    request_hash = rerun.outcome.request_hash
+    if attempt is not None:
+        settle_director(
+            episode_root, attempt,
+            wall_elapsed=max(time.monotonic() - director_started, 0.001),
+            result="succeeded",
+        )
     try:
         new_plan = episode_runner_selection.derive_policy_plan(episode_root, rerun)
     except episode_runner_selection.PolicyDerivationError as error:
         _failed_outcome(
             episode_root, policy, (f"{error.code}: {error.detail}",),
             "計画の導出・検証に失敗したため、版を確定していません。",
+            reservation_sequence=reservation_sequence,
+            run_id=run_id,
+            failure_code=error.code,
+            director_connection="confirmed",
+            director_request_hash=request_hash,
         )
         raise RebuildStageError(error.code, error.detail) from error
     log_path, plan_dir = _review_store(episode_root)
+    if reservation_sequence is not None:
+        try:
+            policy = assert_reservation_fresh(
+                episode_root,
+                reservation_sequence,
+                job_status=job_status,
+                deadline_monotonic=deadline_monotonic,
+            )
+        except RebuildStageError as error:
+            raise _refusal_with_outcome(
+                episode_root, policy, reservation_sequence, run_id, error,
+                director_connection="confirmed",
+                director_request_hash=request_hash,
+            ) from error
+    if attempt is not None:
+        try:
+            ensure_preview_budget_available(
+                episode_root, load_budget_limits(), plan_preview_seconds(new_plan)
+            )
+        except (CockpitNotFoundError, CockpitUnprocessableError) as error:
+            code = (
+                error.code
+                if isinstance(error, CockpitUnprocessableError)
+                else "consultation-preview-budget-exhausted"
+            )
+            _failed_outcome(
+                episode_root, policy, (f"{code}: {error}",), str(error),
+                reservation_sequence=reservation_sequence,
+                run_id=run_id,
+                failure_code=code,
+                director_connection="confirmed",
+                director_request_hash=request_hash,
+            )
+            raise RebuildStageError(code, str(error)) from error
     decision = OperatorDecision0C(
         decision_id=f"dec-policy-{policy.judgment_id}",
         actor_intent="operator",
         note=f"adopted consultation policy {policy.judgment_id} ({policy.decision})",
+    )
+    reservation = (
+        find_reservation(episode_root, reservation_sequence)
+        if reservation_sequence is not None
+        else None
     )
     try:
         outcome = commit_policy(
@@ -238,32 +708,64 @@ def stage_selection(episode_root: Path, log: BinaryIO, *, policy: AdoptedPolicyV
             judgment_id=policy.judgment_id,
             proposal_id=policy.proposal_id,
             policy_decision=policy.decision,
+            expected_base_version=(
+                reservation.base_plan_version if reservation is not None else None
+            ),
+            expected_base_plan_sha256=(
+                reservation.base_plan_sha256 if reservation is not None else None
+            ),
         )
         verified = load_head(log_path, plan_dir)
+    except PolicyRecoveryError as error:
+        if error.recorded_version is not None:
+            _failed_outcome(
+                episode_root, policy,
+                (f"{error.code}: {error}",),
+                f"編集の記録は v{error.recorded_version} まで残っていますが、"
+                "版ファイルの回復を確認できません。自動で「反映されていない」とは判定しません。",
+                plan_version=f"v{error.recorded_version}",
+                reservation_sequence=reservation_sequence,
+                run_id=run_id,
+                failure_code=error.code,
+                director_connection="confirmed",
+                director_request_hash=request_hash,
+            )
+        else:
+            _failed_outcome(
+                episode_root, policy, (f"{error.code}: {error}",),
+                "版の確定前に失敗しました。方針を反映した版はありません。",
+                reservation_sequence=reservation_sequence,
+                run_id=run_id,
+                failure_code=error.code,
+                director_connection="confirmed",
+                director_request_hash=request_hash,
+            )
+        raise RebuildStageError(error.code, str(error)) from error
     except Exception as error:
         code = error.code if isinstance(error, ReviewCommitError) else "policy-commit-failed"
         _failed_outcome(
             episode_root, policy, (f"{code}: {error}",),
             "版の確定に失敗したため、方針は反映されていません。",
+            reservation_sequence=reservation_sequence,
+            run_id=run_id,
+            failure_code=code,
+            director_connection="confirmed",
+            director_request_hash=request_hash,
         )
         raise RebuildStageError(code, str(error)) from error
-    append_policy_outcome(
-        episode_root,
-        ConsultationPolicyOutcomeV1(
-            outcome_id=uuid.uuid4().hex[:12],
-            consultation_id=policy.consultation_id,
-            judgment_id=policy.judgment_id,
-            proposal_id=policy.proposal_id,
-            plan_version=f"v{outcome.version}",
-            status="honored",
-            reasons=(f"adopted {policy.decision} policy re-run by the director",),
-            note="反映の検証は構造検証のみ (プランナー充足性・生成・コンパイル・版再読込)。",
-            created_at=now_stamp(),
-        ),
+    _connected_outcome(
+        episode_root, policy,
+        plan_version=f"v{outcome.version}",
+        reservation_sequence=reservation_sequence,
+        run_id=run_id,
+        commit_event_id=outcome.event_id,
+        director_request_hash=request_hash,
     )
     log_event(
         log, "policy_selection_committed", policy=policy.judgment_id,
         plan_version=f"v{outcome.version}",
+        reservation_sequence=reservation_sequence,
+        run_id=run_id,
     )
     return plan_sha256(verified.plan)
 
@@ -289,9 +791,35 @@ def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log
     log: BinaryIO,
     *,
     run_id: str,
+    selection_attempt: SelectionAttempt | None = None,
+    preview_timeout_seconds: float | None = None,
 ) -> str:
-    """Re-render the review-plane preview from the new version + republish."""
+    """Re-render the review-plane preview from the new version + republish.
 
+    A selection attempt reserves its exact sample seconds before the
+    renderer starts and settles them afterwards: once rendering starts
+    the reserved seconds are charged even on failure (with the measured
+    wall time), so the 30 s allowance can never be silently exceeded.
+    """
+
+    attempt = selection_attempt
+    preview_seconds = 0.0
+    preview_started = 0.0
+    if attempt is not None:
+        preview_seconds = ir_preview_seconds(ir)
+        try:
+            ensure_preview_budget_available(
+                episode_root, load_budget_limits(), preview_seconds
+            )
+        except (CockpitNotFoundError, CockpitUnprocessableError) as error:
+            code = (
+                error.code
+                if isinstance(error, CockpitUnprocessableError)
+                else "consultation-preview-budget-exhausted"
+            )
+            raise RebuildStageError(code, str(error)) from error
+        reserve_preview(episode_root, attempt, preview_seconds)
+        preview_started = time.monotonic()
     run_dir = episode_root / RUN_DIR_NAME
     bundle_file = run_dir / BUNDLE_NAME
     try:
@@ -315,9 +843,27 @@ def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log
         render_review_preview(
             plan, ir, mezzanine_for(bundle_file, bundle), preview_dir,
             tools=load_tools(), decision=decision,
+            timeout_seconds=preview_timeout_seconds,
         )
     except Exception as error:
+        if attempt is not None:
+            settle_preview(
+                episode_root, attempt,
+                preview_seconds=preview_seconds,
+                wall_elapsed=max(time.monotonic() - preview_started, 0.001),
+                result="failed",
+                failure_code=(
+                    error.code if isinstance(error, RebuildStageError) else "preview-failed"
+                ),
+            )
         raise RebuildStageError("preview-failed", str(error)) from error
+    if attempt is not None:
+        settle_preview(
+            episode_root, attempt,
+            preview_seconds=preview_seconds,
+            wall_elapsed=max(time.monotonic() - preview_started, 0.001),
+            result="succeeded",
+        )
     preview_sha = sha256_file(run_dir / f"preview-v{head.version}" / PREVIEW_NAME)
     _update_bundle(bundle_file, bundle, head, preview_sha)
     publish_preview(episode_root, log, source_dir=f"preview-v{head.version}", run_id=run_id)
@@ -460,15 +1006,29 @@ def _bootstrap_bundle(bundle_file: Path) -> ReviewBundle | None:  # noqa: C901, 
     return bundle
 
 
-def _execute(
-    store: StateStore, ctx: RunContext, episode_root: Path, stages: ReentryStages
+def _execute(  # noqa: PLR0913 (re-entry wiring: store/ctx/root/stages + reservation binding)
+    store: StateStore,
+    ctx: RunContext,
+    episode_root: Path,
+    stages: ReentryStages,
+    *,
+    reservation_sequence: int | None = None,
+    job_status: str | None = None,
 ) -> None:
     carried = ReentryState()
     for stage in stages.executed:
         record_stage(store, ctx, stage, "running")
         log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="running")
         try:
-            adopted = _run_stage(stage, episode_root, carried, ctx.log, run_id=ctx.run_id)
+            adopted = _run_stage(
+                stage,
+                episode_root,
+                carried,
+                ctx.log,
+                run_id=ctx.run_id,
+                reservation_sequence=reservation_sequence,
+                job_status=job_status,
+            )
         except RebuildStageError as error:
             block_stage(store, ctx, stage, error.code)
             log_event(
@@ -480,25 +1040,64 @@ def _execute(
         log_event(ctx.log, "rebuild_stage", run_id=ctx.run_id, stage=stage, status="succeeded")
 
 
-def _run_stage(
-    stage: str, episode_root: Path, carried: ReentryState, log: BinaryIO, *, run_id: str
+def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/state/log + run/reservation/preview binding)
+    stage: str,
+    episode_root: Path,
+    carried: ReentryState,
+    log: BinaryIO,
+    *,
+    run_id: str,
+    reservation_sequence: int | None = None,
+    job_status: str | None = None,
 ) -> str:
     """One re-entry stage against the carried state; returns its adopted hash.
 
     Entering at compile/preview hydrates the missing head/IR itself (the
     review store is an idempotent read), so every legal ``--from-stage``
-    value is self-sufficient without re-running earlier stages.
+    value is self-sufficient without re-running earlier stages. A
+    selection re-entry with a reservation executes the pinned judgment
+    (never the latest policy); without one it keeps the legacy
+    latest-policy behavior.
     """
 
     if stage == "selection":
-        policy = latest_adopted_policy(episode_root)
-        if policy is None:
-            raise RebuildStageError(
-                "no-adopted-policy",
-                "selection re-entry needs an adopted consultation policy; "
-                "none is on the table",
+        if reservation_sequence is not None:
+            remaining = remaining_wall_seconds(episode_root, load_budget_limits())
+            deadline = (
+                time.monotonic() + remaining if remaining > 0 else None
             )
-        adopted = stage_selection(episode_root, log, policy=policy)
+            reservation = find_reservation(episode_root, reservation_sequence)
+            if reservation is not None and reservation.judgment_id is not None:
+                try:
+                    pinned = policy_for_judgment(
+                        episode_root, reservation.judgment_id
+                    )
+                except (CockpitNotFoundError, CockpitUnprocessableError):
+                    pinned = None
+                if pinned is not None:
+                    carried.attempt = attempt_for(
+                        reservation_sequence,
+                        pinned.consultation_id,
+                        pinned.judgment_id,
+                    )
+            adopted = stage_selection(
+                episode_root,
+                log,
+                policy=None,
+                reservation_sequence=reservation_sequence,
+                run_id=run_id,
+                job_status=job_status,
+                deadline_monotonic=deadline,
+            )
+        else:
+            policy = latest_adopted_policy(episode_root)
+            if policy is None:
+                raise RebuildStageError(
+                    "no-adopted-policy",
+                    "selection re-entry needs an adopted consultation policy; "
+                    "none is on the table",
+                )
+            adopted = stage_selection(episode_root, log, policy=policy)
         carried.head = stage_plan(episode_root)
         carried.plan = None
         carried.ir = None
@@ -513,7 +1112,23 @@ def _run_stage(
         return carried.head.index.versions[str(carried.head.version)].ir_sha256
     if carried.plan is None or carried.ir is None:
         carried.plan, carried.ir = stage_compile(episode_root, carried.head)
-    return stage_preview(episode_root, carried.head, carried.plan, carried.ir, log, run_id=run_id)
+    preview_timeout: float | None = None
+    if carried.attempt is not None and reservation_sequence is not None:
+        assert_reservation_fresh(
+            episode_root, reservation_sequence, job_status=job_status,
+            for_preview=True,
+        )
+        remaining = remaining_wall_seconds(episode_root, load_budget_limits())
+        if remaining <= 0:
+            raise RebuildStageError(
+                "consultation-selection-deadline-exceeded",
+                "この相談の処理時間上限に達したため、続きを確定していません。",
+            )
+        preview_timeout = remaining
+    return stage_preview(
+        episode_root, carried.head, carried.plan, carried.ir, log, run_id=run_id,
+        selection_attempt=carried.attempt, preview_timeout_seconds=preview_timeout,
+    )
 
 
 def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log: BinaryIO) -> int:
@@ -528,13 +1143,25 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
             reason=f"beyond {call.stop} stop",
         )
     snapshot = store.get_job_snapshot(ctx.job_id)
+    if snapshot.job.status == "FROZEN":
+        raise RebuildStageError(
+            "job-frozen",
+            "この動画は確定済みのため、作り直しを行いませんでした。",
+        )
     if snapshot.job.status != REQUIRED_STATUS:
         raise RebuildStageError(
             "episode-not-preview-ready",
             f"rebuild re-entry needs {REQUIRED_STATUS}, job is at {snapshot.job.status}",
         )
     started = time.monotonic()
-    _execute(store, ctx, call.episode_root, stages)
+    _execute(
+        store,
+        ctx,
+        call.episode_root,
+        stages,
+        reservation_sequence=call.reservation_sequence,
+        job_status=snapshot.job.status,
+    )
     wall = time.monotonic() - started
     if call.applied_command is not None:
         _append_metric(call.episode_root, call.applied_command, stages, wall)
@@ -570,10 +1197,13 @@ def _append_metric(
 __all__ = [
     "BEYOND_STOP_STAGES",
     "METRICS_NAME",
+    "REBUILD_LOG_NAME",
     "REENTRY_FROM_STAGES",
     "REQUIRED_STATUS",
     "RebuildMetricV1",
     "RebuildStageError",
+    "assert_reservation_fresh",
+    "find_reservation",
     "reentry_stages",
     "run_reentry",
     "stage_compile",

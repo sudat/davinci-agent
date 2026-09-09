@@ -26,8 +26,10 @@ stage stands (crash containment; nothing is invented post-mortem).
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
+import stat
 import threading
 import traceback
 import uuid
@@ -110,6 +112,8 @@ class RunnerInvocation:
     applied_command: str | None = None
     editorial_runtime: Path | None = None
     run_id: str | None = None
+    reservation_sequence: int | None = None
+    runner_lock_fd: int | None = None
 
 
 def _frame_count_from_normalize_record(episode_root: Path) -> int | None:
@@ -228,8 +232,52 @@ def _verify_reached(store: StateStore, ctx: RunContext) -> None:
         )
 
 
+def _assert_inherited_runner_lock(episode_root: Path, fd: int | None) -> None:
+    """Prove this re-entry holds the episode lock inherited from the spawner.
+
+    The spawner flocked ``<episode>/runner.lock`` and passed the descriptor
+    through; the child re-asserts the same file (device + inode, regular
+    file, never a symlink) and re-claims the exclusive non-blocking lock
+    on the inherited description, holding it until runner exit. Missing,
+    closed, mismatched, or unclaimable descriptors refuse fail-closed.
+    """
+
+    if fd is None:
+        raise RunnerBlockedError(
+            "runner-lock-not-held",
+            "re-entry needs the inherited episode-runner lock descriptor "
+            "(--runner-lock-fd); refusing without proof of the single writer",
+        )
+    lock_path = episode_root / "runner.lock"
+    try:
+        st_fd = os.fstat(fd)
+        st_path = lock_path.lstat()
+    except OSError as error:
+        raise RunnerBlockedError(
+            "runner-lock-not-held",
+            f"cannot prove the inherited episode-runner lock: {error}",
+        ) from error
+    if (
+        not stat.S_ISREG(st_fd.st_mode)
+        or not stat.S_ISREG(st_path.st_mode)
+        or (st_fd.st_dev, st_fd.st_ino) != (st_path.st_dev, st_path.st_ino)
+    ):
+        raise RunnerBlockedError(
+            "runner-lock-not-held",
+            "the inherited lock descriptor does not name the episode "
+            "runner.lock file; refusing",
+        )
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as error:
+        raise RunnerBlockedError(
+            "runner-lock-not-held",
+            f"cannot claim the inherited episode-runner lock: {error}",
+        ) from error
+
+
 def _reentry_exit(store: StateStore, ctx: RunContext, call: RunnerInvocation, log: BinaryIO) -> int:
-    """Validate the re-entry flags, then execute the stage-subset rebuild."""
+    """Validate the re-entry flags, prove the inherited lock, then rebuild."""
 
     if call.applied_command is None or call.from_stage not in REENTRY_FROM_STAGES:
         raise RunnerMalformedError(
@@ -241,6 +289,7 @@ def _reentry_exit(store: StateStore, ctx: RunContext, call: RunnerInvocation, lo
             "stop-unsupported-for-reentry",
             "re-entry always re-renders the preview; --stop must be PREVIEW_READY",
         )
+    _assert_inherited_runner_lock(call.episode_root, call.runner_lock_fd)
     try:
         return run_reentry(store, ctx, call, log)
     except RebuildStageError as error:
@@ -313,12 +362,18 @@ def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
     applied_command: str | None = None,
     editorial_runtime: Path | None = None,
     run_id: str | None = None,
+    reservation_sequence: int | None = None,
+    runner_lock_fd: int | None = None,
 ) -> int:
     """Advance one cockpit episode through the existing chain; 0/1/2.
 
     ``run_id`` (2P): when the SPAWNING parent pre-generates the run id it
     can pass it here so the rebuild-request records and the runner.log
     events name the SAME run; absent, one is generated internally.
+    ``reservation_sequence`` names the consultation reservation this
+    re-entry executes (selection re-entry pins to it instead of reading
+    the latest policy). ``runner_lock_fd`` is the inherited episode-lock
+    descriptor a re-entry must prove (fail-closed without it).
     """
 
     call = RunnerInvocation(
@@ -330,6 +385,8 @@ def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
         applied_command,
         editorial_runtime,
         run_id,
+        reservation_sequence,
+        runner_lock_fd,
     )
     call.episode_root.mkdir(parents=True, exist_ok=True)
     run_id = call.run_id if call.run_id is not None else uuid.uuid4().hex[:12]
@@ -375,6 +432,20 @@ def _parser() -> argparse.ArgumentParser:
         help="2P: the spawning parent's pre-generated run id (log/record linkage)",
     )
     parser.add_argument(
+        "--reservation-sequence",
+        type=int,
+        default=None,
+        help="slice2 P1: the consultation reservation sequence this "
+        "selection re-entry executes (pins policy + base, never latest)",
+    )
+    parser.add_argument(
+        "--runner-lock-fd",
+        type=int,
+        default=None,
+        help="slice2 P1: the inherited episode-runner lock descriptor a "
+        "re-entry must prove (fail-closed without it)",
+    )
+    parser.add_argument(
         "--state-store",
         type=Path,
         default=None,
@@ -393,6 +464,8 @@ def main(argv: list[str] | None = None) -> int:
         applied_command=arguments.applied_command,
         editorial_runtime=arguments.editorial_runtime,
         run_id=arguments.run_id,
+        reservation_sequence=arguments.reservation_sequence,
+        runner_lock_fd=arguments.runner_lock_fd,
     )
 
 

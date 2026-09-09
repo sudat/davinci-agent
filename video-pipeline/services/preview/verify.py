@@ -131,16 +131,17 @@ def _stream_mismatches(
     return mismatches
 
 
-def verify_preview_output(
+def verify_preview_output(  # noqa: PLR0913 (preview verification contract: tools/out + frame/rate/subtitle/timeout binding)
     tools: PinnedTools,
     output: Path,
     *,
     total_frames: int,
     rate: RationalFrameRate,
     subtitle_expected: bool,
+    timeout_seconds: float | None = None,
 ) -> FfprobeSummary:
     tools.verify_current()
-    report = probe_file(tools, output, count_frames=True)
+    report = probe_file(tools, output, count_frames=True, timeout_seconds=timeout_seconds)
     video = next((s for s in report.streams if s.codec_type == "video"), None)
     audio = next((s for s in report.streams if s.codec_type == "audio"), None)
     subtitle = next((s for s in report.streams if s.codec_type == "subtitle"), None)

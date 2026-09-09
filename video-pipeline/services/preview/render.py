@@ -26,7 +26,13 @@ from services.preview.models import (
 )
 from services.preview.srt import expected_subtitle_cues, parse_srt, render_srt
 from services.preview.styling import carry_styled
-from services.preview.tools import PinnedTools, decoded_video_sha256, probe_file, run_bounded
+from services.preview.tools import (
+    FFMPEG_TIMEOUT_SECONDS,
+    PinnedTools,
+    decoded_video_sha256,
+    probe_file,
+    run_bounded,
+)
 from services.preview.trace import TraceContext, build_trace, plan_version_of
 from services.preview.verify import AUDIO_SAMPLE_RATE_TEXT, verify_preview_output
 
@@ -127,7 +133,10 @@ def _require_binding(bindings: PreviewMediaBindings, item_id: str, kind: str) ->
 
 
 def _verify_av_media(
-    layout: PreviewLayout, bindings: PreviewMediaBindings, tools: PinnedTools
+    layout: PreviewLayout,
+    bindings: PreviewMediaBindings,
+    tools: PinnedTools,
+    timeout_seconds: float | None = None,
 ) -> None:
     rate_fraction = Fraction(layout.rate.num, layout.rate.den)
     probed: set[str] = set()
@@ -136,7 +145,7 @@ def _verify_av_media(
         if str(path) in probed:
             continue
         probed.add(str(path))
-        report = probe_file(tools, path)
+        report = probe_file(tools, path, timeout_seconds=timeout_seconds)
         video = next((s for s in report.streams if s.codec_type == "video"), None)
         if video is not None and Fraction(video.r_frame_rate or "0/1") != rate_fraction:
             raise PreviewBindingError(
@@ -180,6 +189,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     tools: PinnedTools,
     decision: AppliedDecision | None = None,
     styled: StyledPresentation | None = None,
+    timeout_seconds: float | None = None,
 ) -> PreviewTraceManifest:
     tools.verify_current()
     plan_version = plan_version_of(edit_plan)
@@ -193,7 +203,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     style_table = carry_styled(layout, styled) if styled is not None else None
     for item in (*layout.video_items, *layout.audio_items, *layout.subtitle_items):
         _require_binding(media_bindings, item.item_id, item.kind)
-    _verify_av_media(layout, media_bindings, tools)
+    _verify_av_media(layout, media_bindings, tools, timeout_seconds)
     _verify_subtitle_binding(layout, media_bindings)
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / PREVIEW_NAME
@@ -210,7 +220,12 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             output=output,
             subtitle_srt=generated_srt,
         )
-        result = run_bounded(list(command.argv))
+        render_timeout = (
+            FFMPEG_TIMEOUT_SECONDS
+            if timeout_seconds is None
+            else min(float(FFMPEG_TIMEOUT_SECONDS), timeout_seconds)
+        )
+        result = run_bounded(list(command.argv), timeout_seconds=render_timeout)
         if result.returncode != 0:
             raise PreviewRenderError(
                 f"ffmpeg exited {result.returncode}: {result.stderr.strip()[-1500:]}"
@@ -223,6 +238,7 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             total_frames=layout.total_record_frames,
             rate=timeline_ir.rate,
             subtitle_expected=bool(layout.subtitle_items),
+            timeout_seconds=timeout_seconds,
         )
         context = TraceContext(
             ir=timeline_ir,
@@ -232,7 +248,10 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             decision=decision,
             styled=style_table,
         )
-        manifest = build_trace(context, output, summary, decoded_video_sha256(tools, output))
+        manifest = build_trace(
+            context, output, summary,
+            decoded_video_sha256(tools, output, timeout_seconds=timeout_seconds),
+        )
         atomic_write(out_dir / TRACE_NAME, canonical_model_bytes(manifest))
         return manifest
     finally:

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -138,7 +139,9 @@ def _fake_seams(
     ) -> object:
         captured["policy"] = policy
         captured["env_keys"] = sorted(env)
-        return object()
+        return SimpleNamespace(
+            outcome=SimpleNamespace(request_hash="test-request-hash"),
+        )
 
     def fake_derive(episode_root: Path, rerun: object) -> EditPlan0C:
         assert rerun is captured["rerun_marker"]
@@ -188,7 +191,7 @@ def test_selection_honored_commits_new_version_and_outcome(
     assert adopted == plan_sha256(head.plan)
     outcomes = load_policy_outcomes(episode_root)
     assert len(outcomes) == 1
-    assert outcomes[0].status == "honored"
+    assert outcomes[0].status == "connected"
     assert outcomes[0].plan_version == "v2"
     assert outcomes[0].judgment_id == "j-policy-1"
 

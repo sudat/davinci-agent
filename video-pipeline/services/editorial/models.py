@@ -69,11 +69,14 @@ class AdoptedPolicySummaryV1(StrictModel):
 
     decision: Literal["adopt", "revise"]
     scope: AdoptedPolicyScopeV1 = AdoptedPolicyScopeV1()
+    audience_message: str = ""
     structure: str = ""
+    duration_estimate: str = ""
     candidate_scenes: _StringSequence = ()
     subtitle_policy: str = ""
     audio_policy: str = ""
     tempo_policy: str = ""
+    reference_mapping: str = ""
     unused_reasons: str = ""
     unconfirmed: _StringSequence = ()
     note: str | None = None

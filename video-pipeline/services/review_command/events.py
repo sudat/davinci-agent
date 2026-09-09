@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Final, Literal
 
 from pydantic import Field, ValidationError, model_validator
@@ -301,6 +302,22 @@ def policy_payload(
 def event_policy_plan(event: ReviewEvent0C) -> EditPlan0C:
     """Parse the bound policy payload, refusing streams whose hash drifts."""
 
+    return parse_policy_payload(event).plan
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyPayload:
+    """The parsed ``policy_applied`` linkage plus the derived plan."""
+
+    judgment_id: str
+    proposal_id: str | None
+    decision: str
+    plan: EditPlan0C
+
+
+def parse_policy_payload(event: ReviewEvent0C) -> PolicyPayload:
+    """Expose the full policy linkage (judgment/proposal/decision/plan)."""
+
     if event.kind != POLICY_EVENT_KIND:
         raise EventStreamError(
             f"event at sequence {event.sequence} is not a policy commit"
@@ -308,21 +325,35 @@ def event_policy_plan(event: ReviewEvent0C) -> EditPlan0C:
     verify_proposal_hash(event)
     try:
         payload = json.loads(event.proposal_json)
+        judgment_id = payload["judgment_id"]
+        proposal_id = payload.get("proposal_id")
+        decision = payload["decision"]
         plan_json = payload["plan"]
     except (ValueError, KeyError, TypeError) as error:
         raise EventStreamError(
             f"malformed policy payload at sequence {event.sequence}"
         ) from error
-    if not isinstance(plan_json, dict):
+    if (
+        not isinstance(judgment_id, str)
+        or not isinstance(decision, str)
+        or (proposal_id is not None and not isinstance(proposal_id, str))
+        or not isinstance(plan_json, dict)
+    ):
         raise EventStreamError(
             f"malformed policy payload at sequence {event.sequence}"
         )
     try:
-        return EditPlan0C.model_validate(_tuplize(plan_json))
+        plan = EditPlan0C.model_validate(_tuplize(plan_json))
     except (ValidationError, ValueError) as error:
         raise EventStreamError(
             f"unparsable policy plan at sequence {event.sequence}"
         ) from error
+    return PolicyPayload(
+        judgment_id=judgment_id,
+        proposal_id=proposal_id,
+        decision=decision,
+        plan=plan,
+    )
 
 
 def compute_event_id(event: ReviewEvent0C) -> str:
@@ -407,6 +438,7 @@ __all__ = [
     "RESTORED_EVENT_KIND",
     "EventSeal",
     "EventStreamError",
+    "PolicyPayload",
     "ReviewEvent0C",
     "build_event",
     "compute_event_id",
@@ -415,6 +447,7 @@ __all__ = [
     "event_restored_plan",
     "event_stream_bytes",
     "parse_event_stream",
+    "parse_policy_payload",
     "policy_payload",
     "restore_payload",
     "verify_proposal_hash",

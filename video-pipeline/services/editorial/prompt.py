@@ -81,11 +81,14 @@ def render_adopted_policy_text(summary: AdoptedPolicySummaryV1 | None) -> str | 
     )
     lines = [
         header,
+        f"audience_message: {summary.audience_message}",
         f"structure: {summary.structure}",
+        f"duration_estimate: {summary.duration_estimate}",
         f"candidate_scenes: {', '.join(summary.candidate_scenes) or '-'}",
         f"subtitle_policy: {summary.subtitle_policy}",
         f"audio_policy: {summary.audio_policy}",
         f"tempo_policy: {summary.tempo_policy}",
+        f"reference_mapping: {summary.reference_mapping}",
         f"unused_reasons: {summary.unused_reasons}",
         f"unconfirmed: {', '.join(summary.unconfirmed) or '—'}",
     ]
