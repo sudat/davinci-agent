@@ -49,6 +49,9 @@ export type ConsultationProposal = {
   title: string;
   summary: string;
   details: ConsultationProposalDetails;
+  /** 工程4 optional storyboard panels (absent on old data → render
+   *  nothing extra; never claim to be the trial edit). */
+  panels?: ConsultationGenerationPanel[] | null;
 };
 
 export type ConsultationJudgment = {
@@ -206,6 +209,103 @@ export type ConsultationPayload = {
   policy?: ConsultationPolicy | null;
   /** Slice-2 extension, optional for backward compatibility. */
   rebuild?: ConsultationRebuild | null;
+  generation_state?: ConsultationGenerationState | null;
+};
+
+/** 工程4: optional generation permission + panel scope for
+ *  POST /consultation/message. Absent → text-only as today. */
+export type ConsultationGenerationPermission = {
+  granted: true;
+  panels_max: number;
+  images_max: number;
+};
+
+export type ConsultationGenerationPanelRequest = {
+  frame_refs?: string[] | null;
+  panel_id?: string | null;
+};
+
+export type ConsultationGenerationRequest = {
+  permission: ConsultationGenerationPermission;
+  panel_request?: ConsultationGenerationPanelRequest | null;
+};
+
+export type ConsultationGenerationPanelRole = "a" | "b" | "real_frame";
+
+export type ConsultationGenerationPanelStatus =
+  | "requested"
+  | "generated"
+  | "failed";
+
+export type ConsultationGenerationPanelCaption = {
+  subject: string;
+  scene_note: string;
+  changes: string;
+  unconfirmed: string[];
+};
+
+export type ConsultationGenerationPanel = {
+  panel_id: string;
+  role: ConsultationGenerationPanelRole;
+  source_frame_ref: string | null;
+  image_ref: string | null;
+  base_created_at?: string | null;
+  caption: ConsultationGenerationPanelCaption;
+  status: ConsultationGenerationPanelStatus | null;
+};
+
+/** Serve route for one generated panel's bytes (the backend resolves the
+ *  episode-relative image_ref; the client never builds file paths). */
+export function consultationPanelImageUrl(episodeId: string, panelId: string): string {
+  return `/episodes/${encodeURIComponent(episodeId)}/consultation/panels/${encodeURIComponent(panelId)}`;
+}
+
+/** POST .../consultation/panels — retry ONE named panel (U33/U37: no
+ *  auto-retry, no new-panel mixing; a moved base is a typed 409). */
+export async function postConsultationPanelRetry(
+  episodeId: string,
+  input: {
+    consultationId: string;
+    proposalId: string;
+    baseCreatedAt: string;
+    panelId: string;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<Consultation> {
+  const response = await fetchImpl(
+    `/episodes/${encodeURIComponent(episodeId)}/consultation/panels`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consultation_id: input.consultationId,
+        proposal_id: input.proposalId,
+        base_created_at: input.baseCreatedAt,
+        permission: { granted: true, panels_max: 1, images_max: 1 },
+        retry_panel_ids: [input.panelId],
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new CockpitApiError(
+      "unexpected-response",
+      response.status,
+      `panels retry returned HTTP ${String(response.status)}`,
+    );
+  }
+  return (await response.json()) as Consultation;
+}
+
+export type ConsultationGenerationState = {
+  available: boolean;
+  model_verified: boolean | null;
+  model_selected: string | null;
+  refused_reason: string | null;
+};
+
+export type ConsultationMessageInput = {
+  message: string;
+  generation?: ConsultationGenerationRequest | null;
 };
 
 export async function getConsultation(
@@ -221,12 +321,16 @@ export async function getConsultation(
 
 export async function postConsultationMessage(
   episodeId: string,
-  input: { message: string },
+  input: ConsultationMessageInput,
   fetchImpl: FetchLike = fetch,
 ): Promise<Consultation> {
+  const body: Record<string, unknown> = { message: input.message };
+  if (input.generation !== undefined && input.generation !== null) {
+    body["generation"] = input.generation;
+  }
   return request<Consultation>(
     `/episodes/${encodeURIComponent(episodeId)}/consultation/message`,
-    { method: "POST", body: JSON.stringify(input) },
+    { method: "POST", body: JSON.stringify(body) },
     fetchImpl,
   );
 }

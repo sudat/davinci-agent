@@ -4,11 +4,16 @@ import {
   DECISION_LABEL,
   scopeSummary,
 } from "@/components/ConsultationJudgmentForm";
+import { useState } from "react";
 import ConsultationJudgmentForm from "@/components/ConsultationJudgmentForm";
-import ConsultationProposalCard from "@/components/ConsultationProposalCard";
+import ConsultationProposalCard, {
+  panelNoteLine,
+  type ConsultationPanelChoice,
+} from "@/components/ConsultationProposalCard";
 import {
   isPolicyOutcomeEntry,
   type ConsultationEntry,
+  type ConsultationGenerationPanel,
   type ConsultationJudgmentInput,
   type ConsultationPayload,
   type ConsultationPolicyOutcomeEntry,
@@ -25,7 +30,9 @@ function clockOf(raw: string): string {
 type ConsultationEntryListProps = {
   payload: ConsultationPayload | null;
   busy: boolean;
+  episodeId: string;
   onJudgment: (input: ConsultationJudgmentInput) => void;
+  onPanelRetry?: (consultationId: string, proposalId: string, panel: ConsultationGenerationPanel) => void;
 };
 
 function nonEmptyText(value: unknown): string | null {
@@ -120,12 +127,17 @@ function outcomeKeyOf(entry: ConsultationPolicyOutcomeEntry, index: number): str
 function JournalRow({
   entry,
   busy,
+  episodeId,
   onJudgment,
+  onPanelRetry,
 }: {
   entry: ConsultationEntry;
   busy: boolean;
+  episodeId: string;
   onJudgment: (input: ConsultationJudgmentInput) => void;
+  onPanelRetry?: (consultationId: string, proposalId: string, panel: ConsultationGenerationPanel) => void;
 }) {
+  const [panelChoices, setPanelChoices] = useState<Record<string, Record<string, ConsultationPanelChoice | null>>>({});
   if (isPolicyOutcomeEntry(entry)) {
     return (
       <div
@@ -136,6 +148,32 @@ function JournalRow({
       </div>
     );
   }
+  const entryId = entry.consultation_id;
+  const choosePanel = (proposalId: string, panel: ConsultationGenerationPanel, action: ConsultationPanelChoice) => {
+    if (action === "retry") {
+      onPanelRetry?.(entryId, proposalId, panel);
+      return;
+    }
+    setPanelChoices((prev) => ({
+      ...prev,
+      [proposalId]: { ...(prev[proposalId] ?? {}), [panel.panel_id]: action },
+    }));
+  };
+  const submitWithPanelNote = (proposalId: string, input: ConsultationJudgmentInput) => {
+    const choices = panelChoices[proposalId] ?? {};
+    const lines = Object.entries(choices)
+      .filter((pair): pair is [string, ConsultationPanelChoice] => pair[1] !== null)
+      .map(([panelId, choice]) => panelNoteLine(panelId, choice));
+    if (lines.length === 0) {
+      onJudgment(input);
+      return;
+    }
+    const suffix = `（${lines.join("・")}）`;
+    onJudgment({
+      ...input,
+      note: input.note === null || input.note === "" ? suffix : `${input.note}${suffix}`,
+    });
+  };
   return (
     <div
       data-testid="consultation-entry"
@@ -150,7 +188,18 @@ function JournalRow({
         );
         return (
           <div key={proposal.proposal_id}>
-            <ConsultationProposalCard proposal={proposal} />
+            <ConsultationProposalCard
+              proposal={proposal}
+              episodeId={episodeId}
+              panelChoices={panelChoices[proposal.proposal_id] ?? {}}
+              onPanelAction={(panelId, action) => {
+                const panel = Array.isArray(proposal.panels)
+                  ? proposal.panels.find((candidate) => candidate.panel_id === panelId)
+                  : undefined;
+                if (panel === undefined) return;
+                choosePanel(proposal.proposal_id, panel, action);
+              }}
+            />
             {recorded.length > 0 ? (
               <ul className="list-plain" data-testid="consultation-judgments-recorded">
                 {recorded.map((judgment) => (
@@ -168,7 +217,7 @@ function JournalRow({
               consultationId={entry.consultation_id}
               proposalId={proposal.proposal_id}
               busy={busy}
-              onSubmit={onJudgment}
+              onSubmit={(input) => submitWithPanelNote(proposal.proposal_id, input)}
             />
           </div>
         );
@@ -179,7 +228,9 @@ function JournalRow({
 export default function ConsultationEntryList({
   payload,
   busy,
+  episodeId,
   onJudgment,
+  onPanelRetry,
 }: ConsultationEntryListProps) {
   if (payload === null) {
     return (
@@ -206,7 +257,9 @@ export default function ConsultationEntryList({
           }
           entry={entry}
           busy={busy}
+          episodeId={episodeId}
           onJudgment={onJudgment}
+          onPanelRetry={onPanelRetry}
         />
       ))}
     </>

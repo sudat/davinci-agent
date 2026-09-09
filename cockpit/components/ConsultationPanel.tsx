@@ -1,10 +1,12 @@
 "use client";
 
-// allow: SIZE_OK — 304 pure LOC: one consultation-panel concern. The poll
-// merge (absorbView, journal row keys), the judgment forms, and the
-// slice-2 rebuild-state line are one interaction unit over the same polled
-// view; splitting the merge from its render would separate the U44
-// reload-restore behavior from the state that produces it.
+// allow: SIZE_OK — 573 pure LOC: one consultation-panel concern. The poll
+// merge (absorbView, journal row keys), the judgment forms, the slice-2
+// rebuild-state line, and the 工程4 optional-generation section (budget
+// remainder, scope, permission/decline sends, refusal lines) are one
+// interaction unit over the same polled view; splitting the merge from its
+// render would separate the U44 reload-restore behavior from the state
+// that produces it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   apiFailure,
@@ -13,8 +15,11 @@ import {
   isPolicyOutcomeEntry,
   postConsultationJudgment,
   postConsultationMessage,
+  postConsultationPanelRetry,
   type Consultation,
   type ConsultationEntry,
+  type ConsultationGenerationPanel,
+  type ConsultationGenerationState,
   type ConsultationJudgmentInput,
   type ConsultationPayload,
   type ConsultationRebuild,
@@ -86,6 +91,44 @@ function rebuildLineOf(rebuild: ConsultationRebuild | null | undefined): string 
   return null;
 }
 
+const GENERATION_ERROR_CODES = [
+  "generation-model-unverified",
+  "generation-budget-exhausted",
+  "generation-stale",
+] as const;
+
+function isGenerationErrorCode(code: string): boolean {
+  return (GENERATION_ERROR_CODES as readonly string[]).includes(code);
+}
+
+function generationErrorLineOf(code: string): string {
+  if (code === "generation-model-unverified") {
+    return "画像の案を作るAIの確認が済んでいません。0生成で続行します（文章のみの相談は続けられます）";
+  }
+  if (code === "generation-budget-exhausted") {
+    return "画像の案の上限に達しました。0生成で続行します（文章のみの相談は続けられます）";
+  }
+  if (code === "generation-stale") {
+    return "表示中の内容が古いため、画像の案は作りませんでした。0生成で続行します（文章のみの相談は続けられます）";
+  }
+  return "画像の案は作りませんでした。0生成で続行します（文章のみの相談は続けられます）";
+}
+
+function generationStateOf(
+  payload: ConsultationPayload | null,
+): ConsultationGenerationState | null {
+  if (payload === null) return null;
+  const state: unknown = payload.generation_state;
+  if (typeof state !== "object" || state === null) return null;
+  return state as ConsultationGenerationState;
+}
+
+function refusedReasonOf(state: ConsultationGenerationState | null): string | null {
+  if (state === null) return null;
+  const reason: unknown = state.refused_reason;
+  return typeof reason === "string" && reason !== "" ? reason : null;
+}
+
 /**
  * Pre-edit directional consultation (UX 2.5 slice-1): mounted by
  * EpisodeView, visible only while current_stage is in the plan-committed
@@ -110,6 +153,12 @@ export default function ConsultationPanel({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [announcement, setAnnouncement] = useState<string | null>(null);
+  const [generationOpen, setGenerationOpen] = useState(false);
+  const [panelsMax, setPanelsMax] = useState(1);
+  const [generationError, setGenerationError] = useState<{
+    code: string;
+    detail: string;
+  } | null>(null);
   const eligible = status !== null && isConsultationStage(status.current_stage);
   const now = useNow(eligible);
   const openedAtRef = useRef<number | null>(null);
@@ -131,6 +180,8 @@ export default function ConsultationPanel({
       }
       let nextPolicy: ConsultationPayload["policy"];
       let nextRebuild: ConsultationPayload["rebuild"];
+      let nextGenerationState: ConsultationPayload["generation_state"];
+      let carriesGenerationState = false;
       for (const entry of view.consultations) {
         byKey.set(entryKeyOf(entry, byKey.size), entry);
         if (!isPolicyOutcomeEntry(entry)) {
@@ -145,11 +196,19 @@ export default function ConsultationPanel({
           }
         }
       }
+      if (view.generation_state !== undefined) {
+        nextGenerationState = view.generation_state;
+        carriesGenerationState = true;
+      }
       const next: ConsultationPayload = { consultations: [...byKey.values()] };
       const policy = nextPolicy ?? prev?.policy;
       const rebuild = nextRebuild ?? prev?.rebuild;
       if (policy !== undefined) next.policy = policy;
       if (rebuild !== undefined) next.rebuild = rebuild;
+      const generationState = carriesGenerationState
+        ? nextGenerationState
+        : prev?.generation_state;
+      if (generationState !== undefined) next.generation_state = generationState;
       return next;
     });
     const known = knownProposalIdsRef.current;
@@ -256,6 +315,16 @@ export default function ConsultationPanel({
     setAnnouncement(`${what}（${failure.code}）`);
   };
 
+  const recordGenerationFailure = (cause: unknown) => {
+    const failure = apiFailure(cause);
+    if (isGenerationErrorCode(failure.code)) {
+      setGenerationError(failure);
+      setAnnouncement(`画像の案は作りませんでした（${failure.code}）。0生成で続行します`);
+      return;
+    }
+    recordFailure(cause, "相談を送信できませんでした");
+  };
+
   const send = async () => {
     const trimmed = message.trim();
     if (trimmed === "" || busy) return;
@@ -271,6 +340,82 @@ export default function ConsultationPanel({
     } finally {
       setBusy(false);
     }
+  };
+
+  const sendWithGeneration = async () => {
+    const trimmed = message.trim();
+    if (trimmed === "" || busy) return;
+    setBusy(true);
+    setError(null);
+    setGenerationError(null);
+    try {
+      const entry = await postConsultationMessage(
+        episodeId,
+        {
+          message: trimmed,
+          generation: {
+            permission: { granted: true, panels_max: panelsMax, images_max: panelsMax },
+          },
+        },
+        fetchImpl,
+      );
+      absorb([entry]);
+      setMessage("");
+      setFetchedAt(Date.now());
+    } catch (cause) {
+      recordGenerationFailure(cause);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendDecline = async () => {
+    const trimmed = message.trim();
+    if (trimmed === "" || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const entry = await postConsultationMessage(episodeId, { message: trimmed }, fetchImpl);
+      absorb([entry]);
+      setMessage("");
+      setFetchedAt(Date.now());
+      setGenerationOpen(false);
+    } catch (cause) {
+      recordFailure(cause, "相談を送信できませんでした");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendPanelRetry = (consultationId: string, proposalId: string, panel: ConsultationGenerationPanel) => {
+    void (async () => {
+      if (busy) return;
+      const baseCreatedAt: unknown = panel.base_created_at;
+      if (typeof baseCreatedAt !== "string" || baseCreatedAt === "") {
+        setGenerationError({
+          code: "generation-panel-base-unknown",
+          detail: "このコマの記録が古いため再依頼できません（一覧を更新してください）",
+        });
+        return;
+      }
+      setBusy(true);
+      setError(null);
+      setGenerationError(null);
+      try {
+        const entry = await postConsultationPanelRetry(episodeId, {
+          consultationId,
+          proposalId,
+          baseCreatedAt,
+          panelId: panel.panel_id,
+        }, fetchImpl);
+        absorb([entry]);
+        setFetchedAt(Date.now());
+      } catch (cause) {
+        recordGenerationFailure(cause);
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   const submitJudgment = (input: ConsultationJudgmentInput) => {
@@ -301,6 +446,10 @@ export default function ConsultationPanel({
   const llmUnavailable = error?.code === "consultation-llm-unavailable";
   const latestBudget = latestBudgetOf(payload);
   const rebuildLine = rebuildLineOf(payload?.rebuild);
+  const generationState = generationStateOf(payload);
+  const refusedReason = refusedReasonOf(generationState);
+  const generationRemaining =
+    latestBudget !== null ? latestBudget.llm_calls_limit - latestBudget.llm_calls_used : null;
 
   return (
     <section className="card" data-testid="consultation-panel">
@@ -361,6 +510,79 @@ export default function ConsultationPanel({
         </button>
       </div>
       <p className="field-hint">提案が届くまで時間がかかります。届けば自動で表示されます。</p>
+      <div data-testid="generation-permission">
+        <button
+          type="button"
+          className="btn-small"
+          aria-expanded={generationOpen}
+          onClick={() => setGenerationOpen((prev) => !prev)}
+          data-testid="generation-section-toggle"
+        >
+          画像の案を作る（任意）
+        </button>
+        {generationOpen ? (
+          <div>
+            <p className="field-hint">
+              画像の案は見本であり、試し編集ではありません。作らなくても相談は続けられます。
+            </p>
+            {latestBudget !== null && generationRemaining !== null ? (
+              <p className="field-hint" data-testid="generation-budget-remaining">
+                画像の案に使える残り（AIの呼び出し回数の残り）: {generationRemaining} /{" "}
+                {latestBudget.llm_calls_limit}回（パネル数 {panelsMax}枚まで）
+              </p>
+            ) : (
+              <p className="field-hint" data-testid="generation-budget-remaining">
+                画像の案に使える残りはまだ分かりません（相談の記録がありません）
+              </p>
+            )}
+            <div className="inline-row" role="group" aria-label="画像の案の枚数">
+              <span className="field-hint">パネル数:</span>
+              {[1, 2, 3].map((count) => (
+                <label key={count}>
+                  <input
+                    type="radio"
+                    name="generation-panels-max"
+                    checked={panelsMax === count}
+                    onChange={() => setPanelsMax(count)}
+                    data-testid={`generation-panels-${count}`}
+                  />
+                  {count}枚
+                </label>
+              ))}
+            </div>
+            {refusedReason !== null ? (
+              <p className="field-hint" data-testid="consultation-generation-refused">
+                画像の案は作れませんでした：{refusedReason}。0生成で続行します（文章のみの相談は続けられます）
+              </p>
+            ) : null}
+            {generationError !== null ? (
+              <div className="error-notice" role="alert" data-testid="consultation-generation-error">
+                <p>{generationErrorLineOf(generationError.code)}</p>
+                <p className="field-hint">（{generationError.code}）送り直しても回復しない場合は文章のみで続けられます。</p>
+              </div>
+            ) : null}
+            <div className="actions">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void sendWithGeneration()}
+                disabled={busy || message.trim() === ""}
+                data-testid="generation-request"
+              >
+                {busy ? "送信中…" : "許可して依頼"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void sendDecline()}
+                disabled={busy || message.trim() === ""}
+                data-testid="generation-decline"
+              >
+                生成しない（見本だけ）
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
       <div aria-live="polite">
         {announcement !== null ? (
           <p className="field-hint" data-testid="consultation-announcement">
@@ -373,7 +595,13 @@ export default function ConsultationPanel({
           </p>
         ) : null}
       </div>
-      <ConsultationEntryList payload={payload} busy={busy} onJudgment={submitJudgment} />
+      <ConsultationEntryList
+        payload={payload}
+        busy={busy}
+        episodeId={episodeId}
+        onJudgment={submitJudgment}
+        onPanelRetry={sendPanelRetry}
+      />
       {payload?.policy?.adopted !== null && payload?.policy?.adopted !== undefined ? (
         <StyleSaveButton
           episodeId={episodeId}

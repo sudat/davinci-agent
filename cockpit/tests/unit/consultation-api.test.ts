@@ -96,7 +96,32 @@ describe("postConsultationMessage", () => {
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/cockpit-api/episodes/ep-x/consultation/message");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({ message: "冒頭を引きから" });
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).toEqual({ message: "冒頭を引きから" });
+    expect(body).not.toHaveProperty("generation");
+  });
+
+  it("generation付きは permission+panel_request を送り、無いときは付けない", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, entry));
+
+    await postConsultationMessage(
+      "ep-x",
+      {
+        message: "絵コンテも",
+        generation: {
+          permission: { granted: true, panels_max: 2, images_max: 2 },
+        },
+      },
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      message: "絵コンテも",
+      generation: {
+        permission: { granted: true, panels_max: 2, images_max: 2 },
+      },
+    });
   });
 
   it("llm-unavailableの型付きエラーがそのまま出る", async () => {
