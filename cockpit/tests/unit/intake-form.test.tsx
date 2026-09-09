@@ -49,15 +49,17 @@ describe("IntakeForm（Createボタン活性ロジック）", () => {
     const create = screen.getByTestId("create-button") as HTMLButtonElement;
     expect(create.disabled).toBe(false);
 
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          episode_id: "ep-ok",
-          job_id: "ep-ok",
-          status: "CREATED",
-          brief_status: "draft",
-        }),
-        { status: 200 },
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            episode_id: "ep-ok",
+            job_id: "ep-ok",
+            status: "CREATED",
+            brief_status: "draft",
+          }),
+          { status: 200 },
+        ),
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -70,15 +72,17 @@ describe("IntakeForm（Createボタン活性ロジック）", () => {
     render(<IntakeForm />);
     fill("ソースフォルダ", "/tmp/missing");
     fill("この動画は何について？", "テストbrief");
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: {
-            code: "source-folder-not-found",
-            detail: "source folder does not exist: /tmp/missing",
-          },
-        }),
-        { status: 422 },
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "source-folder-not-found",
+              detail: "source folder does not exist: /tmp/missing",
+            },
+          }),
+          { status: 422 },
+        ),
       ),
     );
     vi.stubGlobal("fetch", fetchMock);

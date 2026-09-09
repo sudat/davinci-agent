@@ -42,6 +42,18 @@ function clockOfEpoch(ms: number): string {
     .join(":");
 }
 
+/** 工程3: one honest line for the style pinned at episode start. Absent
+ *  on old data → null (render nothing, never 不明 noise). */
+function appliedStyleLineOf(status: EpisodeStatus | null): string | null {
+  if (status === null) return null;
+  const applied: unknown = status.applied_style;
+  if (typeof applied !== "object" || applied === null) return null;
+  const record = applied as { channel?: unknown; version?: unknown };
+  if (typeof record.channel !== "string" || record.channel === "") return null;
+  if (typeof record.version !== "number") return null;
+  return `使ったスタイル: チャンネル${record.channel}・版${record.version}`;
+}
+
 /**
  * Episode status view: polling progress (ETA only when measured), preview
  * player, flagged review items with timestamp jump, and the before/after
@@ -165,6 +177,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
   const binding = derivePreviewBinding(probeObservation, status);
   const previewOk = previewAllowsCompletion(binding);
+  const appliedStyleLine = appliedStyleLineOf(status);
   // 再生hashは最後の再生可能値を保持する: probe成功時は今回のhash（不明な
   // らnullのまま）、probe失敗時は直前の再生可能hash — playerのkey/srcを
   // 変えずvideo要素を作り直さない。未取得の失敗時はnull（固定URL）のまま。
@@ -222,6 +235,11 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             </dd>
           </div>
         </dl>
+        {appliedStyleLine !== null ? (
+          <p className="field-hint" data-testid="applied-style">
+            {appliedStyleLine}
+          </p>
+        ) : null}
         {notFound ? (
           <p className="empty-note">このエピソードは見つかりません。</p>
         ) : status !== null ? (

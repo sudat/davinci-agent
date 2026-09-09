@@ -10,6 +10,12 @@ import {
 export type EpisodeCreateInput = {
   source_folder: string;
   brief_text: string;
+  /** 工程3: explicit channel choice only — omitted unless the operator
+   *  picked a channel (never a silent default). */
+  channel?: string;
+  /** 工程3: pinned style version — omitted unless explicitly chosen
+   *  together with channel. */
+  style_version?: number;
 };
 
 export type EpisodeCreateResult = {
@@ -115,6 +121,9 @@ export type EpisodeStatus = {
   current_run_retry_count?: number;
   /** Wall-clock intake time — the reference for 経過時間. Absent = unmeasured. */
   intake_created_at?: string;
+  /** 工程3: the channel style pinned at episode start. Absent/null on old
+   *  data — renderers show nothing, never 不明. */
+  applied_style?: { channel: string; version: number } | null;
   /** THIS-run first preview output arrival (試し編集完了 labeling only —
    *  never overall completion). Absent = not arrived (or unmeasured). */
   preview_first_arrived_at?: string;

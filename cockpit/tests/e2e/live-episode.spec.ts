@@ -29,7 +29,12 @@ test.describe("live real-chain episode", () => {
 
   test.describe.configure({ mode: "serial" });
 
-  const API_BASE = process.env.COCKPIT_API ?? "http://127.0.0.1:8765";
+  // Direct (Node-side) backend base for request.get calls: an explicit
+  // COCKPIT_API wins, else the live-lane port variable (mirroring
+  // playwright.config.ts so LIVE_V44_E2E=1 COCKPIT_E2E_PORT=<port> reaches
+  // the backend here too), else the 8765 default.
+  const API_BASE =
+    process.env.COCKPIT_API ?? `http://127.0.0.1:${process.env.COCKPIT_E2E_PORT ?? "8765"}`;
   // __dirname is cockpit/tests/e2e; the playwright config state root is
   // cockpit/.e2e/state (episode layout: <id>/{runner.log,previews/preview.mp4}).
   const EPISODES_ROOT = path.resolve(__dirname, "..", "..", ".e2e", "state", "episodes");
@@ -231,7 +236,11 @@ test.describe("live real-chain episode", () => {
     // adopt→rebuild→updated-preview leg needs the production model runtime
     // and stays a documented non-run here.
     test.setTimeout(120_000);
-    const consoleErrors = trackConsoleErrors(page, [404]);
+    // 422 allowlisted: the honest consultation refusal (consultation-llm-
+    // unavailable) surfaces as a console resource error on the POST — the
+    // refusal itself is the pinned product behavior (backend regressions in
+    // test_consultation_api.py), so the console check must expect it.
+    const consoleErrors = trackConsoleErrors(page, [404, 422]);
 
     const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "cockpit-live-consult-"));
     fs.copyFileSync(FIXTURE_CLIP, path.join(sourceDir, "camera-001.mp4"));

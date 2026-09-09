@@ -24,6 +24,7 @@ import ConsultationBudgetReadout, {
   latestBudgetOf,
 } from "@/components/ConsultationBudgetReadout";
 import ConsultationEntryList from "@/components/ConsultationEntryList";
+import StyleSaveButton from "@/components/StyleSaveButton";
 import ErrorNotice from "@/components/ErrorNotice";
 import { isConsultationStage } from "@/lib/stageGroups";
 import { useNow } from "@/components/useNow";
@@ -42,8 +43,17 @@ function isConsultationPayload(value: unknown): value is ConsultationPayload {
   return Array.isArray((value as { consultations?: unknown }).consultations);
 }
 
-function entryKeyOf(entry: ConsultationEntry, index: number): string {
-  if (isPolicyOutcomeEntry(entry)) {
+/** 工程3 save target: the channel pinned at episode start (poll-derived,
+ *  U08 restart-safe). Absent on old data → null (honest no-button line). */
+function appliedChannelOf(status: EpisodeStatus | null): string | null {
+  if (status === null) return null;
+  const applied: unknown = status.applied_style;
+  if (typeof applied !== "object" || applied === null) return null;
+  const channel: unknown = (applied as { channel?: unknown }).channel;
+  return typeof channel === "string" && channel !== "" ? channel : null;
+}
+
+function entryKeyOf(entry: ConsultationEntry, index: number): string {  if (isPolicyOutcomeEntry(entry)) {
     const id = [entry.outcome_id, entry.judgment_id, entry.recorded_at].find(
       (value) => typeof value === "string" && value !== "",
     );
@@ -364,6 +374,14 @@ export default function ConsultationPanel({
         ) : null}
       </div>
       <ConsultationEntryList payload={payload} busy={busy} onJudgment={submitJudgment} />
+      {payload?.policy?.adopted !== null && payload?.policy?.adopted !== undefined ? (
+        <StyleSaveButton
+          episodeId={episodeId}
+          adopted={payload.policy.adopted}
+          channelId={appliedChannelOf(status)}
+          fetchImpl={fetchImpl}
+        />
+      ) : null}
     </section>
   );
 }

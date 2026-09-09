@@ -2,9 +2,10 @@
  * Typed thin client for the episode cockpit backend (task 44 + 46).
  *
  * Contract notes (read from video-pipeline/services/episode_cockpit/*):
- * - POST /episodes takes a STRICT body: only `source_folder` and
- *   `brief_text` (extra keys are rejected with 422 validation-error), so
- *   this client must never add intake-only UI fields to the request.
+ * - POST /episodes takes `source_folder` + `brief_text` plus the 工程3
+ *   optional `channel` / `style_version` (sent ONLY when the operator
+ *   explicitly chose them — never intake-only UI defaults); other
+ *   intake-only UI fields must never be added to the request.
  * - Every backend failure is `{error: {code, detail}}`; `detail` may be a
  *   string OR a structured array (validation-error). Both are preserved.
  * - Default base is the SAME-ORIGIN proxy path (/cockpit-api → next.config
@@ -29,3 +30,4 @@ export * from "@/lib/approval-api";
 export * from "@/lib/kit-preview-api";
 export * from "@/lib/finishing-api";
 export * from "@/lib/consultation-api";
+export * from "@/lib/channel-styles-api";

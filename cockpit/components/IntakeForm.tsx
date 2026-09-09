@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   canCreateEpisode,
@@ -8,23 +8,56 @@ import {
   type IntakeFieldErrors,
 } from "@/lib/intake";
 import { apiFailure, createEpisode } from "@/lib/api";
+import {
+  getChannels,
+  getChannelStyle,
+  restoreChannelStyle,
+  type ChannelStyle,
+} from "@/lib/channel-styles-api";
+import type { FetchLike } from "@/lib/http";
 import AdvancedSection from "@/components/AdvancedSection";
 import ReferenceList from "@/components/ReferenceList";
 import ErrorNotice from "@/components/ErrorNotice";
 
 type ApiErrorState = { code: string; detail: string };
 
+type IntakeFormProps = {
+  fetchImpl?: FetchLike;
+};
+
+function currentNameOf(style: ChannelStyle): string | null {
+  if (style.current === null) return null;
+  const entry = style.versions.find((item) => item.version === style.current);
+  if (entry === undefined || entry.name === "") return null;
+  return entry.name;
+}
+
 /**
  * PRD 13.2 first screen: source folder + natural-language brief are the
  * only required inputs; everything else is defaulted or collapsed. Internal
- * artifact/job IDs are never surfaced here — Create posts exactly
- * {source_folder, brief_text} and navigates to the episode status view.
+ * artifact/job IDs are never surfaced here.
+ *
+ * 工程3 channel/style: the channel select is fed by GET /channels (a
+ * failed/empty list falls back honestly to a single デフォルト option and
+ * sends no channel). Picking a channel shows its current style version
+ * from GET style; create sends channel + style_version ONLY when the
+ * operator explicitly picked the channel. All state derives from server
+ * fetches — no sessionStorage. Restore (versions > 1) is operator-only.
  */
-export default function IntakeForm() {
+export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
   const router = useRouter();
   const [sourceFolder, setSourceFolder] = useState("");
   const [briefText, setBriefText] = useState("");
   const [channelProfile, setChannelProfile] = useState("default");
+  const [channels, setChannels] = useState<string[] | null>(null);
+  const [channelsFailed, setChannelsFailed] = useState(false);
+  const [channelsEmpty, setChannelsEmpty] = useState(false);
+  const [channelExplicit, setChannelExplicit] = useState(false);
+  const [style, setStyle] = useState<ChannelStyle | null>(null);
+  const [styleFailed, setStyleFailed] = useState(false);
+  const [restoring, setRestoring] = useState<number | null>(null);
+  const [restored, setRestored] = useState<{ target: number; version: number } | null>(null);
+  const [restoreError, setRestoreError] = useState<ApiErrorState | null>(null);
   const [targetLengthMode, setTargetLengthMode] = useState("auto");
   const [references, setReferences] = useState<string[]>([]);
   const [dropActive, setDropActive] = useState(false);
@@ -39,6 +72,55 @@ export default function IntakeForm() {
     ? validateIntake(values)
     : {};
 
+  useEffect(() => {
+    let cancelled = false;
+    const impl: FetchLike = fetchImpl ?? fetch;
+    void (async () => {
+      try {
+        const list = await getChannels(impl);
+        if (cancelled) return;
+        if (list.length === 0) {
+          setChannels(["default"]);
+          setChannelsEmpty(true);
+        } else {
+          const ids = list.map((entry) => entry.channel_id);
+          setChannels(ids);
+          setChannelProfile(ids[0] ?? "default");
+        }
+      } catch {
+        if (cancelled) return;
+        setChannels(["default"]);
+        setChannelsFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchImpl]);
+
+  useEffect(() => {
+    if (channels === null) return;
+    let cancelled = false;
+    const impl: FetchLike = fetchImpl ?? fetch;
+    setStyle(null);
+    setStyleFailed(false);
+    setRestored(null);
+    setRestoreError(null);
+    void (async () => {
+      try {
+        const next = await getChannelStyle(channelProfile, { fetchImpl: impl });
+        if (cancelled) return;
+        setStyle(next);
+      } catch {
+        if (cancelled) return;
+        setStyleFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [channels, channelProfile, fetchImpl]);
+
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDropActive(false);
@@ -52,22 +134,55 @@ export default function IntakeForm() {
     }
   };
 
+  const restoreTo = (target: number) => {
+    const impl: FetchLike = fetchImpl ?? fetch;
+    void (async () => {
+      if (restoring !== null) return;
+      setRestoring(target);
+      setRestoreError(null);
+      try {
+        const result = await restoreChannelStyle(channelProfile, target, impl);
+        const next = await getChannelStyle(channelProfile, { fetchImpl: impl });
+        setStyle(next);
+        setRestored({ target, version: result.version });
+      } catch (cause) {
+        setRestoreError(apiFailure(cause));
+      } finally {
+        setRestoring(null);
+      }
+    })();
+  };
+
   const onSubmit = async () => {
     setTouched(true);
     setApiError(null);
     if (!canCreateEpisode(values)) return;
     setSubmitting(true);
     try {
-      const result = await createEpisode({
-        source_folder: sourceFolder.trim(),
-        brief_text: briefText.trim(),
-      });
+      const result = await createEpisode(
+        {
+          source_folder: sourceFolder.trim(),
+          brief_text: briefText.trim(),
+          ...(channelExplicit && !channelsFailed && channels !== null && channels.length > 0
+            ? { channel: channelProfile }
+            : {}),
+          ...(channelExplicit &&
+          !channelsFailed &&
+          style !== null &&
+          style.current !== null
+            ? { style_version: style.current }
+            : {}),
+        },
+        fetchImpl ?? fetch,
+      );
       router.push(`/episodes/${result.episode_id}`);
     } catch (cause) {
       setApiError(apiFailure(cause));
       setSubmitting(false);
     }
   };
+
+  const currentName = style !== null ? currentNameOf(style) : null;
 
   return (
     <form
@@ -149,11 +264,94 @@ export default function IntakeForm() {
             id="channel-profile"
             name="channel_profile"
             value={channelProfile}
-            onChange={(event) => setChannelProfile(event.target.value)}
+            disabled={channels === null}
+            onChange={(event) => {
+              setChannelProfile(event.target.value);
+              setChannelExplicit(true);
+            }}
+            data-testid="channel-select"
           >
-            <option value="default">デフォルト</option>
+            {channels === null ? (
+              <option value="default">読み込み中…</option>
+            ) : (
+              channels.map((id) => (
+                <option key={id} value={id}>
+                  {id === "default" ? "デフォルト" : id}
+                </option>
+              ))
+            )}
           </select>
+          {channelsFailed || (channelsEmpty && !channelExplicit) ? (
+            <p className="field-hint" data-testid="channels-fallback">
+              {channelsFailed
+                ? "チャンネル一覧を取得できませんでした。デフォルトで作成します"
+                : "登録されているチャンネルがありません。デフォルトで作成します"}
+            </p>
+          ) : null}
         </div>
+
+        {channels !== null ? (
+          <div className="field" data-testid="channel-style-area">
+            {style === null && !styleFailed ? (
+              <p className="field-hint">スタイルを確認しています…</p>
+            ) : null}
+            {styleFailed ? (
+              <p className="field-hint" data-testid="style-unavailable">
+                スタイルを確認できませんでした
+              </p>
+            ) : null}
+            {style !== null && style.current !== null ? (
+              <p className="field-hint" data-testid="channel-style-current">
+                {currentName !== null
+                  ? `使われるスタイル: ${currentName}（版${style.current}）`
+                  : `使われるスタイル: 版${style.current}`}
+              </p>
+            ) : null}
+            {style !== null && style.current === null ? (
+              <p className="field-hint" data-testid="channel-style-empty">
+                このチャンネルに保存されたスタイルはまだありません
+              </p>
+            ) : null}
+            {style !== null && style.versions.length > 1 ? (
+              <div>
+                <p className="field-hint">
+                  以前の版に戻せます（押したときだけ保存されます）。
+                </p>
+                <ul className="list-plain">
+                  {style.versions.map((entry) => (
+                    <li
+                      key={entry.version}
+                      data-testid={`style-version-${entry.version}`}
+                    >
+                      版{entry.version} {entry.name}（{entry.saved_at}）
+                      {entry.version !== style.current ? (
+                        <button
+                          type="button"
+                          className="btn-small"
+                          disabled={restoring !== null}
+                          onClick={() => restoreTo(entry.version)}
+                          data-testid={`style-restore-${entry.version}`}
+                        >
+                          この版に戻す
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                {restored !== null ? (
+                  <p className="field-hint" data-testid="style-restored">
+                    版{restored.target}の内容で新版{restored.version}として保存しました
+                  </p>
+                ) : null}
+                {restoreError !== null ? (
+                  <p className="field-error" data-testid="style-restore-error">
+                    {restoreError.code}: {restoreError.detail}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="field">
           <label htmlFor="reference-input">任意の参照</label>
