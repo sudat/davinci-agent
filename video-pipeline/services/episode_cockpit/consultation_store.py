@@ -69,6 +69,13 @@ JUDGMENTS_NAME = "judgments.jsonl"
 BUDGET_NAME = "budget.jsonl"
 OUTCOMES_NAME = "policy-outcomes.jsonl"
 REBUILD_LOG_NAME = "rebuild-requests.jsonl"
+# 工程4 (optional generated storyboard, default OFF): consultation-journal
+# runtime records — NEVER a new authoritative artifact family. Panels ride
+# proposal-set entries; generation events record the U47 model verification
+# ({model_selected, verified}) and every refusal note.
+PANELS_NAME = "panels.jsonl"
+GENERATION_NAME = "generation.jsonl"
+PANELS_DIR_NAME = "panels"
 
 CONFIG_RELATIVE = Path("config") / "consultation.json"
 _CONFIG_ROOT = Path(__file__).resolve().parents[2]
@@ -77,6 +84,13 @@ DEFAULT_LLM_CALLS_LIMIT = 6
 DEFAULT_INTERVALS_LIMIT = 3
 DEFAULT_WALL_SECONDS_LIMIT = 600.0
 DEFAULT_PREVIEW_SAMPLE_SECONDS_LIMIT = 30.0
+# Episode-cumulative image-call cap (image calls fold into the SAME
+# cumulative budget, scope-tagged via the event kind, never reset).
+DEFAULT_GENERATION_IMAGES_LIMIT = 6
+
+# Per-proposal panel cap (U32: max 3 panels per proposal, 1-2 proposals).
+MAX_PANELS_PER_PROPOSAL = 3
+MAX_GENERATION_PROPOSALS = 2
 
 # Canonical scope order for reservation pins and unaddressed derivation.
 POLICY_SCOPE_ORDER: tuple[str, ...] = ("composition", "appearance", "audio")
@@ -132,6 +146,14 @@ def unconfirmed_for_policy(policy: AdoptedPolicyV1) -> tuple[str, ...]:
     return tuple(dict.fromkeys(merged))
 
 type ConsultationDecision = Literal["adopt", "revise", "reject", "both_wrong", "delegate"]
+
+type PanelRole = Literal["a", "b", "real_frame"]
+
+type PanelStatus = Literal["requested", "generated", "failed"]
+
+type GenerationDecision = Literal["granted", "refused", "failed"]
+
+type BudgetEventKind = Literal["text", "image"]
 
 # Strict models never coerce list→tuple; pin the review_proposals BeforeValidator convention.
 type StringSequence = Annotated[tuple[str, ...], BeforeValidator(tuple)]
@@ -205,6 +227,82 @@ class ConsultationProposalSetV1(StrictModel):
     consultation_id: str
     created_at: str
     proposals: tuple[ConsultationProposalV1, ...] = Field(min_length=1, max_length=2)
+
+
+class GenerationPermissionV1(StrictModel):
+    """Per-request image-generation permission (工程4, default OFF).
+
+    Absent, or ``granted=False``, means text-only exactly as today — the
+    generation seam is never contacted. ``panels_max`` caps panels per
+    proposal (1..3); ``images_max`` caps image transport calls for the
+    request (>=1). Vague taste (no concrete panel target) never launches:
+    the route refuses with 0 calls until the request names its scope.
+    """
+
+    granted: bool = False
+    panels_max: int = Field(default=1, ge=1, le=3)
+    images_max: int = Field(default=1, ge=1)
+
+
+class PanelCaptionV1(StrictModel):
+    """One panel's caption: role subject, scene note, changes, unconfirmed."""
+
+    subject: str = ""
+    scene_note: str = ""
+    changes: str = ""
+    unconfirmed: StringSequence = ()
+
+
+class ConsultationPanelV1(StrictModel):
+    """One storyboard panel riding a proposal-set entry (max 3 per proposal).
+
+    ``role`` ``real_frame`` is an extracted real frame (区分 撮影素材, no
+    generation call, ``image_ref`` stays None); ``a``/``b`` are generated
+    variants (区分 生成した見た目の案). ``base_created_at`` pins the
+    proposal set the panel was generated against — a re-request naming an
+    older base is a typed stale refusal (U38), never an overwrite.
+    ``error_code`` names a failed panel's honest reason; ``model_selected``
+    records the verified U47 model for generated panels.
+    """
+
+    schema_version: Literal["cockpit-consultation-panel-v1"] = (
+        "cockpit-consultation-panel-v1"
+    )
+    consultation_id: str
+    proposal_id: str
+    panel_id: str
+    base_created_at: str
+    role: PanelRole = "a"
+    source_frame_ref: str | None = None
+    image_ref: str | None = None
+    caption: PanelCaptionV1 = Field(default_factory=PanelCaptionV1)
+    status: PanelStatus | None = None
+    error_code: str | None = None
+    model_selected: str | None = None
+    created_at: str
+
+
+class GenerationEventV1(StrictModel):
+    """One generation decision per consultation (U47 record + refusal notes).
+
+    ``verified``/``model_selected`` record the actually-selected-model
+    confirmation; ``decision`` is granted (panels attempted), refused (0
+    image calls: no permission, vague/out-of-scope, unverified model,
+    gated transport, exhausted budget), or failed. ``note`` is the honest
+    view-facing sentence; ``reason`` the machine-readable cause.
+    """
+
+    schema_version: Literal["cockpit-consultation-generation-v1"] = (
+        "cockpit-consultation-generation-v1"
+    )
+    consultation_id: str
+    proposal_id: str | None = None
+    created_at: str
+    model_selected: str | None = None
+    verified: bool = False
+    decision: GenerationDecision
+    reason: str | None = None
+    note: str | None = None
 
 
 class ConsultationJudgmentV1(StrictModel):
@@ -330,7 +428,9 @@ class ConsultationBudgetEventV1(StrictModel):
     (None = unmeasured). ``retry_index`` itemizes internal retries so a
     retried generation settles one line per attempt. ``failure_code``
     marks a failed generation's line — failures still consume budget,
-    never silently.
+    never silently. ``kind`` scope-tags image consumption (工程4): image
+    calls fold into the SAME cumulative counters and NEVER reset the
+    ledger; legacy lines read back as ``text``.
     """
 
     schema_version: Literal["cockpit-consultation-budget-v1"] = (
@@ -340,6 +440,7 @@ class ConsultationBudgetEventV1(StrictModel):
     llm_calls: int = Field(ge=0)
     intervals: int = Field(ge=0)
     wall_seconds: Annotated[float, BeforeValidator(float)] = Field(ge=0.0)
+    kind: BudgetEventKind = "text"
     model_id: str | None = None
     input_bytes: int | None = Field(default=None, ge=0)
     output_bytes: int | None = Field(default=None, ge=0)
@@ -383,6 +484,10 @@ class ConsultationBudgetLimits(StrictModel):
     full_episode_wall_seconds_limit: Annotated[float, BeforeValidator(float)] = (
         DEFAULT_WALL_SECONDS_LIMIT
     )
+    # 工程4: episode-cumulative image-call cap. Image consumption folds
+    # into the same llm_calls/wall counters above; this cap additionally
+    # bounds image calls alone (default 6, the text-call scale).
+    generation_images_limit: int = Field(default=DEFAULT_GENERATION_IMAGES_LIMIT, ge=1)
 
 
 class ConsultationBudgetUsed(NamedTuple):
@@ -966,6 +1071,7 @@ def consume_budget(  # noqa: PLR0913 (explicit budget-line fields; kwargs are th
     output_bytes: int | None = None,
     retry_index: int = 0,
     failure_code: str | None = None,
+    kind: BudgetEventKind = "text",
 ) -> None:
     """Record one generation's spend — successes AND failures alike."""
 
@@ -981,9 +1087,110 @@ def consume_budget(  # noqa: PLR0913 (explicit budget-line fields; kwargs are th
             output_bytes=output_bytes,
             retry_index=retry_index,
             failure_code=failure_code,
+            kind=kind,
             created_at=now_stamp(),
         ),
     )
+
+
+def image_calls_used(episode_dir: Path) -> int:
+    """Cumulative image transport calls (scope-tagged slice of budget_used)."""
+
+    return sum(
+        event.llm_calls
+        for event in _load_jsonl(
+            _consultation_dir(episode_dir) / BUDGET_NAME,
+            ConsultationBudgetEventV1,
+            "consultation-log-corrupt",
+        )
+        if event.kind == "image"
+    )
+
+
+def ensure_image_budget_available(
+    episode_dir: Path, limits: ConsultationBudgetLimits, needed: int
+) -> None:
+    """Typed 422 BEFORE starting image calls past the episode image cap."""
+
+    if image_calls_used(episode_dir) + needed > limits.generation_images_limit:
+        raise CockpitUnprocessableError(
+            "consultation-budget-exhausted",
+            f"consultation image budget exhausted: {image_calls_used(episode_dir)}/"
+            f"{limits.generation_images_limit} image calls used, {needed} requested",
+        )
+
+
+def panel_image_path(episode_dir: Path, panel_id: str) -> Path:
+    """The generated file reference for one panel (episode-relative honest)."""
+
+    return _consultation_dir(episode_dir) / PANELS_DIR_NAME / f"{panel_id}.png"
+
+
+def append_panel(episode_dir: Path, panel: ConsultationPanelV1) -> None:
+    _append(_consultation_dir(episode_dir) / PANELS_NAME, panel)
+
+
+def load_panels(
+    episode_dir: Path, consultation_id: str
+) -> list[ConsultationPanelV1]:
+    """Latest record per panel_id (append-only; a retry appends, never edits)."""
+
+    latest: dict[str, ConsultationPanelV1] = {}
+    for saved in _load_jsonl(
+        _consultation_dir(episode_dir) / PANELS_NAME,
+        ConsultationPanelV1,
+        "consultation-log-corrupt",
+    ):
+        if saved.consultation_id == consultation_id:
+            latest[saved.panel_id] = saved
+    return list(latest.values())
+
+
+def append_generation_event(episode_dir: Path, event: GenerationEventV1) -> None:
+    _append(_consultation_dir(episode_dir) / GENERATION_NAME, event)
+
+
+def load_generation_events(
+    episode_dir: Path, consultation_id: str
+) -> list[GenerationEventV1]:
+    return [
+        saved
+        for saved in _load_jsonl(
+            _consultation_dir(episode_dir) / GENERATION_NAME,
+            GenerationEventV1,
+            "consultation-log-corrupt",
+        )
+        if saved.consultation_id == consultation_id
+    ]
+
+
+def panel_kind_of(role: PanelRole) -> tuple[str, str]:
+    """The U35 区分 labels: (kind, Japanese label) for one panel role."""
+
+    if role == "real_frame":
+        return ("real_frame", "撮影素材")
+    return ("generated", "生成した見た目の案")
+
+
+def panel_view(panel: ConsultationPanelV1) -> dict[str, object]:
+    """One panel's wire object (区分 labels + status + base pin)."""
+
+    kind, kind_label = panel_kind_of(panel.role)
+    return {
+        "panel_id": panel.panel_id,
+        "proposal_id": panel.proposal_id,
+        "role": panel.role,
+        "kind": kind,
+        "kind_label_ja": kind_label,
+        "source_frame_ref": panel.source_frame_ref,
+        "image_ref": panel.image_ref,
+        "caption": panel.caption.model_dump(mode="json"),
+        "status": panel.status,
+        "error_code": panel.error_code,
+        "model_selected": panel.model_selected,
+        "base_created_at": panel.base_created_at,
+        "created_at": panel.created_at,
+    }
 
 
 def ensure_budget_available(episode_dir: Path, limits: ConsultationBudgetLimits) -> None:
@@ -1197,7 +1404,18 @@ def consultation_view(
         for outcome in load_policy_outcomes(episode_dir)
         if outcome.consultation_id == record.consultation_id
     ]
-    return {
+    budget: dict[str, object] = {
+        "llm_calls_used": used.llm_calls + selection.llm_calls,
+        "llm_calls_limit": limits.llm_calls_limit,
+        "intervals_used": used.intervals,
+        "intervals_limit": limits.intervals_limit,
+        "wall_seconds_used": used.wall_seconds + selection.wall_seconds,
+        "wall_seconds_limit": limits.wall_seconds_limit,
+        "preview_seconds_used": selection.preview_seconds,
+        "preview_sample_seconds_limit": limits.preview_sample_seconds_limit,
+        "cost_display": "unmeasured",
+    }
+    view: dict[str, object] = {
         "consultation_id": record.consultation_id,
         "created_at": record.created_at,
         "message": record.message,
@@ -1211,23 +1429,31 @@ def consultation_view(
             )
             for judgment in judgments
         ],
-        "budget": {
-            "llm_calls_used": used.llm_calls + selection.llm_calls,
-            "llm_calls_limit": limits.llm_calls_limit,
-            "intervals_used": used.intervals,
-            "intervals_limit": limits.intervals_limit,
-            "wall_seconds_used": used.wall_seconds + selection.wall_seconds,
-            "wall_seconds_limit": limits.wall_seconds_limit,
-            "preview_seconds_used": selection.preview_seconds,
-            "preview_sample_seconds_limit": limits.preview_sample_seconds_limit,
-            "cost_display": "unmeasured",
-        },
+        "budget": budget,
         "policy": {
             "adopted": policy.model_dump(mode="json") if policy is not None else None
         },
         "rebuild": derive_policy_rebuild(episode_dir, policy, stage_runs),
         "policy_outcomes": outcomes,
     }
+    # 工程4: generation keys ride ONLY consultations with panel/event
+    # records — every other view stays byte-identical to today's shape.
+    panels = load_panels(episode_dir, record.consultation_id)
+    events = load_generation_events(episode_dir, record.consultation_id)
+    if not panels and not events:
+        return view
+    budget["image_calls_used"] = image_calls_used(episode_dir)
+    budget["generation_images_limit"] = limits.generation_images_limit
+    view["panels"] = [panel_view(panel) for panel in panels]
+    latest = events[-1]
+    view["generation"] = {
+        "model_selected": latest.model_selected,
+        "verified": latest.verified,
+        "decision": latest.decision,
+        "reason": latest.reason,
+        "note": latest.note,
+    }
+    return view
 
 
 __all__ = [
@@ -1236,12 +1462,18 @@ __all__ = [
     "CONNECTED_POLICY_FIELDS",
     "CONSULTATIONS_NAME",
     "CONSULTATION_DIR_NAME",
+    "DEFAULT_GENERATION_IMAGES_LIMIT",
     "DEFAULT_INTERVALS_LIMIT",
     "DEFAULT_LLM_CALLS_LIMIT",
     "DEFAULT_PREVIEW_SAMPLE_SECONDS_LIMIT",
     "DEFAULT_WALL_SECONDS_LIMIT",
+    "GENERATION_NAME",
     "JUDGMENTS_NAME",
+    "MAX_GENERATION_PROPOSALS",
+    "MAX_PANELS_PER_PROPOSAL",
     "OUTCOMES_NAME",
+    "PANELS_DIR_NAME",
+    "PANELS_NAME",
     "POLICY_SCOPE_ORDER",
     "PROPOSALS_NAME",
     "REBUILD_LOG_NAME",
@@ -1249,11 +1481,13 @@ __all__ = [
     "STRUCTURAL_REALIZED_CHECKS",
     "TRIAL_VIEW_UNCONFIRMED_JA",
     "AdoptedPolicyV1",
+    "BudgetEventKind",
     "ConsultationBudgetEventV1",
     "ConsultationBudgetLimits",
     "ConsultationBudgetUsed",
     "ConsultationDecision",
     "ConsultationJudgmentV1",
+    "ConsultationPanelV1",
     "ConsultationPolicyOutcomeV1",
     "ConsultationProposalDetails",
     "ConsultationProposalSetV1",
@@ -1261,12 +1495,20 @@ __all__ = [
     "ConsultationRecordV1",
     "ConsultationScope",
     "DirectorConnection",
+    "GenerationDecision",
+    "GenerationEventV1",
+    "GenerationPermissionV1",
+    "PanelCaptionV1",
+    "PanelRole",
+    "PanelStatus",
     "PolicyOutcomeStatus",
     "PolicySettingEntryV1",
     "append_budget_event",
     "append_consultation",
     "append_effective_judgment_once",
+    "append_generation_event",
     "append_judgment",
+    "append_panel",
     "append_policy_outcome",
     "append_policy_outcome_once",
     "append_proposal_set",
@@ -1280,19 +1522,26 @@ __all__ = [
     "derive_policy_rebuild",
     "ensure_budget_available",
     "ensure_full_episode_budget_available",
+    "ensure_image_budget_available",
     "ensure_model_call_budget_available",
     "ensure_preview_budget_available",
     "ensure_selection_budget_available",
+    "image_calls_used",
     "judgment_operation_key",
     "latest_adopted_policy",
     "load_budget_limits",
     "load_consultations",
+    "load_generation_events",
     "load_judgments",
     "load_latest_proposal_sets",
+    "load_panels",
     "load_policy_outcomes",
     "load_policy_rebuild_entries",
     "model_attributed_calls",
     "now_stamp",
+    "panel_image_path",
+    "panel_kind_of",
+    "panel_view",
     "policy_for_judgment",
     "policy_scope_list",
     "policy_summary",
