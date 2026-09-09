@@ -19,6 +19,9 @@ from fastapi.testclient import TestClient
 from services.episode_cockpit import api_consultation
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.status_view import load_rebuild_entries
+from services.job_runner.cas import apply_transition, current_job_state
+from services.job_runner.state_store import StateStore
+from services.job_runner.transitions import MAIN_PATH
 
 _DETAILS = {
     "audience_message": "始めて見る人に分かる導入",
@@ -88,6 +91,29 @@ def _create_episode(client: TestClient, source_folder: Path) -> str:
     return str(response.json()["episode_id"])
 
 
+def _fast_forward_to_preview_ready(
+    workspace: dict[str, Path], episode_id: str
+) -> None:
+    """Walk the job to PREVIEW_READY (P1 reservations schedule only there)."""
+
+    target = MAIN_PATH.index("PREVIEW_READY")
+    with StateStore.open(workspace["state_store"]) as store:
+        while True:
+            current = current_job_state(store, episode_id)
+            position = MAIN_PATH.index(current.status)
+            if position >= target:
+                return
+            apply_transition(
+                store,
+                episode_id,
+                expected_status=current.status,
+                expected_parent_hash=current.adopted_artifact_hash,
+                new_status=MAIN_PATH[position + 1],
+                new_artifact_hash="0" * 64,
+                payload=None,
+            )
+
+
 def _consultation_id(client: TestClient, episode_id: str) -> str:
     response = client.post(
         f"/episodes/{episode_id}/consultation/message", json={"message": "短くしたい"}
@@ -104,6 +130,7 @@ def test_adopt_judgment_schedules_selection_rebuild_with_202(
     runner_spawn_calls: list[dict[str, object]],
 ) -> None:
     episode_id = _create_episode(client, source_folder)
+    _fast_forward_to_preview_ready(workspace, episode_id)
     consultation_id = _consultation_id(client, episode_id)
 
     response = client.post(
@@ -161,6 +188,7 @@ def test_reject_judgment_withdraws_and_returns_200(
     runner_spawn_calls: list[dict[str, object]],
 ) -> None:
     episode_id = _create_episode(client, source_folder)
+    _fast_forward_to_preview_ready(workspace, episode_id)
     consultation_id = _consultation_id(client, episode_id)
     adopt = client.post(
         f"/episodes/{episode_id}/consultation/judgment",
@@ -196,11 +224,13 @@ def test_reject_judgment_withdraws_and_returns_200(
 
 def test_second_adopt_while_running_records_but_does_not_reschedule(
     client: TestClient,
+    workspace: dict[str, Path],
     source_folder: Path,
     llm_calls: list[str],
     runner_spawn_calls: list[dict[str, object]],
 ) -> None:
     episode_id = _create_episode(client, source_folder)
+    _fast_forward_to_preview_ready(workspace, episode_id)
     consultation_id = _consultation_id(client, episode_id)
     first = client.post(
         f"/episodes/{episode_id}/consultation/judgment",
@@ -265,10 +295,12 @@ def test_adopt_with_empty_scope_schedules_nothing(
 
 def test_judgment_consumes_no_consultation_budget(
     client: TestClient,
+    workspace: dict[str, Path],
     source_folder: Path,
     llm_calls: list[str],
 ) -> None:
     episode_id = _create_episode(client, source_folder)
+    _fast_forward_to_preview_ready(workspace, episode_id)
     consultation_id = _consultation_id(client, episode_id)
     before = client.get(f"/episodes/{episode_id}/consultation").json()
 
