@@ -1,8 +1,9 @@
 """Drop/duplicate prediction via the frozen conform frame-conversion model.
 
-The source span is derived from decode-level observations of the INPUT
-(``nb_read_frames`` from ``-count_frames`` and the tick-exact stream
-duration), then handed to ``services.conform`` ``frame_conversion_accounting``
+The source span is derived from probe observations of the INPUT (the frame
+count — decode-level ``"decoded"`` or honestly-derived ``"stream_metadata"``
+/ ``"duration_fps_derived"``, see ``VideoFacts.frame_count_source`` — and
+the tick-exact stream duration), then handed to ``services.conform`` ``frame_conversion_accounting``
 — the same frozen model that reproduces the Phase-0B golden tables. The
 prediction is never taken from ffmpeg's exit code or progress output.
 """

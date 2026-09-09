@@ -21,6 +21,7 @@ def _facts(*, pix_fmt: str) -> MediaFacts:
         avg_frame_rate_num=30,
         avg_frame_rate_den=1,
         nb_read_frames=1,
+        frame_count_source="decoded",
         duration_num=1,
         duration_den=30,
         rotation_degrees=0,

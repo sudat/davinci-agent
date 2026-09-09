@@ -50,6 +50,7 @@ EMPTY_VIDEO = VideoFacts(
     avg_frame_rate_num=30,
     avg_frame_rate_den=1,
     nb_read_frames=0,
+    frame_count_source="decoded",
     duration_num=0,
     duration_den=1,
     rotation_degrees=None,

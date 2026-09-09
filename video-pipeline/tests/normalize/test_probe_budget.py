@@ -16,9 +16,13 @@ import json
 from services.normalize.probe import (
     PROBE_TIMEOUT_CEILING_SECONDS,
     PROBE_TIMEOUT_FLOOR_SECONDS,
-    _hint_from_payload,
+    _frame_hint,
     decode_probe_timeout_seconds,
 )
+
+
+def _hint(payload_json: str) -> int | None:
+    return _frame_hint(json.loads(payload_json))
 
 
 def test_budget_floor_keeps_small_media_fast() -> None:
@@ -63,30 +67,30 @@ def test_metadata_hint_from_real_episode_payload_shape() -> None:
     )
     # container duration truncates below the true 8459 (282.2543 s) — the
     # hint only sizes a budget (423 s either way), never correctness
-    assert _hint_from_payload(payload) == 8_458
+    assert _hint(payload) == 8_458
 
 
 def test_metadata_hint_survives_container_lies_and_garbage() -> None:
     """Given: payloads a hint cannot be derived from; Then: None (floor
     budget) — the real -count_frames probe stays the typed authority."""
 
-    assert _hint_from_payload("not json") is None
-    assert _hint_from_payload("[]") is None
-    assert _hint_from_payload(json.dumps({"streams": "nope"})) is None
-    assert _hint_from_payload(json.dumps({"streams": [{"codec_type": "video"}]})) is None
+    assert _frame_hint(None) is None
+    assert _hint("[]") is None
+    assert _hint(json.dumps({"streams": "nope"})) is None
+    assert _hint(json.dumps({"streams": [{"codec_type": "video"}]})) is None
     no_rate = json.dumps({"streams": [{"codec_type": "video"}], "format": {"duration": "10"}})
-    assert _hint_from_payload(no_rate) is None
+    assert _hint(no_rate) is None
     bad_rate = json.dumps(
         {
             "streams": [{"codec_type": "video", "r_frame_rate": "garbage"}],
             "format": {"duration": "10"},
         }
     )
-    assert _hint_from_payload(bad_rate) is None
+    assert _hint(bad_rate) is None
     zero_duration = json.dumps(
         {
             "streams": [{"codec_type": "video", "r_frame_rate": "30/1"}],
             "format": {"duration": "0"},
         }
     )
-    assert _hint_from_payload(zero_duration) is None
+    assert _hint(zero_duration) is None

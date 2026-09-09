@@ -3,7 +3,8 @@
 Order of operations is the contract: verify pinned binaries against the lock
 (sha256, absolute paths) -> verify the source still hashes to its manifest ->
 read the recipe from the lock -> derive the drop/dup prediction from the
-INPUT's decode-level facts via ``services.conform`` -> guard the argv (network
+INPUT's probe facts (decode-level or honestly-derived, see
+``VideoFacts.frame_count_source``) via ``services.conform`` -> guard the argv (network
 refusal, absolute IO, never over the original) -> run pinned ffmpeg with a
 bounded 600s timeout -> re-hash the source (immutability) -> verify the output
 (decodability, exact CFR rate, 48 kHz, rotation/color policy, frame count

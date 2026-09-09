@@ -2,8 +2,9 @@
 
 The original is re-hashed against its SourceManifest and the edit source
 against its NormalizeRecord before any probing (stale artifacts refuse the
-build). Video facts come from the pinned ffprobe with ``-count_frames`` so
-``nb_read_frames`` is a decode-level observation; the original start PTS is
+build). Video facts come from the pinned ffprobe via ``services.normalize.probe``
+(metadata-first frame count with a recorded accuracy class, bounded
+full-decode fallback); the original start PTS is
 the ingest record's stream fact; original audio facts come from the
 manifest's audio stream record; edit audio facts probe the edit source and
 accept only tick-exact integral sample counts (PCM passthrough).
