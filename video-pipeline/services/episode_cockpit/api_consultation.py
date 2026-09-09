@@ -33,7 +33,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -94,6 +94,10 @@ _LOGGER = logging.getLogger(__name__)
 router = APIRouter()
 
 _MAX_PROPOSALS = 2
+
+# Contract note: SAME env name as episode_runner_editorial.EDITORIAL_RUNTIME_ENV,
+# mirrored (not imported) — this router keeps CLI-side imports lazy. Keep in sync.
+_EDITORIAL_RUNTIME_ENV: Final = "EDITORIAL_RUNTIME_CONFIG"
 
 type ConsultationLlmCall = Callable[[str], dict]
 
@@ -288,6 +292,20 @@ def _codex_consultation_call(model_id: str) -> ConsultationLlmCall | None:
     return call
 
 
+def _resolve_runtime_config_path(
+    runtime_path: Path | None, environment: Mapping[str, str]
+) -> Path:
+    """Precedence mirrored from ``episode_runner_editorial._resolve_config_path``:
+    explicit ``runtime_path`` > ``EDITORIAL_RUNTIME_CONFIG`` env > repo default."""
+
+    if runtime_path is not None:
+        return runtime_path
+    from_env = environment.get(_EDITORIAL_RUNTIME_ENV)
+    if from_env:
+        return Path(from_env)
+    return _CONFIG_ROOT / RUNTIME_CONFIG_RELATIVE
+
+
 def build_consultation_llm_call(
     *,
     runtime_path: Path | None = None,
@@ -296,10 +314,23 @@ def build_consultation_llm_call(
 ) -> ConsultationLlmCall | None:
     """Tolerant factory (``build_review_llm_call`` pattern): ``None``
     (diagnostic mode) unless the runtime mode, the pin's model_id, and
-    the transport's own gate all pass. Never raises."""
+    the transport's own gate all pass. Never raises. The runtime config
+    path follows the ``episode_runner_editorial`` precedence (explicit >
+    ``EDITORIAL_RUNTIME_CONFIG`` env > repo default); an unreadable
+    env-named config degrades to diagnostic mode — the repo default
+    production config is never substituted for it. The pin path keeps
+    its repo default (pins have no env override)."""
 
-    runtime = _read_json_object(runtime_path or (_CONFIG_ROOT / RUNTIME_CONFIG_RELATIVE))
+    environment = os.environ if env is None else env
+    env_name = environment.get(_EDITORIAL_RUNTIME_ENV)
+    runtime = _read_json_object(_resolve_runtime_config_path(runtime_path, environment))
     if runtime is None or runtime.get("mode") != "production_model":
+        if runtime is None and runtime_path is None and env_name:
+            _LOGGER.warning(
+                "consultation: EDITORIAL_RUNTIME_CONFIG %r is unreadable — "
+                "diagnostic mode (no production fallback)",
+                env_name,
+            )
         return None
     pin = _read_json_object(pin_path or (_CONFIG_ROOT / PIN_RELATIVE))
     model_id = pin.get("model_id") if pin is not None else None
@@ -307,8 +338,7 @@ def build_consultation_llm_call(
         return None
     transport = runtime.get("transport")
     if transport == "openai-api":
-        environment = dict(os.environ if env is None else env)
-        return _openai_consultation_call(environment, pin, model_id)
+        return _openai_consultation_call(dict(environment), pin, model_id)
     if transport in (None, "codex-exec"):
         return _codex_consultation_call(model_id)
     _LOGGER.warning("consultation: unknown transport %r, diagnostic mode", transport)

@@ -10,6 +10,9 @@ typed honest error in diagnostic mode — no heuristic fallback), and POST
 
 from __future__ import annotations
 
+import json
+import sys
+import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -520,3 +523,128 @@ def test_generation_stays_off(
         assert not [line for line in imports if "generation" in line]
         assert not [line for line in imports if "edit_plan_generate" in line]
         assert not [line for line in imports if "image" in line]
+
+
+# ---------------------------------------------------------------------------
+# runtime-config precedence (explicit > EDITORIAL_RUNTIME_CONFIG env > repo
+# default) — mirrors services.cli.episode_runner_editorial._resolve_config_path
+# ---------------------------------------------------------------------------
+
+# Captured at import time (before fixtures run): the conftest autouse
+# _hermetic_editorial_env stubs the module attribute with `lambda: None`;
+# these tests restore the REAL factory under test.
+_REAL_BUILD_CONSULTATION_LLM_CALL = api_consultation.build_consultation_llm_call
+
+
+def _use_real_factory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        api_consultation, "build_consultation_llm_call", _REAL_BUILD_CONSULTATION_LLM_CALL
+    )
+
+
+def _write_runtime_file(tmp_path: Path, mode: str) -> Path:
+    path = tmp_path / "editorial-runtime-override.json"
+    path.write_text(json.dumps({"schema_version": "editorial-runtime-v1", "mode": mode}))
+    return path
+
+
+def _forbid_model_contact(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Given the factory under test, when either transport builder runs, then
+    the test fails — ANY construction attempt is production model contact."""
+
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("transport built — production model contact attempted")
+
+    monkeypatch.setattr(api_consultation, "_codex_consultation_call", _refuse)
+    monkeypatch.setattr(api_consultation, "_openai_consultation_call", _refuse)
+
+
+def test_env_override_to_heuristic_runtime_returns_none_without_model_contact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_real_factory(monkeypatch)
+    monkeypatch.setenv(
+        "EDITORIAL_RUNTIME_CONFIG", str(_write_runtime_file(tmp_path, "heuristic_diagnostic"))
+    )
+    _forbid_model_contact(monkeypatch)
+
+    assert api_consultation.build_consultation_llm_call() is None
+
+
+def test_env_override_to_heuristic_runtime_route_refuses_typed_422(
+    client: TestClient,
+    source_folder: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _use_real_factory(monkeypatch)
+    monkeypatch.setenv(
+        "EDITORIAL_RUNTIME_CONFIG", str(_write_runtime_file(tmp_path, "heuristic_diagnostic"))
+    )
+    _forbid_model_contact(monkeypatch)
+    episode_id = _create_episode(client, source_folder)
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/message", json={"message": "短くしたい"}
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "consultation-llm-unavailable"
+    listed = client.get(f"/episodes/{episode_id}/consultation")
+    assert listed.json() == {"consultations": []}
+
+
+def test_env_unset_keeps_repo_default_production_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_real_factory(monkeypatch)
+    monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+    constructions: list[str] = []
+
+    def fake_make_codex_runner() -> Callable[[str], dict[str, object]]:
+        constructions.append("codex")
+
+        def runner(
+            _prompt: str, *, model: str, images: tuple[object, ...], timeout_s: float
+        ) -> dict[str, object]:
+            return {"model": model, "images": list(images), "timeout_s": timeout_s}
+
+        return runner
+
+    fake_module = types.ModuleType("services.cli.live_editorial_codex")
+    fake_module.make_codex_runner = fake_make_codex_runner  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "services.cli.live_editorial_codex", fake_module)
+
+    llm = api_consultation.build_consultation_llm_call()
+
+    assert llm is not None  # repo default (production_model + codex-exec) built as today
+    assert constructions == ["codex"]
+
+
+def test_env_override_unreadable_config_degrades_to_diagnostic_without_production_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_real_factory(monkeypatch)
+    unreadable = tmp_path / "editorial-runtime-override.json"
+    unreadable.write_bytes(b"{not json")
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(unreadable))
+    _forbid_model_contact(monkeypatch)  # the repo default production config is NEVER substituted
+
+    assert api_consultation.build_consultation_llm_call() is None
+
+
+def test_explicit_runtime_path_wins_over_env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_real_factory(monkeypatch)
+    monkeypatch.setenv(
+        "EDITORIAL_RUNTIME_CONFIG", str(_write_runtime_file(tmp_path, "production_model"))
+    )
+    _forbid_model_contact(monkeypatch)  # env names production; explicit must still win
+    explicit = tmp_path / "explicit-runtime.json"
+    explicit.write_text(
+        json.dumps({"schema_version": "editorial-runtime-v1", "mode": "heuristic_diagnostic"})
+    )
+
+    assert api_consultation.build_consultation_llm_call(runtime_path=explicit) is None
