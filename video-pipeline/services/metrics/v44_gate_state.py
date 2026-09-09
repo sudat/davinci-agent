@@ -114,6 +114,26 @@ class ObservationRebuildV1(StrictModel):
     interpretation_ms: Annotated[float, Field(ge=0.0, strict=True)] | None = None
 
 
+class ObservationSelfCheckV1(StrictModel):
+    """Structured 本人確認 record (工程6 prep, additive).
+
+    Operator-supplied only — never defaulted, never inferred. Each of
+    the three questions persists honestly: ``True``/``False`` when the
+    operator answered, ``None`` when 未回答. ``note`` is free text
+    (empty when the operator left none). One JSONL line per answer in
+    the episode dir (``self-check.jsonl``); the latest line is the
+    current fact the observer and status view surface.
+    """
+
+    schema_version: Literal["v44-self-check-v1"] = "v44-self-check-v1"
+    episode_id: Identifier
+    answered_at: Annotated[str, Field(min_length=1, strict=True)]
+    q_instruction_transmitted: bool | None = None
+    q_better_than_before: bool | None = None
+    q_want_to_publish: bool | None = None
+    note: str = ""
+
+
 class V1ObservationRecord(StrictModel):
     """Strict ``v44-1-observation-v1`` — the V44-1 cockpit observation."""
 
@@ -124,6 +144,7 @@ class V1ObservationRecord(StrictModel):
     corrections: Annotated[tuple[ObservationCorrectionV1, ...], BeforeValidator(to_tuple)]
     rebuild_records: Annotated[tuple[ObservationRebuildV1, ...], BeforeValidator(to_tuple)]
     operator_note: Annotated[str, Field(min_length=1, strict=True)] | None = None
+    self_check: ObservationSelfCheckV1 | None = None
     internal_path_leak: bool
     observed_at: Annotated[str, Field(min_length=1, strict=True)]
 
@@ -229,6 +250,7 @@ def write_v44_2_summary(path: Path, record: V44GateSummaryV1) -> None:
 __all__ = [
     "ObservationCorrectionV1",
     "ObservationRebuildV1",
+    "ObservationSelfCheckV1",
     "ObservationStageRunV1",
     "ObservationStageTimelineV1",
     "OperatorVerdict",

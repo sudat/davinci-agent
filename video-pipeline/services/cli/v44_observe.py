@@ -59,12 +59,14 @@ from services.foundation_io import atomic_write, canonical_model_bytes
 from services.metrics.v44_gate_state import (
     ObservationCorrectionV1,
     ObservationRebuildV1,
+    ObservationSelfCheckV1,
     ObservationStageRunV1,
     ObservationStageTimelineV1,
     V1ObservationRecord,
 )
 
 OPERATOR_NOTES_NAME = "operator-notes.jsonl"
+SELF_CHECK_NAME = "self-check.jsonl"
 CHAT_LOG_NAME = "review-chat.jsonl"
 APPLIED_COMMANDS_NAME = "applied-commands.jsonl"
 REBUILD_METRICS_NAME = "rebuild-metrics.jsonl"
@@ -117,6 +119,7 @@ class EpisodeObservationInputs:
     applied_count: int
     rebuild_metrics: tuple[RebuildMetricForObservation, ...]
     operator_note: str | None
+    self_check: ObservationSelfCheckV1 | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +353,35 @@ def _read_operator_note(episode_dir: Path) -> str | None:
     return last_note
 
 
+def _read_self_check(episode_dir: Path) -> ObservationSelfCheckV1 | None:
+    """Latest structured 本人確認 record — None when never answered.
+
+    Operator-supplied only: absent file reads None (never auto-created);
+    corrupt lines raise, valid lines validate strictly, the latest valid
+    line wins (null answers persist honestly as 未回答).
+    """
+
+    path = episode_dir / SELF_CHECK_NAME
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise V44ObserveError("episode-file-unreadable", str(error)) from error
+    latest: ObservationSelfCheckV1 | None = None
+    for lineno, line in enumerate(raw.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            latest = ObservationSelfCheckV1.model_validate_json(line)
+        except ValidationError as error:
+            raise V44ObserveError(
+                "self-check-corrupt",
+                f"line {lineno} in {path}: {error}",
+            ) from error
+    return latest
+
+
 def collect_observation_inputs(
     episode_id: str,
     *,
@@ -386,6 +418,7 @@ def collect_observation_inputs(
         applied_count=_read_applied_state(episode_dir)[0],
         rebuild_metrics=_read_rebuild_metrics(episode_dir),
         operator_note=_read_operator_note(episode_dir),
+        self_check=_read_self_check(episode_dir),
     )
 
 
@@ -490,6 +523,7 @@ def build_observation_record(
             corrections=corrections,
             rebuild_records=rebuild_records,
             operator_note=inputs.operator_note,
+            self_check=inputs.self_check,
             internal_path_leak=leak,
             observed_at=at_value,
         )

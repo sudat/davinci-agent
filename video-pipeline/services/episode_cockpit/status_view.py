@@ -23,6 +23,7 @@ from services.episode_cockpit.review_proposals import (
     load_consumed_proposals,
     load_proposal_sets,
 )
+from services.episode_cockpit.self_check import latest_self_check
 from services.review_command.store import ReviewCommitError, load_head
 
 if TYPE_CHECKING:
@@ -239,6 +240,8 @@ def build_status_payload(snapshot: JobSnapshot, episode_dir: Path) -> dict[str, 
     if created_at is not None:
         payload["intake_created_at"] = created_at
     payload["applied_style"] = intake_applied_style(episode_dir)
+    latest = latest_self_check(episode_dir)
+    payload["self_check"] = latest.model_dump(mode="json") if latest is not None else None
     arrived = next(
         (
             run.first_output_arrived_at for run in snapshot.stage_runs

@@ -30,6 +30,7 @@ from services.episode_cockpit.models import (
     ReferenceRegisterRequest,
     ReviewChatRequest,
     Seconds,
+    SelfCheckRequest,
 )
 from services.episode_cockpit.preview_binding import binding_headers
 from services.episode_cockpit.review_chat import (
@@ -158,6 +159,27 @@ def put_brief(
     episode_id: str, request: BriefPutRequest, workspace: Workspace
 ) -> dict[str, object]:
     return workspace.put_brief(episode_id, brief_text=request.brief_text)
+
+
+@router.post("/episodes/{episode_id}/self-check")
+def post_self_check(
+    episode_id: str, request: SelfCheckRequest, workspace: Workspace
+) -> dict[str, object]:
+    """Record one structured 本人確認 answer (operator-supplied only).
+
+    Strict validation at the request-model boundary (non-bool answers
+    are 422, never coerced); answers persist exactly as sent with null
+    = 未回答. Never auto-created — absent file reads as null.
+    """
+
+    return workspace.record_self_check(episode_id, request)
+
+
+@router.get("/episodes/{episode_id}/self-check")
+def get_self_check(episode_id: str, workspace: Workspace) -> dict[str, object]:
+    """Read the latest 本人確認 record; never-answered reads null."""
+
+    return workspace.load_self_check(episode_id)
 
 
 @router.get("/episodes/{episode_id}/preview")

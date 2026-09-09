@@ -94,6 +94,21 @@ class BriefPutRequest(StrictModel):
     brief_text: NonEmpty
 
 
+class SelfCheckRequest(StrictModel):
+    """POST /episodes/{id}/self-check — structured 本人確認 answers.
+
+    Operator-supplied only — every question defaults to None (未回答),
+    never to False. The server persists exactly what the operator sent;
+    strict mode rejects non-bool answers (0/1/yes strings are 422, never
+    coerced). ``note`` is free text, empty when the operator left none.
+    """
+
+    q_instruction_transmitted: bool | None = None
+    q_better_than_before: bool | None = None
+    q_want_to_publish: bool | None = None
+    note: str = ""
+
+
 class ReviewChatRequest(StrictModel):
     """POST /episodes/{id}/review-chat — raw review message (NLU is task 47)."""
 
@@ -300,4 +315,5 @@ __all__ = [
     "ReviewChatRequest",
     "ReviewProposalConsumed",
     "ReviewReactionKind",
+    "SelfCheckRequest",
 ]
