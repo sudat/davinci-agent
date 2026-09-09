@@ -8,6 +8,7 @@ the pinned ffprobe and hashed frame-semantic-identically across renders.
 
 from __future__ import annotations
 
+import hashlib
 from fractions import Fraction
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -121,6 +122,54 @@ def _assert_plan_agreement(plan: EditPlan0C, ir: TimelineIr0C) -> None:
         raise PreviewLayoutError("timeline IR video items do not match the edit plan")
 
 
+def _plan_content_sha256(edit_plan: EditPlan0C | None) -> str | None:
+    """Content sha of the rendered edit plan, or None when there is no plan.
+
+    Uses the same canonical bytes the review store hashes at commit time
+    (``sha256_bytes(canonical_model_bytes(plan))`` in
+    ``services/review_command/commit.py`` and ``policy_commit.py``,
+    surfaced as ``services.cli.project.plan_sha256``), so the result is
+    directly comparable to the ``VersionEntry.plan_sha256`` recorded in
+    the review-store ``versions.json`` chain.
+    """
+
+    if edit_plan is None:
+        return None
+    return hashlib.sha256(canonical_model_bytes(edit_plan)).hexdigest()
+
+
+def _check_decision_plan_agreement(
+    edit_plan: EditPlan0C | None, decision: AppliedDecision, plan_version: str,
+) -> None:
+    """Refuse a render whose decision refers to a different plan version.
+
+    Version-drift protection: the render must use the plan the decision
+    refers to. Equal version labels pass unchanged. When the two
+    independent chains' counters differ, the render is still accepted if
+    the decision provably refers to this exact plan content — i.e. the
+    decision-side sha (the review-store ``versions.json`` entry hash for
+    ``plan_version_after``) equals the rendered plan's content sha.
+    A sha mismatch is a stale plan and is refused exactly as before; a
+    missing sha on either side is an honest typed refusal (no guessing).
+    """
+
+    if decision.plan_version_after == plan_version:
+        return
+    decision_sha = decision.plan_sha256
+    plan_sha = _plan_content_sha256(edit_plan)
+    if decision_sha is None or plan_sha is None:
+        missing = "decision" if decision_sha is None else "edit-plan"
+        raise PreviewLayoutError(
+            f"decision bumps to {decision.plan_version_after} but the plan is "
+            f"{plan_version}: plan identity is unprovable (missing sha on the "
+            f"{missing} side); refusing a possibly stale plan"
+        )
+    if decision_sha != plan_sha:
+        raise PreviewLayoutError(
+            f"decision bumps to {decision.plan_version_after} but the plan is {plan_version}"
+        )
+
+
 def _require_binding(bindings: PreviewMediaBindings, item_id: str, kind: str) -> MediaBinding:
     binding = bindings.binding_for(item_id)
     if binding is None:
@@ -204,10 +253,8 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
     plan_version = plan_version_of(edit_plan)
     if edit_plan is not None:
         _assert_plan_agreement(edit_plan, timeline_ir)
-    if decision is not None and decision.plan_version_after != plan_version:
-        raise PreviewLayoutError(
-            f"decision bumps to {decision.plan_version_after} but the plan is {plan_version}"
-        )
+    if decision is not None:
+        _check_decision_plan_agreement(edit_plan, decision, plan_version)
     layout = extract_layout(timeline_ir)
     style_table = carry_styled(layout, styled) if styled is not None else None
     for item in (*layout.video_items, *layout.audio_items, *layout.subtitle_items):

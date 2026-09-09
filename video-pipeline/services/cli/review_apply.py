@@ -187,6 +187,7 @@ def _applied(
             case_id=bundle.episode_id,
             classification="clear",
             plan_version_after=f"v{commit.version}",
+            plan_sha256=sha256_file(plan_path),
             previous_trace=previous_trace(bundle_file, bundle),
         )
         try:

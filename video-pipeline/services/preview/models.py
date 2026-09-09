@@ -216,12 +216,21 @@ class AppliedDecision(StrictModel):
 
     The preview adapter only renders post-apply states, so the classification
     is pinned to ``clear``; deferred decisions keep the previous preview.
+
+    ``plan_sha256`` is the review-store ``versions.json`` entry hash
+    (``VersionEntry.plan_sha256`` in ``services/review_command/store.py``)
+    recorded for ``plan_version_after`` — the content sha the decision
+    provably refers to. The preview guard compares it against the rendered
+    edit plan's own content sha, so a decision whose version counter ran
+    ahead of the plan's own version label (content-identical re-commit)
+    still renders, while a genuinely stale plan is refused.
     """
 
     decision_id: str = Field(min_length=1)
     case_id: str = Field(min_length=1)
     classification: Literal["clear"]
     plan_version_after: str = Field(min_length=1)
+    plan_sha256: Sha256 | None = None
     previous_trace: PreviewTraceManifest
 
 

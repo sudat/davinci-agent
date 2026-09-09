@@ -918,11 +918,13 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
                 raise
             log_event(log, "review_bundle_bootstrapped", bundle=str(bundle_file))
         preview_dir = run_dir / f"preview-v{head.version}"
+        head_entry = head.index.versions.get(str(head.version))
         decision = AppliedDecision(
             decision_id=f"decision-rebuild-{bundle.episode_id}-v{head.version}",
             case_id=bundle.episode_id,
             classification="clear",
             plan_version_after=f"v{head.version}",
+            plan_sha256=head_entry.plan_sha256 if head_entry is not None else None,
             previous_trace=previous_trace(bundle_file, bundle),
         )
         render_review_preview(
