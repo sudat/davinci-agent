@@ -39,6 +39,12 @@ R6_SEGMENT_END_MS = 138080
 R6_SPEECH_START_FRAME = 4071  # floor(135720 * 30 / 1000), lattice 3
 R6_SPEECH_END_FRAME = 4143  # ceil(138080 * 30 / 1000), lattice 3
 R6_FILLER_END_FRAME = 4142  # floor(138080 * 48 * 30 / 48000) — real record shape
+# r7: the speech-segmentation lattice constant (services/cli/real_pool.py:51)
+# collapses adjacent segment boundaries when the residue is <= LATTICE, so the
+# real s51 declaration starts at 4074 — exactly LATTICE frames after the
+# sample-derived filler start 4071.
+R7_LATTICE = 3
+R7_SHIFTED_SPEECH_START_FRAME = R6_SPEECH_START_FRAME + R7_LATTICE  # 4074
 
 
 def _sha(label: str) -> str:
@@ -269,3 +275,50 @@ def test_budget_exceeded_during_containment_search_stops_typed() -> None:
     request = _r6_request((_empty("fi127"), _speech("s99", "えーと")))
     with pytest.raises(EvidenceIncomplete, match="frozen budget"):
         assemble_evidence(_as_api(_BudgetApi()), request)
+
+
+def test_r7_cover_shifted_by_exactly_lattice_is_corroborated() -> None:
+    api = _TranscriptIndexApi((_transcript_row("r7-fi127"),))
+    request = _r6_request(
+        (
+            _speech("s51", "えーと", R7_SHIFTED_SPEECH_START_FRAME, R6_SPEECH_END_FRAME),
+            _empty("fi127"),
+        )
+    )
+    bundle = assemble_evidence(_as_api(api), request)
+    assert _methods(bundle) == [
+        ("s51", "transcript_search"),
+        ("fi127", "transcript_containment"),
+    ]
+    assert _sha("r7-fi127") in bundle.lineage
+
+
+def test_r7_cover_shifted_beyond_lattice_stops_honestly() -> None:
+    api = _TranscriptIndexApi((_transcript_row("r7-fi127"),))
+    request = _r6_request(
+        (
+            _speech(
+                "s51", "えーと",
+                R7_SHIFTED_SPEECH_START_FRAME + 1, R6_SPEECH_END_FRAME,
+            ),
+            _empty("fi127"),
+        )
+    )
+    with pytest.raises(EvidenceIncomplete, match="lies outside every text-bearing"):
+        assemble_evidence(_as_api(api), request)
+
+
+def test_r7_lattice_cover_found_but_index_misses_stops_honestly() -> None:
+    api = _TranscriptIndexApi(
+        (_transcript_row("r7-elsewhere", "えーと", 9000, 12000),)
+    )
+    request = _r6_request(
+        (
+            _speech("s51", "えーと", R7_SHIFTED_SPEECH_START_FRAME, R6_SPEECH_END_FRAME),
+            _empty("fi127"),
+        )
+    )
+    with pytest.raises(
+        EvidenceIncomplete, match="not contained in any indexed transcript segment"
+    ):
+        assemble_evidence(_as_api(api), request)

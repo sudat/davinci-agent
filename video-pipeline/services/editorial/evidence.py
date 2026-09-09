@@ -45,6 +45,16 @@ _TEXT_QUERY_MAX = 200
 # this kind that no transcript segment covers is a broken declaration.
 _SPEECH_DERIVED_KINDS: Final = ("filler", "false_start")
 
+# r7: cover-finding tolerance mirrors the speech-segmentation lattice constant
+# (services/cli/real_pool.py:51 — LATTICE = 3: floor-start snapped down to a
+# multiple of 3, ceil-end snapped up, and the <=LATTICE boundary residue
+# collapses to contiguity, shifting declaration starts up to LATTICE frames
+# relative to sample-derived candidate spans). Mirrored — not imported — so
+# the editorial service stays independent of the CLI pool module; if LATTICE
+# changes, this MUST change with it. Applies ONLY to finding the covering
+# text-bearing declaration; the INDEX containment check (ms floor/ceil) stays
+# EXACT below.
+_COVER_LATTICE_TOLERANCE_FRAMES: Final = 3
 # r5: the real-footage silence index holds 256 rows while the frozen page is
 # 50 — a single first-page fetch renders corroborating rows past row 50
 # deterministically invisible. Page full-span queries to exhaustion. The
@@ -142,8 +152,10 @@ def _corroborate_speech_derived(
         cover
         for cover in request.candidates
         if cover.text
-        and cover.start_frame <= candidate.start_frame
-        and candidate.end_frame <= cover.end_frame
+        and cover.start_frame - _COVER_LATTICE_TOLERANCE_FRAMES
+        <= candidate.start_frame
+        and candidate.end_frame
+        <= cover.end_frame + _COVER_LATTICE_TOLERANCE_FRAMES
     ]
     if not covers:
         raise EvidenceIncomplete(
