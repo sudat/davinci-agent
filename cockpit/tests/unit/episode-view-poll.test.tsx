@@ -286,6 +286,12 @@ const probeHeaders = (run: string, version: string): Record<string, string> => (
   "x-cockpit-preview-output-arrived-at": "2026-09-09T00:00:00+00:00",
 });
 
+const probeHeadersNoHash = (run: string, version: string): Record<string, string> => ({
+  "x-cockpit-preview-run-id": run,
+  "x-cockpit-preview-target-version": version,
+  "x-cockpit-preview-output-arrived-at": "2026-09-09T00:00:00+00:00",
+});
+
 /** POST /rebuild後にserverが記録するspawned連鎖: 受付前のpoll（空連鎖）
  *  と受付後のpollを区別するTHIS-run証拠。受付前のbaselineは空連鎖なので、
  *  このentryの出現がserverの前進を証明する。 */
@@ -620,6 +626,52 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
     expect(rekeyed).not.toBe(first);
     expect(rekeyed.getAttribute("src")).toBe(
       "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-next-v3",
+    );
+  });
+
+  it("W7: 成功null観測を保存し、続く失敗で古いhashへ戻さない（要素再生成なし）", async () => {
+    let preview = previewResponse(206, probeHeaders("run-new", "v2"));
+    let seq = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+      const url = String(input);
+      if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
+      if (url.endsWith("/preview")) return Promise.resolve(preview);
+      if (url.endsWith("/consultation")) {
+        return Promise.resolve(consultationOk());
+      }
+      if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
+      seq += 1;
+      return Promise.resolve(
+        jsonResponse(url, 200, bindingStatusPayload(seq, "run-new", "v2")),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<EpisodeView episodeId="ep-bind01" />);
+    await flushAux();
+    expect((screen.getByTestId("preview-player") as HTMLVideoElement).getAttribute("src")).toBe(
+      "/cockpit-api/episodes/ep-bind01/preview?content_hash=hash-run-new-v2",
+    );
+
+    // 成功だがheaderなし(null) → null表示（固定URL）へ遷る
+    preview = previewResponse(206, probeHeadersNoHash("run-new", "v2"));
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
+    const nulled = screen.getByTestId("preview-player") as HTMLVideoElement;
+    expect(nulled.getAttribute("src")).toBe("/cockpit-api/episodes/ep-bind01/preview");
+    nulled.currentTime = 7.25;
+
+    // 失敗だけでは再生identityを変えない: 同一要素・同一src・再生位置を保持
+    preview = previewResponse(500, {});
+    await vi.advanceTimersByTimeAsync(2100);
+    await flushAux();
+    const after = screen.getByTestId("preview-player") as HTMLVideoElement;
+    expect(after).toBe(nulled);
+    expect(after.getAttribute("src")).toBe("/cockpit-api/episodes/ep-bind01/preview");
+    expect(after.getAttribute("src")).not.toContain("hash-run-new-v2");
+    expect(after.currentTime).toBeCloseTo(7.25, 5);
+    expect(screen.getByTestId("preview-binding").textContent).toBe(
+      "確認できません（試し編集の情報を取得できません）",
     );
   });
 });

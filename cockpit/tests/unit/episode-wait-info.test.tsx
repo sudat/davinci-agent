@@ -279,7 +279,7 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
     expect(screen.getByTestId("wait-worker-report").textContent).toContain("最後の作業報告");
   });
 
-  it("今回runの再試行回数と次動作を表示する（上限・次回失敗時の動作は不明と明示）", () => {
+  it("W8: 終端失敗の再試行は履歴と停止を区別し、再実行予定を主張しない", () => {
     renderGuidance({
       current_run_retry_count: 2,
       stage_runs: [
@@ -293,16 +293,61 @@ describe("EpisodeWaitInfo — 10秒からの必須待機情報", () => {
       ],
     });
     const retry = screen.getByTestId("wait-retry").textContent ?? "";
-    expect(retry).toBe(
-      "再試行中です（2回目・最大回数は提供されていません）：理由 compile-failed。次の動作: 同じ工程の再実行（この経路の上限・次回失敗時の動作は提供されていません）",
-    );
+    expect(retry).toContain("再試行の履歴があります（2回）");
+    expect(retry).toContain("理由 compile-failed");
+    expect(retry).toContain("停止しています");
+    expect(retry).not.toContain("再試行中です");
+    expect(retry).not.toContain("次の動作");
+    expect(retry).not.toContain("再実行");
   });
 
-  it("再試行の次動作は同じ工程の再実行とだけ言い上限・失敗時を捏造しない", () => {
+  it("W8: 実行中の再試行は現在形で言い、将来動作を断定しない", () => {
+    renderGuidance({
+      current_run_retry_count: 2,
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "running",
+          retry_count: 1,
+          last_error_code: "compile-failed",
+          run_id: "run-1",
+          first_started_at: new Date(T0.getTime() - 20_000).toISOString(),
+        },
+      ],
+      last_worker_report_at: new Date(T0.getTime() - 5_000).toISOString(),
+    });
+    const retry = screen.getByTestId("wait-retry").textContent ?? "";
+    expect(retry).toContain("再試行のうえ実行中です（2回目");
+    expect(retry).not.toContain("次の動作");
+  });
+
+  it("W8: 終端成功の再試行は履歴と完了を区別する", () => {
+    renderGuidance({
+      current_run_retry_count: 2,
+      stage_runs: [
+        {
+          stage_name: "compile",
+          status: "succeeded",
+          retry_count: 1,
+          last_error_code: null,
+          run_id: "run-1",
+        },
+      ],
+    });
+    const retry = screen.getByTestId("wait-retry").textContent ?? "";
+    expect(retry).toContain("再試行の履歴があります（2回）");
+    expect(retry).toContain("現在は完了しています");
+    expect(retry).not.toContain("再試行中です");
+    expect(retry).not.toContain("次の動作");
+  });
+
+  it("W8: 実経路の行が無ければ再試行の状態は不明と言う（回数で断定しない）", () => {
     renderGuidance({ current_run_retry_count: 2 });
     const retry = screen.getByTestId("wait-retry").textContent ?? "";
-    expect(retry).toContain("次の動作: 同じ工程の再実行");
-    expect(retry).toContain("この経路の上限・次回失敗時の動作は提供されていません");
+    expect(retry).toContain("再試行の履歴があります（2回）");
+    expect(retry).toContain("不明");
+    expect(retry).not.toContain("次の動作");
+    expect(retry).not.toContain("同じ工程の再実行");
   });
 
   it("再試行中表示に捏造した方針数値を含まない（秒数や最大N回を作らない）", () => {

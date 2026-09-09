@@ -145,12 +145,21 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
     expect(screen.getByTestId("rebuild-stage-hint").textContent).toContain("render");
     expect(screen.getByTestId("rebuild-indicator").textContent).toContain("rcmd-0123456789ab");
 
-    // runner picks the rebuild up: a running stage row flips the phase
+    // runner picks the rebuild up: a running stage row flips the phase.
+    // W6: 行は現行runに属さないと今回活動の証明にならない — current_runと
+    // run_id付きで出す（run無しの履歴running行拾いは旧誤動作）。
     episodeStatus = statusOf([
       { stage_name: "preview", status: "succeeded", retry_count: 0, last_error_code: null },
       { stage_name: "plan", status: "succeeded", retry_count: 0, last_error_code: null },
-      { stage_name: "compile", status: "running", retry_count: 0, last_error_code: null },
+      {
+        stage_name: "compile",
+        status: "running",
+        retry_count: 0,
+        last_error_code: null,
+        run_id: "run-2",
+      },
     ]);
+    (episodeStatus as { current_run?: string | null }).current_run = "run-2";
     view.rerender(
       <ReviewChatPanel
         episodeId="ep-abc"

@@ -139,10 +139,23 @@ export function deriveRebuildPhase(
   }
   const runId = status.current_run ?? null;
   if (runId === null) {
-    if (status.stage_runs.some((row) => row.status === "running")) return "running";
+    // W6: 現行runなしで履歴のrunning行を拾うのは今回活動の証明ではない。
+    // 受付済み（scheduled=true）は予約済みどまり。legacy run_idなし行も
+    // runの特定なしには活動と断定しない。
     return "scheduled";
   }
   const runRows = status.stage_runs.filter((row) => row.run_id === runId);
+  if (
+    rebuildResult !== null &&
+    baseline !== null &&
+    baseline !== undefined &&
+    !serverProvesThisRebuild(status, runId, baseline)
+  ) {
+    // W6: 終端失敗にも今回サーバー世代の証明を適用する。polled statusが
+    // 受付時点の世代のまま（旧runの failed_blocked のみ）なら、今回の失敗
+    // とは言わず予約済みどまり。旧成功/旧失敗/旧runningと新予約の区別。
+    return "scheduled";
+  }
   if (runRows.some((row) => row.status === "running")) return "running";
   if (runRows.some((row) => row.status === "failed_blocked")) return "failed";
   if (rebuildResult !== null && !serverProvesThisRebuild(status, runId, baseline ?? null)) {

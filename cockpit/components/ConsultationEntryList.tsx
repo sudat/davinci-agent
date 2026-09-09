@@ -37,6 +37,24 @@ function verbatimList(value: unknown): string[] {
   return value.filter((item): item is string => nonEmptyText(item) !== null);
 }
 
+/** 内部検査名→平易な構造検査の説明（W5）。未登録の名は捏造せず原文のまま。 */
+const STRUCTURAL_CHECK_DESCRIPTION: Record<string, string> = {
+  planner_feasibility: "方針が編集手順として成り立つかの検査",
+  edit_plan_generation: "編集手順の書き出し検査",
+  production_compile: "本番用編集データの組み立て検査",
+};
+
+function structuralCheckDescriptionOf(name: string): string {
+  return STRUCTURAL_CHECK_DESCRIPTION[name] ?? name;
+}
+
+/** W10: 冪等返却が現行headより古い版なら記録版（現在適用済みとは言わない）。
+ *  両欄とも不在の旧データには何も付けない。 */
+function recordOnlyLineOf(entry: ConsultationPolicyOutcomeEntry): string {
+  const superseded = entry.superseded_by_head === true || entry.effective === false;
+  return superseded ? "記録として表示しています（現在は新しい版があります）。" : "";
+}
+
 /** Slice-2 P1-4 outcome line (design `docs/prd/ux-slice2-p1-fix-design.md`
  *  §P1-4). New writers emit only `connected`/`failed`; legacy `honored`
  *  rows still load but never claim 反映されました. Every field is read
@@ -48,11 +66,17 @@ export function outcomeLineOf(entry: ConsultationPolicyOutcomeEntry): string {
     const version = nonEmptyText(entry.plan_version) ?? "不明";
     const realized = verbatimList(entry.realized_checks);
     const unaddressed = verbatimList(entry.unaddressed);
+    const unconfirmed = verbatimList(entry.unconfirmed);
     let line =
       `採用した方針は編集長への入力に接続されました（対象版 ${version}）。` +
       `内容どおりに実現したかは、確認済みの項目だけを表示しています。`;
-    if (realized.length > 0) line += `確認済み: ${realized.join("、")}。`;
-    if (unaddressed.length > 0) line += `未確認: ${unaddressed.join("、")}。`;
+    if (realized.length > 0) {
+      line += `構造検査で確認済み: ${realized.map(structuralCheckDescriptionOf).join("、")}。`;
+    }
+    line += "内容・見た目・音が方針どおりかは、この検査では確認していません。";
+    if (unconfirmed.length > 0) line += `未確認: ${unconfirmed.join("、")}。`;
+    if (unaddressed.length > 0) line += `未対応: ${unaddressed.join("、")}。`;
+    line += recordOnlyLineOf(entry);
     return line;
   }
   if (status === "failed") {
@@ -69,10 +93,13 @@ export function outcomeLineOf(entry: ConsultationPolicyOutcomeEntry): string {
       return `方針は編集長に渡していません。理由を確認して相談へ戻れます。${reasonLine}${recordedLine}`;
     }
     if (connection === "unknown") {
-      return "方針が編集長へ届いたか確認できません。重複利用を避けて停止しました。";
+      return `方針が編集長へ届いたか確認できません。重複利用を避けて停止しました。${reasonLine}${recordedLine}`;
     }
     const list = reasons;
-    return `採用した方針の反映結果：反映できませんでした：${list.length > 0 ? list.join("、") : "理由は不明"}`;
+    return (
+      `採用した方針の反映結果：反映できませんでした：${list.length > 0 ? list.join("、") : "理由は不明"}` +
+      `${recordedLine}`
+    );
   }
   if (status === "honored") {
     const version = nonEmptyText(entry.plan_version) ?? "不明";

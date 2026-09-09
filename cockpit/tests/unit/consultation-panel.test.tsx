@@ -499,6 +499,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     director_connection: "confirmed",
     realized_checks: ["planner_feasibility", "edit_plan_generation"],
     unaddressed: ["字幕と見た目が実映像で方針どおりか"],
+    unconfirmed: ["結末の方針どおりか"],
   };
 
   const failedConfirmedOutcome: ConsultationPolicyOutcomeEntry = {
@@ -669,9 +670,18 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
       "採用した方針は編集長への入力に接続されました（対象版 v4）",
     );
     expect(connected).toContain("確認済みの項目だけを表示しています");
-    expect(connected).toContain("確認済み: planner_feasibility、edit_plan_generation");
-    expect(connected).toContain("未確認: 字幕と見た目が実映像で方針どおりか");
+    expect(connected).toContain(
+      "構造検査で確認済み: 方針が編集手順として成り立つかの検査、編集手順の書き出し検査",
+    );
+    expect(connected).not.toContain("planner_feasibility");
+    expect(connected).not.toContain("edit_plan_generation");
+    expect(connected).toContain(
+      "内容・見た目・音が方針どおりかは、この検査では確認していません",
+    );
+    expect(connected).toContain("未確認: 結末の方針どおりか");
+    expect(connected).toContain("未対応: 字幕と見た目が実映像で方針どおりか");
     expect(connected).not.toContain("反映されました");
+    expect(connected).not.toContain("現在適用済み");
     const legacy = outcomes[1]!.textContent ?? "";
     expect(legacy).toContain(
       "採用した方針は編集長への入力に接続された旧記録です（対象版 v3）",
@@ -746,6 +756,131 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     expect(screen.getByTestId("consultation-budget")).toBeVisible();
     expect(screen.queryByTestId("consultation-rebuild-state")).toBeNull();
     expect(screen.queryByTestId("consultation-policy-outcome")).toBeNull();
+  });
+
+  it("W5-a: connectedで未対応が空でも未確認（結末未確認）は表示される", async () => {
+    const outcome: ConsultationPolicyOutcomeEntry = {
+      kind: "policy_outcome",
+      outcome_id: "o-w5a",
+      consultation_id: "c-1",
+      judgment_id: "j-w5a",
+      proposal_id: "p-1",
+      plan_version: "v4",
+      status: "connected",
+      reasons: [],
+      note: null,
+      recorded_at: "2026-09-08T10:20:00Z",
+      director_connection: "confirmed",
+      realized_checks: [],
+      unaddressed: [],
+      unconfirmed: ["結末未確認"],
+    };
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({ consultations: [{ ...entryOne, policy_outcomes: [outcome] }] }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]!.textContent).toContain("未確認: 結末未確認");
+  });
+
+  it("W5-b: failed×director_connection=unknownでも記録版と理由は消えない", async () => {
+    const outcome: ConsultationPolicyOutcomeEntry = {
+      kind: "policy_outcome",
+      outcome_id: "o-w5b",
+      consultation_id: "c-1",
+      judgment_id: "j-w5b",
+      proposal_id: "p-1",
+      plan_version: "v2",
+      status: "failed",
+      reasons: ["director_timeout: 応答がありませんでした"],
+      note: null,
+      recorded_at: "2026-09-08T10:21:00Z",
+      director_connection: "unknown",
+    };
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({ consultations: [{ ...entryOne, policy_outcomes: [outcome] }] }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(1);
+    const line = outcomes[0]!.textContent ?? "";
+    expect(line).toContain(
+      "方針が編集長へ届いたか確認できません。重複利用を避けて停止しました",
+    );
+    expect(line).toContain("理由：director_timeout: 応答がありませんでした");
+    expect(line).toContain("編集の記録は v2 まで残っています");
+  });
+
+  it("W5-c: connection欠落のfallbackでも記録版は表示される", async () => {
+    const outcome: ConsultationPolicyOutcomeEntry = {
+      kind: "policy_outcome",
+      outcome_id: "o-w5c",
+      consultation_id: "c-1",
+      judgment_id: "j-w5c",
+      proposal_id: "p-1",
+      plan_version: "v2",
+      status: "failed",
+      reasons: ["対象の版が見つかりませんでした"],
+      note: null,
+      recorded_at: "2026-09-08T10:22:00Z",
+    };
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({ consultations: [{ ...entryOne, policy_outcomes: [outcome] }] }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(1);
+    const line = outcomes[0]!.textContent ?? "";
+    expect(line).toContain("反映できませんでした：対象の版が見つかりませんでした");
+    expect(line).toContain("編集の記録は v2 まで残っています");
+  });
+
+  it("W10: 現行headより古い冪等返却は記録版と区別し、現在適用済みとは言わない", async () => {
+    const superseded: ConsultationPolicyOutcomeEntry = {
+      ...connectedOutcome,
+      outcome_id: "o-w10a",
+      judgment_id: "j-w10a",
+      superseded_by_head: true,
+    };
+    const ineffective: ConsultationPolicyOutcomeEntry = {
+      ...connectedOutcome,
+      outcome_id: "o-w10b",
+      judgment_id: "j-w10b",
+      effective: false,
+    };
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({
+        consultations: [{ ...entryOne, policy_outcomes: [superseded, ineffective] }],
+      }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(2);
+    for (const outcome of outcomes) {
+      const line = outcome.textContent ?? "";
+      expect(line).toContain(
+        "記録として表示しています（現在は新しい版があります）",
+      );
+      expect(line).not.toContain("現在適用済み");
+    }
+  });
+
+  it("W10: 新欄のない旧データは記録版の区別行を出さない", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({
+        consultations: [{ ...entryOne, policy_outcomes: [connectedOutcome] }],
+      }),
+    );
+    renderPanel(fetchImpl);
+
+    const outcomes = await screen.findAllByTestId("consultation-policy-outcome");
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]!.textContent).not.toContain("記録として表示しています");
   });
 
   it("再読込（作り直し）でもpollのviewから同じ再編集状態が復元する", async () => {

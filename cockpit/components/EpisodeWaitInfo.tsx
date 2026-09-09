@@ -154,6 +154,31 @@ export default function EpisodeWaitInfo({
     status.stage_runs.find(
       (row) => row.last_error_code !== null && row.run_id === (status.current_run ?? null),
     )?.last_error_code ?? null;
+  // W8: 回数だけで将来動作を断定しない。実経路の状態で言い分ける:
+  // 実行中行あり→再試行のうえ実行中（現在形）、終端失敗→履歴と停止を区別し
+  // 再実行予定は主張しない、終端成功→履歴と完了を区別、行なし→不明。
+  const retryLine = ((): string | null => {
+    if (typeof retryCount !== "number" || retryCount <= 0) return null;
+    const reason = retryReason !== null ? `：理由 ${retryReason}` : "";
+    if (activeRunningRows.length > 0) {
+      return `再試行のうえ実行中です（${retryCount}回目・最大回数は提供されていません）${reason}。`;
+    }
+    const active = activeRunId(status);
+    const activeRows =
+      active === null
+        ? []
+        : status.stage_runs.filter((row) => row.run_id === active);
+    if (activeRows.some((row) => row.status === "failed_blocked")) {
+      return `再試行の履歴があります（${retryCount}回）${reason}。停止しています（自動で次に動く予定は確認できません）。`;
+    }
+    if (
+      activeRows.length > 0 &&
+      activeRows.every((row) => row.status === "succeeded")
+    ) {
+      return `再試行の履歴があります（${retryCount}回）${reason}。現在は完了しています。`;
+    }
+    return `再試行の履歴があります（${retryCount}回）${reason}。現在の状態は不明です。`;
+  })();
 
   return (
     <div data-testid="wait-guidance" className="wait-guidance" aria-busy={runActive}>
@@ -207,13 +232,13 @@ export default function EpisodeWaitInfo({
         <p className="field-hint" data-testid="wait-worker-report">
           {reportLine(status)}
         </p>
-        {/* 再試行の次動作は実コードの意味だけ書く: stage_runner.py _attempts
-            は同一工程の runner_fn を attempt+1 で再実行し（上限 max_attempts・
-            次回失敗時の動作は payload に無い）、失敗終端は failed_blocked 停止
-            →再照会/rebuild の運用者主導回復（自動の次動作なし）。数値は作らない。 */}
-        {typeof retryCount === "number" && retryCount > 0 ? (
+        {/* 再試行の表示は実経路の状態から導く: stage_runner.py _attempts
+            は同一工程の runner_fn を再実行するが、上限・次回失敗時の動作・
+            自動再実行の予定は payload に無い。終端行に再実行予定を主張せず、
+            履歴と現在の状態を区別する（不明なら不明）。数値は作らない。 */}
+        {retryLine !== null ? (
           <p className="field-hint" data-testid="wait-retry">
-            {`再試行中です（${retryCount}回目・最大回数は提供されていません）${retryReason !== null ? `：理由 ${retryReason}` : ""}。次の動作: 同じ工程の再実行（この経路の上限・次回失敗時の動作は提供されていません）`}
+            {retryLine}
           </p>
         ) : null}
         {failedGroups.length > 0 ? (

@@ -381,4 +381,87 @@ describe("useRebuildPhase — stale-poll honesty（V44-1 live lane）", () => {
     const done = completedRunStatus("run-new", [0]);
     expect(deriveRebuildPhase(SCHEDULED, done, true, baseline)).toBe("done");
   });
+
+  it("W6 codex再現: 旧runのfailed_blockedのみ+世代が受付時のまま→今回の失敗と言わず予約済み", () => {
+    const oldFailedOnly = baseStatus({
+      current_run: "run-old",
+      current_target_version: "v1",
+      rebuild_requests: [],
+      stage_runs: [
+        {
+          stage_name: "preview",
+          status: "failed_blocked",
+          retry_count: 1,
+          last_error_code: "preview-failed",
+          run_id: "run-old",
+        },
+      ],
+    });
+    const baseline = { currentRun: "run-old", latestSequence: null };
+    expect(deriveRebuildPhase(SCHEDULED, oldFailedOnly, null, baseline)).toBe(
+      "scheduled",
+    );
+    expect(deriveRebuildPhase(SCHEDULED, oldFailedOnly, null, baseline)).not.toBe(
+      "failed",
+    );
+  });
+
+  it("W6: 旧runのrunning残留+新予約の世代未反映→実行中と偽らず予約済み（baseline有り）", () => {
+    const oldRunning = baseStatus({
+      current_run: "run-old",
+      rebuild_requests: [],
+      stage_runs: [
+        {
+          stage_name: "preview",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-old",
+        },
+      ],
+    });
+    const baseline = { currentRun: "run-old", latestSequence: null };
+    expect(deriveRebuildPhase(SCHEDULED, oldRunning, null, baseline)).toBe(
+      "scheduled",
+    );
+  });
+
+  it("W6: 現行runなしで履歴running行を拾わない（今回活動の証明ではない）", () => {
+    const noCurrentRun = baseStatus({
+      current_run: null,
+      pending_rebuild: null,
+      rebuild_requests: [],
+      stage_runs: [
+        {
+          stage_name: "preview",
+          status: "running",
+          retry_count: 0,
+          last_error_code: null,
+          run_id: "run-old",
+        },
+      ],
+    });
+    expect(deriveRebuildPhase(SCHEDULED, noCurrentRun, null)).toBe("scheduled");
+    expect(deriveRebuildPhase(SCHEDULED, noCurrentRun, null)).not.toBe("running");
+  });
+
+  it("W6: serverがTHIS runの失敗を示したら停止を出す（新run+failed_blocked+連鎖証拠）", () => {
+    const baseline = { currentRun: "run-old", latestSequence: null };
+    const thisRunFailed = baseStatus({
+      current_run: "run-new",
+      rebuild_requests: [spawnedEntry(1, "run-new")],
+      stage_runs: [
+        {
+          stage_name: "preview",
+          status: "failed_blocked",
+          retry_count: 0,
+          last_error_code: "preview-failed",
+          run_id: "run-new",
+        },
+      ],
+    });
+    expect(deriveRebuildPhase(SCHEDULED, thisRunFailed, null, baseline)).toBe(
+      "failed",
+    );
+  });
 });

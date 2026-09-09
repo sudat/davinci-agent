@@ -40,6 +40,8 @@ export type ConsultationProposalDetails = {
   reference_mapping: string;
   unused_reasons: string;
   unconfirmed: string[];
+  /** W9 conditional-presentation classification (absent on old backends). */
+  presentation_condition?: "normal" | "location_change_only" | "local_exception" | null;
 };
 
 export type ConsultationProposal = {
@@ -116,6 +118,8 @@ export type ConsultationAdoptedPolicy = {
   unused_reasons: string;
   unconfirmed: string[];
   note: string;
+  /** W9 conditional-presentation classification (absent on old backends). */
+  presentation_condition?: "normal" | "location_change_only" | "local_exception" | null;
 };
 
 export type ConsultationPolicy = {
@@ -168,10 +172,20 @@ export type ConsultationPolicyOutcomeEntry = {
   realized_checks?: string[] | null;
   unaddressed?: string[] | null;
   unconfirmed?: string[] | null;
+  /** Slice-2 W10: set by the backend when an idempotent same-policy return
+   *  names a version older than the current head — the row is record-only,
+   *  never 現在適用済み. Absent/null on old data — renderers treat absence
+   *  as unknown and render no record-only line (never fabricate it). */
+  superseded_by_head?: boolean | null;
+  /** Slice-2 W10 alias contract: false = this outcome is not the currently
+   *  effective version. Absent/null on old data — same tolerance as above. */
+  effective?: boolean | null;
   failure_code?: string | null;
   reservation_sequence?: number | null;
   run_id?: string | null;
   commit_event_id?: string | null;
+  /** W9 deterministic field→setting rows applied to the derived plan. */
+  applied_settings?: { policy_field: string; setting: string; detail: string }[] | null;
 };
 
 /** One row of the consultation journal: either a message entry or a
