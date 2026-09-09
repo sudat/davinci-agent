@@ -111,6 +111,7 @@ from services.outputs.geometry import (
 )
 from services.preview.models import AppliedDecision
 from services.preview.render import PREVIEW_NAME, TRACE_NAME
+from services.preview.trace import rebuild_decision_id
 from services.review_command.policy_commit import (
     PolicyRecoveryError,
     commit_policy,
@@ -920,7 +921,8 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
         preview_dir = run_dir / f"preview-v{head.version}"
         head_entry = head.index.versions.get(str(head.version))
         decision = AppliedDecision(
-            decision_id=f"decision-rebuild-{bundle.episode_id}-v{head.version}",
+            # r9d fix: run-id suffix — intent-only applies never bump the head version.
+            decision_id=rebuild_decision_id(bundle.episode_id, head.version, run_id),
             case_id=bundle.episode_id,
             classification="clear",
             plan_version_after=f"v{head.version}",

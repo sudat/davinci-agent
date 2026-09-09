@@ -48,6 +48,18 @@ def initial_decision_id(plan_version: str) -> str:
     return f"initial-plan-{plan_version}"
 
 
+def rebuild_decision_id(episode_id: str, version: int, run_id: str) -> str:
+    """Derived per-run rebuild decision id (r9d blocker ``preview-trace-
+    duplicate-decision``). The run-id suffix keeps repeated intent-only
+    rebuilds at an UNCHANGED head version structurally unique — every
+    rebuild run stamps a fresh id, so the trace manifest's decision-id
+    uniqueness invariant holds without a dedup pass. Deterministic from
+    recorded facts (episode, head version, run id); never a random uuid.
+    """
+
+    return f"decision-rebuild-{episode_id}-v{version}-{run_id}"
+
+
 def plan_version_of(edit_plan: EditPlan0C | None) -> str:
     """The plan version a preview renders (Todo-27 default keeps ``v1``)."""
 
@@ -191,4 +203,5 @@ __all__ = [
     "coverage",
     "decisions",
     "initial_decision_id",
+    "rebuild_decision_id",
 ]
