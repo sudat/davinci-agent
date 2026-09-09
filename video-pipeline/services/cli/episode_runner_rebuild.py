@@ -71,8 +71,10 @@ from services.episode_cockpit.consultation_selection_budget import (
     plan_preview_seconds,
     reserve_director,
     reserve_preview,
+    reserve_preview_full_rebuild_exempt,
     settle_director,
     settle_preview,
+    settle_preview_full_rebuild_exempt,
 )
 from services.episode_cockpit.consultation_store import (
     CONNECTED_POLICY_FIELDS,
@@ -82,6 +84,7 @@ from services.episode_cockpit.consultation_store import (
     DirectorConnection,
     append_policy_outcome_once,
     canonical_policy_sha256,
+    combined_wall_used_in_scope,
     ensure_preview_budget_available,
     ensure_selection_budget_available,
     latest_adopted_policy,
@@ -90,7 +93,6 @@ from services.episode_cockpit.consultation_store import (
     policy_for_judgment,
     policy_scope_list,
     policy_summary,
-    remaining_wall_seconds,
     unaddressed_for_scope,
     unconfirmed_for_policy,
 )
@@ -141,6 +143,20 @@ REQUIRED_STATUS: Final = "PREVIEW_READY"
 METRICS_NAME: Final = "rebuild-metrics.jsonl"
 BUNDLE_NAME: Final = "review-bundle.json"
 REBUILD_LOG_NAME: Final = "rebuild-requests.jsonl"
+
+
+def remaining_wall_seconds_with_exempt(episode_root: Path) -> float:
+    """Deadline fold = proposal wall + sample wall + exempt-render wall.
+
+    The 2026-09-10 ruling lifts only the SAMPLE-seconds cap for
+    judgment-commissioned full re-renders; their wall time stays under
+    the unchanged wall deadline, so the deadline fold must see the
+    "full_rebuild_exempt" ledger lines too.
+    """
+
+    return load_budget_limits().wall_seconds_limit - combined_wall_used_in_scope(
+        episode_root, "sample", "full_rebuild_exempt"
+    )
 
 
 class RebuildStageError(Exception):
@@ -713,12 +729,25 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
             ensure_preview_budget_available(
                 episode_root, load_budget_limits(), plan_preview_seconds(new_plan)
             )
-        except (CockpitNotFoundError, CockpitUnprocessableError) as error:
-            code = (
-                error.code
-                if isinstance(error, CockpitUnprocessableError)
-                else "consultation-preview-budget-exhausted"
-            )
+        except CockpitUnprocessableError as error:
+            if error.code != "consultation-preview-budget-exhausted":
+                _failed_outcome(
+                    episode_root, policy, (f"{error.code}: {error}",), str(error),
+                    reservation_sequence=reservation_sequence,
+                    run_id=run_id,
+                    failure_code=error.code,
+                    director_connection="confirmed",
+                    director_request_hash=request_hash,
+                )
+                raise RebuildStageError(error.code, str(error)) from error
+            # 2026-09-10 ruling: this branch runs only on a reservation
+            # path, so the over-allowance render is a full re-render
+            # commissioned by the adopted judgment — only the
+            # sample-seconds refusal is lifted; the wall deadline and
+            # the LLM call caps stay in force, and stage_preview records
+            # the "full_rebuild_exempt" ledger line for the render.
+        except CockpitNotFoundError as error:
+            code = "consultation-preview-budget-exhausted"
             _failed_outcome(
                 episode_root, policy, (f"{code}: {error}",), str(error),
                 reservation_sequence=reservation_sequence,
@@ -823,7 +852,7 @@ def stage_compile(episode_root: Path, head: HeadState) -> tuple[EditPlan0C, Time
         raise RebuildStageError("ir-unreadable", str(error)) from error
 
 
-def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log+run binding)
+def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classification + render + settle in one stage fn, like stage_selection)
     episode_root: Path,
     head: HeadState,
     plan: EditPlan0C,
@@ -840,25 +869,41 @@ def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log
     renderer starts and settles them afterwards: once rendering starts
     the reserved seconds are charged even on failure (with the measured
     wall time), so the 30 s allowance can never be silently exceeded.
+    Sample cap (2026-09-10 ruling): renders that FIT within the
+    remaining 30 s sample allowance stay capped exactly as before; a
+    render commissioned by an active selection-rebuild reservation that
+    EXCEEDS the remaining allowance is a full re-render and skips only
+    the sample-seconds refusal (recorded honestly under the
+    "full_rebuild_exempt" ledger scope). The wall deadline and the LLM
+    call caps stay fully in force for every path.
     """
 
     attempt = selection_attempt
     preview_seconds = 0.0
     preview_started = 0.0
+    settle = settle_preview
     if attempt is not None:
         preview_seconds = ir_preview_seconds(ir)
+        reserve = reserve_preview
         try:
             ensure_preview_budget_available(
                 episode_root, load_budget_limits(), preview_seconds
             )
-        except (CockpitNotFoundError, CockpitUnprocessableError) as error:
-            code = (
-                error.code
-                if isinstance(error, CockpitUnprocessableError)
-                else "consultation-preview-budget-exhausted"
-            )
-            raise RebuildStageError(code, str(error)) from error
-        reserve_preview(episode_root, attempt, preview_seconds)
+        except CockpitUnprocessableError as error:
+            if error.code != "consultation-preview-budget-exhausted":
+                raise RebuildStageError(error.code, str(error)) from error
+            # 2026-09-10 ruling: the over-allowance render on this
+            # reservation path is a full re-render — only the SAMPLE
+            # refusal is lifted; the ledger line honestly records it
+            # under "full_rebuild_exempt" (invisible to the sample gate,
+            # counted by the wall-deadline fold).
+            reserve = reserve_preview_full_rebuild_exempt
+            settle = settle_preview_full_rebuild_exempt
+        except CockpitNotFoundError as error:
+            raise RebuildStageError(
+                "consultation-preview-budget-exhausted", str(error)
+            ) from error
+        reserve(episode_root, attempt, preview_seconds)
         preview_started = time.monotonic()
     run_dir = episode_root / RUN_DIR_NAME
     bundle_file = run_dir / BUNDLE_NAME
@@ -887,7 +932,7 @@ def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log
         )
     except Exception as error:
         if attempt is not None:
-            settle_preview(
+            settle(
                 episode_root, attempt,
                 preview_seconds=preview_seconds,
                 wall_elapsed=max(time.monotonic() - preview_started, 0.001),
@@ -898,7 +943,7 @@ def stage_preview(  # noqa: PLR0913 (the preview stage consumes head+plan+ir+log
             )
         raise RebuildStageError("preview-failed", str(error)) from error
     if attempt is not None:
-        settle_preview(
+        settle(
             episode_root, attempt,
             preview_seconds=preview_seconds,
             wall_elapsed=max(time.monotonic() - preview_started, 0.001),
@@ -1127,7 +1172,9 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
         # W4: the remaining wall budget bounds EVERY re-entry path, not
         # just the director call and the preview render — a reserved run
         # whose allowance is already spent stops before plan/compile work.
-        remaining = remaining_wall_seconds(episode_root, load_budget_limits())
+        # The fold includes the ruling-exempt full-re-render scope, so an
+        # exempt preview's wall seconds stay deadline-bounded.
+        remaining = remaining_wall_seconds_with_exempt(episode_root)
         if remaining <= 0:
             raise RebuildStageError(
                 "consultation-selection-deadline-exceeded",
@@ -1135,7 +1182,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
             )
     if stage == "selection":
         if reservation_sequence is not None:
-            remaining = remaining_wall_seconds(episode_root, load_budget_limits())
+            remaining = remaining_wall_seconds_with_exempt(episode_root)
             deadline = (
                 time.monotonic() + remaining if remaining > 0 else None
             )
@@ -1194,7 +1241,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
             episode_root, reservation_sequence, job_status=job_status,
             for_preview=True,
         )
-        remaining = remaining_wall_seconds(episode_root, load_budget_limits())
+        remaining = remaining_wall_seconds_with_exempt(episode_root)
         if remaining <= 0:
             raise RebuildStageError(
                 "consultation-selection-deadline-exceeded",

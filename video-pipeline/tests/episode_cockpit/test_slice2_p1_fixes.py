@@ -29,7 +29,7 @@ from services.cli import episode_runner, episode_runner_rebuild, episode_runner_
 from services.cli.episode_runner_rebuild import RebuildStageError
 from services.cli.episode_runner_state import RunContext, record_stage
 from services.cli.project import plan_sha256
-from services.cli.review_common import store_ir
+from services.cli.review_common import store_ir, store_plan
 from services.contracts.edit_plan_0c import (
     EditPlan0C,
     EditPlanBody0C,
@@ -46,10 +46,12 @@ from services.episode_cockpit.consultation_selection_budget import (
     attempt_for,
     reserve_director,
     reserve_preview,
+    reserve_preview_full_rebuild_exempt,
     selection_budget_used,
     selection_budget_used_in_scope,
     settle_director,
     settle_preview,
+    settle_preview_full_rebuild_exempt,
 )
 from services.episode_cockpit.consultation_store import (
     CONNECTED_POLICY_FIELDS,
@@ -85,6 +87,7 @@ from services.episode_cockpit.consultation_store import (
     policy_for_judgment,
     policy_scope_list,
     policy_summary,
+    remaining_wall_seconds,
 )
 from services.episode_cockpit.errors import CockpitUnprocessableError
 from services.episode_cockpit.models import IntakeRecordV1, RebuildRequestEntry
@@ -1045,9 +1048,14 @@ def _huge_plan(episode_root: Path) -> EditPlan0C:
     )
 
 
-def test_preview_over_remaining_budget_stops_before_commit_and_render(
+def test_full_rebuild_over_remaining_sample_budget_commits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """2026-09-10 ruling: a judgment-commissioned full re-render is not
+    sample-budget-capped — it passes the preview gate and commits (the
+    r9 blocker: a 282 s real-footage re-render used to fail-close here).
+    """
+
     episode_dir = _episode_with_policy(tmp_path)
     _live_env(monkeypatch)
     captured: dict[str, Any] = {}
@@ -1066,22 +1074,143 @@ def test_preview_over_remaining_budget_stops_before_commit_and_render(
     )
     reservation = _reserve(episode_dir, "j1")
 
-    with pytest.raises(RebuildStageError) as exc_info:
-        episode_runner_rebuild.stage_selection(
-            episode_dir,
-            io.BytesIO(),
-            policy=policy_for_judgment(episode_dir, "j1"),
-            reservation_sequence=reservation.sequence,
-            run_id="run-preview-1",
-            job_status="PREVIEW_READY",
-        )
+    plan_sha = episode_runner_rebuild.stage_selection(
+        episode_dir,
+        io.BytesIO(),
+        policy=policy_for_judgment(episode_dir, "j1"),
+        reservation_sequence=reservation.sequence,
+        run_id="run-preview-1",
+        job_status="PREVIEW_READY",
+    )
 
-    assert exc_info.value.code == "consultation-preview-budget-exhausted"
     assert renders == []
     assert load_head(
         episode_dir / "review" / "events.jsonl", episode_dir / "review" / "store"
-    ).version == 1
-    assert not (episode_dir / "review" / "store" / "plan-v2.json").exists()
+    ).version == 2
+    assert (episode_dir / "review" / "store" / "plan-v2.json").is_file()
+    assert plan_sha == plan_sha256(
+        store_plan(episode_dir / "review" / "store" / "plan-v2.json")
+    )
+
+
+def test_full_rebuild_preview_ledgers_exemption_not_sample(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exempt re-render settles under "full_rebuild_exempt": visible
+    in the journal and the wall fold, invisible to the sample totals and
+    the sample gate (2026-09-10 ruling, honest ledger representation).
+    """
+
+    episode_dir = _episode_with_policy(tmp_path)
+    head = load_head(
+        episode_dir / "review" / "events.jsonl", episode_dir / "review" / "store"
+    )
+    ir = store_ir(episode_dir / "review" / "store" / "ir-v1.json")
+    precharged = attempt_for(1, "c1", "j1")
+    reserve_preview(episode_dir, precharged, 29.0)
+    settle_preview(
+        episode_dir, precharged, preview_seconds=29.0, wall_elapsed=1.0,
+        result="succeeded",
+    )
+    attempt = attempt_for(2, "c1", "j1")
+
+    def fail_render(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("ffmpeg gone")
+
+    monkeypatch.setattr(
+        episode_runner_rebuild, "render_review_preview", fail_render
+    )
+
+    with pytest.raises(RebuildStageError) as exc_info:
+        episode_runner_rebuild.stage_preview(
+            episode_dir, head, head.plan, ir, io.BytesIO(),
+            run_id="run-preview-exempt", selection_attempt=attempt,
+        )
+
+    assert exc_info.value.code == "preview-failed"
+    journal = episode_dir / "consultation" / "selection-budget.jsonl"
+    lines = [
+        json.loads(line) for line in journal.read_bytes().splitlines()
+    ]
+    exempt_lines = [line for line in lines if line["scope"] == "full_rebuild_exempt"]
+    assert [line["phase"] for line in exempt_lines] == [
+        "preview_reserved", "preview_settled",
+    ]
+    assert exempt_lines[-1]["preview_seconds_used"] == pytest.approx(2.0)
+    assert exempt_lines[-1]["result"] == "failed"
+    assert all(line["scope"] == "sample" for line in lines[:-2])
+    used = selection_budget_used(episode_dir)
+    assert used.preview_seconds == pytest.approx(29.0)
+    exempt_used = selection_budget_used_in_scope(episode_dir, "full_rebuild_exempt")
+    assert exempt_used.preview_seconds == pytest.approx(2.0)
+    assert exempt_used.wall_seconds > 0.0
+    limits = load_budget_limits()
+    ensure_preview_budget_available(episode_dir, limits, 1.0)
+    with pytest.raises(CockpitUnprocessableError) as gate_error:
+        ensure_preview_budget_available(episode_dir, limits, 2.0)
+    assert gate_error.value.code == "consultation-preview-budget-exhausted"
+
+
+def test_wall_deadline_counts_full_rebuild_exempt_render_seconds(
+    tmp_path: Path,
+) -> None:
+    """(d) The wall deadline stays fully in force for exempt re-renders:
+    the deadline fold counts their wall seconds even though the sample
+    gate ignores them.
+    """
+
+    episode_dir = _episode_with_policy(tmp_path)
+    attempt = attempt_for(1, "c1", "j1")
+    reserve_preview_full_rebuild_exempt(episode_dir, attempt, 60.0)
+    settle_preview_full_rebuild_exempt(
+        episode_dir, attempt, preview_seconds=60.0, wall_elapsed=601.0,
+        result="succeeded",
+    )
+
+    assert episode_runner_rebuild.remaining_wall_seconds_with_exempt(
+        episode_dir
+    ) <= 0.0
+    assert remaining_wall_seconds(episode_dir, load_budget_limits()) > 0.0
+    carried = episode_runner_rebuild.ReentryState()
+    with pytest.raises(RebuildStageError) as exc_info:
+        episode_runner_rebuild._run_stage(
+            "compile", episode_dir, carried, io.BytesIO(),
+            run_id="run-deadline-exempt", reservation_sequence=1,
+            job_status="PREVIEW_READY",
+        )
+    assert exc_info.value.code == "consultation-selection-deadline-exceeded"
+
+
+def test_stage_preview_without_attempt_touches_no_ledger(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(c) The no-reservation (initial-chain style) preview path runs no
+    budget gate and writes no selection-budget lines — unchanged.
+    """
+
+    episode_dir = _episode_with_policy(tmp_path)
+    head = load_head(
+        episode_dir / "review" / "events.jsonl", episode_dir / "review" / "store"
+    )
+    ir = store_ir(episode_dir / "review" / "store" / "ir-v1.json")
+
+    def fail_render(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("ffmpeg gone")
+
+    monkeypatch.setattr(
+        episode_runner_rebuild, "render_review_preview", fail_render
+    )
+
+    with pytest.raises(RebuildStageError) as exc_info:
+        episode_runner_rebuild.stage_preview(
+            episode_dir, head, head.plan, ir, io.BytesIO(),
+            run_id="run-preview-no-attempt",
+        )
+
+    assert exc_info.value.code == "preview-failed"
+    assert not (
+        episode_dir / "consultation" / "selection-budget.jsonl"
+    ).exists()
 
 
 def test_preview_failure_consumes_reserved_sample_seconds(

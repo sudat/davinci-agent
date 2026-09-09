@@ -44,7 +44,9 @@ from services.editorial.models import (
 )
 from services.episode_cockpit.consultation_selection_budget import (
     DIRECTOR_WALL_ALLOWANCE_SECONDS,
+    BudgetScope,
     selection_budget_used,
+    selection_budget_used_in_scope,
 )
 from services.episode_cockpit.errors import (
     CockpitNotFoundError,
@@ -1217,10 +1219,22 @@ def combined_llm_used(episode_dir: Path) -> int:
 
 
 def combined_wall_used(episode_dir: Path) -> float:
-    return (
-        budget_used(episode_dir).wall_seconds
-        + selection_budget_used(episode_dir).wall_seconds
-    )
+    return combined_wall_used_in_scope(episode_dir, "sample")
+
+
+def combined_wall_used_in_scope(episode_dir: Path, *scopes: BudgetScope) -> float:
+    """Proposal-journal wall + the named ledger scopes' wall seconds.
+
+    ``combined_wall_used`` is exactly this over the "sample" scope — the
+    deadline fold adds "full_rebuild_exempt" so ruling-exempt re-render
+    lines stay wall-bounded (the wall deadline enforcement is unchanged;
+    only the SAMPLE cap is scoped).
+    """
+
+    wall = budget_used(episode_dir).wall_seconds
+    for scope in scopes:
+        wall += selection_budget_used_in_scope(episode_dir, scope).wall_seconds
+    return wall
 
 
 def remaining_wall_seconds(episode_dir: Path, limits: ConsultationBudgetLimits) -> float:
@@ -1257,7 +1271,12 @@ def ensure_preview_budget_available(
     """Typed 422 BEFORE committing or rendering an over-budget sample.
 
     Fail-closed: an over-allowance plan is never silently truncated to
-    fit — the bundle stays whole-plan-bound and the run stops.
+    fit — the bundle stays whole-plan-bound and the run stops. This is
+    the SAMPLE gate (2026-09-10 ruling): it folds the "sample" ledger
+    scope only; a full re-render commissioned by a selection-rebuild
+    reservation is exempt (see
+    consultation_selection_budget.reserve_preview_full_rebuild_exempt)
+    while its wall time stays under the unchanged wall deadline.
     """
 
     used = selection_budget_used(episode_dir).preview_seconds
@@ -1516,6 +1535,7 @@ __all__ = [
     "canonical_policy_sha256",
     "combined_llm_used",
     "combined_wall_used",
+    "combined_wall_used_in_scope",
     "consultation_view",
     "consultation_write_locked",
     "consume_budget",
