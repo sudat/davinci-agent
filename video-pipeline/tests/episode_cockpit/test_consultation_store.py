@@ -371,6 +371,7 @@ def test_consultation_view_matches_pinned_contract(episode_dir: Path) -> None:
         "llm_calls_used": 1, "llm_calls_limit": 6,
         "intervals_used": 1, "intervals_limit": 3,
         "wall_seconds_used": 1.25, "wall_seconds_limit": 600.0,
+        "preview_seconds_used": 0.0, "preview_sample_seconds_limit": 30.0,
         "cost_display": "unmeasured",
     }
     adopted = cast("dict[str, object]", view["policy"])["adopted"]

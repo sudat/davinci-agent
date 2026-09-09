@@ -176,6 +176,15 @@ class RebuildRequestEntry(StrictModel):
     links a selection rebuild to the adopted consultation judgment that
     requested it, so the consultation view derives the rebuild state
     deterministically per policy. Absent (None) on every legacy line.
+
+    Slice2 P1 (additive, backward compatible): the reservation pins the
+    adopted judgment's scope, policy bytes, and review-store base so the
+    runner can refuse a stale run instead of silently using the latest
+    policy. ``policy_scope`` uses the canonical order
+    (composition, appearance, audio). ``policy_sha256`` is the SHA-256 of
+    the canonical ``AdoptedPolicyV1`` bytes. ``base_plan_sha256`` is the
+    recorded ``plan_sha256`` of the base version entry (never recomputed).
+    ``failure_code``/``detail`` ride only on terminal spawn-failure rows.
     """
 
     schema_version: Literal["cockpit-rebuild-request-v1"] = "cockpit-rebuild-request-v1"
@@ -187,6 +196,12 @@ class RebuildRequestEntry(StrictModel):
     target_version: NonEmpty | None = None
     reserves_sequence: SequenceNumber | None = None
     judgment_id: NonEmpty | None = None
+    policy_scope: tuple[str, ...] | None = None
+    policy_sha256: str | None = None
+    base_plan_version: str | None = None
+    base_plan_sha256: str | None = None
+    failure_code: str | None = None
+    detail: str | None = None
 
 
 class ReviewProposalConsumed(StrictModel):

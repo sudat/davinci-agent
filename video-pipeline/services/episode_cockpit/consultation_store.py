@@ -23,7 +23,9 @@ intervals 3 / wall seconds 600) as fallback; ``cost_display`` stays
 
 from __future__ import annotations
 
+import hashlib
 import json
+import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,6 +35,10 @@ from pydantic import BeforeValidator, Field, ValidationError
 
 from services.contracts.primitives import StrictModel
 from services.editorial.models import AdoptedPolicyScopeV1, AdoptedPolicySummaryV1
+from services.episode_cockpit.consultation_selection_budget import (
+    DIRECTOR_WALL_ALLOWANCE_SECONDS,
+    selection_budget_used,
+)
 from services.episode_cockpit.errors import (
     CockpitNotFoundError,
     CockpitUnprocessableError,
@@ -62,6 +68,59 @@ _CONFIG_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LLM_CALLS_LIMIT = 6
 DEFAULT_INTERVALS_LIMIT = 3
 DEFAULT_WALL_SECONDS_LIMIT = 600.0
+DEFAULT_PREVIEW_SAMPLE_SECONDS_LIMIT = 30.0
+
+# Canonical scope order for reservation pins and unaddressed derivation.
+POLICY_SCOPE_ORDER: tuple[str, ...] = ("composition", "appearance", "audio")
+
+# The only structural checks a successful v1 derivation may record (the
+# solve/generate/compile_ir/project_plan + review-store round-trip steps).
+# Never relabeled as semantic-compliance evidence.
+STRUCTURAL_REALIZED_CHECKS: tuple[str, ...] = (
+    "planner_feasibility",
+    "edit_plan_generation",
+    "production_compile",
+    "review_projection",
+    "review_store_round_trip",
+)
+
+CONNECTED_POLICY_FIELDS: tuple[str, ...] = (
+    "decision",
+    "scope",
+    "audience_message",
+    "structure",
+    "duration_estimate",
+    "candidate_scenes",
+    "subtitle_policy",
+    "audio_policy",
+    "tempo_policy",
+    "reference_mapping",
+    "unused_reasons",
+    "unconfirmed",
+    "note",
+)
+
+SCOPE_UNADDRESSED_JA: dict[str, str] = {
+    "composition": "構成・候補場面・想定尺・参考対応・テンポが方針の意味どおりか",
+    "appearance": "字幕と見た目が実映像で方針どおりか",
+    "audio": "BGM・音量・音付きテンポが方針どおりか",
+}
+
+TRIAL_VIEW_UNCONFIRMED_JA = "試し編集を本人が見て方針どおりか"
+
+
+def unaddressed_for_scope(policy: AdoptedPolicyV1) -> tuple[str, ...]:
+    flags = (
+        ("composition", policy.scope.composition),
+        ("appearance", policy.scope.appearance),
+        ("audio", policy.scope.audio),
+    )
+    return tuple(SCOPE_UNADDRESSED_JA[name] for name, flag in flags if flag)
+
+
+def unconfirmed_for_policy(policy: AdoptedPolicyV1) -> tuple[str, ...]:
+    merged = (*policy.unconfirmed, TRIAL_VIEW_UNCONFIRMED_JA)
+    return tuple(dict.fromkeys(merged))
 
 type ConsultationDecision = Literal["adopt", "revise", "reject", "both_wrong", "delegate"]
 
@@ -181,15 +240,27 @@ class AdoptedPolicyV1(StrictModel):
     note: str | None = None
 
 
-type PolicyOutcomeStatus = Literal["honored", "failed"]
+type PolicyOutcomeStatus = Literal["honored", "connected", "failed"]
+
+type DirectorConnection = Literal["confirmed", "not_started", "unknown"]
 
 
 class ConsultationPolicyOutcomeV1(StrictModel):
     """One selection-rebuild verdict for an adopted policy (append-only).
 
-    ``honored`` carries the committed plan version; ``failed`` carries no
-    version and the honest reason (never a silently dropped policy). The
-    ``note`` records what was actually verified (never a claim beyond it).
+    ``honored`` is legacy read-only (old writers emitted it; new writers
+    emit only ``connected`` or ``failed``). ``connected`` means the pinned
+    policy reached the director request and the listed structural checks
+    passed — never a semantic-compliance claim. ``failed`` carries the
+    honest reason (never a silently dropped policy) and MAY name the
+    recorded ``plan_version`` when a sealed policy event proves the
+    version exists (orphan-recovery honesty). ``director_connection``
+    separates connection from realization: ``confirmed`` (a live response
+    to the pinned-policy request arrived), ``not_started`` (stopped
+    before any director contact), ``unknown`` (transport attempted but
+    delivery unproven). ``unaddressed`` names adopted-scope aspects whose
+    realization is unverified; ``unconfirmed`` names still-unconfirmed
+    items. ``note`` records what was actually verified (never beyond it).
     """
 
     schema_version: Literal["cockpit-consultation-policy-outcome-v1"] = (
@@ -204,6 +275,17 @@ class ConsultationPolicyOutcomeV1(StrictModel):
     reasons: StringSequence = ()
     note: str | None = None
     created_at: str
+    reservation_sequence: int | None = None
+    run_id: str | None = None
+    commit_event_id: str | None = None
+    failure_code: str | None = None
+    director_connection: DirectorConnection | None = None
+    director_request_hash: str | None = None
+    policy_prompt_sha256: str | None = None
+    connected_fields: StringSequence = ()
+    realized_checks: StringSequence = ()
+    unaddressed: StringSequence = ()
+    unconfirmed: StringSequence = ()
 
 
 class ConsultationBudgetEventV1(StrictModel):
@@ -235,6 +317,9 @@ class ConsultationBudgetLimits(StrictModel):
     intervals_limit: int = DEFAULT_INTERVALS_LIMIT
     wall_seconds_limit: Annotated[float, BeforeValidator(float)] = (
         DEFAULT_WALL_SECONDS_LIMIT
+    )
+    preview_sample_seconds_limit: Annotated[float, BeforeValidator(float)] = (
+        DEFAULT_PREVIEW_SAMPLE_SECONDS_LIMIT
     )
 
 
@@ -378,19 +463,163 @@ def policy_summary(policy: AdoptedPolicyV1) -> AdoptedPolicySummaryV1:
             appearance=policy.scope.appearance,
             audio=policy.scope.audio,
         ),
+        audience_message=policy.audience_message,
         structure=policy.structure,
+        duration_estimate=policy.duration_estimate,
         candidate_scenes=policy.candidate_scenes,
         subtitle_policy=policy.subtitle_policy,
         audio_policy=policy.audio_policy,
         tempo_policy=policy.tempo_policy,
+        reference_mapping=policy.reference_mapping,
         unused_reasons=policy.unused_reasons,
         unconfirmed=policy.unconfirmed,
         note=policy.note,
     )
 
 
+def policy_scope_list(policy: AdoptedPolicyV1) -> list[str]:
+    return [
+        name
+        for name, flag in (
+            ("composition", policy.scope.composition),
+            ("appearance", policy.scope.appearance),
+            ("audio", policy.scope.audio),
+        )
+        if flag
+    ]
+
+
+def canonical_policy_sha256(policy: AdoptedPolicyV1) -> str:
+    return hashlib.sha256(canonical_model_bytes(policy)).hexdigest()
+
+
+def policy_for_judgment(episode_dir: Path, judgment_id: str) -> AdoptedPolicyV1:
+    judgments = load_judgments(episode_dir)
+    matches = [item for item in judgments if item.judgment_id == judgment_id]
+    if not matches:
+        raise CockpitNotFoundError(
+            "consultation-judgment-not-found",
+            f"no judgment {judgment_id} in the journal",
+        )
+    if len(matches) > 1:
+        raise CockpitUnprocessableError(
+            "consultation-judgment-ambiguous",
+            f"judgment {judgment_id} appears {len(matches)} times; refusing",
+        )
+    latest = matches[0]
+    if latest.decision not in ("adopt", "revise"):
+        raise CockpitUnprocessableError(
+            "consultation-judgment-not-adoptable",
+            f"judgment {judgment_id} decides {latest.decision}; no policy to pin",
+        )
+    if not (
+        latest.scope.composition or latest.scope.appearance or latest.scope.audio
+    ):
+        raise CockpitUnprocessableError(
+            "consultation-judgment-not-adoptable",
+            f"judgment {judgment_id} adopts an empty scope; no policy to pin",
+        )
+    if latest.proposal_id is None:
+        raise CockpitUnprocessableError(
+            "consultation-judgment-not-adoptable",
+            f"judgment {judgment_id} names no proposal; no policy to pin",
+        )
+    proposal_set = load_latest_proposal_sets(episode_dir).get(latest.consultation_id)
+    proposal = next(
+        (
+            candidate
+            for candidate in (proposal_set.proposals if proposal_set is not None else ())
+            if candidate.proposal_id == latest.proposal_id
+        ),
+        None,
+    )
+    if proposal is None:
+        raise CockpitUnprocessableError(
+            "consultation-judgment-not-adoptable",
+            f"judgment {judgment_id} names proposal {latest.proposal_id} "
+            "which is not on the table",
+        )
+    details = proposal.details
+    return AdoptedPolicyV1(
+        consultation_id=latest.consultation_id,
+        judgment_id=latest.judgment_id,
+        proposal_id=proposal.proposal_id,
+        decision=latest.decision,
+        scope=latest.scope,
+        audience_message=details.audience_message,
+        structure=details.structure,
+        duration_estimate=details.duration_estimate,
+        candidate_scenes=details.candidate_scenes,
+        subtitle_policy=details.subtitle_policy,
+        audio_policy=details.audio_policy,
+        tempo_policy=details.tempo_policy,
+        reference_mapping=details.reference_mapping,
+        unused_reasons=details.unused_reasons,
+        unconfirmed=details.unconfirmed,
+        note=latest.note,
+    )
+
+
+def append_effective_judgment_once(  # noqa: PLR0913 (explicit judgment-fingerprint fields; kwargs are the contract)
+    episode_dir: Path,
+    *,
+    consultation_id: str,
+    proposal_id: str | None,
+    decision: ConsultationDecision,
+    scope: ConsultationScope,
+    note: str | None,
+) -> tuple[ConsultationJudgmentV1, bool]:
+    judgments = load_judgments(episode_dir)
+    dedupe_applies = (
+        decision in ("adopt", "revise")
+        and proposal_id is not None
+        and (scope.composition or scope.appearance or scope.audio)
+    )
+    if dedupe_applies and judgments:
+        latest = judgments[-1]
+        if (
+            latest.consultation_id == consultation_id
+            and latest.proposal_id == proposal_id
+            and latest.decision == decision
+            and latest.scope.composition == scope.composition
+            and latest.scope.appearance == scope.appearance
+            and latest.scope.audio == scope.audio
+            and latest.note == note
+        ):
+            return latest, False
+    judgment = ConsultationJudgmentV1(
+        judgment_id=uuid.uuid4().hex[:12],
+        consultation_id=consultation_id,
+        proposal_id=proposal_id,
+        decision=decision,
+        scope=scope,
+        note=note,
+        created_at=now_stamp(),
+    )
+    append_judgment(episode_dir, judgment)
+    return judgment, True
+
+
 def append_policy_outcome(episode_dir: Path, outcome: ConsultationPolicyOutcomeV1) -> None:
     _append(_consultation_dir(episode_dir) / OUTCOMES_NAME, outcome)
+
+
+def append_policy_outcome_once(
+    episode_dir: Path, outcome: ConsultationPolicyOutcomeV1
+) -> tuple[ConsultationPolicyOutcomeV1, bool]:
+    outcomes = load_policy_outcomes(episode_dir)
+    if outcomes:
+        latest = outcomes[-1]
+        if (
+            latest.judgment_id == outcome.judgment_id
+            and latest.reservation_sequence == outcome.reservation_sequence
+            and latest.status == outcome.status
+            and latest.commit_event_id == outcome.commit_event_id
+            and latest.failure_code == outcome.failure_code
+        ):
+            return latest, False
+    append_policy_outcome(episode_dir, outcome)
+    return outcome, True
 
 
 def load_policy_outcomes(episode_dir: Path) -> list[ConsultationPolicyOutcomeV1]:
@@ -449,7 +678,7 @@ def _selection_run_state(
     return "requested"
 
 
-def derive_policy_rebuild(
+def derive_policy_rebuild(  # noqa: PLR0911 (one return per rebuild state; the state table)
     episode_dir: Path,
     policy: AdoptedPolicyV1 | None,
     stage_runs: Sequence[StageRunRow] = (),
@@ -477,12 +706,22 @@ def derive_policy_rebuild(
             for outcome in load_policy_outcomes(episode_dir)
             if outcome.judgment_id == policy.judgment_id
         ]
-    honored = [outcome for outcome in outcomes if outcome.status == "honored"]
+    honored = [
+        outcome for outcome in outcomes
+        if outcome.status in ("honored", "connected")
+    ]
     if outcomes and outcomes[-1].status == "failed":
         last = outcomes[-1]
         detail = "; ".join(last.reasons) or last.note or "方針の反映に失敗しました。"
-        return {"status": "failed", "target_version": None, "detail": detail}
+        return {"status": "failed", "target_version": last.plan_version, "detail": detail}
     target = honored[-1].plan_version if honored else None
+    if linked and linked[-1].failure_code is not None:
+        terminal = linked[-1]
+        return {
+            "status": "failed",
+            "target_version": target,
+            "detail": terminal.detail or "再生成の起動に失敗しました。",
+        }
     spawns = [entry for entry in linked if entry.spawned]
     if not linked:
         return {
@@ -616,6 +855,62 @@ def ensure_budget_available(episode_dir: Path, limits: ConsultationBudgetLimits)
         )
 
 
+def combined_llm_used(episode_dir: Path) -> int:
+    return budget_used(episode_dir).llm_calls + selection_budget_used(episode_dir).llm_calls
+
+
+def combined_wall_used(episode_dir: Path) -> float:
+    return (
+        budget_used(episode_dir).wall_seconds
+        + selection_budget_used(episode_dir).wall_seconds
+    )
+
+
+def remaining_wall_seconds(episode_dir: Path, limits: ConsultationBudgetLimits) -> float:
+    return limits.wall_seconds_limit - combined_wall_used(episode_dir)
+
+
+def ensure_selection_budget_available(
+    episode_dir: Path, limits: ConsultationBudgetLimits
+) -> float:
+    """Typed 422 BEFORE a selection director call; returns remaining wall.
+
+    Proposal generation and selection rebuilds share one cumulative
+    episode budget: one call plus the full live-director wall allowance
+    must remain, or the director is never contacted (failures still
+    settle their measured usage, so the spend stays visible).
+    """
+
+    remaining = remaining_wall_seconds(episode_dir, limits)
+    if (
+        combined_llm_used(episode_dir) + 1 > limits.llm_calls_limit
+        or remaining < DIRECTOR_WALL_ALLOWANCE_SECONDS
+    ):
+        raise CockpitUnprocessableError(
+            "consultation-selection-budget-exhausted",
+            "この相談で使えるAI回数または処理時間の上限に達したため、"
+            "作り直しを始めませんでした。",
+        )
+    return remaining
+
+
+def ensure_preview_budget_available(
+    episode_dir: Path, limits: ConsultationBudgetLimits, preview_seconds: float
+) -> None:
+    """Typed 422 BEFORE committing or rendering an over-budget sample.
+
+    Fail-closed: an over-allowance plan is never silently truncated to
+    fit — the bundle stays whole-plan-bound and the run stops.
+    """
+
+    used = selection_budget_used(episode_dir).preview_seconds
+    if used + preview_seconds > limits.preview_sample_seconds_limit:
+        raise CockpitUnprocessableError(
+            "consultation-preview-budget-exhausted",
+            "見本映像は合計30秒の上限を超えるため、映像生成を始めませんでした。",
+        )
+
+
 def load_budget_limits(config_path: Path | None = None) -> ConsultationBudgetLimits:
     """Tolerant config read: absent/malformed file → the pinned defaults."""
 
@@ -671,6 +966,7 @@ def consultation_view(
         if judgment.consultation_id == record.consultation_id
     ]
     used = budget_used(episode_dir)
+    selection = selection_budget_used(episode_dir)
     policy = latest_adopted_policy(episode_dir)
     stage_runs = snapshot.stage_runs if snapshot is not None else ()
     outcomes = [
@@ -693,12 +989,14 @@ def consultation_view(
             for judgment in judgments
         ],
         "budget": {
-            "llm_calls_used": used.llm_calls,
+            "llm_calls_used": used.llm_calls + selection.llm_calls,
             "llm_calls_limit": limits.llm_calls_limit,
             "intervals_used": used.intervals,
             "intervals_limit": limits.intervals_limit,
-            "wall_seconds_used": used.wall_seconds,
+            "wall_seconds_used": used.wall_seconds + selection.wall_seconds,
             "wall_seconds_limit": limits.wall_seconds_limit,
+            "preview_seconds_used": selection.preview_seconds,
+            "preview_sample_seconds_limit": limits.preview_sample_seconds_limit,
             "cost_display": "unmeasured",
         },
         "policy": {
@@ -712,15 +1010,21 @@ def consultation_view(
 __all__ = [
     "BUDGET_NAME",
     "CONFIG_RELATIVE",
+    "CONNECTED_POLICY_FIELDS",
     "CONSULTATIONS_NAME",
     "CONSULTATION_DIR_NAME",
     "DEFAULT_INTERVALS_LIMIT",
     "DEFAULT_LLM_CALLS_LIMIT",
+    "DEFAULT_PREVIEW_SAMPLE_SECONDS_LIMIT",
     "DEFAULT_WALL_SECONDS_LIMIT",
     "JUDGMENTS_NAME",
     "OUTCOMES_NAME",
+    "POLICY_SCOPE_ORDER",
     "PROPOSALS_NAME",
     "REBUILD_LOG_NAME",
+    "SCOPE_UNADDRESSED_JA",
+    "STRUCTURAL_REALIZED_CHECKS",
+    "TRIAL_VIEW_UNCONFIRMED_JA",
     "AdoptedPolicyV1",
     "ConsultationBudgetEventV1",
     "ConsultationBudgetLimits",
@@ -733,17 +1037,25 @@ __all__ = [
     "ConsultationProposalV1",
     "ConsultationRecordV1",
     "ConsultationScope",
+    "DirectorConnection",
     "PolicyOutcomeStatus",
     "append_budget_event",
     "append_consultation",
+    "append_effective_judgment_once",
     "append_judgment",
     "append_policy_outcome",
+    "append_policy_outcome_once",
     "append_proposal_set",
     "budget_used",
+    "canonical_policy_sha256",
+    "combined_llm_used",
+    "combined_wall_used",
     "consultation_view",
     "consume_budget",
     "derive_policy_rebuild",
     "ensure_budget_available",
+    "ensure_preview_budget_available",
+    "ensure_selection_budget_available",
     "latest_adopted_policy",
     "load_budget_limits",
     "load_consultations",
@@ -752,8 +1064,13 @@ __all__ = [
     "load_policy_outcomes",
     "load_policy_rebuild_entries",
     "now_stamp",
+    "policy_for_judgment",
+    "policy_scope_list",
     "policy_summary",
+    "remaining_wall_seconds",
     "require_consultation",
     "require_proposal",
     "selection_rebuild_active",
+    "unaddressed_for_scope",
+    "unconfirmed_for_policy",
 ]
