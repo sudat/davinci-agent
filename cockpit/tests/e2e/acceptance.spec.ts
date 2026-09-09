@@ -818,13 +818,16 @@ test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗
     { timeout: 15_000 },
   );
 
-  // Honest terminal in the synthetic episode: the backend boots with no
-  // model credentials, so director_mode is deterministic-baseline and the
-  // detached selection rebuild stops BEFORE any director contact — the
-  // journal carries a REAL failed policy-outcome with
-  // director_connection=not_started ("方針は編集長に渡していません"),
+  // Honest terminal in the synthetic episode: the seeded state has NO real
+  // initial chain, so the persisted director inputs
+  // (run/selection-inputs.json) never existed and the detached selection
+  // rebuild refuses with the typed selection-inputs-missing failure BEFORE
+  // any director contact — the journal carries a REAL failed policy-outcome
+  // with director_connection=not_started ("方針は編集長に渡していません"),
   // and the rebuild-state line flips to the factual failure. The outcome
-  // rider merges as its own 実装結果 row on poll.
+  // rider merges as its own 実装結果 row on poll. (An episode that DID run
+  // a real chain reaches the director and reports the baseline refusal
+  // instead — pinned separately by the backend selection tests.)
   await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
     "再編集に失敗しました",
     { timeout: 180_000 },
@@ -833,7 +836,7 @@ test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗
     "相談を続けられます",
   );
   await expect(page.getByTestId("consultation-rebuild-state")).toContainText(
-    "方針を解釈できませんでした",
+    "selection-inputs-missing",
   );
   const outcome = page.getByTestId("consultation-policy-outcome");
   await expect(outcome.first()).toContainText(
@@ -842,7 +845,7 @@ test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗
       timeout: 30_000,
     },
   );
-  await expect(outcome.first()).toContainText("方針を解釈できませんでした", {
+  await expect(outcome.first()).toContainText("selection-inputs-missing", {
     timeout: 30_000,
   });
 

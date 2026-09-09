@@ -121,6 +121,13 @@ from services.review_command.store import (
     load_head,
 )
 
+# SelectionRerunError codes that fail BEFORE any director contact (typed
+# input/grant load failures) — their outcome must say not_started (渡して
+# いません), never unknown.
+_PRE_DIRECTOR_CONTACT_CODES = frozenset(
+    {"selection-inputs-missing", "editorial-grant-invalid"}
+)
+
 if TYPE_CHECKING:
     from services.cli.episode_runner import RunnerInvocation
     from services.contracts.edit_plan_0c import EditPlan0C
@@ -658,7 +665,11 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
             run_id=run_id,
             failure_code=error.code,
             director_connection=(
-                "confirmed" if error.code == "director_refused" else "unknown"
+                "not_started"
+                if error.code in _PRE_DIRECTOR_CONTACT_CODES
+                else "confirmed"
+                if error.code == "director_refused"
+                else "unknown"
             ),
         )
         raise RebuildStageError(error.code, error.detail) from error
