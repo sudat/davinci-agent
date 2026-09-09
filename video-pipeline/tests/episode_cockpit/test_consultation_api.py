@@ -19,6 +19,9 @@ from fastapi.testclient import TestClient
 from services.episode_cockpit import api_consultation, consultation_store
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.consultation_store import ConsultationBudgetLimits
+from services.job_runner.cas import apply_transition, current_job_state
+from services.job_runner.state_store import StateStore
+from services.job_runner.transitions import MAIN_PATH
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -184,6 +187,8 @@ def test_message_creates_consultation_with_one_proposal(
         "wall_seconds_limit": 600.0,
         "cost_display": "unmeasured",
         "wall_seconds_used": body["budget"]["wall_seconds_used"],
+        "preview_seconds_used": 0.0,
+        "preview_sample_seconds_limit": 30.0,
     }
     assert body["budget"]["wall_seconds_used"] >= 0.0
 
@@ -358,9 +363,27 @@ def test_malformed_llm_response_is_typed_422(
 
 
 def test_judgment_is_append_only_and_scope_verbatim(
-    client: TestClient, source_folder: Path, llm_calls: list[str]
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    llm_calls: list[str],
 ) -> None:
     episode_id = _create_episode(client, source_folder)
+    with StateStore.open(workspace["state_store"]) as store:
+        while True:
+            current = current_job_state(store, episode_id)
+            position = MAIN_PATH.index(current.status)
+            if position >= MAIN_PATH.index("PREVIEW_READY"):
+                break
+            apply_transition(
+                store,
+                episode_id,
+                expected_status=current.status,
+                expected_parent_hash=current.adopted_artifact_hash,
+                new_status=MAIN_PATH[position + 1],
+                new_artifact_hash="0" * 64,
+                payload=None,
+            )
     consultation_id = str(_post_message(client, episode_id)["consultation_id"])
 
     first = client.post(

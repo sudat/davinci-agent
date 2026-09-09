@@ -67,7 +67,7 @@ def _spawn_runner(argv: list[str], *, cwd: Path, log_path: Path) -> None:
             ) from error
         with log_path.open("ab") as stream:
             subprocess.Popen(
-                argv,
+                [*argv, "--runner-lock-fd", str(descriptor)],
                 cwd=cwd,
                 start_new_session=True,
                 stdout=stream,

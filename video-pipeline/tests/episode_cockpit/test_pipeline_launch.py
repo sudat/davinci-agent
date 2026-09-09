@@ -156,7 +156,8 @@ def test_post_create_spawns_detached_runner_with_expected_args(
 
     assert len(runner_spawn_calls) == 1
     spawn = runner_spawn_calls[0]
-    assert spawn["argv"] == [
+    argv = cast("list[str]", spawn["argv"])
+    assert argv[:9] == [
         sys.executable,
         "-m",
         "services.cli.episode_runner",
@@ -167,6 +168,7 @@ def test_post_create_spawns_detached_runner_with_expected_args(
         "--state-store",
         str(workspace["state_store"]),
     ]
+    assert argv[argv.index("--runner-lock-fd") + 1].isdigit()
     assert spawn["cwd"] == PIPELINE_ROOT
     assert spawn["start_new_session"] is True
     assert spawn["stdout"] is spawn["stderr"]

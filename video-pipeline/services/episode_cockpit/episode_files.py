@@ -26,7 +26,12 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from services.episode_cockpit.consultation_store import latest_adopted_policy
+from services.episode_cockpit.consultation_store import (
+    canonical_policy_sha256,
+    latest_adopted_policy,
+    policy_for_judgment,
+    policy_scope_list,
+)
 from services.episode_cockpit.episode_ops import (
     _PIPELINE_ROOT,
     RUNNER_LOG_NAME,
@@ -105,6 +110,46 @@ _LOGGER = logging.getLogger(__name__)
 PREVIEW_RELATIVE = ("previews", PREVIEW_NAME)
 EXECUTABLE_DOMAIN = "edit_plan"
 NOT_EXECUTABLE_REASON = "command kind not rebuild-executable yet"
+
+
+_SELECTION_STAGES = ("selection", "plan", "compile", "preview")
+
+
+def _review_base_pin(episode_dir: Path) -> tuple[str | None, str | None]:
+    try:
+        head = load_head(
+            episode_dir.joinpath(*REVIEW_EVENTS_RELATIVE),
+            episode_dir.joinpath(*REVIEW_STORE_RELATIVE),
+        )
+    except (ReviewCommitError, OSError):
+        return None, None
+    entry = head.index.versions.get(str(head.version))
+    if entry is None:
+        return None, None
+    return f"v{head.version}", entry.plan_sha256
+
+
+def _latest_consultation_reservation(
+    log_path: Path, judgment_id: str
+) -> RebuildRequestEntry | None:
+    try:
+        lines = log_path.read_bytes().splitlines()
+    except OSError:
+        return None
+    found: RebuildRequestEntry | None = None
+    for line in lines:
+        try:
+            entry = RebuildRequestEntry.model_validate_json(line)
+        except ValidationError:
+            continue
+        if (
+            entry.judgment_id == judgment_id
+            and not entry.spawned
+            and entry.reserves_sequence is None
+            and entry.failure_code is None
+        ):
+            found = entry
+    return found
 
 
 class FileOps(WorkspaceContext):
@@ -738,33 +783,64 @@ class FileOps(WorkspaceContext):
     ) -> dict[str, object]:
         """Schedule a selection rebuild for an adopted consultation judgment.
 
-        The reservation carries ``judgment_id`` so the consultation view
-        derives the rebuild state deterministically per policy; the spawn
-        entry links back via ``reserves_sequence`` (the existing
-        予約→起動→成果 discipline). The lineage is the selection re-entry
-        projection (selection→plan→compile→preview). The rebuild consumes
-        NO consultation LLM budget (deterministic orchestration + the
-        chain's own director path). ``runner-active`` (a runner holds the
-        lock) propagates as the typed 409 — the judgment route maps it to
-        an unscheduled 200 with the recorded judgment intact.
+        The reservation pins the judgment's scope, policy bytes, and
+        review-store base so the runner refuses a stale run instead of
+        silently using the latest policy (the 予約→起動→成果 discipline).
+        The lineage is the selection re-entry projection
+        (selection→plan→compile→preview). The rebuild consumes NO
+        consultation LLM budget (deterministic orchestration + the chain's
+        own director path). ``runner-active`` (a runner holds the lock)
+        propagates as the typed 409 — the judgment route maps it to an
+        unscheduled 200 with the recorded judgment intact. A reservation
+        for the same judgment is reused without a new row or spawn; a
+        spawn failure appends a terminal failed row (never an orphan
+        ``requested``) and raises.
         """
 
-        episode_dir = self._episode_dir(self._require_snapshot(episode_id).job.episode_id)
-        if latest_adopted_policy(episode_dir) is None:
+        snapshot = self._require_snapshot(episode_id)
+        episode_dir = self._episode_dir(snapshot.job.episode_id)
+        if snapshot.job.status == "FROZEN":
             raise CockpitUnprocessableError(
-                "no-adopted-policy",
-                "selection rebuild needs an adopted consultation policy; "
-                "none is on the table",
+                "job-frozen",
+                "この動画は確定済みのため、作り直しを行いませんでした。",
+            )
+        if snapshot.job.status != "PREVIEW_READY":
+            raise CockpitUnprocessableError(
+                "episode-not-preview-ready",
+                "selection rebuild needs a PREVIEW_READY job; "
+                f"job is at {snapshot.job.status}",
+            )
+        policy = policy_for_judgment(episode_dir, judgment_id)
+        latest = latest_adopted_policy(episode_dir)
+        if latest is None or latest.judgment_id != judgment_id:
+            raise CockpitUnprocessableError(
+                "reserved-policy-changed",
+                "予約した判断が変わりました。古い判断の編集は確定していません。",
             )
         log_path = episode_dir / REBUILD_LOG_NAME
+        existing = _latest_consultation_reservation(log_path, judgment_id)
+        if existing is not None:
+            return {
+                "stage_hint": existing.stage_hint,
+                "scheduled": bool(existing.run_id),
+                "stages": list(_SELECTION_STAGES),
+                "judgment_id": judgment_id,
+                "reservation_sequence": existing.sequence,
+                "reused": True,
+            }
         start = PIPELINE_STAGES.index("selection")
         stop = PIPELINE_STAGES.index("preview")
         stages = tuple(PIPELINE_STAGES[start : stop + 1])
         marker = f"consultation-{judgment_id}"
+        base_version, base_sha = _review_base_pin(episode_dir)
         reservation = RebuildRequestEntry(
             sequence=self._next_sequence(log_path),
             stage_hint=",".join(stages),
             judgment_id=judgment_id,
+            policy_scope=tuple(policy_scope_list(policy)),
+            policy_sha256=canonical_policy_sha256(policy),
+            base_plan_version=base_version,
+            base_plan_sha256=base_sha,
         )
         self._append_jsonl(log_path, reservation)  # the 予約 (pre-spawn reservation)
         run_id = uuid.uuid4().hex[:12]
@@ -782,6 +858,8 @@ class FileOps(WorkspaceContext):
                     stages[0],
                     "--applied-command",
                     marker,
+                    "--reservation-sequence",
+                    str(reservation.sequence),
                     "--run-id",
                     run_id,
                     "--state-store",
@@ -790,7 +868,31 @@ class FileOps(WorkspaceContext):
                 cwd=_PIPELINE_ROOT,
                 log_path=episode_dir / RUNNER_LOG_NAME,
             )
+        except CockpitConflictError:
+            self._append_jsonl(
+                log_path,
+                RebuildRequestEntry(
+                    sequence=self._next_sequence(log_path),
+                    stage_hint=",".join(stages),
+                    judgment_id=judgment_id,
+                    reserves_sequence=reservation.sequence,
+                    failure_code="runner-active",
+                    detail="実行中の処理があるため、作り直しを始めませんでした。",
+                ),
+            )
+            raise
         except OSError as error:
+            self._append_jsonl(
+                log_path,
+                RebuildRequestEntry(
+                    sequence=self._next_sequence(log_path),
+                    stage_hint=",".join(stages),
+                    judgment_id=judgment_id,
+                    reserves_sequence=reservation.sequence,
+                    failure_code="runner-spawn-failed",
+                    detail="再生成の起動に失敗しました。相談へ戻ってやり直せます。",
+                ),
+            )
             raise CockpitUnprocessableError(
                 "runner-spawn-failed", f"cannot start the rebuild runner: {error}"
             ) from error
@@ -813,6 +915,7 @@ class FileOps(WorkspaceContext):
             "applied_command": marker,
             "run_id": run_id,
             "judgment_id": judgment_id,
+            "reservation_sequence": reservation.sequence,
         }
 
     def _load_brief(self, episode_id: str) -> BriefDraft:

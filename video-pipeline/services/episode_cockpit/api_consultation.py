@@ -42,22 +42,23 @@ from pydantic import BeforeValidator, Field, ValidationError
 from services.contracts.primitives import StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
 from services.episode_cockpit.consultation_store import (
-    ConsultationJudgmentV1,
     ConsultationProposalDetails,
     ConsultationProposalSetV1,
     ConsultationProposalV1,
     ConsultationRecordV1,
     ConsultationScope,
     append_consultation,
-    append_judgment,
+    append_effective_judgment_once,
     append_proposal_set,
     consultation_view,
     consume_budget,
+    derive_policy_rebuild,
     ensure_budget_available,
     latest_adopted_policy,
     load_budget_limits,
     load_consultations,
     now_stamp,
+    policy_for_judgment,
     require_consultation,
     require_proposal,
     selection_rebuild_active,
@@ -386,13 +387,17 @@ def consultation_judgment(
     """Append an adoption judgment; an adoptable one schedules a rebuild.
 
     Validation is unchanged (unknown words → 4xx, unknown consultation →
-    404, unknown proposal → 422). When the appended judgment is adopt|revise
-    with a non-empty scope AND the extracted latest policy is this judgment,
-    a SELECTION rebuild is scheduled through the existing reservation
-    machinery (202 with the view). Otherwise — reject/both_wrong/delegate,
-    empty scope, no resolvable proposal, or a rebuild already running — the
-    judgment is recorded and the view returns unchanged-shape 200. The
-    rebuild consumes no consultation LLM budget.
+    404, unknown proposal → 422). A byte-identical resend of the latest
+    effective adoption reuses the existing judgment with zero writes and
+    zero spawns; the HTTP status mirrors the existing rebuild state
+    (requested|running → 202, none|succeeded|failed → 200). When the
+    appended judgment is adopt|revise with a non-empty scope AND the
+    extracted latest policy is this judgment, a SELECTION rebuild is
+    scheduled through the existing reservation machinery (202 with the
+    view). Otherwise — reject/both_wrong/delegate, empty scope, no
+    resolvable proposal, or a rebuild already running — the judgment is
+    recorded and the view returns unchanged-shape 200. The rebuild
+    consumes no consultation LLM budget.
     """
 
     episode_dir = _episode_dir(workspace, episode_id)
@@ -400,20 +405,30 @@ def consultation_judgment(
     record = require_consultation(episode_dir, request.consultation_id)
     if request.proposal_id is not None:
         require_proposal(episode_dir, request.consultation_id, request.proposal_id)
-    judgment_id = uuid.uuid4().hex[:12]
-    append_judgment(
+    judgment, appended = append_effective_judgment_once(
         episode_dir,
-        ConsultationJudgmentV1(
-            judgment_id=judgment_id,
-            consultation_id=request.consultation_id,
-            proposal_id=request.proposal_id,
-            decision=request.decision,
-            scope=request.scope,
-            note=request.note,
-            created_at=now_stamp(),
-        ),
+        consultation_id=request.consultation_id,
+        proposal_id=request.proposal_id,
+        decision=request.decision,
+        scope=request.scope,
+        note=request.note,
     )
+    judgment_id = judgment.judgment_id
     snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
+    if not appended:
+        try:
+            policy = policy_for_judgment(episode_dir, judgment_id)
+        except Exception:  # noqa: BLE001 (unresolvable duplicate falls back to latest)
+            policy = latest_adopted_policy(episode_dir)
+        state = derive_policy_rebuild(
+            episode_dir, policy, snapshot.stage_runs
+        ).get("status")
+        return JSONResponse(
+            status_code=202 if state in ("requested", "running") else 200,
+            content=consultation_view(
+                episode_dir, record, limits, snapshot=snapshot
+            ),
+        )
     policy = latest_adopted_policy(episode_dir)
     scope_adopted = (
         request.scope.composition or request.scope.appearance or request.scope.audio
