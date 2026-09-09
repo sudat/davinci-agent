@@ -56,6 +56,7 @@ describe("EpisodeView poll hardening（工程2P）", () => {
       const url = String(input);
       if (url.endsWith("/flags")) return new Promise(() => undefined);
       if (url.endsWith("/preview")) return new Promise(() => undefined);
+      if (url.endsWith("/outputs")) return Promise.resolve(new Response(null, { status: 404 }));
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
       if (url.includes("/consultation")) {
         return Promise.resolve(jsonResponse("c", 200, { consultations: [] }));
@@ -165,7 +166,8 @@ describe("EpisodeView poll hardening（工程2P）", () => {
       const url = String(input);
       if (url.endsWith("/flags")) return Promise.resolve(flagsOk());
       if (url.endsWith("/preview")) return Promise.resolve(preview404());
-      if (url.endsWith("/consultation")) return Promise.resolve(consultationOk());
+      if (url.endsWith("/outputs")) return Promise.resolve(new Response(null, { status: 404 }));
+      if (url.includes("/consultation")) return Promise.resolve(consultationOk());
       if (url.includes("/finishing")) return Promise.resolve(okStatus(0));
       statusCalls += 1;
       return Promise.resolve(okStatus(statusCalls));

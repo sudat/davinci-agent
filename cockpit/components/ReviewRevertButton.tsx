@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { apiFailure, revertReviewPlan, type ReviewRevertResult } from "@/lib/api";
+import { apiFailure, revertReviewPlan, type OutputId, type ReviewRevertResult } from "@/lib/api";
 
 type ReviewRevertButtonProps = {
   episodeId: string;
   /** Disabled while another panel action (send/apply) is in flight. */
   disabled?: boolean;
   fetchImpl?: typeof fetch;
+  /** 工程5: the output chain this revert restores (default landscape). */
+  outputId?: OutputId;
   /** Reported at revert-attempt start/end so the panel can disable its
    *  other actions for the duration (single-flight discipline). */
   onBusyChange?: (busy: boolean) => void;
@@ -25,6 +27,7 @@ export default function ReviewRevertButton({
   episodeId,
   disabled = false,
   fetchImpl,
+  outputId = "landscape",
   onBusyChange,
   onReverted,
   onError,
@@ -35,7 +38,7 @@ export default function ReviewRevertButton({
     setBusy(true);
     onBusyChange?.(true);
     try {
-      onReverted(await revertReviewPlan(episodeId, fetchImpl));
+      onReverted(await revertReviewPlan(episodeId, fetchImpl, outputId));
     } catch (cause) {
       onError(apiFailure(cause));
     } finally {

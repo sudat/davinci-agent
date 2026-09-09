@@ -7,6 +7,7 @@ import {
   postRebuild,
   revertRebuildReadout,
   type EpisodeStatus,
+  type OutputId,
   type RebuildResult,
   type ReviewApplyInput,
   type ReviewApplyResult,
@@ -22,6 +23,9 @@ type UseReviewApplyOptions = {
   previewOk?: boolean | null;
   fetchImpl?: typeof fetch;
   onError: (failure: { code: string; detail: string }) => void;
+  /** 工程5: the output chain this panel renders. Vertical requests carry
+   *  output_id; landscape omits it (backend default, byte-identical). */
+  outputId?: OutputId;
 };
 
 /**
@@ -39,6 +43,7 @@ export function useReviewApply({
   previewOk = null,
   fetchImpl,
   onError,
+  outputId = "landscape",
 }: UseReviewApplyOptions) {
   const [applyBusy, setApplyBusy] = useState(false);
   const [applyResult, setApplyResult] = useState<ReviewApplyResult | null>(null);
@@ -59,8 +64,13 @@ export function useReviewApply({
     // poll (the 2s poll may still serve it after accept — that stale
     // repeat must never complete THIS request).
     const baseline = rebuildBaselineOf(status);
+    const vertical = outputId === "vertical";
     try {
-      const applied = await applyReviewCommand(episodeId, input, fetchImpl);
+      const applied = await applyReviewCommand(
+        episodeId,
+        vertical ? { ...input, output_id: outputId } : input,
+        fetchImpl,
+      );
       setApplyResult(applied);
       const commandIds =
         applied.applied_commands?.map((command) => command.command_id) ?? [
@@ -71,6 +81,7 @@ export function useReviewApply({
         {
           applied_command: commandIds[0],
           ...(commandIds.length > 1 ? { applied_commands: commandIds } : {}),
+          ...(vertical ? { output_id: outputId } : {}),
         },
         fetchImpl,
       );

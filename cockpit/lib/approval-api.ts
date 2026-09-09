@@ -1,6 +1,7 @@
 /** Approval-session endpoints: pending-session listing and execution. */
 
 import { request, type FetchLike } from "@/lib/http";
+import { outputQuery, type OutputId } from "@/lib/episode-api";
 
 export type PendingApprovalItem = {
   record_id: string;
@@ -32,9 +33,10 @@ export type ApprovalSessionsPayload = {
 export async function getApprovalSessions(
   episodeId: string,
   fetchImpl: FetchLike = fetch,
+  outputId?: OutputId,
 ): Promise<ApprovalSessionsPayload> {
   return request<ApprovalSessionsPayload>(
-    `/episodes/${encodeURIComponent(episodeId)}/approval-sessions`,
+    `/episodes/${encodeURIComponent(episodeId)}/approval-sessions${outputQuery(outputId)}`,
     { method: "GET" },
     fetchImpl,
   );
@@ -58,11 +60,12 @@ export async function executeApproval(
   approvalId: string,
   input: ApprovalExecuteInput,
   fetchImpl: FetchLike = fetch,
+  outputId?: OutputId,
 ): Promise<ApprovalExecuteResult> {
   return request<ApprovalExecuteResult>(
     `/episodes/${encodeURIComponent(episodeId)}/approvals/${encodeURIComponent(
       approvalId,
-    )}`,
+    )}${outputQuery(outputId)}`,
     { method: "POST", body: JSON.stringify(input) },
     fetchImpl,
   );

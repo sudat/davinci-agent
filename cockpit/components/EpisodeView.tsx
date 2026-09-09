@@ -5,14 +5,19 @@ import Link from "next/link";
 import {
   apiFailure,
   getEpisodeFlags,
+  getEpisodeOutputs,
   getEpisodeStatus,
+  outputLabel,
   probeEpisodePreview,
+  registerOutput,
   CockpitApiError,
   type EpisodeStatus,
   type FlagsPayload,
+  type OutputId,
 } from "@/lib/api";
 import ErrorNotice from "@/components/ErrorNotice";
 import EpisodeProgress from "@/components/EpisodeProgress";
+import { hasMultipleOutputs, useOutputScope } from "@/components/OutputScope";
 import PreviewPlayer, { type PreviewAvailability } from "@/components/PreviewPlayer";
 import {
   derivePreviewBinding,
@@ -93,6 +98,17 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  /** 工程5: registered outputs (shared with ApprovalSessions via scope).
+   *  null = unknown (not yet fetched, or an old backend without the
+   *  route) → landscape-only UI with no output noise. The UI never
+   *  auto-registers: vertical appears only via the explicit 追加 action. */
+  const outputScope = useOutputScope();
+  const selectedOutput: OutputId = outputScope.selected;
+  const multiOutput = hasMultipleOutputs(outputScope.outputs);
+  const verticalRegistered =
+    outputScope.outputs?.some((output) => output.output_id === "vertical") ?? false;
+  const [addBusy, setAddBusy] = useState(false);
+  const [addResult, setAddResult] = useState<string | null>(null);
   const now = useNow(true);
   const openedAtRef = useRef<number | null>(null);
   if (openedAtRef.current === null) openedAtRef.current = Date.now();
@@ -110,8 +126,8 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
     const refreshAux = () => {
       void Promise.allSettled([
-        getEpisodeFlags(episodeId),
-        probeEpisodePreview(episodeId),
+        getEpisodeFlags(episodeId, fetch, selectedOutput),
+        probeEpisodePreview(episodeId, fetch, selectedOutput),
       ]).then(([flagsResult, previewResult]) => {
         if (cancelled) return;
         if (flagsResult.status === "fulfilled") setFlags(flagsResult.value);
@@ -169,7 +185,56 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", requery);
     };
+  }, [episodeId, selectedOutput]);
+
+  // 工程5: the outputs list is episode-level metadata — fetched once per
+  // episode (never on the poll cadence, never with an output dimension).
+  useEffect(() => {
+    let cancelled = false;
+    void getEpisodeOutputs(episodeId)
+      .then((payload) => {
+        if (cancelled) return;
+        outputScope.setOutputs(payload?.outputs ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        outputScope.setOutputs(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // setOutputs is scope-stable (provider state setter or local fallback).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId]);
+
+  // 工程5: switching outputs drops the previous output's probe binding —
+  // the binding line must never show 横版's claim under 縦版's player.
+  useEffect(() => {
+    setProbeObservation(null);
+    setPlayerState("checking");
+    setPlayableHash(null);
+    setFlags(null);
+  }, [episodeId, selectedOutput]);
+
+  const addVerticalOutput = () => {
+    if (addBusy) return;
+    setAddBusy(true);
+    setAddResult(null);
+    void registerOutput(episodeId, "vertical")
+      .then((result) => {
+        if (result.outputs.length > 0) outputScope.setOutputs(result.outputs);
+        setAddResult(
+          result.idempotent === true ? "縦版は既に追加済みです" : "縦版を追加しました",
+        );
+      })
+      .catch((cause: unknown) => {
+        const failure = apiFailure(cause);
+        setAddResult(`縦版を追加できませんでした（${failure.code}）`);
+      })
+      .finally(() => {
+        setAddBusy(false);
+      });
+  };
 
   const stale =
     !notFound && now - (fetchedAt ?? openedAtRef.current ?? now) > STALE_AFTER_MS;
@@ -251,11 +316,53 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       <ConsultationPanel episodeId={episodeId} status={status} />
       <section className="card">
         <h2 className="card-title">プレビュー</h2>
+        {multiOutput ? (
+          <div data-testid="output-select" role="group" aria-label="出力の切り替え">
+            {(outputScope.outputs ?? []).map((output) => (
+              <button
+                key={output.output_id}
+                type="button"
+                className={output.output_id === selectedOutput ? "btn-primary" : "btn-small"}
+                aria-pressed={output.output_id === selectedOutput}
+                data-testid={`output-option-${output.output_id}`}
+                onClick={() =>
+                  output.output_id === "landscape" || output.output_id === "vertical"
+                    ? outputScope.select(output.output_id)
+                    : undefined
+                }
+              >
+                {outputLabel(output.output_id)}
+              </button>
+            ))}
+            <p className="field-hint" data-testid="output-independence-note">
+              横版と縦版の承認は別々です。表示中のプレビュー・再構築は選択中の版にだけ適用されます。
+            </p>
+          </div>
+        ) : null}
+        {outputScope.outputs !== null && !verticalRegistered ? (
+          <div className="actions">
+            <button
+              type="button"
+              className="btn-small"
+              data-testid="output-add"
+              onClick={addVerticalOutput}
+              disabled={addBusy}
+            >
+              {addBusy ? "追加中…" : "縦版を追加する"}
+            </button>
+          </div>
+        ) : null}
+        {addResult !== null ? (
+          <p className="field-hint" aria-live="polite" data-testid="output-add-result">
+            {addResult}
+          </p>
+        ) : null}
         <PreviewPlayer
           episodeId={episodeId}
           state={playerState}
           contentHash={probedHash}
           videoRef={videoRef}
+          output={selectedOutput}
         />
         <p className="field-hint" aria-live="polite" data-testid="preview-binding">
           {previewBindingLine(binding)}
@@ -279,6 +386,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         getAtSeconds={() => videoRef.current?.currentTime ?? null}
         status={status}
         previewOk={previewOk}
+        outputId={selectedOutput}
       />
       <BeforeAfterSummary summary={status?.before_after ?? null} />
     </div>

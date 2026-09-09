@@ -6,9 +6,12 @@ import {
   executeApproval,
   getApprovalSessions,
   CockpitApiError,
+  outputLabel,
   type ApprovalSessionsPayload,
+  type OutputId,
 } from "@/lib/api";
 import ErrorNotice from "@/components/ErrorNotice";
+import { hasMultipleOutputs, useOutputScope } from "@/components/OutputScope";
 
 const PURPOSE_LABEL: Record<string, string> = {
   editorial: "編集承認",
@@ -29,6 +32,10 @@ type ApprovalSessionsProps = {
   episodeId: string;
   actorId?: string;
   fetchImpl?: typeof fetch;
+  /** 工程5: explicit output override (tests). When omitted, the shared
+   *  output scope (the EpisodeView selector) applies; landscape omits the
+   *  output dimension so requests stay byte-identical. */
+  outputId?: OutputId;
 };
 
 /**
@@ -41,15 +48,20 @@ export default function ApprovalSessions({
   episodeId,
   actorId = "cockpit-operator",
   fetchImpl,
+  outputId,
 }: ApprovalSessionsProps) {
   const [payload, setPayload] = useState<ApprovalSessionsPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const outputScope = useOutputScope();
+  const selectedOutput: OutputId = outputId ?? outputScope.selected;
+  const showOutputNote =
+    hasMultipleOutputs(outputScope.outputs) || outputId === "vertical";
 
   const refresh = useCallback(async () => {
     try {
-      setPayload(await getApprovalSessions(episodeId, fetchImpl));
+      setPayload(await getApprovalSessions(episodeId, fetchImpl, selectedOutput));
       setError(null);
       setNotFound(false);
     } catch (cause) {
@@ -61,7 +73,7 @@ export default function ApprovalSessions({
       }
       setError(apiFailure(cause));
     }
-  }, [episodeId, fetchImpl]);
+  }, [episodeId, fetchImpl, selectedOutput]);
 
   useEffect(() => {
     void refresh();
@@ -77,6 +89,7 @@ export default function ApprovalSessions({
           recordId,
           { decision: "approve", actor_id: actorId },
           fetchImpl,
+          selectedOutput,
         );
       }
       await refresh();
@@ -98,6 +111,11 @@ export default function ApprovalSessions({
       <p className="page-subtitle" style={{ marginBottom: "var(--space-3)" }}>
         互換性のある承認は最大2セッションにまとめられます（編集・見たて / 最終・公開）。
       </p>
+      {showOutputNote ? (
+        <p className="field-hint" data-testid="approval-output-note">
+          {outputLabel(selectedOutput)}の承認を表示しています（横版と縦版の承認は別々です）。
+        </p>
+      ) : null}
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       {payload === null ? (
         <p className="empty-note">承認状態を確認しています…</p>

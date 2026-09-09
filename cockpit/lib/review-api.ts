@@ -1,6 +1,8 @@
 /** Review loop endpoints: chat, command application, partial rebuild. */
 
 import { request, type FetchLike } from "@/lib/http";
+import type { OutputId } from "@/lib/episode-api";
+import { outputQuery } from "@/lib/episode-api";
 
 /** UX-redesign 工程1: honest DISPLAY state for feelings-route messages
  *  that went through cause investigation. Backend derivation
@@ -171,6 +173,10 @@ export type ReviewApplyInput = {
   /** The chat response's `sequence`: which saved proposal set to adopt.
    *  Optional (old-client shape resolves by full-draft equality). */
   sequence?: number;
+  /** 工程5: the output chain this adoption renders (backend
+   *  ReviewChatApplyRequest.output_id; omitted = landscape default, so
+   *  landscape request bodies stay byte-identical). */
+  output_id?: OutputId;
 };
 
 export async function applyReviewCommand(
@@ -205,7 +211,14 @@ export type RebuildResult = {
 
 export async function postRebuild(
   episodeId: string,
-  input: { applied_command?: string; applied_commands?: string[]; stage_hint?: string },
+  input: {
+    applied_command?: string;
+    applied_commands?: string[];
+    stage_hint?: string;
+    /** 工程5: the output chain the rebuild renders (backend
+     *  RebuildRequestWithCommand.output_id; omitted = landscape). */
+    output_id?: OutputId;
+  },
   fetchImpl: FetchLike = fetch,
 ): Promise<RebuildResult> {
   return request<RebuildResult>(
@@ -251,13 +264,15 @@ export function revertRebuildReadout(result: ReviewRevertResult): RebuildResult 
 
 /** UX-redesign 工程1: restore the previous plan version as a NEW version.
  *  Empty body. 409 `nothing-to-revert` at the bootstrap floor (surfaced as
- *  CockpitApiError via the shared transport, like every backend failure). */
+ *  CockpitApiError via the shared transport, like every backend failure).
+ *  工程5: `outputId` scopes the revert to that output chain (?output=). */
 export async function revertReviewPlan(
   episodeId: string,
   fetchImpl: FetchLike = fetch,
+  outputId?: OutputId,
 ): Promise<ReviewRevertResult> {
   return request<ReviewRevertResult>(
-    `/episodes/${encodeURIComponent(episodeId)}/review-chat/revert`,
+    `/episodes/${encodeURIComponent(episodeId)}/review-chat/revert${outputQuery(outputId)}`,
     { method: "POST" },
     fetchImpl,
   );

@@ -7,6 +7,7 @@ import {
   type CheckedMaterials,
   type EpisodeStatus,
   type InvestigationState,
+  type OutputId,
   type ProposalKind,
   type ReviewCommandDraft,
   type ReviewRevertResult,
@@ -27,6 +28,10 @@ type ReviewChatPanelProps = {
   /** Preview probe (2xx) result from the polling view — 完了 needs it. */
   previewOk?: boolean | null;
   fetchImpl?: typeof fetch;
+  /** 工程5: the output chain this panel renders (default landscape).
+   *  Vertical apply/rebuild/revert requests carry the output dimension;
+   *  landscape requests stay byte-identical. */
+  outputId?: OutputId;
 };
 
 type ChoiceReaction = "choice-a" | "choice-b";
@@ -68,6 +73,7 @@ export default function ReviewChatPanel({
   status,
   previewOk = null,
   fetchImpl,
+  outputId = "landscape",
 }: ReviewChatPanelProps) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -91,6 +97,7 @@ export default function ReviewChatPanel({
     previewOk,
     fetchImpl,
     onError: setError,
+    outputId,
   });
   // One flight flag across send / apply / revert keeps every panel action
   // single-flight (revert reports its own busy via onBusyChange).
@@ -205,6 +212,7 @@ export default function ReviewChatPanel({
       episodeId={episodeId}
       disabled={busyAll}
       fetchImpl={fetchImpl}
+      outputId={outputId}
       onBusyChange={handleRevertBusy}
       onReverted={handleReverted}
       onError={(failure) => setError(failure)}

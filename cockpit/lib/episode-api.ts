@@ -4,6 +4,7 @@ import {
   apiBase,
   CockpitApiError,
   request,
+  requestWithStatus,
   type FetchLike,
 } from "@/lib/http";
 
@@ -169,16 +170,156 @@ export async function getEpisodeStatus(
 export async function getEpisodeFlags(
   episodeId: string,
   fetchImpl: FetchLike = fetch,
+  outputId?: OutputId,
 ): Promise<FlagsPayload> {
   return request<FlagsPayload>(
-    `/episodes/${encodeURIComponent(episodeId)}/flags`,
+    `/episodes/${encodeURIComponent(episodeId)}/flags${outputQuery(outputId)}`,
     { method: "GET" },
     fetchImpl,
   );
 }
 
-export function previewUrl(episodeId: string): string {
-  return `${apiBase()}/episodes/${encodeURIComponent(episodeId)}/preview`;
+/** 工程5: per-output format independence (backend: services/outputs/geometry.py).
+ *
+ * Contract (read from services/episode_cockpit/api.py + episode_files.py):
+ * - GET /episodes/{id}/outputs → `{outputs: [{output_id, orientation,
+ *   width, height}, ...]}` (default [landscape]; absent file = landscape).
+ * - POST /episodes/{id}/outputs {output_id} → `{outputs, registered,
+ *   idempotent}` (idempotent=true when already registered).
+ * - Preview/flags/approvals/rebuild/apply/revert accept the output
+ *   dimension (`?output=vertical` on GET/file routes, `output_id` in the
+ *   rebuild/apply POST bodies; None/"" = landscape default).
+ * - The episode STATUS payload has NO output dimension (verified in
+ *   status_view.py::build_status_payload) — stage/version readouts stay
+ *   shared; only preview binding / flags / approvals / rebuild chains are
+ *   per-output. Unknown binding fields render as 不明, never guessed.
+ * - Old backends (no /outputs route) → 404 → null → landscape-only UI
+ *   with no output noise.
+ */
+
+export type OutputId = "landscape" | "vertical";
+
+export function isOutputId(value: unknown): value is OutputId {
+  return value === "landscape" || value === "vertical";
+}
+
+/** One registered output (OutputGeometryV1 dump). Only output_id drives
+ *  the UI; orientation/size ride along when the backend sends them and
+ *  stay undefined otherwise (never fabricated). */
+export type OutputGeometry = {
+  output_id: string;
+  orientation?: string;
+  width?: number;
+  height?: number;
+};
+
+export type OutputsPayload = {
+  outputs: OutputGeometry[];
+};
+
+export type OutputRegisterResult = {
+  outputs: OutputGeometry[];
+  registered: string;
+  /** True when the output was already registered (backend `idempotent`).
+   *  Absent on old payloads → treated as 新規追加 (false). */
+  idempotent?: boolean;
+};
+
+function parseGeometryEntry(entry: unknown): OutputGeometry | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  const record = entry as { output_id?: unknown; orientation?: unknown; width?: unknown; height?: unknown };
+  if (typeof record.output_id !== "string" || record.output_id === "") return null;
+  const geometry: OutputGeometry = { output_id: record.output_id };
+  if (typeof record.orientation === "string") geometry.orientation = record.orientation;
+  if (typeof record.width === "number") geometry.width = record.width;
+  if (typeof record.height === "number") geometry.height = record.height;
+  return geometry;
+}
+
+function parseOutputsPayload(body: unknown): OutputsPayload | null {
+  if (typeof body !== "object" || body === null) return null;
+  const outputs = (body as { outputs?: unknown }).outputs;
+  if (!Array.isArray(outputs)) return null;
+  const geometries: OutputGeometry[] = [];
+  for (const entry of outputs) {
+    const geometry = parseGeometryEntry(entry);
+    if (geometry !== null) geometries.push(geometry);
+  }
+  if (geometries.length === 0) return null;
+  return { outputs: geometries };
+}
+
+/** Query suffix for the output dimension: only vertical is ever sent —
+ *  landscape/undefined omit the param (backend default), so landscape
+ *  URLs stay byte-identical to today. Unknown strings never serialize. */
+export function outputQuery(outputId?: string): string {
+  return outputId === "vertical" ? "?output=vertical" : "";
+}
+
+/** 横版/縦版 display label. Unknown ids render raw (never hidden). */
+export function outputLabel(outputId: string): string {
+  if (outputId === "landscape") return "横版";
+  if (outputId === "vertical") return "縦版";
+  return outputId;
+}
+
+/** GET /episodes/{id}/outputs. null = unknown (old backend 404, or a
+ *  payload without a usable outputs list) → landscape-only UI. */
+export async function getEpisodeOutputs(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<OutputsPayload | null> {
+  let body: unknown;
+  try {
+    ({ body } = await requestWithStatus<unknown>(
+      `/episodes/${encodeURIComponent(episodeId)}/outputs`,
+      { method: "GET" },
+      fetchImpl,
+    ));
+  } catch (cause) {
+    if (cause instanceof CockpitApiError && cause.status === 404) return null;
+    throw cause;
+  }
+  return parseOutputsPayload(body);
+}
+
+/** POST /episodes/{id}/outputs — explicit registration only (the UI never
+ *  auto-registers). `.idempotent` echoes the backend flag (absent → false). */
+export async function registerOutput(
+  episodeId: string,
+  outputId: OutputId,
+  fetchImpl: FetchLike = fetch,
+): Promise<OutputRegisterResult> {
+  const body = await request<unknown>(
+    `/episodes/${encodeURIComponent(episodeId)}/outputs`,
+    { method: "POST", body: JSON.stringify({ output_id: outputId }) },
+    fetchImpl,
+  );
+  const parsed = typeof body === "object" && body !== null ? body : {};
+  const record = parsed as { outputs?: unknown; registered?: unknown; idempotent?: unknown };
+  return {
+    outputs: parseOutputsPayload(parsed)?.outputs ?? [],
+    registered: typeof record.registered === "string" ? record.registered : outputId,
+    idempotent: record.idempotent === true,
+  };
+}
+
+export function previewUrl(episodeId: string, outputId?: OutputId): string {
+  return `${apiBase()}/episodes/${encodeURIComponent(episodeId)}/preview${outputQuery(outputId)}`;
+}
+
+/** The <video> src for one output: content_hash (when probe-verified)
+ *  combines with the output param (`?output=vertical&content_hash=…`).
+ *  Landscape without a hash stays the legacy fixed URL, byte for byte. */
+export function previewVideoSrc(
+  episodeId: string,
+  outputId: OutputId | undefined,
+  contentHash: string | null,
+): string {
+  const base = previewUrl(episodeId, outputId);
+  if (contentHash === null) return base;
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}content_hash=${encodeURIComponent(contentHash)}`;
 }
 
 /** One preview probe result. The run/version binding comes ONLY from the
@@ -210,10 +351,11 @@ function headerOrNull(response: Response, name: string): string | null {
 export async function probeEpisodePreview(
   episodeId: string,
   fetchImpl: FetchLike = fetch,
+  outputId?: OutputId,
 ): Promise<EpisodePreviewProbe> {
   let response: Response;
   try {
-    response = await fetchImpl(previewUrl(episodeId), {
+    response = await fetchImpl(previewUrl(episodeId, outputId), {
       method: "GET",
       headers: { range: "bytes=0-1" },
     });

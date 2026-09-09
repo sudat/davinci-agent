@@ -1,7 +1,15 @@
 "use client";
 
 import type { RefObject } from "react";
-import { previewUrl } from "@/lib/api";
+import { previewVideoSrc, type OutputId } from "@/lib/api";
+
+/** Low-resolution preview canvas per output (backend
+ *  services/outputs/geometry.py::preview_size_for): landscape 640x360,
+ *  vertical 360x640. The element carries the real preview dimensions. */
+export const PREVIEW_SIZES: Record<OutputId, { width: number; height: number }> = {
+  landscape: { width: 640, height: 360 },
+  vertical: { width: 360, height: 640 },
+};
 
 export type PreviewAvailability = "checking" | "available" | "not_generated";
 
@@ -16,6 +24,11 @@ type PreviewPlayerProps = {
    *  video要素が作り直され再生位置を失う。 */
   contentHash: string | null;
   videoRef: RefObject<HTMLVideoElement | null>;
+  /** 工程5: the output this player shows (default landscape). The video
+   *  src carries ?output=vertical only for vertical; landscape srcs stay
+   *  byte-identical. Vertical elements carry the real 360x640 preview
+   *  dimensions; landscape renders exactly as before (no size attrs). */
+  output?: OutputId;
 };
 
 /**
@@ -27,6 +40,7 @@ export default function PreviewPlayer({
   state,
   contentHash,
   videoRef,
+  output = "landscape",
 }: PreviewPlayerProps) {
   if (state === "checking") {
     return (
@@ -45,19 +59,24 @@ export default function PreviewPlayer({
       </div>
     );
   }
+  const vertical = output === "vertical";
   return (
     <video
-      key={contentHash ?? "unverified"}
+      key={`${output}/${contentHash ?? "unverified"}`}
       data-testid="preview-player"
+      data-output={output}
       className="video-player"
       controls
       preload="metadata"
-      src={
-        contentHash === null
-          ? previewUrl(episodeId)
-          : `${previewUrl(episodeId)}?content_hash=${encodeURIComponent(contentHash)}`
-      }
+      src={previewVideoSrc(episodeId, output, contentHash)}
       ref={videoRef}
+      {...(vertical
+        ? {
+            width: PREVIEW_SIZES.vertical.width,
+            height: PREVIEW_SIZES.vertical.height,
+            style: { maxWidth: PREVIEW_SIZES.vertical.width },
+          }
+        : {})}
     />
   );
 }
