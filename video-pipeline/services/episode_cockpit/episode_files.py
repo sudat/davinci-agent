@@ -119,7 +119,11 @@ _PLAN_CREATING_EVENT_KINDS = frozenset({"decision_applied", RESTORED_EVENT_KIND}
 
 _LOGGER = logging.getLogger(__name__)
 PREVIEW_RELATIVE = ("previews", PREVIEW_NAME)
-EXECUTABLE_DOMAIN = "edit_plan"
+# Rebuild-executable review domains: edit_plan (span-translatable kinds re-plan
+# from "plan") and presentation (intent-only kinds re-render from "compile" —
+# the committed plan content is unchanged, so compile/preview re-derive the
+# output without selection). Selection/scope kinds stay intent-only.
+EXECUTABLE_DOMAINS = frozenset({"edit_plan", "presentation"})
 NOT_EXECUTABLE_REASON = "command kind not rebuild-executable yet"
 
 
@@ -602,7 +606,7 @@ class FileOps(WorkspaceContext):
         stages = tuple(
             stage
             for stage in PIPELINE_STAGES
-            if stage in DEFAULT_LINEAGE[EXECUTABLE_DOMAIN]
+            if stage in DEFAULT_LINEAGE["edit_plan"]
         )
         creating = next(
             (
@@ -755,11 +759,14 @@ class FileOps(WorkspaceContext):
         Deterministic path stays authoritative: the rebuild consumes the
         sealed events + plan version the apply route committed — this only
         derives the lineage stage set (``plan_rebuild``) and detaches the
-        runner with a stage-subset re-entry. Only ``edit_plan``-domain
-        commands (the three span-translatable kinds) are rebuild-executable
-        today; the other nine kinds stay intent-only with an honest reason.
-        A batch (``applied_commands``, V44-1 multi-command fix) schedules
-        ONE runner over the UNION of the per-command stage sets; a batch is
+        runner with a stage-subset re-entry. ``edit_plan``-domain commands
+        (the three span-translatable kinds) re-plan from ``plan``;
+        ``presentation``-domain commands (the five intent-only kinds) re-
+        render from ``compile`` — the committed plan is unchanged, so
+        compile/preview re-derive the output without selection. Selection
+        and scope kinds stay intent-only with an honest reason. A batch
+        (``applied_commands``, V44-1 multi-command fix) schedules ONE
+        runner over the UNION of the per-command stage sets; a batch is
         rebuild-executable only when EVERY command is.
         """
 
@@ -851,7 +858,7 @@ class FileOps(WorkspaceContext):
         self._append_jsonl(log_path, entry)  # the 予約 (pre-spawn reservation)
         primary = applied[0]
         result: dict[str, object]
-        if any(command.affected_domain != EXECUTABLE_DOMAIN for command in applied):
+        if any(command.affected_domain not in EXECUTABLE_DOMAINS for command in applied):
             result = {
                 "stage_hint": resolved_hint,
                 "scheduled": False,

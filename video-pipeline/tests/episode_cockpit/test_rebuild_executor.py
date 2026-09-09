@@ -45,10 +45,14 @@ from services.contracts.primitives import Producer, RationalFrameRate, SourceFra
 from services.episode_cockpit import episode_ops
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.review_chat import (
+    DEFAULT_LINEAGE,
+    AppliedCommand,
     ReviewCommandDraft,
     ReviewCommandKind,
     _command_id,
+    plan_rebuild,
 )
+from services.episode_cockpit.status_view import load_rebuild_entries
 from services.foundation_io import sha256_file
 from services.job_runner.cas import apply_transition, current_job_state
 from services.job_runner.state_store import StateStore
@@ -69,12 +73,15 @@ def _locked_reentry_run(
     state_store_path: Path,
     from_stage: str,
     applied_command: str,
+    run_id: str | None = None,
 ) -> int:
     """Direct re-entry holding a real inherited-lock descriptor (P1 proof).
 
     Production re-entries inherit ``runner.lock`` through the spawn; direct
     test calls hold it explicitly and pass the descriptor, or the runner
-    refuses fail-closed with ``runner-lock-not-held``.
+    refuses fail-closed with ``runner-lock-not-held``. ``run_id`` carries
+    the spawning POST's pre-generated id when given (the ``--run-id``
+    production contract), so journal rows and log events name one run.
     """
 
     fd = os.open(episode_dir / "runner.lock", os.O_CREAT | os.O_RDWR, 0o644)
@@ -87,6 +94,7 @@ def _locked_reentry_run(
             from_stage=from_stage,
             applied_command=applied_command,
             runner_lock_fd=fd,
+            run_id=run_id,
         )
     finally:
         os.close(fd)
@@ -609,11 +617,14 @@ def test_multi_draft_apply_rejects_forged_command_id(
 
 
 # ---------------------------------------------------------------------------
-# (b) non-executable kind (lower_bgm): intent-only with the honest reason.
+# (b) non-executable kind (use_other_take, selection domain): intent-only
+#     with the honest reason. Presentation kinds used to live here
+#     (lower_bgm); since the presentation-domain wiring they schedule a
+#     compile-first rebuild like edit_plan kinds (see (f) below).
 # ---------------------------------------------------------------------------
 
 
-def test_lower_bgm_rebuild_stays_intent_only(
+def test_selection_kind_rebuild_stays_intent_only(
     client: TestClient,
     workspace: dict[str, Path],
     source_folder: Path,
@@ -624,14 +635,15 @@ def test_lower_bgm_rebuild_stays_intent_only(
                                                       monkeypatch)
     preview = client.post(
         f"/episodes/{episode_id}/review-chat",
-        json={"text": "ここのBGMをもっと小さく", "at_seconds": 1.0},
+        json={"text": "別のテイクを使って", "at_seconds": 1.0},
     )
     assert preview.status_code == 200
     applied = client.post(
         f"/episodes/{episode_id}/review-chat/apply",
-        json={"text": "ここのBGMをもっと小さく", "at_seconds": 1.0},
+        json={"text": "別のテイクを使って", "at_seconds": 1.0},
     ).json()["applied"]
-    assert applied["command_kind"] == "lower_bgm"
+    assert applied["command_kind"] == "use_other_take"
+    assert applied["affected_domain"] == "selection"
 
     response = client.post(
         f"/episodes/{episode_id}/rebuild", json={"applied_command": applied["command_id"]}
@@ -843,3 +855,232 @@ def test_stage_preview_repoints_bundle_at_cockpit_review_store(
     assert published["content_hash"] == sha256_file(
         episode_dir / "previews" / "preview.mp4"
     )
+
+
+# ---------------------------------------------------------------------------
+# (f) presentation-domain kind (subtitle_shorter, the r9c gap): the applied
+#     command schedules a compile-first rebuild through the SAME
+#     reservation/spawn machinery as edit_plan kinds — the committed plan is
+#     unchanged (intent-only apply), so the re-entry re-derives the output
+#     from compile without selection.
+# ---------------------------------------------------------------------------
+
+SUBTITLE_TEXT = "字幕を短くして見やすくして"
+
+
+def _apply_subtitle_shorter(client: TestClient, episode_id: str) -> dict[str, object]:
+    preview = client.post(
+        f"/episodes/{episode_id}/review-chat",
+        json={"text": SUBTITLE_TEXT, "at_seconds": None},
+    )
+    assert preview.status_code == 200
+    response = client.post(
+        f"/episodes/{episode_id}/review-chat/apply",
+        json={"text": SUBTITLE_TEXT, "at_seconds": None},
+    )
+    assert response.status_code == 200
+    applied: dict[str, object] = response.json()["applied"]
+    return applied
+
+
+def test_subtitle_shorter_rebuild_schedules_compile_lineage(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                     monkeypatch)
+    applied = _apply_subtitle_shorter(client, episode_id)
+    assert applied["command_kind"] == "subtitle_shorter"
+    assert applied["affected_domain"] == "presentation"
+    assert applied["event_id"] is None
+    assert applied["result_plan_version"] is None  # intent-only: plan unchanged
+
+    response = client.post(
+        f"/episodes/{episode_id}/rebuild", json={"applied_command": applied["command_id"]}
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["scheduled"] is True
+    assert body["stages"] == ["compile", "preview", "resolve_build", "qc", "render"]
+    assert body["runner_log"].endswith("runner.log")
+    assert body["applied_command"] == applied["command_id"]
+    assert len(runner_spawn_calls) == 2  # intake spawn + rebuild spawn
+    rebuild_argv = cast("list[str]", runner_spawn_calls[1]["argv"])
+    assert rebuild_argv[rebuild_argv.index("--from-stage") + 1] == "compile"
+    assert rebuild_argv[rebuild_argv.index("--applied-command") + 1] == applied["command_id"]
+    assert rebuild_argv[rebuild_argv.index("--state-store") + 1] == str(
+        workspace["state_store"]
+    )
+    assert "--reservation-sequence" not in rebuild_argv  # no selection budget touch
+
+    entries = load_rebuild_entries(episode_dir)
+    assert len(entries) == 2
+    reservation, spawned = entries
+    assert reservation.spawned is False
+    assert reservation.run_id is None
+    assert spawned.spawned is True
+    assert spawned.reserves_sequence == reservation.sequence
+    assert spawned.run_id == body["run_id"]
+    assert spawned.target_version is None  # intent-only: no new plan version
+
+
+def test_subtitle_shorter_reentry_executes_compile_and_preview_only(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                     monkeypatch)
+    applied = _apply_subtitle_shorter(client, episode_id)
+    rebuild = client.post(
+        f"/episodes/{episode_id}/rebuild", json={"applied_command": applied["command_id"]}
+    )
+    assert rebuild.json()["scheduled"] is True
+    rebuild_run_id = str(rebuild.json()["run_id"])
+    before_counts = _stage_counts(workspace, episode_id)
+    preview_before = (episode_dir / "previews" / "preview.mp4").stat().st_mtime_ns
+
+    monkeypatch.setattr(episode_runner_rebuild, "stage_preview", _fake_stage_preview)
+    exit_code = _locked_reentry_run(
+        episode_dir,
+        state_store_path=workspace["state_store"],
+        from_stage="compile",
+        applied_command=str(applied["command_id"]),
+        run_id=rebuild_run_id,
+    )
+
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    status = client.get(f"/episodes/{episode_id}").json()
+    assert status["status"] == "PREVIEW_READY"
+    after_counts = _stage_counts(workspace, episode_id)
+    for untouched in ("intake", "ingest", "normalize", "analyze", "selection", "plan"):
+        assert after_counts[untouched] == before_counts[untouched] == ["succeeded"]
+    # The chain mirror never writes a compile row, so the re-entry owns the
+    # only one — pinned to the rebuild run; preview gains its second row.
+    assert after_counts["compile"] == ["succeeded"]
+    assert after_counts["preview"] == ["succeeded", "succeeded"]
+    with StateStore.open(workspace["state_store"]) as store:
+        compile_rows = [
+            run
+            for run in store.get_job_snapshot(episode_id).stage_runs
+            if run.stage_name == "compile"
+        ]
+    assert [run.run_id for run in compile_rows] == [rebuild_run_id]
+
+    published = episode_dir / "previews" / "preview.mp4"
+    assert published.read_bytes() == b"fake-preview-v1"  # same head re-rendered
+    assert published.stat().st_mtime_ns > preview_before
+
+    metric_lines = (episode_dir / "rebuild-metrics.jsonl").read_bytes().splitlines()
+    assert len(metric_lines) == 1
+    metric = json.loads(metric_lines[0])
+    assert metric["applied_command"] == applied["command_id"]
+    assert metric["stages"] == ["compile", "preview"]
+    assert "selection" in metric["unrelated_stages_skipped"]
+    assert "plan" in metric["unrelated_stages_skipped"]
+    assert "resolve_build" in metric["unrelated_stages_skipped"]
+
+    events = _runner_log_events(episode_dir)
+    kinds = [event["event"] for event in events]
+    assert "rebuild_finished" in kinds
+    skipped = [event for event in events if event["event"] == "rebuild_stage_skipped"]
+    assert [event["stage"] for event in skipped] == ["resolve_build", "qc", "render"]
+
+
+# ---------------------------------------------------------------------------
+# (f2) presentation re-request parity: the applied-command path keeps its
+#      append-only resend semantics (a fresh reservation + spawn, never a
+#      rewrite of the first chain) — exactly like edit_plan re-requests.
+# ---------------------------------------------------------------------------
+
+
+def test_presentation_rebuild_rerequest_spawns_fresh_run(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                     monkeypatch)
+    applied = _apply_subtitle_shorter(client, episode_id)
+
+    first = client.post(
+        f"/episodes/{episode_id}/rebuild", json={"applied_command": applied["command_id"]}
+    )
+    second = client.post(
+        f"/episodes/{episode_id}/rebuild", json={"applied_command": applied["command_id"]}
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["scheduled"] is True
+    assert second.json()["scheduled"] is True
+    assert second.json()["run_id"] != first.json()["run_id"]
+    assert len(runner_spawn_calls) == 3  # intake spawn + two rebuild spawns
+    entries = load_rebuild_entries(episode_dir)
+    assert len(entries) == 4
+    assert [entry.spawned for entry in entries] == [False, True, False, True]
+    assert entries[1].reserves_sequence == entries[0].sequence
+    assert entries[3].reserves_sequence == entries[2].sequence
+    assert entries[3].run_id == second.json()["run_id"]
+
+
+# ---------------------------------------------------------------------------
+# (f3) lineage derivation: every presentation kind feeds the compile-first
+#      stage set (hermetic — no episode needed, the derivation is pure).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["subtitle_shorter", "remove_effect", "lower_bgm", "match_color", "channel_lower_third"],
+)
+def test_presentation_kinds_derive_compile_first_lineage(kind: ReviewCommandKind) -> None:
+    applied = AppliedCommand(
+        command_id="rcmd-presentation-lineage",
+        command_kind=kind,
+        affected_domain="presentation",
+    )
+    plan = plan_rebuild(applied, DEFAULT_LINEAGE)
+    assert list(plan.stages) == ["compile", "preview", "resolve_build", "qc", "render"]
+    assert "selection" in plan.excluded_stages
+    assert "plan" in plan.excluded_stages
+
+
+# ---------------------------------------------------------------------------
+# (f4) gates unchanged: a compile-first re-entry on a not-yet-preview-ready
+#      episode blocks honestly through the shared runner gate.
+# ---------------------------------------------------------------------------
+
+
+def test_presentation_reentry_blocked_when_episode_not_preview_ready(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+    body = client.post(
+        "/episodes",
+        json={"source_folder": str(source_folder), "brief_text": "not ready"},
+    ).json()
+    episode_dir = workspace["episodes_root"] / str(body["episode_id"])
+
+    exit_code = _locked_reentry_run(
+        episode_dir,
+        state_store_path=workspace["state_store"],
+        from_stage="compile",
+        applied_command="rcmd-neverapplied",
+    )
+
+    assert exit_code == episode_runner.EXIT_BLOCKED
+    blocked = next(
+        event for event in _runner_log_events(episode_dir) if event["event"] == "blocked"
+    )
+    assert blocked["code"] == "episode-not-preview-ready"
