@@ -30,6 +30,10 @@ from services.editorial_v2.model_provider import (
     EditorialRedirectRefusedError,
 )
 from services.foundation_io import sha256_file
+from services.media_intelligence.gemini_av_observation import (
+    GEMINI_AV_HOST,
+    GeminiAvHttpResponse,
+)
 from services.media_intelligence.moment_review_real import RealAudioContext, RealTranscriptLookup
 from services.media_intelligence.video_clip_extraction import ClipExtractor
 from services.media_intelligence.video_review_providers import (
@@ -100,6 +104,67 @@ class _VideoHttpPost:
 
 def make_video_http_post() -> HttpPost:
     return _VideoHttpPost()
+
+
+def _require_gemini_av_url(url: str) -> None:
+    if not url.startswith(GEMINI_AV_HOST + "/"):
+        raise ValueError(
+            "endpoint-not-pinned: Gemini AV transport only reaches "
+            f"{GEMINI_AV_HOST} (got a different host; refusing)"
+        )
+
+
+class _GeminiAvHttp:
+    """Header-capable transport for the Gemini AV wire (Files API needs the
+    ``X-Goog-Upload-URL`` response header, which the bytes-only ``HttpPost``
+    cannot surface). Host-pinned to the pinned Gemini API host; redirects
+    refused; error bodies truncated — values never logged by callers."""
+
+    __slots__ = ()
+
+    def _roundtrip(
+        self, method: str, url: str, headers: Mapping[str, str], body: bytes | None,
+        timeout_s: float,
+    ) -> GeminiAvHttpResponse:
+        _require_gemini_av_url(url)
+        request = urllib.request.Request(  # noqa: S310
+            url, data=body, headers=dict(headers), method=method
+        )
+        try:
+            with urllib.request.build_opener(_PinnedRedirectHandler()).open(
+                request, timeout=timeout_s
+            ) as response:
+                return GeminiAvHttpResponse(
+                    status=int(response.status),
+                    headers=dict(response.headers.items()),
+                    body=response.read(),
+                )
+        except urllib.error.HTTPError as error:
+            detail = error.read()[:_ERROR_BODY_LIMIT].decode("utf-8", "replace")
+            raise EditorialHttpResponseError(error.code, detail) from error
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise TimeoutError(
+                    f"the pinned Gemini AV endpoint timed out after {timeout_s:.0f}s"
+                ) from error
+            raise EditorialRuntimeError(
+                "production-model-unavailable",
+                f"the pinned Gemini AV endpoint is unreachable: {error.reason}",
+            ) from error
+
+    def post(
+        self, url: str, headers: Mapping[str, str], body: bytes, timeout_s: float
+    ) -> GeminiAvHttpResponse:
+        return self._roundtrip("POST", url, headers, body, timeout_s)
+
+    def get(
+        self, url: str, headers: Mapping[str, str], timeout_s: float
+    ) -> GeminiAvHttpResponse:
+        return self._roundtrip("GET", url, headers, None, timeout_s)
+
+
+def make_gemini_av_http() -> _GeminiAvHttp:
+    return _GeminiAvHttp()
 
 
 @dataclass(slots=True)

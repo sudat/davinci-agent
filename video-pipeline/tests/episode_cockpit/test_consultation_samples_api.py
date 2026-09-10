@@ -27,7 +27,7 @@ from services.compile.sample_projection import (
 )
 from services.contracts.primitives import RecordFrameSpan
 from services.contracts.timeline_ir import TimelineIr0C
-from services.episode_cockpit import sample_observation_server
+from services.episode_cockpit import sample_observation_router
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.consultation_selection_budget import (
     attempt_for,
@@ -327,9 +327,9 @@ def test_sample_windows_none_uses_injected_observation_path(
 
     observation = json.dumps({"chunks": [{"index": 0}], "insufficient_chunks": []})
     monkeypatch.setattr(
-        sample_observation_server,
-        "resolve_server_sample_windows",
-        lambda full_ir, root, eid: (
+        sample_observation_router,
+        "resolve_routed_sample_windows",
+        lambda full_ir, root, eid, route_override=None: (
             [RecordFrameSpan(start_frame=0, end_frame=30)],
             observation,
         ),
@@ -356,21 +356,21 @@ def test_sample_windows_none_blocked_is_typed_422(
     source_folder: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An unavailable GLM path fails the request typed — never position sampling."""
+    """An unavailable observation path fails the request typed — never position sampling."""
     episode_id = _create_episode(client, source_folder)
     _seed_episode(workspace, episode_id)
     calls: list[str] = []
     _install_fake_render(monkeypatch, calls)
 
     def blocked(
-        full_ir: Any, root: Path, eid: str,
+        full_ir: Any, root: Path, eid: str, route_override: Any = None,
     ) -> tuple[list[Any], str]:
         raise SampleObservationError(
             "sample-observation-unavailable", "no edit source here"
         )
 
     monkeypatch.setattr(
-        sample_observation_server, "resolve_server_sample_windows", blocked
+        sample_observation_router, "resolve_routed_sample_windows", blocked
     )
 
     response = client.post(

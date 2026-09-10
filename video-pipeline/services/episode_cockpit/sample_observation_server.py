@@ -3,7 +3,9 @@
 Assembles mezzanine + transcript + GLM provider around the two
 media_intelligence halves. Every failure is SampleObservationError, which
 the route maps to a typed 422 — position sampling is never a fallback, and
-Gemini is never called. Module-level seam so tests inject fixtures.
+Gemini is never called. The transcript read prefers the real pipeline
+index (``run/episode/media.duckdb``); the legacy MediaQueryApiV2 path
+runs only when that file is absent. Module-level seam so tests inject fixtures.
 """
 
 from __future__ import annotations
@@ -40,6 +42,10 @@ _GLM_PIN_RELATIVE = (
 )
 _MEZZANINE_RELATIVE = ("run", "media", "edit-source.mov")
 _INDEX_NAME = "media-intelligence.duckdb"
+#: The real pipeline writes its search index here (``run/episode/`` holds
+#: the analyzer outputs; the episode root holds the mezzanine). The legacy
+#: ``media-intelligence.duckdb`` name survives only as a fallback.
+_REAL_INDEX_RELATIVE = ("run", "episode", "media.duckdb")
 _WORKSPACE_DIR_NAME = "sample-observation-clips"
 
 
@@ -54,6 +60,74 @@ def _insufficient(chunk: SampleChunk, note: str) -> SampleChunkObservation:
     )
 
 
+def _real_index_segments(
+    episode_dir: Path,
+) -> list[tuple[float, float, str]] | None:
+    """Transcript rows from the real pipeline index (``run/episode/media.duckdb``).
+
+    Returns None when that file is absent (caller falls back to the
+    legacy index); an UNREADABLE real index is a typed failure, never a
+    silent empty transcript. Fixed SQL over the frozen migration-1
+    schema (source_id/start_ms/end_ms/text); milliseconds become seconds.
+    """
+
+    import duckdb  # noqa: PLC0415 (duckdb off the fast path)
+
+    index_path = episode_dir.joinpath(*_REAL_INDEX_RELATIVE)
+    if not index_path.is_file():
+        return None
+    try:
+        connection = duckdb.connect(str(index_path), read_only=True)
+        try:
+            rows = connection.execute(
+                "SELECT start_ms, end_ms, text FROM transcript_segments "
+                "ORDER BY source_id, segment_index"
+            ).fetchall()
+        finally:
+            connection.close()
+    except Exception as error:
+        raise SampleObservationError(
+            "sample-observation-unavailable",
+            f"cannot read transcript rows: {type(error).__name__}",
+        ) from error
+    segments: list[tuple[float, float, str]] = []
+    for row in rows:
+        try:
+            start_ms, end_ms, text = row
+            segments.append((float(start_ms) / 1000.0, float(end_ms) / 1000.0, str(text)))
+        except (TypeError, ValueError) as error:
+            raise SampleObservationError(
+                "sample-observation-unavailable",
+                f"cannot read transcript rows: {type(error).__name__}",
+            ) from None
+    return segments
+
+
+def episode_has_transcript(episode_dir: Path) -> bool:
+    """Cheap speech-presence check for route selection (COUNT only)."""
+
+    import duckdb  # noqa: PLC0415 (duckdb off the fast path)
+
+    real_path = episode_dir.joinpath(*_REAL_INDEX_RELATIVE)
+    legacy_path = episode_dir / _INDEX_NAME
+    target: tuple[Path, str] | None = None
+    if real_path.is_file():
+        target = (real_path, "SELECT count(*) FROM transcript_segments")
+    elif legacy_path.is_file():
+        target = (legacy_path, "SELECT count(*) FROM mi_transcripts")
+    if target is None:
+        return False
+    try:
+        connection = duckdb.connect(str(target[0]), read_only=True)
+        try:
+            row = connection.execute(target[1]).fetchone()
+        finally:
+            connection.close()
+    except Exception:  # noqa: BLE001 (presence check is best-effort; visual path raises typed)
+        return False
+    return row is not None and int(row[0]) > 0
+
+
 def _transcript_segments(
     episode_dir: Path, total_frames: int, rate: Fraction
 ) -> list[tuple[float, float, str]]:
@@ -61,6 +135,9 @@ def _transcript_segments(
     from services.media_query.index_v2 import open_read_only  # noqa: PLC0415
     from services.media_query.query_v2 import MediaQueryApiV2  # noqa: PLC0415
 
+    real = _real_index_segments(episode_dir)
+    if real is not None:
+        return real
     index_path = episode_dir / _INDEX_NAME
     if not index_path.is_file():
         raise SampleObservationError(
@@ -218,4 +295,4 @@ def resolve_server_sample_windows(
     )
 
 
-__all__ = ["resolve_server_sample_windows"]
+__all__ = ["episode_has_transcript", "resolve_server_sample_windows"]

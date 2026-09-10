@@ -105,6 +105,9 @@ from services.episode_cockpit.sample_identity import (
 )
 from services.episode_cockpit.sample_journal import request_sample
 from services.foundation_io import sha256_file
+from services.media_intelligence.observation_route import (  # noqa: TC001 (FastAPI get_type_hints)
+    RequestedRoute,
+)
 from services.media_intelligence.sample_observation import SampleObservationError
 from services.review_command.store import load_head
 
@@ -283,13 +286,16 @@ class ConsultationSampleRequestV1(StrictModel):
 
     Only consultation/judgment/windows/operation ride the wire; the base
     version, plan sha, policy sha, and full-IR sha are pinned server-side
-    from the committed store (never client-claimed).
+    from the committed store (never client-claimed). ``route`` is an
+    optional explicit observation override (``visual``/``audiovisual``);
+    absent means ``auto`` selection from existing episode data.
     """
 
     consultation_id: NonEmpty
     judgment_id: NonEmpty
     operation_id: NonEmpty
     windows: WindowSequence | None = None  # absent = server picks representative scenes
+    route: RequestedRoute | None = None
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -1733,13 +1739,13 @@ def consultation_sample_request(
             f"編集の版が読めないため、試し動画を作れませんでした: {error}",
         ) from error
     if request.windows is None:
-        from services.episode_cockpit.sample_observation_server import (  # noqa: PLC0415 (live observation assembled only on the server-pick path)
-            resolve_server_sample_windows,
+        from services.episode_cockpit.sample_observation_router import (  # noqa: PLC0415 (live observation assembled only on the server-pick path)
+            resolve_routed_sample_windows,
         )
 
         try:
-            windows, observation = resolve_server_sample_windows(
-                full_ir, episode_dir, episode_id
+            windows, observation = resolve_routed_sample_windows(
+                full_ir, episode_dir, episode_id, route_override=request.route
             )
         except SampleObservationError as error:
             raise CockpitUnprocessableError(error.code, error.detail) from error

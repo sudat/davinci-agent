@@ -650,7 +650,7 @@ PRD §6.7の「1回の的を絞った設計修正と1回の再実行」の枠内
 | fusion | 本地の決定論的統合 | 区間観察を既存`MomentDeepReviewV1`記録へprovider中立・型付きpayloadでのみ統合 | 型付きpayload外の文章は信頼しない |
 | 編集判断の唯一の所有者 | GPT-5.6 Sol（DirectorV2） | keep/remove/順序/編集意図の選択はこの役割のみ | 融合evidenceを検証・commitの前に消費する。どのmodelもJob State・Selection Plan・Edit Plan・Resolveに書き込まない |
 
-（2026-09-10 オペレーター指示により主経路をGLM-5v-turbo単独へ変更: 定額はGLMのみ、Gemini Flashは従量のため品質不足実測区間のみ許可制で補助。）
+（2026-09-10 オペレーター指示により主経路をGLM-5v-turbo単独へ変更: 定額はGLMのみ、Gemini Flashは従量のため品質不足実測区間のみ許可制で補助。2026-09-11 追記: 実素材A/Bの結果、上記は相談用サンプル観察経路ではdual-route決定に置き換える——音声・発話関連エピソードの主経路は許可制のGemini `gemini-3.5-flash-lite` 全編一発A/V観察、GLM-5v-turboは無音・視覚限定経路＋詳細再確認。字幕の正本はASRのまま、編集判断の唯一の所有者はSolのまま。r2記述は履歴として残す。）
 
 権威artifactは融合済み`MomentDeepReviewV1`記録のみとし、段階別の来歴は既存記録内で検査可能とする。map/reduce/専属の実行時payloadは再生成可能な実行データであり、第三のauthoritative artifactは作らない（§0.3）。
 

@@ -845,6 +845,8 @@ The §6.7.1 correction defines bounded evidence-generation roles only; this is n
 
 Only fused `MomentDeepReviewV1` records are committed and indexed as authoritative evidence; per-stage provenance remains inspectable inside those existing records. Runtime chunk/specialist payloads are rebuildable execution data and do not create a third authoritative artifact type (§0.2).
 
+2026-09-11 addendum (A/B outcome on real-episode footage, 282s): the §8.5 roles above are superseded for the consultation-sample observation path by the dual-route decision — Gemini `gemini-3.5-flash-lite` (live-verified pin `moment-review-gemini-av`) is the PRIMARY whole-video audiovisual observation for speech/sound-relevant episodes (ONE metered call over a low-res A/V proxy, explicit per-episode AV cloud-send consent required, speech never becomes subtitle authority), and GLM `glm-5v-turbo` is the visual-only path (silent chunks, audio never sent) plus detail recheck. ASR remains the subtitle authority; GPT-5.6 Sol remains the sole editorial owner; no model writes Job State, Selection Plan, Edit Plan, or Resolve. The pre-addendum table is kept as history.
+
 ---
 
 # 9. Editorial Intelligence production path
