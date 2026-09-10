@@ -378,7 +378,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   );
 
   const detailsBlock = (withStageIds: boolean, withFinishing: boolean) => (
-    <details className="episode-details" data-testid="episode-details">
+    <details id="details" className="episode-details" data-testid="episode-details">
       <summary>詳しい記録</summary>
       <dl className="status-list">
         <div>

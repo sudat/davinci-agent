@@ -688,6 +688,12 @@ video { max-width: 100%; height: auto; }
 .page:has(.sample-stage) .page-header {
   display: none;
 }
+.page:has(.sample-stage) > details.episode-details {
+  display: none;
+}
+.page:has(.sample-stage) .sample-stage details[data-testid="sample-record"] {
+  display: none;
+}
 
 .sample-stage .sample-stage-title {
   font-size: var(--font-size-title, 1.25rem);

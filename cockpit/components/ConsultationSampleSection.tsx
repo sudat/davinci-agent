@@ -353,7 +353,7 @@ export default function ConsultationSampleSection({
             ) : null}
             <div className="actions sample-primary">
               <button type="button" className="btn-primary" onClick={authorizeFull} disabled={authorizeBusy} data-testid="full-authorize">
-                {authorizeBusy ? "記録中…" : "この方向で全編へ進む"}
+                {authorizeBusy ? "記録中…" : "この内容で全編を作る"}
               </button>
             </div>
             {authorizedSampleId !== null ? (
@@ -380,7 +380,7 @@ export default function ConsultationSampleSection({
                 </label>
                 <div className="actions">
                   <button type="button" className="btn-small" onClick={feedback.onSubmit} disabled={feedback.busy || feedback.text.trim() === ""} data-testid="sample-feedback-submit">
-                    {feedback.busy ? "送信中…" : "修正した試し動画を見る"}
+                    {feedback.busy ? "送信中…" : "修正してもう一度見る"}
                   </button>
                 </div>
               </>
