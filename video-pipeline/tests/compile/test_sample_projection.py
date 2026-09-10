@@ -27,6 +27,7 @@ from services.compile.sample_projection import (
     sample_total_frames,
     sample_total_seconds,
     window_digest,
+    windows_around_anchors,
 )
 from services.contracts.primitives import (
     Producer,
@@ -361,3 +362,13 @@ def test_derive_sample_windows_picks_three_positions_up_to_cap() -> None:
     assert sample_total_seconds(trimmed, RATE) == pytest.approx(3.0)
     capped = derive_sample_windows(_full_ir(), limit_seconds=1.0)
     assert sample_total_seconds(capped, RATE) <= 1.0 + 1 / 30
+
+
+def test_windows_around_anchors_matches_derive_for_same_anchors() -> None:
+    """The shared widening base: GLM-observation candidate anchors widen
+    exactly like the legacy position picks for identical anchors."""
+    ir = _full_ir()
+    assert windows_around_anchors(ir, [0, 60]) == derive_sample_windows(ir)
+    with pytest.raises(PydanticCustomError) as exc_info:
+        windows_around_anchors(ir, [])
+    assert "sample-windows-empty" in repr(exc_info.value)

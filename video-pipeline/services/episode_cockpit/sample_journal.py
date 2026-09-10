@@ -116,14 +116,18 @@ def complete_missing_success_locked(
 
 
 def _reserved_payload(
-    *, manifest: SampleManifestV1, sample_attempt_id: str, origin: str | None
+    *, manifest: SampleManifestV1, sample_attempt_id: str, origin: str | None,
+    observation: str | None = None,
 ) -> str:
+    payload: dict[str, object] = {
+        "manifest": manifest.model_dump(mode="json"),
+        "origin_sample_attempt_id": origin,
+        "sample_attempt_id": sample_attempt_id,
+    }
+    if observation is not None:
+        payload["sample_observation"] = observation
     return json.dumps(
-        {
-            "manifest": manifest.model_dump(mode="json"),
-            "origin_sample_attempt_id": origin,
-            "sample_attempt_id": sample_attempt_id,
-        },
+        payload,
         ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     )
 
@@ -145,6 +149,7 @@ def _reserved_manifest_from_detail(
 def _fresh_reserve_locked(  # noqa: PLR0913 (reserve record: identity + journal scan slots)
     episode_dir: Path, identity: SampleRequestIdentityV1,
     sample_id: str, digest: str, events: list[SampleJournalEventV1], *, origin: str | None,
+    observation: str | None = None,
 ) -> dict[str, Any]:
     sequence = sum(1 for e in events if e.event == "sample_reserved") + 1
     sample_attempt_id = f"sample-attempt-{sequence}"
@@ -156,7 +161,8 @@ def _fresh_reserve_locked(  # noqa: PLR0913 (reserve record: identity + journal 
         episode_dir, event="sample_reserved", sample_id=sample_id, digest=digest,
         operation_id=identity.operation_id, sample_attempt_id=sample_attempt_id,
         detail=_reserved_payload(
-            manifest=manifest, sample_attempt_id=sample_attempt_id, origin=origin),
+            manifest=manifest, sample_attempt_id=sample_attempt_id, origin=origin,
+            observation=observation),
     )
     return {
         "state": "reserved", "manifest": manifest,
@@ -165,7 +171,8 @@ def _fresh_reserve_locked(  # noqa: PLR0913 (reserve record: identity + journal 
 
 
 def request_sample_locked(
-    episode_dir: Path, identity: SampleRequestIdentityV1
+    episode_dir: Path, identity: SampleRequestIdentityV1,
+    observation: str | None = None,
 ) -> dict[str, Any]:
     """Idempotent request; caller MUST hold ``consultation_write_locked``."""
     from services.episode_cockpit.sample_complete import (  # noqa: PLC0415 (lazy: completion owns verification)
@@ -219,15 +226,17 @@ def request_sample_locked(
             None,
         )
     return _fresh_reserve_locked(
-        episode_dir, identity, sample_id, digest, events, origin=origin)
+        episode_dir, identity, sample_id, digest, events, origin=origin,
+        observation=observation)
 
 
 def request_sample(
-    episode_dir: Path, identity: SampleRequestIdentityV1
+    episode_dir: Path, identity: SampleRequestIdentityV1,
+    observation: str | None = None,
 ) -> dict[str, Any]:
     """Public wrapper: the whole check + reserve runs atomically under the lock."""
     with consultation_write_locked(episode_dir):
-        return request_sample_locked(episode_dir, identity)
+        return request_sample_locked(episode_dir, identity, observation)
 
 
 def record_sample_success_locked(  # noqa: PLR0913 (success record: one field per journal slot)

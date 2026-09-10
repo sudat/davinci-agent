@@ -86,33 +86,28 @@ def _cap_window_total(
     return capped
 
 
-def derive_sample_windows(
-    ir: TimelineIr0C, limit_seconds: float = 30.0
+def windows_around_anchors(
+    ir: TimelineIr0C, anchors: Sequence[int], limit_seconds: float = 30.0
 ) -> tuple[RecordFrameSpan, ...]:
-    """Sample up to three POSITIONS (head/middle/late) of the committed
-    IR's video track as CONTIGUOUS ~8s spans (5-10s band), not single
-    short edit cuts. The honest unit is a 「か所」 (a place), never a
-    「場面」 (a scene): position sampling only. Windows that overlap or
-    nearly touch (≤1s apart) merge and the merged count is the real
-    count; the total is kept within ``limit_seconds`` by proportional
-    shrinking with a ≥1s floor (latest windows give way first)."""
+    """Widen record-frame ``anchors`` into contiguous ~8s spans (5-10s band).
+
+    Shared widening base: position sampling picks head/middle/late anchors
+    and GLM-observation candidates arrive as record-frame anchors — both
+    widen here (merge ≤1s-apart spans, cap the total at ``limit_seconds``
+    with a ≥1s floor, latest windows give way first)."""
     video = next((t for t in ir.tracks if t.track.kind == "video"), None)
     if video is None or not video.items:
         raise PydanticCustomError("sample-empty-track", "no video interval")
-    items = sorted(video.items, key=lambda i: i.record_span.start_frame)
-    picks = [items[0], items[len(items) // 2], items[-1]]
-    unique: list[TimelineItem0C] = []
-    for pick in picks:
-        if pick not in unique:
-            unique.append(pick)
+    if not anchors:
+        raise PydanticCustomError("sample-windows-empty", "windows must not be empty")
     fps = float(ir.rate.num) / float(ir.rate.den)
-    track_end = max(item.record_span.end_frame for item in items)
+    track_end = max(item.record_span.end_frame for item in video.items)
     span_frames = max(round(8.0 * fps), 1)
     half = span_frames // 2
     raw: list[RecordFrameSpan] = []
-    for pick in unique:
-        anchor = pick.record_span.start_frame
-        start = max(anchor - half, 0)
+    for anchor in anchors:
+        clamped = min(max(int(anchor), 0), track_end)
+        start = max(clamped - half, 0)
         end = min(start + span_frames, track_end)
         if end >= track_end:  # keep the nominal length when an edge clamps
             start = max(end - span_frames, 0)
@@ -124,6 +119,37 @@ def derive_sample_windows(
             budget_frames=max(int(limit_seconds * fps), 0),
             floor_frames=max(round(1.0 * fps), 1),
         )
+    )
+
+
+def derive_sample_windows(
+    ir: TimelineIr0C, limit_seconds: float = 30.0
+) -> tuple[RecordFrameSpan, ...]:
+    """Sample up to three POSITIONS (head/middle/late) of the committed
+    IR's video track as CONTIGUOUS ~8s spans (5-10s band), not single
+    short edit cuts. The honest unit is a 「か所」 (a place), never a
+    「場面」 (a scene): position sampling only. Windows that overlap or
+    nearly touch (≤1s apart) merge and the merged count is the real
+    count; the total is kept within ``limit_seconds`` by proportional
+    shrinking with a ≥1s floor (latest windows give way first).
+
+    Legacy server-picking path: the consultation sample route now uses
+    GLM-observation candidates widened through ``windows_around_anchors``
+    instead of calling this; this stays for diagnostics and regressions.
+    """
+    video = next((t for t in ir.tracks if t.track.kind == "video"), None)
+    if video is None or not video.items:
+        raise PydanticCustomError("sample-empty-track", "no video interval")
+    items = sorted(video.items, key=lambda i: i.record_span.start_frame)
+    picks = [items[0], items[len(items) // 2], items[-1]]
+    unique: list[TimelineItem0C] = []
+    for pick in picks:
+        if pick not in unique:
+            unique.append(pick)
+    return windows_around_anchors(
+        ir,
+        [pick.record_span.start_frame for pick in unique],
+        limit_seconds,
     )
 
 

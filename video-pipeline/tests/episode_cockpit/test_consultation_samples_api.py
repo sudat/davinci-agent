@@ -25,7 +25,9 @@ from services.compile.sample_projection import (
     project_sample_ir,
     sample_total_seconds,
 )
+from services.contracts.primitives import RecordFrameSpan
 from services.contracts.timeline_ir import TimelineIr0C
+from services.episode_cockpit import sample_observation_server
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.consultation_selection_budget import (
     attempt_for,
@@ -39,7 +41,11 @@ from services.episode_cockpit.sample_identity import (
     sample_dir,
     sample_identity_digest,
 )
-from services.episode_cockpit.sample_journal import record_sample_success
+from services.episode_cockpit.sample_journal import (
+    load_sample_events,
+    record_sample_success,
+)
+from services.media_intelligence.sample_observation import SampleObservationError
 from services.review_command.store import initialize_store
 from services.validate.edit_commit_schema import tuplize
 from tests.episode_cockpit.test_full_authorization_binding import (
@@ -294,3 +300,84 @@ def test_consultation_view_includes_samples(
     samples = consultations[0]["samples"]
     assert len(samples) == 1
     assert samples[0]["sample_id"] == posted.json()["sample_id"]
+
+
+def _payload_without_windows(
+    operation_id: str = "op-auto", consultation_id: str = "c1"
+) -> dict[str, Any]:
+    return {
+        "consultation_id": consultation_id,
+        "judgment_id": "j1",
+        "operation_id": operation_id,
+    }
+
+
+def test_sample_windows_none_uses_injected_observation_path(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """windows=None flows through the observation seam (injected fixtures, no
+    GLM network) and journals the observation record on the reserve line."""
+    episode_id = _create_episode(client, source_folder)
+    episode_dir = _seed_episode(workspace, episode_id)
+    calls: list[str] = []
+    _install_fake_render(monkeypatch, calls)
+
+    observation = json.dumps({"chunks": [{"index": 0}], "insufficient_chunks": []})
+    monkeypatch.setattr(
+        sample_observation_server,
+        "resolve_server_sample_windows",
+        lambda full_ir, root, eid: (
+            [RecordFrameSpan(start_frame=0, end_frame=30)],
+            observation,
+        ),
+    )
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/samples",
+        json=_payload_without_windows(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "published"
+    reserved = [
+        e for e in load_sample_events(episode_dir) if e.event == "sample_reserved"
+    ]
+    assert len(reserved) == 1
+    detail = json.loads(reserved[0].detail or "{}")
+    assert detail["sample_observation"] == observation
+
+
+def test_sample_windows_none_blocked_is_typed_422(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable GLM path fails the request typed — never position sampling."""
+    episode_id = _create_episode(client, source_folder)
+    _seed_episode(workspace, episode_id)
+    calls: list[str] = []
+    _install_fake_render(monkeypatch, calls)
+
+    def blocked(
+        full_ir: Any, root: Path, eid: str,
+    ) -> tuple[list[Any], str]:
+        raise SampleObservationError(
+            "sample-observation-unavailable", "no edit source here"
+        )
+
+    monkeypatch.setattr(
+        sample_observation_server, "resolve_server_sample_windows", blocked
+    )
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/samples",
+        json=_payload_without_windows(operation_id="op-blocked"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "sample-observation-unavailable"
+    assert calls == []

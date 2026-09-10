@@ -105,6 +105,7 @@ from services.episode_cockpit.sample_identity import (
 )
 from services.episode_cockpit.sample_journal import request_sample
 from services.foundation_io import sha256_file
+from services.media_intelligence.sample_observation import SampleObservationError
 from services.review_command.store import load_head
 
 if TYPE_CHECKING:
@@ -1732,11 +1733,18 @@ def consultation_sample_request(
             f"編集の版が読めないため、試し動画を作れませんでした: {error}",
         ) from error
     if request.windows is None:
-        from services.compile.sample_projection import (  # noqa: PLC0415 (lazy pure helper)
-            derive_sample_windows,
+        from services.episode_cockpit.sample_observation_server import (  # noqa: PLC0415 (live observation assembled only on the server-pick path)
+            resolve_server_sample_windows,
         )
-        windows = list(derive_sample_windows(full_ir))
+
+        try:
+            windows, observation = resolve_server_sample_windows(
+                full_ir, episode_dir, episode_id
+            )
+        except SampleObservationError as error:
+            raise CockpitUnprocessableError(error.code, error.detail) from error
     else:
+        observation = None
         windows = list(request.windows)
         if any(window.end_frame <= window.start_frame for window in windows):
             raise CockpitUnprocessableError(
@@ -1766,7 +1774,7 @@ def consultation_sample_request(
         ) from error
     total_seconds = sample_total_seconds(tuple(windows), full_ir.rate)
     ensure_preview_budget_available(episode_dir, limits, total_seconds)
-    outcome = request_sample(episode_dir, identity)
+    outcome = request_sample(episode_dir, identity, observation)
     if outcome["state"] in ("stored", "recovering"):
         manifest: SampleManifestV1 = outcome["manifest"]
         return {
