@@ -56,7 +56,7 @@ describe("ReviewChatPanel（調査状態の感想表示）", () => {
         fetchImpl={fetchImpl as unknown as typeof fetch}
       />,
     );
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "ここ退屈" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -95,7 +95,7 @@ describe("ReviewChatPanel（調査状態の感想表示）", () => {
         fetchImpl={fetchImpl as unknown as typeof fetch}
       />,
     );
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "ここ退屈" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -127,7 +127,7 @@ describe("ReviewChatPanel（調査状態の感想表示）", () => {
         fetchImpl={fetchImpl as unknown as typeof fetch}
       />,
     );
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "ここ退屈" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -162,7 +162,7 @@ describe("ReviewChatPanel（調査状態の感想表示）", () => {
         fetchImpl={fetchImpl as unknown as typeof fetch}
       />,
     );
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "ここ退屈" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));

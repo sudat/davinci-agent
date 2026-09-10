@@ -107,8 +107,8 @@ describe("IntakeForm — チャンネル選択とスタイルのピン留め（�
     render(<IntakeForm fetchImpl={fetchImpl} />);
     await screen.findByTestId("channel-style-current");
 
-    fill("ソースフォルダ", "/tmp/a");
-    fill("この動画は何について？", "テストbrief");
+    fill("撮影素材のフォルダを選ぶ", "/tmp/a");
+    fill("どんな動画にしたいですか？", "テストbrief");
     fireEvent.change(screen.getByTestId("channel-select"), { target: { value: "ch-b" } });
     await waitFor(() =>
       expect(screen.getByTestId("channel-style-current")).toBeVisible(),
@@ -131,8 +131,8 @@ describe("IntakeForm — チャンネル選択とスタイルのピン留め（�
     render(<IntakeForm fetchImpl={fetchImpl} />);
     await screen.findByTestId("channel-style-current");
 
-    fill("ソースフォルダ", "/tmp/a");
-    fill("この動画は何について？", "テストbrief");
+    fill("撮影素材のフォルダを選ぶ", "/tmp/a");
+    fill("どんな動画にしたいですか？", "テストbrief");
     fireEvent.click(screen.getByTestId("create-button"));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/episodes/ep-new"));
@@ -160,18 +160,20 @@ describe("IntakeForm — チャンネル選択とスタイルのピン留め（�
     });
     render(<IntakeForm fetchImpl={fetchImpl} />);
 
+    fireEvent.click(screen.getByText("詳細設定"));
     expect(await screen.findByTestId("channels-fallback")).toBeVisible();
     expect(screen.getByTestId("channels-fallback").textContent).toContain(
       "チャンネル一覧を取得できませんでした",
     );
     expect(screen.getByTestId("channel-select").textContent).toContain("デフォルト");
+    fireEvent.click(screen.getByText("詳しい記録"));
     expect(await screen.findByTestId("channel-style-empty")).toBeVisible();
     expect(screen.getByTestId("channel-style-empty").textContent).toContain(
       "保存されたスタイルはまだありません",
     );
 
-    fill("ソースフォルダ", "/tmp/a");
-    fill("この動画は何について？", "テストbrief");
+    fill("撮影素材のフォルダを選ぶ", "/tmp/a");
+    fill("どんな動画にしたいですか？", "テストbrief");
     fireEvent.click(screen.getByTestId("create-button"));
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/episodes/ep-new"));
     const createCalls = calls.filter((call) => call.url.endsWith("/episodes"));
@@ -222,6 +224,50 @@ describe("IntakeForm — チャンネル選択とスタイルのピン留め（�
     const restoreCalls = calls.filter((call) => call.url.endsWith("/style/restore"));
     expect(restoreCalls).toHaveLength(1);
     expect(JSON.parse(String(restoreCalls[0]!.init.body))).toEqual({ target_version: 1 });
+  });
+
+  it("いつものスタイルを使うは保存済みがあるときだけ出て、付けるとstyle_versionを送る", async () => {
+    const { fetchImpl, calls } = intakeFetch();
+    render(<IntakeForm fetchImpl={fetchImpl} />);
+    await screen.findByTestId("channel-style-current");
+
+    const optIn = screen.getByTestId("style-opt-in") as HTMLInputElement;
+    expect(optIn.checked).toBe(false);
+    fireEvent.click(optIn);
+    expect(optIn.checked).toBe(true);
+
+    fill("撮影素材のフォルダを選ぶ", "/tmp/a");
+    fill("どんな動画にしたいですか？", "テストbrief");
+    fireEvent.click(screen.getByTestId("create-button"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/episodes/ep-new"));
+    const createCalls = calls.filter((call) => call.url.endsWith("/episodes"));
+    expect(JSON.parse(String(createCalls[0]!.init.body))).toEqual({
+      source_folder: "/tmp/a",
+      brief_text: "テストbrief",
+      channel: "ch-a",
+      style_version: 2,
+    });
+  });
+
+  it("保存済みスタイルがなければいつものスタイルを使うは出ない", async () => {
+    const { fetchImpl } = recordingFetch((url) => {
+      if (url.includes("/style")) {
+        return jsonResponse({ channel_id: "default", versions: [], current: null });
+      }
+      if (url.endsWith("/channels")) {
+        return jsonResponse({ channels: [{ channel_id: "default" }] });
+      }
+      return jsonResponse({
+        episode_id: "ep-new",
+        job_id: "ep-new",
+        status: "CREATED",
+        brief_status: "draft",
+      });
+    });
+    render(<IntakeForm fetchImpl={fetchImpl} />);
+    await screen.findByTestId("channel-style-empty");
+    expect(screen.queryByTestId("style-opt-in")).toBeNull();
   });
 });
 

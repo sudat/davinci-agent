@@ -68,7 +68,7 @@ async function sendWith(checkedMaterials: {
       fetchImpl={fetchImpl as unknown as typeof fetch}
     />,
   );
-  fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+  fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
     target: { value: "ここ退屈" },
   });
   fireEvent.click(screen.getByTestId("review-chat-send"));

@@ -42,6 +42,11 @@ const isChoice = (reaction: unknown): reaction is ChoiceReaction =>
 const LONG_BUSY_MS = 30_000;
 const VERY_LONG_BUSY_MS = 120_000;
 
+function formatAtSeconds(value: number): string {
+  const whole = Math.max(0, Math.floor(value));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
 /**
  * Review chat (PRD 13.3): natural-language correction -> structured
  * command preview (echoed drafts, shown verbatim with parsed
@@ -221,22 +226,27 @@ export default function ReviewChatPanel({
 
   return (
     <section className="card" data-testid="review-chat-panel">
-      <h2 className="card-title">修正チャット</h2>
+      <h2 className="card-title">気になるところを伝える</h2>
       <p className="page-subtitle" style={{ marginBottom: "var(--space-3)" }}>
         自然言語で修正を伝えると、構造化コマンドの解釈プレビューを返します。確認して適用すると、影響stageのみの部分rebuildが実行されます。
       </p>
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       <label className="field" htmlFor="review-chat-input">
-        修正指示（自然言語）
+        気になるところを伝える
         <textarea
           id="review-chat-input"
           rows={2}
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="例: この後2秒残して"
+          placeholder="ここだけ少し長く感じます"
           data-testid="review-chat-input"
         />
       </label>
+      {sentAt !== null ? (
+        <p className="field-hint" data-testid="review-at-position">
+          現在位置 {formatAtSeconds(sentAt)}
+        </p>
+      ) : null}
       <div className="actions">
         <button
           type="button"
@@ -292,8 +302,8 @@ export default function ReviewChatPanel({
               {busyAll
                 ? "適用中…"
                 : multi
-                  ? "この修正をすべて適用"
-                  : "この修正を適用"}
+                  ? "この位置を修正する（すべて）"
+                  : "この位置を修正する"}
             </button>
           )}
         </div>

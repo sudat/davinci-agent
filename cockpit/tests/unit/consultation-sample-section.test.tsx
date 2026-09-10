@@ -90,7 +90,7 @@ describe("ConsultationSampleSection（30秒試し動画・全編許可）", () =
       "/consultation/samples/sample-abc123/preview",
     );
     expect(screen.getByTestId("consultation-sample-kind").textContent).toContain(
-      "30秒以内の試し動画",
+      "試し動画（撮影素材から作成）",
     );
   });
 

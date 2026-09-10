@@ -32,7 +32,8 @@ import ConsultationPanel from "@/components/ConsultationPanel";
 import ReviewChatPanel from "@/components/ReviewChatPanel";
 import SelfCheckSection from "@/components/SelfCheckSection";
 import { useNow } from "@/components/useNow";
-import { jobStatusSuffix, formatElapsed } from "@/lib/stageGroups";
+import { jobStatusSuffix, formatElapsed, isConsultationStage } from "@/lib/stageGroups";
+import { currentStage, type EpisodeStep, type StageHint } from "@/lib/stage-steps";
 
 const POLL_INTERVAL_MS = 2000;
 const STALE_AFTER_MS = 15000;
@@ -111,6 +112,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const [addBusy, setAddBusy] = useState(false);
   const [addResult, setAddResult] = useState<string | null>(null);
   const now = useNow(true);
+  const [stageHint, setStageHint] = useState<StageHint | null>(null);
   const openedAtRef = useRef<number | null>(null);
   if (openedAtRef.current === null) openedAtRef.current = Date.now();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -249,8 +251,152 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const probedHash =
     probeObservation?.kind === "probed" ? probeObservation.probe.content_hash : playableHash;
 
-  return (
-    <div>
+  const eligible = status !== null && isConsultationStage(status.current_stage);
+  const step: EpisodeStep = currentStage(stageHint, eligible);
+  const showFlagsNormally =
+    flags !== null && !flags.not_yet_generated && flags.flags.length > 0;
+  const flagsStateLine =
+    flags === null
+      ? "確認中"
+      : flags.not_yet_generated
+        ? "まだ生成されていません"
+        : `${flags.flags.length}件`;
+
+  const footageSlot = (
+    <>
+      <PreviewPlayer
+        episodeId={episodeId}
+        state={playerState}
+        contentHash={probedHash}
+        videoRef={videoRef}
+        output={selectedOutput}
+      />
+      <p className="field-hint" aria-live="polite" data-testid="preview-binding">
+        {previewBindingLine(binding)}
+      </p>
+    </>
+  );
+
+  const previewSection = (heading: string) => (
+    <section className="card">
+      <h2 className="card-title">{heading}</h2>
+      {multiOutput ? (
+        <div data-testid="output-select" role="group" aria-label="出力の切り替え">
+          {(outputScope.outputs ?? []).map((output) => (
+            <button
+              key={output.output_id}
+              type="button"
+              className={output.output_id === selectedOutput ? "btn-primary" : "btn-small"}
+              aria-pressed={output.output_id === selectedOutput}
+              data-testid={`output-option-${output.output_id}`}
+              onClick={() =>
+                output.output_id === "landscape" || output.output_id === "vertical"
+                  ? outputScope.select(output.output_id)
+                  : undefined
+              }
+            >
+              {outputLabel(output.output_id)}
+            </button>
+          ))}
+          <p className="field-hint" data-testid="output-independence-note">
+            横版と縦版の承認は別々です。表示中のプレビュー・再構築は選択中の版にだけ適用されます。
+          </p>
+        </div>
+      ) : null}
+      {outputScope.outputs !== null && !verticalRegistered ? (
+        <div className="actions">
+          <button
+            type="button"
+            className="btn-small"
+            data-testid="output-add"
+            onClick={addVerticalOutput}
+            disabled={addBusy}
+          >
+            {addBusy ? "追加中…" : "縦版を追加する"}
+          </button>
+        </div>
+      ) : null}
+      {addResult !== null ? (
+        <p className="field-hint" aria-live="polite" data-testid="output-add-result">
+          {addResult}
+        </p>
+      ) : null}
+      <PreviewPlayer
+        episodeId={episodeId}
+        state={playerState}
+        contentHash={probedHash}
+        videoRef={videoRef}
+        output={selectedOutput}
+      />
+      <p className="field-hint" aria-live="polite" data-testid="preview-binding">
+        {previewBindingLine(binding)}
+      </p>
+    </section>
+  );
+
+  const detailsBlock = (withStageIds: boolean, withFinishing: boolean) => (
+    <details className="episode-details" data-testid="episode-details">
+      <summary>詳しい記録</summary>
+      <dl className="status-list">
+        <div>
+          <dt>エピソード</dt>
+          <dd className="mono">{episodeId}</dd>
+        </div>
+        <div>
+          <dt>ステータス</dt>
+          {withStageIds ? (
+            <dd data-testid="episode-status">
+              {status !== null
+                ? `${status.status}${
+                    jobStatusSuffix(status.status) !== null
+                      ? `（${jobStatusSuffix(status.status)}）`
+                      : ""
+                  }`
+                : "…"}
+            </dd>
+          ) : (
+            <dd>
+              {status !== null
+                ? `${status.status}${
+                    jobStatusSuffix(status.status) !== null
+                      ? `（${jobStatusSuffix(status.status)}）`
+                      : ""
+                  }`
+                : "…"}
+            </dd>
+          )}
+        </div>
+        <div>
+          <dt>現在のステージ</dt>
+          {withStageIds ? (
+            <dd data-testid="current-stage">
+              {status !== null ? status.current_stage : "…"}
+            </dd>
+          ) : (
+            <dd>{status !== null ? status.current_stage : "…"}</dd>
+          )}
+        </div>
+        <div>
+          <dt>プレビューの対応</dt>
+          <dd>{previewBindingLine(binding)}</dd>
+        </div>
+        <div>
+          <dt>レビューflag</dt>
+          <dd data-testid="episode-flags-state">{flagsStateLine}</dd>
+        </div>
+        {appliedStyleLine !== null ? (
+          <div>
+            <dt>使ったスタイル</dt>
+            <dd>{appliedStyleLine}</dd>
+          </div>
+        ) : null}
+      </dl>
+      {withFinishing ? <FinishingDomainPanel episodeId={episodeId} /> : null}
+    </details>
+  );
+
+  const topNotices = (
+    <>
       <Link href="/new-episode" className="top-link">
         ← 新しいエピソード
       </Link>
@@ -274,70 +420,80 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           </button>
         </div>
       ) : null}
-      <section className="card preview-hero" data-testid="preview-hero">
-        <h2 className="card-title">全編のプレビュー</h2>
-        <div className="hero-grid">
-          <div className="hero-video">
-            <PreviewPlayer
-              episodeId={episodeId}
-              state={playerState}
-              contentHash={probedHash}
-              videoRef={videoRef}
-              output={selectedOutput}
+    </>
+  );
+
+  if (step === "方向") {
+    return (
+      <div>
+        {topNotices}
+        <ConsultationPanel
+          episodeId={episodeId}
+          status={status}
+          footageSlot={footageSlot}
+          onStageHint={setStageHint}
+        />
+        {detailsBlock(true, false)}
+      </div>
+    );
+  }
+
+  if (step === "試し動画") {
+    return (
+      <div>
+        {topNotices}
+        <ConsultationPanel
+          episodeId={episodeId}
+          status={status}
+          onStageHint={setStageHint}
+        />
+        {detailsBlock(true, false)}
+      </div>
+    );
+  }
+
+  if (step === "全編確認") {
+    return (
+      <div>
+        {topNotices}
+        <ConsultationPanel
+          episodeId={episodeId}
+          status={status}
+          onStageHint={setStageHint}
+        />
+        {previewSection("全編の確認用動画")}
+        {showFlagsNormally ? (
+          <section className="card">
+            <h2 className="card-title">レビューflag</h2>
+            <FlagList
+              flags={flags!.flags}
+              notYetGenerated={flags!.not_yet_generated}
+              canSeek={playerState === "available"}
+              onSeek={seekTo}
             />
-            <p className="field-hint" aria-live="polite" data-testid="preview-binding">
-              {previewBindingLine(binding)}
-            </p>
-          </div>
-          <div className="hero-side">
-            {multiOutput ? (
-              <div data-testid="output-select" role="group" aria-label="出力の切り替え">
-                {(outputScope.outputs ?? []).map((output) => (
-                  <button
-                    key={output.output_id}
-                    type="button"
-                    className={output.output_id === selectedOutput ? "btn-primary" : "btn-small"}
-                    aria-pressed={output.output_id === selectedOutput}
-                    data-testid={`output-option-${output.output_id}`}
-                    onClick={() =>
-                      output.output_id === "landscape" || output.output_id === "vertical"
-                        ? outputScope.select(output.output_id)
-                        : undefined
-                    }
-                  >
-                    {outputLabel(output.output_id)}
-                  </button>
-                ))}
-                <p className="field-hint" data-testid="output-independence-note">
-                  横版と縦版の承認は別々です。表示中のプレビュー・再構築は選択中の版にだけ適用されます。
-                </p>
-              </div>
-            ) : null}
-            {outputScope.outputs !== null && !verticalRegistered ? (
-              <div className="actions">
-                <button
-                  type="button"
-                  className="btn-small"
-                  data-testid="output-add"
-                  onClick={addVerticalOutput}
-                  disabled={addBusy}
-                >
-                  {addBusy ? "追加中…" : "縦版を追加する"}
-                </button>
-              </div>
-            ) : null}
-            {addResult !== null ? (
-              <p className="field-hint" aria-live="polite" data-testid="output-add-result">
-                {addResult}
-              </p>
-            ) : null}
-            <p className="field-hint" data-testid="preview-trial-pointer">
-              採用した方針がある場合、短い試し動画は下の「編集の方針相談」の中の「30秒以内の試し動画」に表示されます。
-            </p>
-          </div>
-        </div>
-      </section>
-      <ConsultationPanel episodeId={episodeId} status={status} />
+          </section>
+        ) : null}
+        <ReviewChatPanel
+          episodeId={episodeId}
+          getAtSeconds={() => videoRef.current?.currentTime ?? null}
+          status={status}
+          previewOk={previewOk}
+          outputId={selectedOutput}
+        />
+        <FinishingDomainPanel episodeId={episodeId} summaryOnly />
+        <SelfCheckSection
+          episodeId={episodeId}
+          status={status}
+          beforeAfter={<BeforeAfterSummary summary={status?.before_after ?? null} />}
+        />
+        {detailsBlock(false, true)}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {topNotices}
       <section className="card">
         <h2 className="card-title">進捗</h2>
         <dl className="status-list">
@@ -378,6 +534,8 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         )}
       </section>
       <FinishingDomainPanel episodeId={episodeId} />
+      <ConsultationPanel episodeId={episodeId} status={status} onStageHint={setStageHint} />
+      {previewSection("全編の確認用動画")}
       <section className="card">
         <h2 className="card-title">レビューflag</h2>
         {flags !== null ? (
@@ -400,6 +558,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       />
       <BeforeAfterSummary summary={status?.before_after ?? null} />
       <SelfCheckSection episodeId={episodeId} status={status} />
+      {detailsBlock(false, false)}
     </div>
   );
 }

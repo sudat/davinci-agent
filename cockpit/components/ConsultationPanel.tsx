@@ -8,6 +8,7 @@
 // render would separate the U44 reload-restore behavior from the state
 // that produces it.
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   apiFailure,
   CockpitApiError,
@@ -22,18 +23,21 @@ import {
   type ConsultationGenerationPanel,
   type ConsultationGenerationState,
   type ConsultationJudgmentInput,
-  type ConsultationPayload,  type ConsultationRebuild,
+  type ConsultationPayload,
+  type ConsultationRebuild,
   type EpisodeStatus,
 } from "@/lib/api";
 import ConsultationBudgetReadout, {
   latestBudgetOf,
 } from "@/components/ConsultationBudgetReadout";
 import ConsultationEntryList from "@/components/ConsultationEntryList";
-import { scopeSummary } from "@/components/ConsultationJudgmentForm";
-import ConsultationSampleSection from "@/components/ConsultationSampleSection";
+import ConsultationSampleSection, {
+  type SampleFeedback,
+} from "@/components/ConsultationSampleSection";
 import StyleSaveButton from "@/components/StyleSaveButton";
 import ErrorNotice from "@/components/ErrorNotice";
 import { isConsultationStage } from "@/lib/stageGroups";
+import type { StageHint } from "@/lib/stage-steps";
 import { useNow } from "@/components/useNow";
 
 const POLL_INTERVAL_MS = 2000;
@@ -43,7 +47,26 @@ type ConsultationPanelProps = {
   episodeId: string;
   status: EpisodeStatus | null;
   fetchImpl?: typeof fetch;
+  /** 方向画面の左に置く撮影素材プレイヤー（EpisodeViewのPreviewPlayer）。 */
+  footageSlot?: ReactNode;
+  onStageHint?: (hint: StageHint) => void;
 };
+
+/** 採用した方針の2〜3行要約。構成・テンポ・字幕・音のうち実際に入って
+ *  いる内容だけを抜く（空欄は出さない）。 */
+export function adoptedSummaryLinesOf(
+  adopted: ConsultationAdoptedPolicy | null | undefined,
+): string[] {
+  if (adopted === null || adopted === undefined) return [];
+  return [adopted.tempo_policy, adopted.structure, adopted.subtitle_policy, adopted.audio_policy]
+    .filter((line): line is string => typeof line === "string" && line.trim() !== "")
+    .slice(0, 3);
+}
+
+function isFullAuthorizedEntry(entry: ConsultationEntry): boolean {
+  if (isPolicyOutcomeEntry(entry)) return false;
+  return entry.judgments.some((judgment) => judgment.decision === "full_authorized");
+}
 
 function isConsultationPayload(value: unknown): value is ConsultationPayload {
   if (typeof value !== "object" || value === null) return false;
@@ -131,55 +154,6 @@ function refusedReasonOf(state: ConsultationGenerationState | null): string | nu
   return typeof reason === "string" && reason !== "" ? reason : null;
 }
 
-function adoptedDirectionLines(adopted: ConsultationAdoptedPolicy): string[] {
-  const lines: string[] = [`範囲：${scopeSummary(adopted.scope)}`];
-  if (adopted.structure !== "") lines.push(`構成：${adopted.structure}`);
-  if (adopted.audience_message !== "") lines.push(`伝えたいこと：${adopted.audience_message}`);
-  return lines.slice(0, 3);
-}
-
-function adoptedRecordEntries(adopted: ConsultationAdoptedPolicy): Array<[string, string]> {
-  const entries: Array<[string, string]> = [];
-  if (adopted.duration_estimate !== "") entries.push(["尺のめやす", adopted.duration_estimate]);
-  if (adopted.candidate_scenes.length > 0) entries.push(["候補シーン", adopted.candidate_scenes.join("、")]);
-  if (adopted.subtitle_policy !== "") entries.push(["字幕の方針", adopted.subtitle_policy]);
-  if (adopted.audio_policy !== "") entries.push(["音声の方針", adopted.audio_policy]);
-  if (adopted.tempo_policy !== "") entries.push(["テンポの方針", adopted.tempo_policy]);
-  if (adopted.reference_mapping !== "") entries.push(["いつもの作りとの対応", adopted.reference_mapping]);
-  if (adopted.unused_reasons !== "") entries.push(["使わなかった候補と理由", adopted.unused_reasons]);
-  if (adopted.unconfirmed.length > 0) entries.push(["確認できていないこと", adopted.unconfirmed.join("、")]);
-  if (adopted.note !== "") entries.push(["メモ", adopted.note]);
-  return entries;
-}
-
-function AdoptedDirection({ adopted }: { adopted: ConsultationAdoptedPolicy }) {
-  const lines = adoptedDirectionLines(adopted);
-  const record = adoptedRecordEntries(adopted);
-  return (
-    <section data-testid="consultation-adopted-direction">
-      <h3 className="section-title">採用した方向</h3>
-      <ul className="list-plain">
-        {lines.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-      {record.length > 0 ? (
-        <details data-testid="consultation-adopted-record">
-          <summary>詳しい記録</summary>
-          <dl className="status-list">
-            {record.map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </details>
-      ) : null}
-    </section>
-  );
-}
-
 /**
  * Pre-edit directional consultation (UX 2.5 slice-1): mounted by
  * EpisodeView, visible only while current_stage is in the plan-committed
@@ -196,8 +170,11 @@ export default function ConsultationPanel({
   episodeId,
   status,
   fetchImpl,
+  footageSlot = null,
+  onStageHint,
 }: ConsultationPanelProps) {
   const [payload, setPayload] = useState<ConsultationPayload | null>(null);
+  const [hasPublishedSample, setHasPublishedSample] = useState(false);
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -491,25 +468,55 @@ export default function ConsultationPanel({
     })();
   };
 
+  const quickAdopt = (consultationId: string, proposalId: string) => {
+    submitJudgment({
+      consultation_id: consultationId,
+      proposal_id: proposalId,
+      decision: "adopt",
+      scope: { composition: true, appearance: true, audio: true },
+      note: null,
+    });
+  };
+
+  const adopted = payload?.policy?.adopted ?? null;
+  const adoptedSummary = adoptedSummaryLinesOf(adopted);
+  const fullAuthorized =
+    payload?.consultations.some(isFullAuthorizedEntry) ?? false;
+  const messageEntries =
+    payload?.consultations.filter((entry) => !isPolicyOutcomeEntry(entry)) ?? [];
+  const hasConsultation = messageEntries.length > 0;
+
+  useEffect(() => {
+    onStageHint?.({
+      hasConsultation,
+      adopted: adopted !== null,
+      hasPublishedSample,
+      fullAuthorized,
+    });
+  }, [onStageHint, hasConsultation, adopted, hasPublishedSample, fullAuthorized]);
+
   if (!eligible || notFound) return null;
 
   const budgetExhausted = error?.code === "consultation-budget-exhausted";
   const llmUnavailable = error?.code === "consultation-llm-unavailable";
   const latestBudget = latestBudgetOf(payload);
+  const budgetRemaining =
+    latestBudget !== null
+      ? latestBudget.llm_calls_limit - latestBudget.llm_calls_used
+      : null;
+  const budgetNearLimit =
+    budgetRemaining !== null &&
+    budgetRemaining >= 0 &&
+    budgetRemaining <= 2 &&
+    !budgetExhausted;
   const rebuildLine = rebuildLineOf(payload?.rebuild);
-  const rebuildFailed = payload?.rebuild?.status === "failed";
-  const adopted = payload?.policy?.adopted ?? null;
   const generationState = generationStateOf(payload);
   const refusedReason = refusedReasonOf(generationState);
   const generationRemaining =
     latestBudget !== null ? latestBudget.llm_calls_limit - latestBudget.llm_calls_used : null;
 
-  return (
-    <section className="card" data-testid="consultation-panel">
-      <h2 className="card-title">編集の方針相談</h2>
-      <p className="page-subtitle" style={{ marginBottom: "var(--space-3)" }}>
-        編集を始める前に、このエピソードの方針を文章で相談できます。届いた提案を確認して、1件ずつ判断を記録してください。
-      </p>
+  const noticeBlock = (
+    <>
       {budgetExhausted ? (
         <div className="error-notice" role="alert" data-testid="consultation-budget-exhausted">
           <p>このエピソードの相談回数が上限に達しました。</p>
@@ -537,17 +544,111 @@ export default function ConsultationPanel({
           </button>
         </div>
       ) : null}
-      {latestBudget !== null ? (
-        <ConsultationBudgetReadout budget={latestBudget} degraded={budgetExhausted} />
+    </>
+  );
+
+  const budgetBlock = (
+    <>
+      {budgetNearLimit ? (
+        <p className="field-hint" data-testid="consultation-budget-warning">
+          この動画で試せる回数が残り少なくなっています（残り{budgetRemaining}回）
+        </p>
       ) : null}
+      {latestBudget !== null && budgetNearLimit ? (
+        <details data-testid="consultation-budget-details">
+          <summary>利用状況の詳細</summary>
+          <ConsultationBudgetReadout budget={latestBudget} degraded={budgetExhausted} />
+        </details>
+      ) : null}
+    </>
+  );
+
+  const generationBlock = (
+    <div data-testid="generation-permission">
+      <button
+        type="button"
+        className="btn-small"
+        aria-expanded={generationOpen}
+        onClick={() => setGenerationOpen((prev) => !prev)}
+        data-testid="generation-section-toggle"
+      >
+        画像で雰囲気を見る
+      </button>
+      {generationOpen ? (
+        <div>
+          <p className="field-hint">
+            画像の案は見本であり、試し編集ではありません。作らなくても相談は続けられます。
+          </p>
+          {latestBudget !== null && generationRemaining !== null ? (
+            <p className="field-hint" data-testid="generation-budget-remaining">
+              画像の案に使える残り（AIの呼び出し回数の残り）: {generationRemaining} /{" "}
+              {latestBudget.llm_calls_limit}回（パネル数 {panelsMax}枚まで）
+            </p>
+          ) : (
+            <p className="field-hint" data-testid="generation-budget-remaining">
+              画像の案に使える残りはまだ分かりません（相談の記録がありません）
+            </p>
+          )}
+          <div className="inline-row" role="group" aria-label="画像の案の枚数">
+            <span className="field-hint">パネル数:</span>
+            {[1, 2, 3].map((count) => (
+              <label key={count}>
+                <input
+                  type="radio"
+                  name="generation-panels-max"
+                  checked={panelsMax === count}
+                  onChange={() => setPanelsMax(count)}
+                  data-testid={`generation-panels-${count}`}
+                />
+                {count}枚
+              </label>
+            ))}
+          </div>
+          {refusedReason !== null ? (
+            <p className="field-hint" data-testid="consultation-generation-refused">
+              画像の案は作れませんでした：{refusedReason}。0生成で続行します（文章のみの相談は続けられます）
+            </p>
+          ) : null}
+          {generationError !== null ? (
+            <div className="error-notice" role="alert" data-testid="consultation-generation-error">
+              <p>{generationErrorLineOf(generationError.code)}</p>
+              <p className="field-hint">（{generationError.code}）送り直しても回復しない場合は文章のみで続けられます。</p>
+            </div>
+          ) : null}
+          <div className="actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => void sendWithGeneration()}
+              disabled={busy || message.trim() === ""}
+              data-testid="generation-request"
+            >
+              {busy ? "送信中…" : "許可して依頼"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void sendDecline()}
+              disabled={busy || message.trim() === ""}
+              data-testid="generation-decline"
+            >
+              生成しない（見本だけ）
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const messageBlock = (
+    <>
       <label className="field" htmlFor="consultation-message-input">
-        相談の内容
+        {hasConsultation ? "少し変えたい" : "どんな雰囲気にしたいですか？"}
         <textarea
           id="consultation-message-input"
           rows={3}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder="例: 普段の作りみたいに、冒頭は引きの映像から見せたい"
+          placeholder="例: Aを基本に、Bの書体を使いたい"
           data-testid="consultation-message-input"
         />
       </label>
@@ -559,132 +660,136 @@ export default function ConsultationPanel({
           disabled={busy || message.trim() === ""}
           data-testid="consultation-send"
         >
-          {busy ? "送信中…" : "送信"}
+          {busy ? "送信中…" : "希望を伝える"}
         </button>
       </div>
       <p className="field-hint">提案が届くまで時間がかかります。届けば自動で表示されます。</p>
-      {payload?.policy?.adopted !== null && payload?.policy?.adopted !== undefined ? (
-        <ConsultationSampleSection
-          episodeId={episodeId}
-          consultationId={payload.policy.adopted.consultation_id}
-          judgmentId={payload.policy.adopted.judgment_id}
-          scope={payload.policy.adopted.scope}
-          fetchImpl={fetchImpl}
-          onView={absorbView}
-        />
+    </>
+  );
+
+  const liveBlock = (
+    <div aria-live="polite">
+      {announcement !== null ? (
+        <p className="field-hint" data-testid="consultation-announcement">
+          {announcement}
+        </p>
       ) : null}
-      <div data-testid="generation-permission">
-        <button
-          type="button"
-          className="btn-small"
-          aria-expanded={generationOpen}
-          onClick={() => setGenerationOpen((prev) => !prev)}
-          data-testid="generation-section-toggle"
-        >
-          画像の案を作る（任意）
-        </button>
-        {generationOpen ? (
-          <div>
-            <p className="field-hint">
-              画像の案は見本であり、試し編集ではありません。作らなくても相談は続けられます。
-            </p>
-            {latestBudget !== null && generationRemaining !== null ? (
-              <p className="field-hint" data-testid="generation-budget-remaining">
-                画像の案に使える残り（AIの呼び出し回数の残り）: {generationRemaining} /{" "}
-                {latestBudget.llm_calls_limit}回（パネル数 {panelsMax}枚まで）
-              </p>
-            ) : (
-              <p className="field-hint" data-testid="generation-budget-remaining">
-                画像の案に使える残りはまだ分かりません（相談の記録がありません）
-              </p>
-            )}
-            <div className="inline-row" role="group" aria-label="画像の案の枚数">
-              <span className="field-hint">パネル数:</span>
-              {[1, 2, 3].map((count) => (
-                <label key={count}>
-                  <input
-                    type="radio"
-                    name="generation-panels-max"
-                    checked={panelsMax === count}
-                    onChange={() => setPanelsMax(count)}
-                    data-testid={`generation-panels-${count}`}
-                  />
-                  {count}枚
-                </label>
-              ))}
-            </div>
-            {refusedReason !== null ? (
-              <p className="field-hint" data-testid="consultation-generation-refused">
-                画像の案は作れませんでした：{refusedReason}。0生成で続行します（文章のみの相談は続けられます）
-              </p>
-            ) : null}
-            {generationError !== null ? (
-              <div className="error-notice" role="alert" data-testid="consultation-generation-error">
-                <p>{generationErrorLineOf(generationError.code)}</p>
-                <p className="field-hint">（{generationError.code}）送り直しても回復しない場合は文章のみで続けられます。</p>
-              </div>
-            ) : null}
-            <div className="actions">
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => void sendWithGeneration()}
-                disabled={busy || message.trim() === ""}
-                data-testid="generation-request"
-              >
-                {busy ? "送信中…" : "許可して依頼"}
-              </button>
-              <button
-                type="button"
-                onClick={() => void sendDecline()}
-                disabled={busy || message.trim() === ""}
-                data-testid="generation-decline"
-              >
-                生成しない（見本だけ）
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-      <div aria-live="polite">
-        {announcement !== null ? (
-          <p className="field-hint" data-testid="consultation-announcement">
-            {announcement}
-          </p>
-        ) : null}
-        {rebuildLine !== null ? (
-          rebuildFailed ? (
-            <p className="field-hint" data-testid="consultation-rebuild-state">
-              {rebuildLine}
-            </p>
-          ) : (
-            <details data-testid="consultation-rebuild-record">
-              <summary>詳しい記録</summary>
-              <p className="field-hint" data-testid="consultation-rebuild-state">
-                {rebuildLine}
-              </p>
-            </details>
-          )
-        ) : null}
-      </div>
-      {adopted !== null && adopted !== undefined ? (
-        <AdoptedDirection adopted={adopted} />
+      {rebuildLine !== null ? (
+        <p className="field-hint" data-testid="consultation-rebuild-state">
+          {rebuildLine}
+        </p>
       ) : null}
+    </div>
+  );
+
+  const journalDetails = (
+    <details data-testid="consultation-journal-details">
+      <summary>相談の記録</summary>
       <ConsultationEntryList
         payload={payload}
         busy={busy}
         episodeId={episodeId}
         onJudgment={submitJudgment}
         onPanelRetry={sendPanelRetry}
+        interactive={false}
       />
-      {payload?.policy?.adopted !== null && payload?.policy?.adopted !== undefined ? (
-        <StyleSaveButton
-          episodeId={episodeId}
-          adopted={payload.policy.adopted}
-          channelId={appliedChannelOf(status)}
-          fetchImpl={fetchImpl}
-        />
-      ) : null}
+    </details>
+  );
+
+  const feedback: SampleFeedback = {
+    text: message,
+    busy,
+    onChange: setMessage,
+    onSubmit: () => {
+      void send();
+    },
+  };
+
+  const sampleBlock =
+    adopted !== null ? (
+      <ConsultationSampleSection
+        episodeId={episodeId}
+        consultationId={adopted.consultation_id}
+        judgmentId={adopted.judgment_id}
+        scope={adopted.scope}
+        fetchImpl={fetchImpl}
+        onView={absorbView}
+        adoptedSummary={adoptedSummary}
+        feedback={feedback}
+        onSamplesChange={({ hasPublished }: { hasPublished: boolean }) =>
+          setHasPublishedSample(hasPublished)
+        }
+      />
+    ) : null;
+
+  const styleSaveBlock =
+    adopted !== null ? (
+      <StyleSaveButton
+        episodeId={episodeId}
+        adopted={adopted}
+        channelId={appliedChannelOf(status)}
+        fetchImpl={fetchImpl}
+      />
+    ) : null;
+
+  if (fullAuthorized) {
+    return (
+      <section className="card" data-testid="consultation-panel">
+        <h2 className="card-title">採用した方針</h2>
+        {adoptedSummary.map((line, index) => (
+          <p key={index}>{line}</p>
+        ))}
+        {noticeBlock}
+        {journalDetails}
+      </section>
+    );
+  }
+
+  if (adopted !== null && hasPublishedSample) {
+    return (
+      <section className="card" data-testid="consultation-panel">
+        <h2 className="card-title">試し動画を確認する</h2>
+        {noticeBlock}
+        {sampleBlock}
+        {liveBlock}
+        {styleSaveBlock}
+        {journalDetails}
+        {budgetBlock}
+      </section>
+    );
+  }
+
+  return (
+    <section className="card direction-stage" data-testid="consultation-panel">
+      <h2 className="card-title">編集の方向を決める</h2>
+      <p className="page-subtitle">
+        やりたいイメージを教えてください。提案の中から選ぶか、言葉で直してください。
+      </p>
+      {noticeBlock}
+      <div className="direction-grid">
+        {footageSlot !== null ? (
+          <div className="direction-footage">
+            <p className="footage-badge">撮影素材の見本</p>
+            {footageSlot}
+          </div>
+        ) : null}
+        <div className="direction-chat">
+          <ConsultationEntryList
+            payload={payload}
+            busy={busy}
+            episodeId={episodeId}
+            onJudgment={submitJudgment}
+            onPanelRetry={sendPanelRetry}
+            onQuickAdopt={quickAdopt}
+          />
+          {messageBlock}
+          {generationBlock}
+        </div>
+      </div>
+      {liveBlock}
+      {sampleBlock}
+      {styleSaveBlock}
+      {budgetBlock}
     </section>
   );
 }

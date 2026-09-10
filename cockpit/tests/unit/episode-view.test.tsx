@@ -64,15 +64,14 @@ describe("EpisodeView — 計測裏付けのない実際のpayload形状（task-
 
     render(<EpisodeView episodeId="ep-unit01" />);
 
-    expect(await screen.findByTestId("episode-status")).toHaveTextContent("CREATED");
-    expect(screen.getByTestId("current-stage")).toHaveTextContent("intake");
+    expect(await screen.findByTestId("consultation-send")).toBeVisible();
+    expect(screen.queryByTestId("consultation-sample")).toBeNull();
     await waitFor(() =>
       expect(screen.getByTestId("preview-pending")).toBeVisible(),
     );
     expect(screen.getByTestId("preview-binding").textContent).toBe(
       "試し編集はまだ生成されていません",
     );
-    expect(screen.getByTestId("flags-empty")).toBeVisible();
     expect(screen.queryByTestId("eta")).toBeNull();
     expect(screen.queryByTestId("before-after")).toBeNull();
     expect(screen.queryByTestId("preview-player")).toBeNull();

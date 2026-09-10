@@ -90,7 +90,7 @@ async function sendAndAssertBusy(): Promise<void> {
   render(
     <ReviewChatPanel episodeId="ep-busy01" getAtSeconds={() => null} status={status} />,
   );
-  fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+  fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
     target: { value: "この後2秒残して" },
   });
   fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -131,7 +131,7 @@ describe("ReviewChatPanel — 送信中ラベルと長時間注意", () => {
     render(
       <ReviewChatPanel episodeId="ep-busy01" getAtSeconds={() => null} status={status} />,
     );
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -163,7 +163,7 @@ describe("ReviewChatPanel — 送信中ラベルと長時間注意", () => {
     render(
       <ReviewChatPanel episodeId="ep-busy01" getAtSeconds={() => null} status={status} />,
     );
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));

@@ -182,7 +182,7 @@ test.describe("live real-chain episode", () => {
 
     // Regex path (deterministic interpreter): explicit 0:02 timestamp +
     // remove_section phrasing → fully determined draft, no LLM involved.
-    await page.getByLabel("修正指示（自然言語）").fill("0:02の区間を削除して");
+    await page.getByLabel("気になるところを伝える").fill("0:02の区間を削除して");
     await page.getByTestId("review-chat-send").click();
 
     await expect(page.getByTestId("review-draft")).toBeVisible({ timeout: 15_000 });

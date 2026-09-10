@@ -46,11 +46,11 @@ test("intake → Create → episode status view (backend receives POST)", async 
   const createButton = page.getByTestId("create-button");
   await expect(createButton).toBeDisabled();
 
-  const brief = page.getByLabel("この動画は何について？");
+  const brief = page.getByLabel("どんな動画にしたいですか？");
   await brief.fill("e2eテスト: コックピットintakeからのbrief");
   await expect(createButton).toBeDisabled();
 
-  const source = page.getByLabel("ソースフォルダ");
+  const source = page.getByLabel("撮影素材のフォルダを選ぶ");
   await source.fill("   ");
   await expect(createButton).toBeDisabled();
 
@@ -98,10 +98,10 @@ test("empty source keeps Create disabled (malformed input)", async ({ page }) =>
   const createButton = page.getByTestId("create-button");
   await expect(createButton).toBeDisabled();
 
-  await page.getByLabel("この動画は何について？").fill("briefだけある状態");
+  await page.getByLabel("どんな動画にしたいですか？").fill("briefだけある状態");
   await expect(createButton).toBeDisabled();
 
-  await page.getByLabel("ソースフォルダ").fill(" ");
+  await page.getByLabel("撮影素材のフォルダを選ぶ").fill(" ");
   await expect(createButton).toBeDisabled();
 
   // 高度な設定は初期折りたたみ
@@ -116,9 +116,9 @@ test("backend structured error is displayed on the intake form", async ({ page }
 
   await page.goto("/new-episode");
   await page
-    .getByLabel("ソースフォルダ")
+    .getByLabel("撮影素材のフォルダを選ぶ")
     .fill(`/nonexistent/cockpit-e2e-${Date.now()}`);
-  await page.getByLabel("この動画は何について？").fill("存在しないフォルダでの検証");
+  await page.getByLabel("どんな動画にしたいですか？").fill("存在しないフォルダでの検証");
   await page.getByTestId("create-button").click();
 
   const alert = page.getByTestId("error-notice");

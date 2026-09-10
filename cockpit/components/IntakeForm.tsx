@@ -183,6 +183,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
   };
 
   const currentName = style !== null ? currentNameOf(style) : null;
+  const hasSavedStyle = style !== null && style.current !== null;
 
   return (
     <form
@@ -197,24 +198,6 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
 
       <section className="card">
         <div className="field">
-          <label htmlFor="source-folder">ソースフォルダ</label>
-          <input
-            ref={sourceInputRef}
-            id="source-folder"
-            name="source_folder"
-            type="text"
-            placeholder="/Volumes/Camera/2026-08-20_shoot"
-            value={sourceFolder}
-            onChange={(event) => setSourceFolder(event.target.value)}
-            aria-describedby="source-folder-hint"
-          />
-          {fieldErrors.sourceFolder !== undefined ? (
-            <p className="field-error">{fieldErrors.sourceFolder}</p>
-          ) : (
-            <p className="field-hint" id="source-folder-hint">
-              素材フォルダのローカルパス
-            </p>
-          )}
           <div
             className={`dropzone${dropActive ? " is-over" : ""}`}
             data-testid="source-dropzone"
@@ -225,16 +208,35 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
             onDragLeave={() => setDropActive(false)}
             onDrop={onDrop}
           >
-            フォルダのパスをここにドロップ、または上に入力してください
+            <p className="dropzone-title">
+              <label htmlFor="source-folder">撮影素材のフォルダを選ぶ</label>
+            </p>
+            <input
+              ref={sourceInputRef}
+              id="source-folder"
+              name="source_folder"
+              type="text"
+              placeholder="/Volumes/Camera/2026-08-20_shoot"
+              value={sourceFolder}
+              onChange={(event) => setSourceFolder(event.target.value)}
+              aria-describedby="source-folder-hint"
+            />
+            {fieldErrors.sourceFolder !== undefined ? (
+              <p className="field-error">{fieldErrors.sourceFolder}</p>
+            ) : (
+              <p className="field-hint" id="source-folder-hint">
+                フォルダをここにドラッグ＆ドロップしても選択できます
+              </p>
+            )}
           </div>
         </div>
 
         <div className="field">
-          <label htmlFor="brief-text">この動画は何について？</label>
+          <label htmlFor="brief-text">どんな動画にしたいですか？</label>
           <textarea
             id="brief-text"
             name="brief_text"
-            placeholder="例: 台所の収納を改善する回。Before/Afterを見せて、コストと手間の内訳を最後にまとめる。"
+            placeholder="みなとみらいを落ち着いた雰囲気で紹介したい"
             value={briefText}
             onChange={(event) => setBriefText(event.target.value)}
           />
@@ -245,127 +247,155 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
           )}
         </div>
 
-        <div className="field">
-          <label htmlFor="target-length">目標尺</label>
-          <select
-            id="target-length"
-            name="target_length"
-            value={targetLengthMode}
-            onChange={(event) => setTargetLengthMode(event.target.value)}
-          >
-            <option value="auto">自動</option>
-            <option value="custom">指定（高度な設定で範囲入力）</option>
-          </select>
-        </div>
-
-        <div className="field">
-          <label htmlFor="channel-profile">チャンネルプロファイル</label>
-          <select
-            id="channel-profile"
-            name="channel_profile"
-            value={channelProfile}
-            disabled={channels === null}
-            onChange={(event) => {
-              setChannelProfile(event.target.value);
-              setChannelExplicit(true);
-            }}
-            data-testid="channel-select"
-          >
-            {channels === null ? (
-              <option value="default">読み込み中…</option>
-            ) : (
-              channels.map((id) => (
-                <option key={id} value={id}>
-                  {id === "default" ? "デフォルト" : id}
-                </option>
-              ))
-            )}
-          </select>
-          {channelsFailed || (channelsEmpty && !channelExplicit) ? (
-            <p className="field-hint" data-testid="channels-fallback">
-              {channelsFailed
-                ? "チャンネル一覧を取得できませんでした。デフォルトで作成します"
-                : "登録されているチャンネルがありません。デフォルトで作成します"}
+        {hasSavedStyle ? (
+          <div className="field">
+            <label>
+              <input
+                type="checkbox"
+                checked={channelExplicit}
+                onChange={(event) => setChannelExplicit(event.target.checked)}
+                data-testid="style-opt-in"
+              />{" "}
+              いつものスタイルを使う
+            </label>
+            <p className="field-hint" data-testid="channel-style-current">
+              {currentName !== null
+                ? `使われるスタイル: ${currentName}（版${style.current}）`
+                : `使われるスタイル: 版${style.current}`}
             </p>
-          ) : null}
-        </div>
-
-        {channels !== null ? (
-          <div className="field" data-testid="channel-style-area">
-            {style === null && !styleFailed ? (
-              <p className="field-hint">スタイルを確認しています…</p>
-            ) : null}
-            {styleFailed ? (
-              <p className="field-hint" data-testid="style-unavailable">
-                スタイルを確認できませんでした
-              </p>
-            ) : null}
-            {style !== null && style.current !== null ? (
-              <p className="field-hint" data-testid="channel-style-current">
-                {currentName !== null
-                  ? `使われるスタイル: ${currentName}（版${style.current}）`
-                  : `使われるスタイル: 版${style.current}`}
-              </p>
-            ) : null}
-            {style !== null && style.current === null ? (
-              <p className="field-hint" data-testid="channel-style-empty">
-                このチャンネルに保存されたスタイルはまだありません
-              </p>
-            ) : null}
-            {style !== null && style.versions.length > 1 ? (
-              <div>
-                <p className="field-hint">
-                  以前の版に戻せます（押したときだけ保存されます）。
-                </p>
-                <ul className="list-plain">
-                  {style.versions.map((entry) => (
-                    <li
-                      key={entry.version}
-                      data-testid={`style-version-${entry.version}`}
-                    >
-                      版{entry.version} {entry.name}（{entry.saved_at}）
-                      {entry.version !== style.current ? (
-                        <button
-                          type="button"
-                          className="btn-small"
-                          disabled={restoring !== null}
-                          onClick={() => restoreTo(entry.version)}
-                          data-testid={`style-restore-${entry.version}`}
-                        >
-                          この版に戻す
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-                {restored !== null ? (
-                  <p className="field-hint" data-testid="style-restored">
-                    版{restored.target}の内容で新版{restored.version}として保存しました
-                  </p>
-                ) : null}
-                {restoreError !== null ? (
-                  <p className="field-error" data-testid="style-restore-error">
-                    {restoreError.code}: {restoreError.detail}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         ) : null}
-
-        <div className="field">
-          <label htmlFor="reference-input">任意の参照</label>
-          <ReferenceList
-            items={references}
-            onAdd={(value) => setReferences((prev) => [...prev, value])}
-            onRemove={(index) =>
-              setReferences((prev) => prev.filter((_, i) => i !== index))
-            }
-          />
-        </div>
       </section>
 
+      <details className="advanced" data-testid="reference-collapse">
+        <summary>参考動画</summary>
+        <div className="advanced-body">
+          <div className="field">
+            <label htmlFor="reference-input">参考動画の追加（任意）</label>
+            <ReferenceList
+              items={references}
+              onAdd={(value) => setReferences((prev) => [...prev, value])}
+              onRemove={(index) =>
+                setReferences((prev) => prev.filter((_, i) => i !== index))
+              }
+            />
+          </div>
+        </div>
+      </details>
+
+      <details className="advanced" data-testid="detail-settings">
+        <summary>詳細設定</summary>
+        <div className="advanced-body">
+          <div className="field">
+            <label htmlFor="target-length">目標尺</label>
+            <select
+              id="target-length"
+              name="target_length"
+              value={targetLengthMode}
+              onChange={(event) => setTargetLengthMode(event.target.value)}
+            >
+              <option value="auto">自動</option>
+              <option value="custom">指定（高度な設定で範囲入力）</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="channel-profile">チャンネルプロファイル</label>
+            <select
+              id="channel-profile"
+              name="channel_profile"
+              value={channelProfile}
+              disabled={channels === null}
+              onChange={(event) => {
+                setChannelProfile(event.target.value);
+                setChannelExplicit(true);
+              }}
+              data-testid="channel-select"
+            >
+              {channels === null ? (
+                <option value="default">読み込み中…</option>
+              ) : (
+                channels.map((id) => (
+                  <option key={id} value={id}>
+                    {id === "default" ? "デフォルト" : id}
+                  </option>
+                ))
+              )}
+            </select>
+            {channelsFailed || (channelsEmpty && !channelExplicit) ? (
+              <p className="field-hint" data-testid="channels-fallback">
+                {channelsFailed
+                  ? "チャンネル一覧を取得できませんでした。デフォルトで作成します"
+                  : "登録されているチャンネルがありません。デフォルトで作成します"}
+              </p>
+            ) : null}
+          </div>
+
+          {channels !== null && !hasSavedStyle && !styleFailed ? (
+            <div className="field">
+              {style === null ? (
+                <p className="field-hint">スタイルを確認しています…</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </details>
+
       <AdvancedSection />
+
+      <section id="details" className="card">
+        <details data-testid="intake-record">
+          <summary>詳しい記録</summary>
+          {style !== null && style.versions.length > 1 ? (
+            <div>
+              <p className="field-hint">
+                以前の版に戻せます（押したときだけ保存されます）。
+              </p>
+              <ul className="list-plain">
+                {style.versions.map((entry) => (
+                  <li
+                    key={entry.version}
+                    data-testid={`style-version-${entry.version}`}
+                  >
+                    版{entry.version} {entry.name}（{entry.saved_at}）
+                    {entry.version !== style.current ? (
+                      <button
+                        type="button"
+                        className="btn-small"
+                        disabled={restoring !== null}
+                        onClick={() => restoreTo(entry.version)}
+                        data-testid={`style-restore-${entry.version}`}
+                      >
+                        この版に戻す
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {restored !== null ? (
+                <p className="field-hint" data-testid="style-restored">
+                  版{restored.target}の内容で新版{restored.version}として保存しました
+                </p>
+              ) : null}
+              {restoreError !== null ? (
+                <p className="field-error" data-testid="style-restore-error">
+                  {restoreError.code}: {restoreError.detail}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          {style !== null && style.current === null ? (
+            <p className="field-hint" data-testid="channel-style-empty">
+              このチャンネルに保存されたスタイルはまだありません
+            </p>
+          ) : null}
+          {styleFailed ? (
+            <p className="field-hint" data-testid="style-unavailable-record">
+              スタイルを確認できませんでした
+            </p>
+          ) : null}
+        </details>
+      </section>
 
       <div className="actions">
         <button
@@ -374,7 +404,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
           disabled={!submittable || submitting}
           data-testid="create-button"
         >
-          {submitting ? "作成中…" : "動画を作成"}
+          {submitting ? "作成中…" : "動画づくりを始める"}
         </button>
       </div>
     </form>

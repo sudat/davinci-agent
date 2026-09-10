@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   apiFailure,
   CockpitApiError,
@@ -15,6 +16,8 @@ type SelfCheckSectionProps = {
   episodeId: string;
   status: EpisodeStatus | null;
   fetchImpl?: FetchLike;
+  /** 2問目（前より良くなった）の下に置く修正前後の要約。 */
+  beforeAfter?: ReactNode;
 };
 
 type Answers = {
@@ -57,6 +60,7 @@ export default function SelfCheckSection({
   episodeId,
   status,
   fetchImpl,
+  beforeAfter = null,
 }: SelfCheckSectionProps) {
   const [supported, setSupported] = useState<boolean | null>(null);
   const [answers, setAnswers] = useState<Answers>(EMPTY_ANSWERS);
@@ -139,7 +143,7 @@ export default function SelfCheckSection({
   return (
     <section className="card" data-testid="self-check-section">
       <details>
-        <summary>この動画の確認（最後の3つの質問）</summary>
+        <summary>最後の確認</summary>
         <p className="field-hint">
           分からない質問は「未回答のまま」でかまいません。未回答は未確認として残り、成功扱いにしません。
         </p>
@@ -169,6 +173,9 @@ export default function SelfCheckSection({
             <p className="field-hint" data-testid={`${question.testId}-current`}>
               現在の回答: {answerLabel(answers[question.key])}
             </p>
+            {question.key === "q_better_than_before" && beforeAfter !== null ? (
+              <div data-testid="self-check-before-after">{beforeAfter}</div>
+            ) : null}
           </div>
         ))}
         <label className="field" htmlFor="self-check-note">

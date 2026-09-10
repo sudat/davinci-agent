@@ -372,7 +372,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
     );
 
     // rebuild-phase を出して previewOk=false を観測する（今回claimを出さない）
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -447,7 +447,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
       "不明（対象となる実行を特定できません）",
     );
 
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -547,7 +547,7 @@ describe("EpisodeView 試し編集binding（実行/対象版対応）", () => {
 
     // previewOk=true を rebuild-phase（done）で確定させる: 受付後のpollで
     // server連鎖が出てからTHIS runの完了になる
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));

@@ -583,7 +583,7 @@ test("NL修正→構造化プレビュー→適用→部分rebuild 202", async (
   });
 
   await page
-    .getByLabel("修正指示（自然言語）")
+    .getByLabel("気になるところを伝える")
     .fill("この後2秒残して");
   await page.getByTestId("review-chat-send").click();
 

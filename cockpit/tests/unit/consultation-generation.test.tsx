@@ -181,7 +181,7 @@ describe("工程4 既定OFFの回帰", () => {
 
     expect(screen.getByTestId("generation-permission")).toBeVisible();
     expect(screen.getByTestId("generation-section-toggle").textContent).toContain(
-      "画像の案を作る（任意）",
+      "画像で雰囲気を見る",
     );
     expect(screen.queryByTestId("generation-budget-remaining")).toBeNull();
     expect(screen.queryByTestId("generation-request")).toBeNull();
@@ -449,6 +449,8 @@ describe("工程4 拒否と型付きエラー", () => {
     expect(
       container.querySelector('[data-testid="consultation-generation-error"]'),
     ).toBeNull();
-    expect(screen.getByTestId("consultation-budget")).toBeVisible();
+    expect(
+      screen.queryByTestId("consultation-budget"),
+    ).not.toBeInTheDocument();
   });
 });

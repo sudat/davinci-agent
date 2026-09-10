@@ -85,7 +85,7 @@ function renderPanel(fetchImpl: typeof fetch) {
 }
 
 async function sendMultiDrafts() {
-  fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+  fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
     target: { value: DRAFT_A.text },
   });
   fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -189,7 +189,7 @@ describe("ReviewChatPanel（工程2 反応フロー）", () => {
     );
     expect(screen.queryByTestId("review-choice-ack")).toBeNull();
     // 1案のsetに戻ったので一括適用ボタンが復活し、採用ボタンは消える
-    expect(screen.getByTestId("review-apply-button").textContent).toBe("この修正を適用");
+    expect(screen.getByTestId("review-apply-button").textContent).toBe("この位置を修正する");
     expect(screen.queryByTestId("review-draft-adopt-1")).toBeNull();
     expect(screen.queryByTestId("review-both-different")).toBeNull();
   });
@@ -235,7 +235,7 @@ describe("ReviewChatPanel（工程2 反応フロー）", () => {
     renderPanel(fetchImpl as unknown as typeof fetch);
     await sendMultiDrafts();
 
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "Aがいい" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));

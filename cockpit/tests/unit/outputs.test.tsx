@@ -708,7 +708,7 @@ describe("ReviewChatPanel — 適用/再構築/復帰は選択中の出力を運
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -763,7 +763,7 @@ describe("ReviewChatPanel — 適用/再構築/復帰は選択中の出力を運
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+    fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
       target: { value: "この後2秒残して" },
     });
     fireEvent.click(screen.getByTestId("review-chat-send"));

@@ -47,7 +47,6 @@ export default function ConsultationBudgetReadout({
   const warn = degraded || nearLimit(budget);
   return (
     <div data-testid="consultation-budget">
-      <p className="field-hint">AIの利用状況（このエピソードの累計）</p>
       {warn && !degraded ? (
         <p className="field-hint" data-testid="consultation-budget-warning">
           AIの利用が上限に近づいています。上限に達すると、相談は提案なし・文章のみになります。

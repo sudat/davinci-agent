@@ -34,6 +34,8 @@ type ConsultationEntryListProps = {
   episodeId: string;
   onJudgment: (input: ConsultationJudgmentInput) => void;
   onPanelRetry?: (consultationId: string, proposalId: string, panel: ConsultationGenerationPanel) => void;
+  onQuickAdopt?: (consultationId: string, proposalId: string) => void;
+  interactive?: boolean;
 };
 
 function nonEmptyText(value: unknown): string | null {
@@ -119,25 +121,6 @@ export function outcomeLineOf(entry: ConsultationPolicyOutcomeEntry): string {
   return "採用した方針の反映結果：不明";
 }
 
-/** U2: 通常画面の短い行。編集長・対象版・構造検査・未確認/未対応の
- *  一覧は出さない（詳しい記録に移す）。行動に必要な結論だけを残す。 */
-export function outcomeShortLineOf(entry: ConsultationPolicyOutcomeEntry): string {
-  const status: unknown = entry.status;
-  if (status === "connected") {
-    return (
-      "採用した方針の接続ができました。" +
-      "内容・見た目・音が方針どおりかは、この検査では確認していません。"
-    );
-  }
-  if (status === "failed") {
-    return "採用した方針を反映できませんでした。相談へ戻れます。";
-  }
-  if (status === "honored") {
-    return "採用した方針の古い記録です。";
-  }
-  return "採用した方針の反映結果：不明";
-}
-
 function outcomeKeyOf(entry: ConsultationPolicyOutcomeEntry, index: number): string {
   return `policy-outcome:${nonEmptyText(entry.judgment_id) ?? nonEmptyText(entry.recorded_at) ?? `row-${index}`}`;
 }
@@ -150,12 +133,16 @@ function JournalRow({
   episodeId,
   onJudgment,
   onPanelRetry,
+  onQuickAdopt,
+  interactive = true,
 }: {
   entry: ConsultationEntry;
   busy: boolean;
   episodeId: string;
   onJudgment: (input: ConsultationJudgmentInput) => void;
   onPanelRetry?: (consultationId: string, proposalId: string, panel: ConsultationGenerationPanel) => void;
+  onQuickAdopt?: (consultationId: string, proposalId: string) => void;
+  interactive?: boolean;
 }) {
   const [panelChoices, setPanelChoices] = useState<Record<string, Record<string, ConsultationPanelChoice | null>>>({});
   if (isPolicyOutcomeEntry(entry)) {
@@ -164,11 +151,7 @@ function JournalRow({
         data-testid="consultation-policy-outcome"
         data-judgment-id={nonEmptyText(entry.judgment_id) ?? undefined}
       >
-        <p>{outcomeShortLineOf(entry)}</p>
-        <details data-testid="consultation-policy-record">
-          <summary>詳しい記録</summary>
-          <p>{outcomeLineOf(entry)}</p>
-        </details>
+        <p>{outcomeLineOf(entry)}</p>
       </div>
     );
   }
@@ -203,15 +186,19 @@ function JournalRow({
       data-testid="consultation-entry"
       data-consultation-id={entry.consultation_id}
     >
-      <p data-testid="consultation-entry-message">
-        相談した内容: {entry.message}（{clockOf(entry.created_at)}）
-      </p>
+      <div className="chat-bubble-user">
+        <p className="chat-speaker">あなた</p>
+        <p data-testid="consultation-entry-message">
+          相談した内容: {entry.message}（{clockOf(entry.created_at)}）
+        </p>
+      </div>
+      <p className="chat-speaker">DaVinci Agent</p>
       {entry.proposals.map((proposal) => {
         const recorded = entry.judgments.filter(
           (judgment) => judgment.proposal_id === proposal.proposal_id,
         );
         return (
-          <div key={proposal.proposal_id}>
+          <div key={proposal.proposal_id} className="chat-bubble-agent">
             <ConsultationProposalCard
               proposal={proposal}
               episodeId={episodeId}
@@ -223,6 +210,12 @@ function JournalRow({
                 if (panel === undefined) return;
                 choosePanel(proposal.proposal_id, panel, action);
               }}
+              onQuickAdopt={
+                interactive && onQuickAdopt !== undefined
+                  ? () => onQuickAdopt(entryId, proposal.proposal_id)
+                  : undefined
+              }
+              quickAdoptBusy={busy}
             />
             {recorded.length > 0 ? (
               <ul className="list-plain" data-testid="consultation-judgments-recorded">
@@ -237,12 +230,14 @@ function JournalRow({
                 ))}
               </ul>
             ) : null}
-            <ConsultationJudgmentForm
-              consultationId={entry.consultation_id}
-              proposalId={proposal.proposal_id}
-              busy={busy}
-              onSubmit={(input) => submitWithPanelNote(proposal.proposal_id, input)}
-            />
+            {interactive ? (
+              <ConsultationJudgmentForm
+                consultationId={entry.consultation_id}
+                proposalId={proposal.proposal_id}
+                busy={busy}
+                onSubmit={(input) => submitWithPanelNote(proposal.proposal_id, input)}
+              />
+            ) : null}
           </div>
         );
       })}
@@ -255,6 +250,8 @@ export default function ConsultationEntryList({
   episodeId,
   onJudgment,
   onPanelRetry,
+  onQuickAdopt,
+  interactive = true,
 }: ConsultationEntryListProps) {
   if (payload === null) {
     return (
@@ -284,6 +281,8 @@ export default function ConsultationEntryList({
           episodeId={episodeId}
           onJudgment={onJudgment}
           onPanelRetry={onPanelRetry}
+          onQuickAdopt={onQuickAdopt}
+          interactive={interactive}
         />
       ))}
     </>

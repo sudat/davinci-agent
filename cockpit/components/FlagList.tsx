@@ -26,13 +26,10 @@ function FlagItem({
   const ts = flag.at_seconds;
   return (
     <li data-testid="flag-item">
+      <div className="flag-meta">
+        #{flag.sequence} · {flag.kind}
+      </div>
       {flag.reason !== null ? <p className="flag-reason">{flag.reason}</p> : null}
-      <details data-testid="flag-record">
-        <summary>詳しい記録</summary>
-        <div className="flag-meta">
-          #{flag.sequence} · {flag.kind}
-        </div>
-      </details>
       {typeof ts === "number" ? (
         <div className="flag-jump-row">
           <button

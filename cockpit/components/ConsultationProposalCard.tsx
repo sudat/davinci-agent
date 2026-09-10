@@ -151,11 +151,16 @@ export default function ConsultationProposalCard({
   panelChoices,
   onPanelAction,
   episodeId,
+  onQuickAdopt,
+  quickAdoptBusy = false,
 }: {
   proposal: ConsultationProposal;
   panelChoices?: Record<string, ConsultationPanelChoice | null>;
   onPanelAction?: (panelId: string, action: ConsultationPanelChoice) => void;
   episodeId: string;
+  /** 方向画面のカード主操作。この方向で試す（採用判断をそのまま送る）。 */
+  onQuickAdopt?: () => void;
+  quickAdoptBusy?: boolean;
 }) {
   const details = proposal.details;
   const panels = panelsOf(proposal);
@@ -165,6 +170,19 @@ export default function ConsultationProposalCard({
         AIの提案: {proposal.title}
       </h3>
       <p data-testid="consultation-proposal-summary">{proposal.summary}</p>
+      {onQuickAdopt !== undefined ? (
+        <div className="actions">
+          <button
+            type="button"
+            className="btn-small"
+            onClick={onQuickAdopt}
+            disabled={quickAdoptBusy}
+            data-testid="proposal-quick-adopt"
+          >
+            {quickAdoptBusy ? "送信中…" : "この方向で試す"}
+          </button>
+        </div>
+      ) : null}
       {panels.length > 0 ? (
         <div data-testid="consultation-storyboard">
           <p className="field-hint">

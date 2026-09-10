@@ -4,10 +4,7 @@ export default function ReferencesPage() {
   return (
     <main className="page">
       <header className="page-header">
-        <h1 className="page-title">参照</h1>
-        <p className="page-subtitle">
-          参照動画の登録と、保存した注釈の一覧を表示します。
-        </p>
+        <h1 className="page-title">参考動画と好み</h1>
       </header>
       <ReferencesView />
     </main>

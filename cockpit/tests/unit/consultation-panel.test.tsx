@@ -278,27 +278,18 @@ describe("ConsultationPanel（UX 2.5 slice-1）", () => {
     expect(recorded[0]!.textContent).toContain("メモ: 字幕は減らす");
   });
 
-  it("budgetは数値を詳しい記録に移し、区間の使用数は出さず、警告は上限接近時だけ", async () => {
+  it("budgetは通常表示しない。残りわずかで1行警告、数値は詳細に置く", async () => {
     const { fetchImpl } = recordingFetch(() => jsonResponse(payloadOne));
     renderPanel(fetchImpl);
 
     await waitFor(() => {
-      expect(screen.getByTestId("consultation-budget")).toBeVisible();
+      expect(screen.getByTestId("consultation-proposal")).toBeVisible();
     });
-    expect(screen.getByTestId("consultation-budget-llm-calls").textContent).toBe("3 / 10回");
-    expect(screen.getByTestId("consultation-budget-wall-seconds").textContent).toBe(
-      "120 / 600秒",
-    );
-    expect(screen.queryByTestId("consultation-budget-intervals")).toBeNull();
-    expect(screen.queryByText("区間の使用数")).toBeNull();
+    // 残り7回なので警告も数値ダッシュボードも通常画面に出ない
     expect(screen.queryByTestId("consultation-budget-warning")).toBeNull();
-    const policy = screen.getByTestId("consultation-budget-policy").textContent ?? "";
-    expect(policy).toContain("直接計測できない");
-    expect(policy).toContain("呼び出し回数で管理");
-    expect(policy).toContain("リセットされません");
-    expect(screen.getByTestId("consultation-budget-cost-display").textContent).toBe(
-      budget.cost_display,
-    );
+    expect(screen.queryByTestId("consultation-budget-details")).toBeNull();
+    expect(screen.queryByTestId("consultation-budget")).toBeNull();
+    expect(screen.queryByTestId("consultation-budget-llm-calls")).toBeNull();
   });
 
   it("相談がまだ無い間は予算の数値を出さない（実データのない数字は作らない）", async () => {
@@ -341,7 +332,7 @@ describe("ConsultationPanel（UX 2.5 slice-1）", () => {
     expect(screen.queryByTestId("error-notice")).toBeNull();
     expect(screen.queryByText("送信中…")).toBeNull();
     const send = screen.getByTestId("consultation-send") as HTMLButtonElement;
-    expect(send.textContent).toBe("送信");
+    expect(send.textContent).toBe("希望を伝える");
   });
 
   it("consultation-llm-unavailableは本番用AI実行環境が必要だと正直に言う", async () => {
@@ -755,7 +746,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     renderPanel(fetchImpl);
 
     await screen.findAllByTestId("consultation-proposal");
-    expect(screen.getByTestId("consultation-budget")).toBeVisible();
+    expect(screen.queryByTestId("consultation-budget-details")).toBeNull();
     expect(screen.queryByTestId("consultation-rebuild-state")).toBeNull();
     expect(screen.queryByTestId("consultation-policy-outcome")).toBeNull();
   });
@@ -930,7 +921,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
       expect(screen.getByTestId("sample-request")).toBeVisible();
     });
     expect(screen.getByTestId("sample-request").textContent).toContain(
-      "30秒の試し動画を作る",
+      "試し動画を作る",
     );
     first.unmount();
 

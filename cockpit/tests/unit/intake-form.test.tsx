@@ -29,23 +29,23 @@ describe("IntakeForm（Createボタン活性ロジック）", () => {
 
   it("briefだけでは無効（空ソース → malformed input）", () => {
     render(<IntakeForm />);
-    fill("この動画は何について？", "テストbrief");
+    fill("どんな動画にしたいですか？", "テストbrief");
     const create = screen.getByTestId("create-button") as HTMLButtonElement;
     expect(create.disabled).toBe(true);
   });
 
   it("空白のみのbriefでも無効", () => {
     render(<IntakeForm />);
-    fill("ソースフォルダ", "/tmp/a");
-    fill("この動画は何について？", "   ");
+    fill("撮影素材のフォルダを選ぶ", "/tmp/a");
+    fill("どんな動画にしたいですか？", "   ");
     const create = screen.getByTestId("create-button") as HTMLButtonElement;
     expect(create.disabled).toBe(true);
   });
 
   it("ソース+briefで活性し、送信後に /episodes/{id} へ遷移", async () => {
     render(<IntakeForm />);
-    fill("ソースフォルダ", "/tmp/a");
-    fill("この動画は何について？", "テストbrief");
+    fill("撮影素材のフォルダを選ぶ", "/tmp/a");
+    fill("どんな動画にしたいですか？", "テストbrief");
     const create = screen.getByTestId("create-button") as HTMLButtonElement;
     expect(create.disabled).toBe(false);
 
@@ -70,8 +70,8 @@ describe("IntakeForm（Createボタン活性ロジック）", () => {
 
   it("API失敗時は構造化エラーを表示して遷移しない", async () => {
     render(<IntakeForm />);
-    fill("ソースフォルダ", "/tmp/missing");
-    fill("この動画は何について？", "テストbrief");
+    fill("撮影素材のフォルダを選ぶ", "/tmp/missing");
+    fill("どんな動画にしたいですか？", "テストbrief");
     const fetchMock = vi.fn().mockImplementation(() =>
       Promise.resolve(
         new Response(

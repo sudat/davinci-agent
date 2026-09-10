@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import FinishingDomainPanel from "@/components/FinishingDomainPanel";
 import type { FinishingStatusPayload } from "@/lib/api";
 
@@ -41,43 +41,30 @@ function jsonResponse(payload: object, status = 200): Response {
 }
 
 describe("FinishingDomainPanel", () => {
-  it("未実施では何も出さない（プレースホルダなし・エラー扱いしない・chipなし）", async () => {
+  it("未実施では待機状態（エラー扱いしない・chipなし）", async () => {
     const fetchImpl: typeof fetch = async () =>
       jsonResponse({ available: false, domains: [] });
 
     const { container } = render(<FinishingDomainPanel episodeId="ep-abc" fetchImpl={fetchImpl} />);
 
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="finishing-domain-panel"]')).toBeNull();
+      expect(screen.getByTestId("finishing-empty")).toBeVisible();
     });
     expect(container.querySelector('[data-testid="finishing-chip"]')).toBeNull();
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("手動対応・ブロックだけ通常表示し、7ドメイン全覧は詳しい記録に移す", async () => {
+  it("7ドメイン・日本語ラベル・chip・justificationが表示される", async () => {
     const fetchImpl: typeof fetch = async () => jsonResponse(SEVEN);
 
     render(<FinishingDomainPanel episodeId="ep-abc" fetchImpl={fetchImpl} />);
 
-    const actions = await waitFor(() => {
-      const found = within(screen.getByTestId("finishing-action-list")).getAllByTestId(
-        "finishing-domain-row",
-      );
-      expect(found).toHaveLength(1);
+    const rows = await waitFor(() => {
+      const found = screen.getAllByTestId("finishing-domain-row");
+      expect(found).toHaveLength(7);
       return found;
     });
-    expect(actions[0]!.getAttribute("data-domain")).toBe("delivery_qc");
-    expect(actions[0]!.getAttribute("data-status")).toBe("blocked");
-    expect(within(actions[0] as HTMLElement).getByText("ブロック中")).toBeVisible();
-    expect(within(actions[0] as HTMLElement).getByTestId("finishing-action").textContent).toContain(
-      "止まっている理由を確認して",
-    );
-
-    const all = within(screen.getByTestId("finishing-all-domains")).getAllByTestId(
-      "finishing-domain-row",
-    );
-    expect(all).toHaveLength(7);
-    expect(all.map((row) => row.getAttribute("data-domain"))).toEqual([
+    expect(rows.map((row) => row.getAttribute("data-domain"))).toEqual([
       "editorial_construction",
       "subtitle",
       "audio_finishing",
@@ -86,27 +73,26 @@ describe("FinishingDomainPanel", () => {
       "graphics_presentation",
       "delivery_qc",
     ]);
-    const details = screen.getByTestId("finishing-all-domains");
-    expect(within(details).getByText("編集組み立て")).toBeTruthy();
-    expect(within(details).getByText("字幕")).toBeTruthy();
-    expect(within(details).getByText("音声仕上げ")).toBeTruthy();
-    expect(within(details).getByText("色補正")).toBeTruthy();
-    expect(within(details).getByText("フレーミング／拡大縮小")).toBeTruthy();
-    expect(within(details).getByText("画面表示（テロップ等）")).toBeTruthy();
-    expect(within(details).getByText("納品前品質確認")).toBeTruthy();
-    expect(within(details).getAllByText("適用済み")).toHaveLength(4);
-    expect(within(details).getAllByText("意図的に不要")).toHaveLength(2);
-    expect(within(details).getByText("ブロック中")).toBeTruthy();
-    expect(within(details).getAllByText("今回はこの項目を実施していません。")).toHaveLength(2);
-    expect(within(details).getByText("この項目で処理が止まっています。")).toBeTruthy();
-    const justifications = within(details).getAllByTestId("finishing-justification");
+    expect(screen.getByText("編集組み立て")).toBeVisible();
+    expect(screen.getByText("字幕")).toBeVisible();
+    expect(screen.getByText("音声仕上げ")).toBeVisible();
+    expect(screen.getByText("色補正")).toBeVisible();
+    expect(screen.getByText("フレーミング／拡大縮小")).toBeVisible();
+    expect(screen.getByText("画面表示（テロップ等）")).toBeVisible();
+    expect(screen.getByText("納品前品質確認")).toBeVisible();
+    expect(screen.getAllByText("適用済み")).toHaveLength(4);
+    expect(screen.getAllByText("意図的に不要")).toHaveLength(2);
+    expect(screen.getByText("ブロック中")).toBeVisible();
+    expect(screen.getAllByText("今回はこの項目を実施していません。")).toHaveLength(2);
+    expect(screen.getByText("この項目で処理が止まっています。")).toBeVisible();
+    const justifications = screen.getAllByTestId("finishing-justification");
     expect(justifications).toHaveLength(3);
     expect(justifications[0]!.textContent).toBe(
       "no framing/motion treatment requested for this episode",
     );
     expect(justifications[2]!.textContent).toBe("delivery QC did not pass for this episode");
     expect(screen.queryByText("editorial_construction")).toBeNull();
-    expect(within(details).getAllByText("記録された理由（原文）")).toHaveLength(3);
+    expect(screen.getAllByText("記録された理由（原文）")).toHaveLength(3);
   });
 
   it("意図的に不要は適用済みと視覚的に区別される（chip classが異なる）", async () => {
@@ -115,15 +101,9 @@ describe("FinishingDomainPanel", () => {
     render(<FinishingDomainPanel episodeId="ep-abc" fetchImpl={fetchImpl} />);
 
     await waitFor(() => {
-      expect(
-        within(screen.getByTestId("finishing-all-domains")).getAllByTestId(
-          "finishing-domain-row",
-        ),
-      ).toHaveLength(7);
+      expect(screen.getAllByTestId("finishing-domain-row")).toHaveLength(7);
     });
-    const chips = within(screen.getByTestId("finishing-all-domains")).getAllByTestId(
-      "finishing-chip",
-    );
+    const chips = screen.getAllByTestId("finishing-chip");
     const appliedChip = chips.find((chip) => chip.getAttribute("data-status") === "applied")!;
     const intentionallyChip = chips.find(
       (chip) => chip.getAttribute("data-status") === "intentionally_not_needed",
@@ -163,26 +143,16 @@ describe("FinishingDomainPanel", () => {
     render(<FinishingDomainPanel episodeId="ep-mix" fetchImpl={fetchImpl} />);
 
     await waitFor(() => {
-      expect(
-        within(screen.getByTestId("finishing-action-list")).getAllByTestId(
-          "finishing-domain-row",
-        ),
-      ).toHaveLength(2);
+      expect(screen.getAllByTestId("finishing-domain-row")).toHaveLength(7);
     });
-    const actionDomains = within(screen.getByTestId("finishing-action-list"))
-      .getAllByTestId("finishing-domain-row")
-      .map((row) => row.getAttribute("data-domain"));
-    expect(actionDomains).toEqual(["audio_finishing", "color_finishing"]);
     const byStatus = Object.fromEntries(
-      within(screen.getByTestId("finishing-all-domains"))
-        .getAllByTestId("finishing-chip")
-        .map((chip) => [chip.getAttribute("data-status"), chip.className]),
+      screen.getAllByTestId("finishing-chip").map((chip) => [chip.getAttribute("data-status"), chip.className]),
     );
     expect(byStatus["applied"]).toContain("finishing-chip-applied");
     expect(byStatus["intentionally_not_needed"]).toContain("finishing-chip-intentionally-not-needed");
     expect(byStatus["manual_fallback_required"]).toContain("finishing-chip-manual");
     expect(byStatus["blocked"]).toContain("finishing-chip-blocked");
-    expect(screen.getAllByText("手動対応必要")).toHaveLength(2);
+    expect(screen.getByText("手動対応必要")).toBeVisible();
   });
 
   it("未知のstatusは生のstatus文字列を表示し、unknown chipになる", async () => {
@@ -205,12 +175,9 @@ describe("FinishingDomainPanel", () => {
     render(<FinishingDomainPanel episodeId="ep-x" fetchImpl={fetchImpl} />);
 
     await waitFor(() => {
-      expect(screen.getAllByText("weird_future_status")).toHaveLength(2);
+      expect(screen.getByText("weird_future_status")).toBeVisible();
     });
-    const unknown = within(screen.getByTestId("finishing-action-list")).getByText(
-      "weird_future_status",
-    );
-    expect(unknown).toBeVisible();
+    const unknown = screen.getByText("weird_future_status");
     expect(unknown.className).toContain("finishing-chip-unknown");
   });
 
@@ -246,25 +213,14 @@ describe("FinishingDomainPanel", () => {
       return jsonResponse(callCount === 1 ? { available: false, domains: [] } : SEVEN);
     };
 
-    const { container } = render(<FinishingDomainPanel episodeId="ep-abc" fetchImpl={fetchImpl} />);
-    await vi.waitFor(() => {
-      expect(container.querySelector('[data-testid="finishing-domain-panel"]')).toBeNull();
-    });
+    render(<FinishingDomainPanel episodeId="ep-abc" fetchImpl={fetchImpl} />);
+    await vi.waitFor(() => expect(screen.getByTestId("finishing-empty")).toBeVisible());
 
     await vi.advanceTimersByTimeAsync(2000);
 
     await vi.waitFor(() => {
-      expect(
-        within(screen.getByTestId("finishing-action-list")).getAllByTestId(
-          "finishing-domain-row",
-        ),
-      ).toHaveLength(1);
+      expect(screen.getAllByTestId("finishing-domain-row")).toHaveLength(7);
     });
-    expect(
-      within(screen.getByTestId("finishing-all-domains")).getAllByTestId(
-        "finishing-domain-row",
-      ),
-    ).toHaveLength(7);
     expect(callCount).toBe(2);
     vi.useRealTimers();
   });

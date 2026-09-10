@@ -200,8 +200,8 @@ test("narrow viewport (375x667): intake form renders without horizontal overflow
   await page.goto("/");
   await expect(page).toHaveURL(/\/new-episode$/);
 
-  await expect(page.getByLabel("ソースフォルダ")).toBeVisible();
-  await expect(page.getByLabel("この動画は何について？")).toBeVisible();
+  await expect(page.getByLabel("撮影素材のフォルダを選ぶ")).toBeVisible();
+  await expect(page.getByLabel("どんな動画にしたいですか？")).toBeVisible();
   await expect(page.getByTestId("create-button")).toBeVisible();
 
   await assertNoHorizontalOverflow(page);
@@ -245,7 +245,7 @@ test("keyboard-only: intake Tab order reaches inputs and Enter submits", async (
   }
   const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "cockpit-kbd-src-"));
   await page.keyboard.type(sourceDir);
-  await expect(page.getByLabel("ソースフォルダ")).toHaveValue(sourceDir);
+  await expect(page.getByLabel("撮影素材のフォルダを選ぶ")).toHaveValue(sourceDir);
 
   await page.keyboard.press("Tab");
   const afterSourceTab = await page.evaluate(
@@ -286,8 +286,8 @@ test("narrow viewport (375x667): episode page renders without horizontal overflo
 
   await page.goto("/");
   const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "cockpit-narrow-src-"));
-  await page.getByLabel("この動画は何について？").fill("狭い画面の確認");
-  await page.getByLabel("ソースフォルダ").fill(sourceDir);
+  await page.getByLabel("どんな動画にしたいですか？").fill("狭い画面の確認");
+  await page.getByLabel("撮影素材のフォルダを選ぶ").fill(sourceDir);
   await page.getByTestId("create-button").click();
   await page.waitForURL(/\/episodes\/ep-[0-9a-f]+$/, { timeout: 20_000 });
   const episodeId = page.url().split("/").pop() as string;
@@ -310,8 +310,8 @@ test("keyboard-only: consultation judgment reachable and submittable by keyboard
 
   await page.goto("/");
   const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "cockpit-kbd-cons-"));
-  await page.getByLabel("この動画は何について？").fill("相談のキーボード確認");
-  await page.getByLabel("ソースフォルダ").fill(sourceDir);
+  await page.getByLabel("どんな動画にしたいですか？").fill("相談のキーボード確認");
+  await page.getByLabel("撮影素材のフォルダを選ぶ").fill(sourceDir);
   await page.getByTestId("create-button").click();
   await page.waitForURL(/\/episodes\/ep-[0-9a-f]+$/, { timeout: 20_000 });
   const episodeId = page.url().split("/").pop() as string;

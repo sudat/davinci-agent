@@ -122,7 +122,7 @@ async function sendMultiDrafts(drafts: object[], proposalKind?: string) {
     throw new Error(`unexpected url: ${url}`);
   });
   renderPanel(fetchImpl as unknown as typeof fetch);
-  fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+  fireEvent.change(screen.getByLabelText("気になるところを伝える"), {
     target: { value: DRAFT_A.text },
   });
   fireEvent.click(screen.getByTestId("review-chat-send"));
@@ -139,7 +139,7 @@ describe("ReviewChatPanel（proposal_kind別の採用経路）", () => {
     calls.length = 0;
 
     expect(screen.getByTestId("review-apply-all-button").textContent).toBe(
-      "この修正をすべて適用",
+      "この位置を修正する（すべて）",
     );
     expect(screen.queryByTestId("review-draft-adopt-1")).toBeNull();
     expect(screen.queryByTestId("review-draft-adopt-2")).toBeNull();
@@ -176,7 +176,7 @@ describe("ReviewChatPanel（proposal_kind別の採用経路）", () => {
   it("proposal_kindが無い旧payloadの複数案はbundleとして扱う（一括適用）", async () => {
     await sendMultiDrafts([DRAFT_A, DRAFT_B]);
     expect(screen.getByTestId("review-apply-all-button").textContent).toBe(
-      "この修正をすべて適用",
+      "この位置を修正する（すべて）",
     );
     expect(screen.queryByTestId("review-draft-adopt-1")).toBeNull();
     expect(screen.queryByTestId("review-both-different")).toBeNull();
