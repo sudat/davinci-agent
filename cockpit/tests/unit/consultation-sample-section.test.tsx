@@ -73,7 +73,7 @@ describe("ConsultationSampleSection（30秒試し動画・全編許可）", () =
 
     await waitFor(() => {
       expect(screen.getByTestId("sample-request-state").textContent).toContain(
-        "試し動画ができました",
+        "試し動画を保存しました",
       );
     });
     const posts = calls.filter(
@@ -84,7 +84,6 @@ describe("ConsultationSampleSection（30秒試し動画・全編許可）", () =
       consultation_id: "c-1",
       judgment_id: "j-1",
       operation_id: expect.any(String),
-      windows: [{ start_frame: 0, end_frame: 720 }],
     });
     const preview = screen.getByTestId("sample-preview") as HTMLVideoElement;
     expect(preview.getAttribute("src")).toContain(

@@ -288,7 +288,7 @@ class ConsultationSampleRequestV1(StrictModel):
     consultation_id: NonEmpty
     judgment_id: NonEmpty
     operation_id: NonEmpty
-    windows: WindowSequence
+    windows: WindowSequence | None = None  # absent = server picks representative scenes
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -1711,15 +1711,6 @@ def consultation_sample_request(
     limits = load_budget_limits()
     require_consultation(episode_dir, request.consultation_id)
     policy_for_judgment(episode_dir, request.judgment_id)
-    windows = list(request.windows)
-    if not windows or any(
-        window.end_frame <= window.start_frame for window in windows
-    ):
-        raise CockpitUnprocessableError(
-            "sample-windows-invalid",
-            "試し動画の区間を指定してください。"
-            "各区間は開始より後ろで終わるものにしてください。",
-        )
     from services.cli.review_common import store_ir  # noqa: PLC0415 (lazy CLI-side IR read)
 
     store = review_store_location(episode_dir)
@@ -1740,6 +1731,18 @@ def consultation_sample_request(
             "sample-base-unreadable",
             f"編集の版が読めないため、試し動画を作れませんでした: {error}",
         ) from error
+    if request.windows is None:
+        from services.compile.sample_projection import (  # noqa: PLC0415 (lazy pure helper)
+            derive_sample_windows,
+        )
+        windows = list(derive_sample_windows(full_ir))
+    else:
+        windows = list(request.windows)
+        if any(window.end_frame <= window.start_frame for window in windows):
+            raise CockpitUnprocessableError(
+                "sample-windows-invalid",
+                "試し動画の区間は開始より後ろで終わるものにしてください。",
+            )
     policy = latest_adopted_policy(episode_dir)
     try:
         identity = SampleRequestIdentityV1(

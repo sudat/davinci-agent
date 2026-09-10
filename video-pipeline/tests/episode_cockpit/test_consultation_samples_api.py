@@ -254,7 +254,7 @@ def test_sample_unknown_consultation_is_404(
     assert response.json()["error"]["code"] == "consultation-not-found"
 
 
-def test_sample_empty_windows_is_422(
+def test_sample_invalid_windows_is_422(
     client: TestClient,
     workspace: dict[str, Path],
     source_folder: Path,
@@ -263,7 +263,8 @@ def test_sample_empty_windows_is_422(
     _seed_episode(workspace, episode_id)
 
     response = client.post(
-        f"/episodes/{episode_id}/consultation/samples", json=_payload(windows=())
+        f"/episodes/{episode_id}/consultation/samples",
+        json=_payload(windows=((30, 30),)),  # zero-length: end <= start
     )
 
     assert response.status_code == 422

@@ -428,7 +428,7 @@ export type ConsultationSampleInput = {
   consultation_id: string;
   judgment_id: string;
   operation_id: string;
-  windows: ConsultationSampleWindow[];
+  windows?: ConsultationSampleWindow[];
 };
 
 export type ConsultationSampleResult = {

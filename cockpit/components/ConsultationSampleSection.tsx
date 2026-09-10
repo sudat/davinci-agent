@@ -20,7 +20,6 @@ const SAMPLE_POLL_INTERVAL_MS = 2000;
 
 // 冒頭30秒相当のRecord窓フォールバック（24fps想定）。実尺はサーバーが
 // IRのレートで確定し、範囲外は422で正直に表示される。
-const SAMPLE_FIRST_WINDOW_END_FRAME = 720;
 
 function newOperationId(): string {
   try {
@@ -42,7 +41,7 @@ function newOperationId(): string {
 }
 
 function requestStateLine(state: string): string {
-  if (state === "published") return "試し動画ができました";
+  if (state === "published") return "試し動画を保存しました";
   if (isSampleWorking(state)) return "作成中です";
   return `状態を確認しています（${state}）`;
 }
@@ -128,7 +127,6 @@ export default function ConsultationSampleSection({
             consultation_id: consultationId,
             judgment_id: judgmentId,
             operation_id: newOperationId(),
-            windows: [{ start_frame: 0, end_frame: SAMPLE_FIRST_WINDOW_END_FRAME }],
           },
           fetchImpl,
         );
@@ -181,7 +179,7 @@ export default function ConsultationSampleSection({
   return (
     <section data-testid="consultation-sample-section">
       <h3>30秒以内の試し動画</h3>
-      <p className="field-hint">採用した方針の冒頭から、短い試し動画を作れます。尺はサーバーが確定します。</p>
+      <p className="field-hint">採用した探した場面から、短い試し動画を作れます。尺はサーバーが確定します。</p>
       <div className="actions">
         <button
           type="button"

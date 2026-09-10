@@ -43,6 +43,33 @@ def sample_total_frames(windows: Sequence[RecordFrameSpan]) -> int:
     return sum(w.end_frame - w.start_frame for w in windows)
 
 
+def derive_sample_windows(
+    ir: TimelineIr0C, limit_seconds: float = 30.0
+) -> tuple[RecordFrameSpan, ...]:
+    """Pick up to three representative edit intervals (head/middle/late)
+    from the committed IR's video track, capped to ``limit_seconds`` in
+    total — the operator sees the adopted policy across DIFFERENT
+    scenes, not just the opening (2026-09-10 main-path review)."""
+    video = next((t for t in ir.tracks if t.track.kind == "video"), None)
+    if video is None or not video.items:
+        raise PydanticCustomError("sample-empty-track", "no video interval")
+    items = sorted(video.items, key=lambda i: i.record_span.start_frame)
+    picks = [items[0], items[len(items) // 2], items[-1]]
+    unique: list[TimelineItem0C] = []
+    for pick in picks:
+        if pick not in unique:
+            unique.append(pick)
+    per_cap = max(
+        int(limit_seconds * ir.rate.den / ir.rate.num / len(unique)), 1
+    )
+    windows: list[RecordFrameSpan] = []
+    for item in unique:
+        start = item.record_span.start_frame
+        end = min(item.record_span.end_frame, start + per_cap)
+        windows.append(RecordFrameSpan(start_frame=start, end_frame=end))
+    return tuple(windows)
+
+
 def sample_total_seconds(
     windows: Sequence[RecordFrameSpan], rate: RationalFrameRate
 ) -> float:
