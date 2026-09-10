@@ -128,6 +128,9 @@ export type EpisodeStatus = {
   /** THIS-run first preview output arrival (試し編集完了 labeling only —
    *  never overall completion). Absent = not arrived (or unmeasured). */
   preview_first_arrived_at?: string;
+  /** Latest 本人確認 record (status_view.py). null = never answered;
+   *  absent = old backend without the field — renderers show nothing. */
+  self_check?: SelfCheckRecord | null;
 };
 
 /** One flagged review item. `at_seconds` is optional: the task-44 flags
@@ -302,6 +305,111 @@ export async function registerOutput(
     registered: typeof record.registered === "string" ? record.registered : outputId,
     idempotent: record.idempotent === true,
   };
+}
+
+/** Self-check (本人確認の3つの質問) — backend:
+ *  services/episode_cockpit/self_check.py + api.py.
+ *
+ * Contract:
+ * - POST /episodes/{id}/self-check {q_instruction_transmitted,
+ *   q_better_than_before, q_want_to_publish: bool|null, note} →
+ *   the persisted record. null = 未回答 (honestly persisted, never
+ *   defaulted); strict mode rejects non-bool answers (422, never coerced).
+ * - GET /episodes/{id}/self-check → {episode_id, self_check: record|null}.
+ *   Old backends (no route) → 404 → the UI hides the section.
+ * - The status payload also carries `self_check` (record|null) when the
+ *   backend knows it (status_view.py) — used for reload restore.
+ */
+
+export type SelfCheckAnswer = boolean | null;
+
+export type SelfCheckRequestBody = {
+  q_instruction_transmitted: SelfCheckAnswer;
+  q_better_than_before: SelfCheckAnswer;
+  q_want_to_publish: SelfCheckAnswer;
+  note: string;
+};
+
+export type SelfCheckRecord = {
+  episode_id: string;
+  answered_at: string;
+  q_instruction_transmitted: SelfCheckAnswer;
+  q_better_than_before: SelfCheckAnswer;
+  q_want_to_publish: SelfCheckAnswer;
+  note: string;
+};
+
+export type SelfCheckPayload = {
+  episode_id: string;
+  self_check: SelfCheckRecord | null;
+};
+
+function parseSelfCheckRecord(entry: unknown): SelfCheckRecord | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  const record = entry as { [key: string]: unknown };
+  const answer = (value: unknown): SelfCheckAnswer | undefined =>
+    value === null || typeof value === "boolean" ? value : undefined;
+  const q1 = answer(record.q_instruction_transmitted);
+  const q2 = answer(record.q_better_than_before);
+  const q3 = answer(record.q_want_to_publish);
+  if (q1 === undefined || q2 === undefined || q3 === undefined) return null;
+  if (typeof record.episode_id !== "string" || typeof record.answered_at !== "string") {
+    return null;
+  }
+  if (typeof record.note !== "string") return null;
+  return {
+    episode_id: record.episode_id,
+    answered_at: record.answered_at,
+    q_instruction_transmitted: q1,
+    q_better_than_before: q2,
+    q_want_to_publish: q3,
+    note: record.note,
+  };
+}
+
+/** GET /episodes/{id}/self-check. 404 propagates (old backend → hide). */
+export async function getSelfCheck(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<SelfCheckPayload> {
+  const body = await request<unknown>(
+    `/episodes/${encodeURIComponent(episodeId)}/self-check`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  const record = typeof body === "object" && body !== null ? body : {};
+  const payload = record as { episode_id?: unknown; self_check?: unknown };
+  const selfCheck =
+    payload.self_check === null || payload.self_check === undefined
+      ? null
+      : parseSelfCheckRecord(payload.self_check);
+  return {
+    episode_id: typeof payload.episode_id === "string" ? payload.episode_id : episodeId,
+    self_check: selfCheck,
+  };
+}
+
+/** POST /episodes/{id}/self-check — sends exactly what the operator chose
+ *  (null answers ride along as null, never defaulted). */
+export async function postSelfCheck(
+  episodeId: string,
+  input: SelfCheckRequestBody,
+  fetchImpl: FetchLike = fetch,
+): Promise<SelfCheckRecord> {
+  const body = await request<unknown>(
+    `/episodes/${encodeURIComponent(episodeId)}/self-check`,
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+  const parsed = parseSelfCheckRecord(body);
+  if (parsed === null) {
+    throw new CockpitApiError(
+      "unexpected-response",
+      200,
+      "本人確認の応答の形式が期待と違います",
+    );
+  }
+  return parsed;
 }
 
 export function previewUrl(episodeId: string, outputId?: OutputId): string {

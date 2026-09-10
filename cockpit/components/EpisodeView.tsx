@@ -30,6 +30,7 @@ import BeforeAfterSummary from "@/components/BeforeAfterSummary";
 import FinishingDomainPanel from "@/components/FinishingDomainPanel";
 import ConsultationPanel from "@/components/ConsultationPanel";
 import ReviewChatPanel from "@/components/ReviewChatPanel";
+import SelfCheckSection from "@/components/SelfCheckSection";
 import { useNow } from "@/components/useNow";
 import { jobStatusSuffix, formatElapsed } from "@/lib/stageGroups";
 
@@ -389,6 +390,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         outputId={selectedOutput}
       />
       <BeforeAfterSummary summary={status?.before_after ?? null} />
+      <SelfCheckSection episodeId={episodeId} status={status} />
     </div>
   );
 }
