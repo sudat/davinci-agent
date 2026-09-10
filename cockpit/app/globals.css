@@ -566,3 +566,6 @@ table.stage-runs th {
     grid-template-columns: 1fr;
   }
 }
+
+/* 375px viewport: rendered video must never force horizontal scroll */
+video { max-width: 100%; height: auto; }
