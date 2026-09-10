@@ -45,7 +45,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BeforeValidator, Field, ValidationError, model_validator
 
-from services.contracts.primitives import StrictModel
+from services.contracts.primitives import Identifier, StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
 from services.episode_cockpit.consultation_store import (
     MAX_PANELS_PER_PROPOSAL,
@@ -61,6 +61,7 @@ from services.episode_cockpit.consultation_store import (
     PanelCaptionV1,
     append_consultation,
     append_effective_judgment_once,
+    append_full_authorization_once,
     append_generation_event,
     append_panel,
     append_proposal_set,
@@ -242,14 +243,22 @@ class ConsultationJudgmentRequest(StrictModel):
     ``operation_id`` names the adoption operation for late re-sends: the
     same id dedupes against the whole journal (never just the latest
     row); a deliberate re-adoption carries a NEW id and appends anew.
+    ``full_authorized`` is the explicit 全編へ: the request MUST carry the
+    ``sample_id`` currently displayed (no latest-guessing server-side);
+    the server verifies THAT sample (consultation/base/policy pins plus
+    video bytes) and binds to it, and a re-send of the same authorization
+    returns the existing row with zero downstream work.
     """
 
     consultation_id: NonEmpty
     proposal_id: NonEmpty | None = None
-    decision: Literal["adopt", "revise", "reject", "both_wrong", "delegate"]
+    decision: Literal[
+        "adopt", "revise", "reject", "both_wrong", "delegate", "full_authorized"
+    ]
     scope: ConsultationScope
     note: str | None = None
     operation_id: str | None = None
+    sample_id: Identifier | None = None
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -1506,6 +1515,44 @@ def _recover_unreserved_judgment(
     return "completed"
 
 
+def _consultation_full_authorization(
+    episode_id: str,
+    episode_dir: Path,
+    record: ConsultationRecordV1,
+    request: ConsultationJudgmentRequest,
+    workspace: Workspace,
+) -> JSONResponse:
+    """One bound 全編へ authorization with a zero-downstream resend (P1-2).
+
+    The first send binds the authorization to the current head + adopted
+    policy + the EXPLICITLY NAMED sample; a re-send of the same
+    authorization returns the existing row with no render, no budget
+    write, no spawn, and no commit. A moved target under the same
+    operation id surfaces as the store's typed 409. An unspecified,
+    nonexistent, or other-consultation sample_id is a typed 422.
+    """
+
+    if request.proposal_id is not None:
+        raise CockpitUnprocessableError(
+            "consultation-judgment-proposal-unexpected",
+            "全編への承認は相談全体への判断です。proposal_idを指定せずに送ってください。",
+        )
+    append_full_authorization_once(
+        episode_dir,
+        consultation_id=request.consultation_id,
+        sample_id=request.sample_id,
+        scope=request.scope,
+        note=request.note,
+        operation_id=request.operation_id,
+    )
+    limits = load_budget_limits()
+    snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
+    return JSONResponse(
+        status_code=200,
+        content=consultation_view(episode_dir, record, limits, snapshot=snapshot),
+    )
+
+
 @router.post("/episodes/{episode_id}/consultation/judgment")
 def consultation_judgment(
     episode_id: str, request: ConsultationJudgmentRequest, workspace: Workspace
@@ -1523,12 +1570,19 @@ def consultation_judgment(
     view). Otherwise — reject/both_wrong/delegate, empty scope, no
     resolvable proposal, or a rebuild already running — the judgment is
     recorded and the view returns unchanged-shape 200. The rebuild
-    consumes no consultation LLM budget.
+    consumes no consultation LLM budget. The explicit 全編へ
+    (``full_authorized``) binds to the current head + adopted policy +
+    the explicitly named sample instead, and its re-send returns the
+    existing row with zero downstream work (200).
     """
 
     episode_dir = _episode_dir(workspace, episode_id)
     limits = load_budget_limits()
     record = require_consultation(episode_dir, request.consultation_id)
+    if request.decision == "full_authorized":
+        return _consultation_full_authorization(
+            episode_id, episode_dir, record, request, workspace
+        )
     if request.proposal_id is not None:
         require_proposal(episode_dir, request.consultation_id, request.proposal_id)
     judgment, appended = append_effective_judgment_once(

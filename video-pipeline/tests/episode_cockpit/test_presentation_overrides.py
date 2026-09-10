@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from services.compile.subtitle_policy import (
+    SUBTITLE_BASE_CHARS_PER_LINE,
+    SUBTITLE_MIN_CHARS_PER_LINE,
+    SUBTITLE_SHORTER_STEP_CHARS,
+)
 from services.contracts.primitives import (
     RationalFrameRate,
     RecordFrameSpan,
@@ -19,9 +24,6 @@ from services.contracts.primitives import (
 from services.contracts.timeline_ir import TimelineItem0C
 from services.episode_cockpit.presentation_overrides import (
     LOWER_BGM_STEP_MB,
-    SUBTITLE_BASE_CHARS_PER_LINE,
-    SUBTITLE_MIN_CHARS_PER_LINE,
-    SUBTITLE_SHORTER_STEP_CHARS,
     AppliedCommand,
     consume_presentation_intents,
     derive_presentation_overrides,

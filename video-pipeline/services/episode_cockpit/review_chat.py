@@ -70,6 +70,10 @@ type ReviewCommandKind = Literal[
     "mark_boring",
     "quiet_longer",
     "subtitle_shorter",
+    "split_display",
+    "duration_shorten",
+    "text_summary_ack",
+    "line_wrap",
     "remove_effect",
     "lower_bgm",
     "match_color",
@@ -102,6 +106,10 @@ COMMAND_DOMAIN: Mapping[ReviewCommandKind, AffectedDomain] = {
     "insert_broll": "selection",
     "mark_boring": "selection",
     "subtitle_shorter": "presentation",
+    "split_display": "presentation",
+    "duration_shorten": "presentation",
+    "text_summary_ack": "presentation",
+    "line_wrap": "presentation",
     "remove_effect": "presentation",
     "lower_bgm": "presentation",
     "match_color": "presentation",
@@ -117,6 +125,45 @@ DEFAULT_LINEAGE: StageLineage = {
     "scope": frozenset(),
 }
 APPLIED_COMMANDS_NAME = "applied-commands.jsonl"
+
+# Subtitle 4-choice confirmation (v4 P1-E): the ambiguous 「字幕を短く」
+# (subtitle_shorter) NEVER auto-maps to wrap-width narrowing. The draft is
+# flagged needs_confirmation with this plain-Japanese question; the
+# operator answers with an explicit message that parses to one of the four
+# distinct kinds below (split_display / duration_shorten /
+# text_summary_ack / line_wrap). Shape mirrors the existing
+# needs_confirmation flow — the UI/apply contract is unchanged.
+SUBTITLE_CHOICE_SPLIT = "言葉は変えず、一度に出す文字を少なく分ける"
+SUBTITLE_CHOICE_DURATION = "表示している時間を短くする"
+SUBTITLE_CHOICE_SUMMARY = (
+    "話した内容を要約して文章自体を短くする"
+    "（発話どおりではなくなる——明示了承が必要）"  # noqa: RUF001 (fullwidth parens are the required JA wording)
+)
+SUBTITLE_CHOICE_WRAP = "一行の幅だけ狭くして折り返す"
+SUBTITLE_AMBIGUOUS_QUESTION = (
+    "「字幕を短く」には4つの意味があります。番号で教えてください:\n"
+    f"1) {SUBTITLE_CHOICE_SPLIT}\n"
+    f"2) {SUBTITLE_CHOICE_DURATION}\n"
+    f"3) {SUBTITLE_CHOICE_SUMMARY}\n"
+    f"4) {SUBTITLE_CHOICE_WRAP}"
+)
+SUBTITLE_SUMMARY_ACK_REQUEST = (
+    "字幕の要約は発話どおりではなくなります。よければ「要約してよい」など"
+    "明示の了承を添えて送ってください"
+)
+# Contract for the three 4-choice kinds with no review-plane knob
+# (split_display / duration_shorten / text_summary_ack): all four options
+# stay visible as disambiguation choices; selecting a no-knob kind raises
+# the refusal below — no AppliedCommand is journaled, no rebuild scheduled.
+# Only line_wrap maps to the real wrap-width override; text_summary_ack
+# has no summary body to write, so an explicit ack alone changes nothing.
+SUBTITLE_NO_KNOB_REFUSAL_DETAIL = (
+    "現在の仕組みではまだ対応していません。"
+    "別の選択肢を選ぶか、相談へ戻ってください。"
+)
+_SUBTITLE_NO_KNOB_REFUSAL_KINDS: frozenset[ReviewCommandKind] = frozenset(
+    {"split_display", "duration_shorten", "text_summary_ack"}
+)
 
 
 class ReviewChatError(CockpitUnprocessableError):
@@ -149,6 +196,7 @@ class ReviewCommandDraft(StrictModel):
     confirmation_reason: str | None = None
     hypothesis: str | None = None
     investigated: bool = False
+    explicit_ack: bool = False
 
     @model_validator(mode="after")
     def require_confirmation_consistency(self) -> ReviewCommandDraft:
@@ -222,6 +270,7 @@ class AppliedCommand(StrictModel):
     reason: str | None = None
     target_seconds: Seconds | None = None
     seconds_delta: Seconds | None = None
+    explicit_ack: bool = False
 
 
 class RebuildPlan(StrictModel):
@@ -274,6 +323,31 @@ _RULE_SPEC: tuple[tuple[ReviewCommandKind, str, bool], ...] = (
         (r"(?:静か|無音)[^。、\n]{0,12}(?:長く|残し)|quiet[^.\n]{0,30}longer"
         r"|leave\s+the\s+quiet"),
         True,
+    ),
+    (
+        "split_display",
+        (r"字幕[^。、\n]{0,10}(?:分けて表示|分けて|分割|小分け)"
+        r"|split\s+(?:the\s+)?subtitles?"),
+        False,
+    ),
+    (
+        "duration_shorten",
+        (r"字幕[^。、\n]{0,10}(?:表示時間|表示)[^。、\n]{0,15}(?:短く|縮め)"
+        r"|(?:shorten|reduce)\s+(?:the\s+)?subtitle\s+(?:display|duration|time)"
+        r"|subtitle\s+(?:display|duration)\s+short"),
+        False,
+    ),
+    (
+        "text_summary_ack",
+        (r"字幕[^。、\n]{0,10}(?:要約|まとめ)"
+        r"|summariz\w*\s+(?:the\s+)?subtitles?|subtitles?\s+summar"),
+        False,
+    ),
+    (
+        "line_wrap",
+        (r"字幕[^。、\n]{0,10}(?:折り返|改行|幅を?狭く|一行)"
+        r"|(?:wrap|narrow)\s+(?:the\s+)?subtitles?|subtitles?\s+wrap"),
+        False,
     ),
     ("subtitle_shorter", r"字幕[^。、\n]{0,10}短く|subtitles?\s+shorter", False),
     (
@@ -336,6 +410,10 @@ _KIND_RULES = tuple(
     for kind, pattern, positional in _RULE_SPEC
 )
 _POSITION_DEPENDENT = frozenset(rule.kind for rule in _KIND_RULES if rule.position_dependent)
+_SUMMARY_ACK_PATTERN = re.compile(
+    r"了承|承知|承認|かまわない|構わない|大丈夫|いいよ|OK|オッケー|よい|良い",
+    re.IGNORECASE,
+)
 # Feelings/goal vocabulary (UX redesign 工程1, JA-first): a match routes the
 # message through cause investigation instead of positional auto-confirm.
 _FEELINGS_PATTERN = re.compile(
@@ -504,11 +582,16 @@ def interpret_command(text: str, context: ReviewChatContext) -> ReviewCommandDra
     target = _resolve_target(text, context.at_seconds)
     delta = _first_group_float(_DELTA_PATTERNS, text) if kind in _DELTA_KINDS else None
     scope = "channel" if kind == "channel_lower_third" else "episode"
+    explicit_ack = kind == "text_summary_ack" and _SUMMARY_ACK_PATTERN.search(text) is not None
     reason: str | None = None
     if _is_feelings_interpretation(kind, text):
         # Feelings NEVER auto-confirm from position alone (brief rule 2/3):
         # the cause-investigation route decides the change.
         reason = _FEELINGS_REASON
+    elif kind == "subtitle_shorter":
+        reason = SUBTITLE_AMBIGUOUS_QUESTION
+    elif kind == "text_summary_ack" and not explicit_ack:
+        reason = SUBTITLE_SUMMARY_ACK_REQUEST
     elif kind is None:
         reason = "no known command kind matched the message; restate the correction"
     elif kind in _POSITION_DEPENDENT and target is None:
@@ -525,6 +608,7 @@ def interpret_command(text: str, context: ReviewChatContext) -> ReviewCommandDra
         scope=scope,
         needs_confirmation=reason is not None,
         confirmation_reason=reason,
+        explicit_ack=explicit_ack,
     )
 
 
@@ -614,6 +698,10 @@ def _prepare_commit(
     if draft.needs_confirmation and not draft.investigated:
         raise ReviewChatError("draft-not-confirmed", "only confirmed drafts may be applied")
     kind = draft.command_kind
+    if kind in _SUBTITLE_NO_KNOB_REFUSAL_KINDS:
+        raise ReviewChatError(
+            "subtitle-choice-not-implemented", SUBTITLE_NO_KNOB_REFUSAL_DETAIL
+        )
     operation = _APPLICABLE_KINDS.get(kind)
     if operation is None:
         return None
@@ -665,6 +753,7 @@ def apply_command(draft: ReviewCommandDraft, *, store: ReviewStoreLocation) -> A
             affected_domain=COMMAND_DOMAIN[kind],
             target_seconds=draft.target_seconds,
             seconds_delta=draft.seconds_delta,
+            explicit_ack=draft.explicit_ack,
         )
     head, proposal, decision = prepared
     outcome: CommitOutcome = commit_command(proposal, decision, store.log_path, store.plan_dir)
@@ -748,6 +837,13 @@ __all__ = [
     "COMMAND_DOMAIN",
     "DEFAULT_LINEAGE",
     "PIPELINE_STAGES",
+    "SUBTITLE_AMBIGUOUS_QUESTION",
+    "SUBTITLE_CHOICE_DURATION",
+    "SUBTITLE_CHOICE_SPLIT",
+    "SUBTITLE_CHOICE_SUMMARY",
+    "SUBTITLE_CHOICE_WRAP",
+    "SUBTITLE_NO_KNOB_REFUSAL_DETAIL",
+    "SUBTITLE_SUMMARY_ACK_REQUEST",
     "AppliedCommand",
     "PriorProposalContext",
     "RebuildPlan",

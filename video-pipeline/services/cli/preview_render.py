@@ -107,4 +107,41 @@ def render_review_preview(  # noqa: PLR0913 (preview adapter contract: plan/IR/m
     )
 
 
-__all__ = ["render_review_preview"]
+def render_consultation_sample(  # noqa: PLR0913 (sample adapter contract: IR/media/out + tools + presentation)
+    sample_ir: TimelineIr0C,
+    mezzanine: Path,
+    out_dir: Path,
+    *,
+    tools: PinnedTools,
+    timeout_seconds: float | None = None,
+    presentation: PresentationRenderSettings | None = None,
+    presentation_trace: TracePresentation | None = None,
+) -> PreviewTraceManifest:
+    """Wave-1 sample adapter (v4 contract P1-2, F6 presentation discipline).
+
+    The CALLER verifies the base plan/version/hash and the full-IR hash
+    BEFORE this call (bound together in the sample manifest); the
+    existing renderer then runs with ``edit_plan=None`` and
+    ``decision=None`` — the plan/IR agreement checks are neither invoked
+    nor weakened, and the normal preview path is untouched.
+
+    ``presentation``/``presentation_trace`` carry the adopted policy's
+    presentation overrides through the SAME machinery as the normal
+    preview (``stage_preview`` passes them identically): the bound
+    subtitle table is wrapped with the same width so the render-time
+    binding check agrees, and honestly-unimplemented override kinds ride
+    the trace as notes — never silently unapplied, never fake effects.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    subtitle_wrap_chars = (
+        presentation.subtitle_max_chars_per_line if presentation is not None else None
+    )
+    bindings = _bindings(sample_ir, mezzanine, out_dir.parent / "media", subtitle_wrap_chars)
+    return render_preview(
+        None, sample_ir, bindings, out_dir, tools=tools,
+        timeout_seconds=timeout_seconds, presentation=presentation,
+        presentation_trace=presentation_trace,
+    )
+
+
+__all__ = ["render_consultation_sample", "render_review_preview"]

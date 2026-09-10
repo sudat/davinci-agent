@@ -44,6 +44,18 @@ from services.contracts.edit_plan_0c import (
 from services.contracts.primitives import Producer, RationalFrameRate, SourceFrameSpan
 from services.episode_cockpit import episode_ops
 from services.episode_cockpit.app import create_cockpit_app
+from services.episode_cockpit.consultation_store import (
+    ConsultationJudgmentV1,
+    ConsultationProposalDetails,
+    ConsultationProposalSetV1,
+    ConsultationProposalV1,
+    ConsultationRecordV1,
+    ConsultationScope,
+    append_consultation,
+    append_judgment,
+    append_proposal_set,
+    now_stamp,
+)
 from services.episode_cockpit.review_chat import (
     DEFAULT_LINEAGE,
     AppliedCommand,
@@ -67,13 +79,14 @@ if TYPE_CHECKING:
     from services.contracts.timeline_ir import TimelineIr0C
 
 
-def _locked_reentry_run(
+def _locked_reentry_run(  # noqa: PLR0913 (re-entry surface mirror: store/stage/command + run/stop bindings)
     episode_dir: Path,
     *,
     state_store_path: Path,
     from_stage: str,
     applied_command: str,
     run_id: str | None = None,
+    stop_stage: str | None = None,
 ) -> int:
     """Direct re-entry holding a real inherited-lock descriptor (P1 proof).
 
@@ -82,6 +95,8 @@ def _locked_reentry_run(
     refuses fail-closed with ``runner-lock-not-held``. ``run_id`` carries
     the spawning POST's pre-generated id when given (the ``--run-id``
     production contract), so journal rows and log events name one run.
+    ``stop_stage`` carries the consultation ``--stop-stage compile`` flag
+    when given (the run truncates at compile, never rendering).
     """
 
     fd = os.open(episode_dir / "runner.lock", os.O_CREAT | os.O_RDWR, 0o644)
@@ -95,6 +110,7 @@ def _locked_reentry_run(
             applied_command=applied_command,
             runner_lock_fd=fd,
             run_id=run_id,
+            stop_stage=stop_stage,
         )
     finally:
         os.close(fd)
@@ -859,14 +875,14 @@ def test_stage_preview_repoints_bundle_at_cockpit_review_store(
 
 
 # ---------------------------------------------------------------------------
-# (f) presentation-domain kind (subtitle_shorter, the r9c gap): the applied
-#     command schedules a compile-first rebuild through the SAME
-#     reservation/spawn machinery as edit_plan kinds — the committed plan is
-#     unchanged (intent-only apply), so the re-entry re-derives the output
-#     from compile without selection.
+# (f) presentation-domain kind (line_wrap, the explicit 4-choice successor of
+#     the ambiguous subtitle_shorter): the applied command schedules a
+#     compile-first rebuild through the SAME reservation/spawn machinery as
+#     edit_plan kinds — the committed plan is unchanged (intent-only apply),
+#     so the re-entry re-derives the output from compile without selection.
 # ---------------------------------------------------------------------------
 
-SUBTITLE_TEXT = "字幕を短くして見やすくして"
+SUBTITLE_TEXT = "字幕を折り返して見やすくして"
 
 
 def _apply_subtitle_shorter(client: TestClient, episode_id: str) -> dict[str, object]:
@@ -894,7 +910,7 @@ def test_subtitle_shorter_rebuild_schedules_compile_lineage(
     episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
                                                      monkeypatch)
     applied = _apply_subtitle_shorter(client, episode_id)
-    assert applied["command_kind"] == "subtitle_shorter"
+    assert applied["command_kind"] == "line_wrap"
     assert applied["affected_domain"] == "presentation"
     assert applied["event_id"] is None
     assert applied["result_plan_version"] is None  # intent-only: plan unchanged
@@ -1085,3 +1101,278 @@ def test_presentation_reentry_blocked_when_episode_not_preview_ready(
         event for event in _runner_log_events(episode_dir) if event["event"] == "blocked"
     )
     assert blocked["code"] == "episode-not-preview-ready"
+
+
+# ---------------------------------------------------------------------------
+# (g) P1-4 runner-side consultation stop: a consultation-triggered rebuild
+#     (adoption) runs selection→plan→compile and TERMINATES WITHOUT the
+#     full preview render — the old preview stays, the job stays
+#     PREVIEW_READY, and the run log records the honest stop.
+# ---------------------------------------------------------------------------
+
+
+def test_reentry_stages_stop_at_compile_truncates_before_preview() -> None:
+    stages = episode_runner_rebuild.reentry_stages("selection", "compile")
+    assert stages.executed == ("selection", "plan", "compile")
+    assert "preview" in stages.skipped
+    assert "resolve_build" in stages.skipped
+
+
+def test_reentry_stages_default_stop_still_preview() -> None:
+    assert episode_runner_rebuild.reentry_stages("plan").executed == (
+        "plan", "compile", "preview",
+    )
+    assert episode_runner_rebuild.reentry_stages(
+        "selection", "preview"
+    ).executed == ("selection", "plan", "compile", "preview")
+
+
+def test_reentry_stages_rejects_stop_before_from() -> None:
+    with pytest.raises(episode_runner_rebuild.RebuildStageError):
+        episode_runner_rebuild.reentry_stages("compile", "plan")
+    with pytest.raises(episode_runner_rebuild.RebuildStageError):
+        episode_runner_rebuild.reentry_stages("selection", "render")
+
+
+def _fake_consultation_selection(
+    episode_root: Path,
+    log: BinaryIO,
+    **_kwargs: object,
+) -> str:
+    """Consultation selection without the director: consume the head plan.
+
+    The director/policy/commit path is B6-adjacent machinery this stop test
+    does not own; the stop under test is selection→plan→compile executing
+    with NO preview render afterwards. Consuming the real head keeps the
+    plan/compile stages honest (they materialize the committed store).
+    """
+
+    del log
+    return plan_sha256(episode_runner_rebuild.stage_plan(episode_root).plan)
+
+
+def _fail_loud_preview_render(*_args: object, **_kwargs: object) -> str:
+    raise AssertionError("consultation-stop run must never render the full preview")
+
+
+def _fail_loud_publish_preview(*_args: object, **_kwargs: object) -> None:
+    raise AssertionError("consultation-stop run must never republish the preview")
+
+
+def test_consultation_stop_rebuild_terminates_at_compile(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                     monkeypatch)
+    before_counts = _stage_counts(workspace, episode_id)
+    preview_bytes_before = (episode_dir / "previews" / "preview.mp4").read_bytes()
+    run_preview_before = (episode_dir / "run" / "preview-v1" / "preview.mp4").read_bytes()
+
+    monkeypatch.setattr(
+        episode_runner_rebuild, "stage_selection", _fake_consultation_selection
+    )
+    # The re-entry reads the latest adopted policy before the selection
+    # stage; that lookup is director/policy machinery outside this stop
+    # test's scope (see the fake above), so it resolves to a stub.
+    monkeypatch.setattr(
+        episode_runner_rebuild, "latest_adopted_policy", lambda _root: object()
+    )
+    monkeypatch.setattr(
+        episode_runner_rebuild, "render_review_preview", _fail_loud_preview_render
+    )
+    monkeypatch.setattr(
+        episode_runner_rebuild, "publish_preview", _fail_loud_publish_preview
+    )
+    exit_code = _locked_reentry_run(
+        episode_dir,
+        state_store_path=workspace["state_store"],
+        from_stage="selection",
+        applied_command="consultation-j1",
+        run_id="run-consult01",
+        stop_stage="compile",
+    )
+
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    status = client.get(f"/episodes/{episode_id}").json()
+    assert status["status"] == "PREVIEW_READY"
+    after_counts = _stage_counts(workspace, episode_id)
+    assert after_counts["selection"] == [*before_counts["selection"], "succeeded"]
+    assert after_counts["plan"] == [*before_counts["plan"], "succeeded"]
+    assert after_counts["compile"] == ["succeeded"]
+    assert after_counts["preview"] == before_counts["preview"] == ["succeeded"]
+    assert all("running" not in runs for runs in after_counts.values())
+
+    assert (episode_dir / "previews" / "preview.mp4").read_bytes() == preview_bytes_before
+    assert (
+        episode_dir / "run" / "preview-v1" / "preview.mp4"
+    ).read_bytes() == run_preview_before
+
+    metric_lines = (episode_dir / "rebuild-metrics.jsonl").read_bytes().splitlines()
+    assert len(metric_lines) == 1
+    metric = json.loads(metric_lines[0])
+    assert metric["applied_command"] == "consultation-j1"
+    assert metric["stages"] == ["selection", "plan", "compile"]
+    assert "preview" in metric["unrelated_stages_skipped"]
+    assert "resolve_build" in metric["unrelated_stages_skipped"]
+
+    events = _runner_log_events(episode_dir)
+    started = next(
+        event for event in events
+        if event["event"] == "runner_started" and event["run_id"] == "run-consult01"
+    )
+    assert started["stop_stage"] == "compile"
+    finished = next(
+        event for event in events
+        if event["event"] == "rebuild_finished" and event["run_id"] == "run-consult01"
+    )
+    assert finished["stages"] == ["selection", "plan", "compile"]
+    assert finished["stopped_at"] == "compile"
+    assert finished["reason"] == "consultation-sample-pending"
+    skipped = [
+        event for event in events
+        if event["event"] == "rebuild_stage_skipped" and event["run_id"] == "run-consult01"
+    ]
+    assert "preview" in [event["stage"] for event in skipped]
+    assert "resolve_build" in [event["stage"] for event in skipped]
+    assert not [
+        event for event in events
+        if event["event"] == "preview_published" and event["run_id"] == "run-consult01"
+    ]
+
+
+def _adopt_open_policy(episode_dir: Path) -> None:
+    """Open a consultation flow: adopted judgment, no 全編へ."""
+    append_consultation(
+        episode_dir,
+        ConsultationRecordV1(
+            consultation_id="c1", created_at=now_stamp(), message="短くしたい"
+        ),
+    )
+    append_proposal_set(
+        episode_dir,
+        ConsultationProposalSetV1(
+            consultation_id="c1",
+            created_at=now_stamp(),
+            proposals=(
+                ConsultationProposalV1(
+                    proposal_id="prop-1",
+                    title="案1",
+                    summary="要旨1",
+                    details=ConsultationProposalDetails.model_validate(
+                        {
+                            "audience_message": "導入",
+                            "structure": "導入→本編",
+                            "duration_estimate": "約4分",
+                            "candidate_scenes": ["opening"],
+                            "subtitle_policy": "短め",
+                            "audio_policy": "BGM小さめ",
+                            "tempo_policy": "前半重視",
+                            "reference_mapping": "参考1",
+                            "unused_reasons": "なし",
+                            "unconfirmed": [],
+                        }
+                    ),
+                ),
+            ),
+        ),
+    )
+    append_judgment(
+        episode_dir,
+        ConsultationJudgmentV1(
+            judgment_id="j1",
+            consultation_id="c1",
+            proposal_id="prop-1",
+            decision="adopt",
+            scope=ConsultationScope(composition=True),
+            note="構成だけ採用",
+            created_at=now_stamp(),
+        ),
+    )
+
+
+def test_consultation_nl_fix_reentry_renders_nothing(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    """P1-2 real-path: an NL fix inside an open consultation flow (no
+    全編へ) schedules a compile-stopped rebuild, and the actual
+    executor runs selection→compile with ZERO normal preview renders —
+    end to end through the real routing with fake stages only."""
+
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                     monkeypatch)
+    _adopt_open_policy(episode_dir)
+    applied = _apply_subtitle_shorter(client, episode_id)
+    assert applied["affected_domain"] == "presentation"
+    rebuild = client.post(
+        f"/episodes/{episode_id}/rebuild", json={"applied_command": applied["command_id"]}
+    )
+    assert rebuild.status_code == 202
+    body = rebuild.json()
+    assert body["scheduled"] is True
+    assert body["stop_stage"] == "compile"
+    rebuild_argv = cast("list[str]", runner_spawn_calls[-1]["argv"])
+    assert rebuild_argv[rebuild_argv.index("--stop-stage") + 1] == "compile"
+    preview_before = (episode_dir / "previews" / "preview.mp4").read_bytes()
+
+    renders: list[str] = []
+    publishes: list[str] = []
+    monkeypatch.setattr(
+        episode_runner_rebuild, "render_review_preview",
+        lambda *args, **kwargs: renders.append("render") or "sha",
+    )
+    monkeypatch.setattr(
+        episode_runner_rebuild, "publish_preview",
+        lambda *args, **kwargs: publishes.append("publish"),
+    )
+    exit_code = _locked_reentry_run(
+        episode_dir,
+        state_store_path=workspace["state_store"],
+        from_stage="compile",
+        applied_command=str(applied["command_id"]),
+        run_id=str(body["run_id"]),
+        stop_stage="compile",
+    )
+
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    assert renders == []
+    assert publishes == []
+    assert (episode_dir / "previews" / "preview.mp4").read_bytes() == preview_before
+    finished = next(
+        event for event in _runner_log_events(episode_dir)
+        if event["event"] == "rebuild_finished"
+        and event["run_id"] == body["run_id"]
+    )
+    assert finished["stages"] == ["compile"]
+    assert finished["stopped_at"] == "compile"
+
+
+def test_consultation_stop_rejects_non_compile_stop_stage(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _episode_id, episode_dir = _initial_preview_ready(
+        client, workspace, source_folder, monkeypatch
+    )
+
+    exit_code = _locked_reentry_run(
+        episode_dir,
+        state_store_path=workspace["state_store"],
+        from_stage="selection",
+        applied_command="consultation-j1",
+        stop_stage="preview",
+    )
+
+    assert exit_code == episode_runner.EXIT_MALFORMED
+    malformed = next(
+        event for event in _runner_log_events(episode_dir) if event["event"] == "malformed"
+    )
+    assert malformed["code"] == "reentry-malformed"

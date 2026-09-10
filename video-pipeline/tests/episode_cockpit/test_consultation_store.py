@@ -363,7 +363,8 @@ def test_consultation_view_matches_pinned_contract(episode_dir: Path) -> None:
     judgment = cast("list[dict[str, object]]", view["judgments"])[0]
     assert set(judgment) == {
         "judgment_id", "proposal_id", "decision", "scope", "note", "created_at",
-        "operation_id",
+        "operation_id", "auth_sample_id", "auth_sample_content_sha256",
+        "auth_base_version", "auth_base_plan_sha256", "auth_policy_sha256",
     }
     assert cast("dict[str, object]", judgment["scope"]) == {
         "composition": True, "appearance": False, "audio": False

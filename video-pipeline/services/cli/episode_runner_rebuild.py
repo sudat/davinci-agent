@@ -1,8 +1,8 @@
 """Stage-subset re-entry for applied review commands (task 9).
 
 ``--from-stage`` executes the stop-bounded lineage projection: the stages
-from the given re-entry point up to ``preview`` (the ``PREVIEW_READY``
-stop) run against the CURRENT committed artifacts — entering at
+from the given re-entry point up to ``--stop-stage`` (default ``preview``,
+the ``PREVIEW_READY`` stop) run against the CURRENT committed artifacts — entering at
 ``selection`` re-runs the director seam under the latest adopted
 consultation policy and commits the derived plan as a new review-store
 version (consultation slice 2); the plan stage consumes that head version,
@@ -20,7 +20,8 @@ mirror discipline).
 # hand-off + metrics writer belong to one task-9 commit scope, extended by
 # the consultation slice-2 selection stage); same precedent as
 # review_chat.py / review_interpreter.py. The production director/derive
-# seams live in episode_runner_selection.py, not here.
+# seams live in episode_runner_selection.py; the sample render flow lives
+# in services/cli/sample_render.py (+ sample_resolve.py), not here.
 
 from __future__ import annotations
 
@@ -68,13 +69,10 @@ from services.episode_cockpit.consultation_selection_budget import (
     attempt_for,
     has_open_director_reservation,
     ir_preview_seconds,
-    plan_preview_seconds,
     reserve_director,
     reserve_preview,
-    reserve_preview_full_rebuild_exempt,
     settle_director,
     settle_preview,
-    settle_preview_full_rebuild_exempt,
 )
 from services.episode_cockpit.consultation_store import (
     CONNECTED_POLICY_FIELDS,
@@ -87,6 +85,7 @@ from services.episode_cockpit.consultation_store import (
     combined_wall_used_in_scope,
     ensure_preview_budget_available,
     ensure_selection_budget_available,
+    full_render_authorized,
     latest_adopted_policy,
     load_budget_limits,
     now_stamp,
@@ -96,7 +95,10 @@ from services.episode_cockpit.consultation_store import (
     unaddressed_for_scope,
     unconfirmed_for_policy,
 )
-from services.episode_cockpit.errors import CockpitNotFoundError, CockpitUnprocessableError
+from services.episode_cockpit.errors import (
+    CockpitNotFoundError,
+    CockpitUnprocessableError,
+)
 from services.episode_cockpit.models import RebuildRequestEntry
 from services.episode_cockpit.policy_settings import (
     PolicySettingEntryV1,
@@ -143,6 +145,8 @@ if TYPE_CHECKING:
 
 REENTRY_FROM_STAGES: Final = ("selection", "plan", "compile", "preview")
 STOP_STAGE: Final = "preview"
+CONSULTATION_STOP_STAGE: Final = "compile"
+CONSULTATION_STOP_REASON: Final = "consultation-sample-pending"
 BEYOND_STOP_STAGES: Final = ("resolve_build", "qc", "render")
 REQUIRED_STATUS: Final = "PREVIEW_READY"
 METRICS_NAME: Final = "rebuild-metrics.jsonl"
@@ -150,13 +154,12 @@ BUNDLE_NAME: Final = "review-bundle.json"
 REBUILD_LOG_NAME: Final = "rebuild-requests.jsonl"
 
 
-def remaining_wall_seconds_with_exempt(episode_root: Path) -> float:
-    """Deadline fold = proposal wall + sample wall + exempt-render wall.
+def remaining_wall_seconds_with_legacy(episode_root: Path) -> float:
+    """Deadline fold = proposal wall + sample wall + legacy-history wall.
 
-    The 2026-09-10 ruling lifts only the SAMPLE-seconds cap for
-    judgment-commissioned full re-renders; their wall time stays under
-    the unchanged wall deadline, so the deadline fold must see the
-    "full_rebuild_exempt" ledger lines too.
+    The "full_rebuild_exempt" scope names unauthorized historical rows
+    only (no live rule, no new writes): the deadline fold still reads
+    them so their wall seconds stay deadline-bounded.
     """
 
     return load_budget_limits().wall_seconds_limit - combined_wall_used_in_scope(
@@ -171,6 +174,49 @@ class RebuildStageError(Exception):
         super().__init__(f"{code}: {detail}")
         self.code = code
         self.detail = detail
+
+
+CONSULTATION_FLOW_MARKER_PREFIX: Final = "consultation-"
+
+
+def is_sample_flow_run(
+    applied_command: str | None, reservation_sequence: int | None
+) -> bool:
+    """Whether this re-entry belongs to the consultation sample flow.
+
+    The rebuild reservation (its sequence) and the consultation marker
+    distinguish sample-flow rebuilds from ordinary non-consultation
+    rebuilds: a reservation sequence or a consultation-prefixed applied
+    command (``consultation-{judgment}`` adoptions,
+    ``consultation-flow:{command}`` NL fixes) marks the sample flow;
+    plain review-command and revert markers mark ordinary rebuilds.
+    """
+    if reservation_sequence is not None:
+        return True
+    return (applied_command or "").startswith(CONSULTATION_FLOW_MARKER_PREFIX)
+
+
+def refuse_unauthorized_full_preview(
+    episode_root: Path,
+    applied_command: str | None,
+    reservation_sequence: int | None,
+) -> None:
+    """Refuse a sample-flow full preview without an explicit 全編へ.
+
+    Sample-flow rebuilds never reach the full render — they terminate
+    at the sample path (compile + sample surface, same 30 s
+    cumulative); full renders connect only after an explicit
+    full_authorized judgment. Ordinary non-consultation rebuilds pass
+    through untouched.
+    """
+    if is_sample_flow_run(applied_command, reservation_sequence) and (
+        not full_render_authorized(episode_root)
+    ):
+        raise RebuildStageError(
+            "consultation-preview-not-authorized",
+            "この相談では全編の再描画は承認されていません。"
+            "試し動画で確認するか、全編へを承認してください。",
+        )
 
 
 def _reservation_entries(episode_root: Path) -> list[RebuildRequestEntry]:
@@ -337,16 +383,34 @@ class ReentryState:
     presentation: PresentationOverrideSet | None = None
 
 
-def reentry_stages(from_stage: str) -> ReentryStages:
-    """Stop-bounded lineage projection: [from_stage .. preview] of PIPELINE_STAGES."""
+def reentry_stages(from_stage: str, stop_stage: str = STOP_STAGE) -> ReentryStages:
+    """Stop-bounded lineage projection: [from_stage .. stop_stage] of PIPELINE_STAGES.
+
+    The default stop is ``preview`` (every non-consultation rebuild runs to
+    the re-rendered preview as before). A consultation-triggered rebuild
+    passes ``stop_stage="compile"`` — the chain executes
+    selection→plan→compile and TERMINATES WITHOUT stage_preview (no full
+    render, no preview republish; the old preview stays and the sample
+    flow is the terminal preview surface).
+    """
 
     if from_stage not in REENTRY_FROM_STAGES:
         raise RebuildStageError(
             "from-stage-unsupported",
             f"--from-stage must be one of {REENTRY_FROM_STAGES}, got {from_stage!r}",
         )
+    if stop_stage not in REENTRY_FROM_STAGES:
+        raise RebuildStageError(
+            "stop-stage-unsupported",
+            f"--stop-stage must be one of {REENTRY_FROM_STAGES}, got {stop_stage!r}",
+        )
     start = PIPELINE_STAGES.index(from_stage)
-    stop = PIPELINE_STAGES.index(STOP_STAGE)
+    stop = PIPELINE_STAGES.index(stop_stage)
+    if stop < start:
+        raise RebuildStageError(
+            "stop-stage-before-from",
+            f"--stop-stage {stop_stage!r} ends before --from-stage {from_stage!r}",
+        )
     executed = tuple(PIPELINE_STAGES[start : stop + 1])
     return ReentryStages(
         executed=executed,
@@ -730,39 +794,6 @@ def stage_selection(  # noqa: PLR0913, C901, PLR0912, PLR0915 (selection stage: 
                 director_connection="confirmed",
                 director_request_hash=request_hash,
             ) from error
-    if attempt is not None:
-        try:
-            ensure_preview_budget_available(
-                episode_root, load_budget_limits(), plan_preview_seconds(new_plan)
-            )
-        except CockpitUnprocessableError as error:
-            if error.code != "consultation-preview-budget-exhausted":
-                _failed_outcome(
-                    episode_root, policy, (f"{error.code}: {error}",), str(error),
-                    reservation_sequence=reservation_sequence,
-                    run_id=run_id,
-                    failure_code=error.code,
-                    director_connection="confirmed",
-                    director_request_hash=request_hash,
-                )
-                raise RebuildStageError(error.code, str(error)) from error
-            # 2026-09-10 ruling: this branch runs only on a reservation
-            # path, so the over-allowance render is a full re-render
-            # commissioned by the adopted judgment — only the
-            # sample-seconds refusal is lifted; the wall deadline and
-            # the LLM call caps stay in force, and stage_preview records
-            # the "full_rebuild_exempt" ledger line for the render.
-        except CockpitNotFoundError as error:
-            code = "consultation-preview-budget-exhausted"
-            _failed_outcome(
-                episode_root, policy, (f"{code}: {error}",), str(error),
-                reservation_sequence=reservation_sequence,
-                run_id=run_id,
-                failure_code=code,
-                director_connection="confirmed",
-                director_request_hash=request_hash,
-            )
-            raise RebuildStageError(code, str(error)) from error
     decision = OperatorDecision0C(
         decision_id=f"dec-policy-{policy.judgment_id}",
         actor_intent="operator",
@@ -858,7 +889,7 @@ def stage_compile(episode_root: Path, head: HeadState) -> tuple[EditPlan0C, Time
         raise RebuildStageError("ir-unreadable", str(error)) from error
 
 
-def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classification + render + settle in one stage fn, like stage_selection)
+def stage_preview(  # noqa: PLR0913 (preview stage: budget-gate classification + render + settle in one stage fn, like stage_selection)
     episode_root: Path,
     head: HeadState,
     plan: EditPlan0C,
@@ -876,41 +907,31 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
     renderer starts and settles them afterwards: once rendering starts
     the reserved seconds are charged even on failure (with the measured
     wall time), so the 30 s allowance can never be silently exceeded.
-    Sample cap (2026-09-10 ruling): renders that FIT within the
-    remaining 30 s sample allowance stay capped exactly as before; a
-    render commissioned by an active selection-rebuild reservation that
-    EXCEEDS the remaining allowance is a full re-render and skips only
-    the sample-seconds refusal (recorded honestly under the
-    "full_rebuild_exempt" ledger scope). The wall deadline and the LLM
-    call caps stay fully in force for every path.
+    A render whose sample seconds exceed the remaining allowance is
+    REFUSED here with the typed consultation-preview-budget-exhausted
+    error — the pre-authorization loop renders the ≤30 s sample path
+    instead, and full renders start only after the operator's explicit
+    全編へ judgment under the separate full_episode ledger. No new
+    "full_rebuild_exempt" rows are ever written (unauthorized historical
+    rows stay readable for the wall fold only).
     """
 
     attempt = selection_attempt
     preview_seconds = 0.0
     preview_started = 0.0
-    settle = settle_preview
     if attempt is not None:
         preview_seconds = ir_preview_seconds(ir)
-        reserve = reserve_preview
         try:
             ensure_preview_budget_available(
                 episode_root, load_budget_limits(), preview_seconds
             )
         except CockpitUnprocessableError as error:
-            if error.code != "consultation-preview-budget-exhausted":
-                raise RebuildStageError(error.code, str(error)) from error
-            # 2026-09-10 ruling: the over-allowance render on this
-            # reservation path is a full re-render — only the SAMPLE
-            # refusal is lifted; the ledger line honestly records it
-            # under "full_rebuild_exempt" (invisible to the sample gate,
-            # counted by the wall-deadline fold).
-            reserve = reserve_preview_full_rebuild_exempt
-            settle = settle_preview_full_rebuild_exempt
+            raise RebuildStageError(error.code, str(error)) from error
         except CockpitNotFoundError as error:
             raise RebuildStageError(
                 "consultation-preview-budget-exhausted", str(error)
             ) from error
-        reserve(episode_root, attempt, preview_seconds)
+        reserve_preview(episode_root, attempt, preview_seconds)
         preview_started = time.monotonic()
     run_dir = episode_root / RUN_DIR_NAME
     bundle_file = run_dir / BUNDLE_NAME
@@ -946,7 +967,7 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
         )
     except Exception as error:
         if attempt is not None:
-            settle(
+            settle_preview(
                 episode_root, attempt,
                 preview_seconds=preview_seconds,
                 wall_elapsed=max(time.monotonic() - preview_started, 0.001),
@@ -957,7 +978,7 @@ def stage_preview(  # noqa: PLR0913, C901 (preview stage: budget-gate classifica
             )
         raise RebuildStageError("preview-failed", str(error)) from error
     if attempt is not None:
-        settle(
+        settle_preview(
             episode_root, attempt,
             preview_seconds=preview_seconds,
             wall_elapsed=max(time.monotonic() - preview_started, 0.001),
@@ -1157,6 +1178,7 @@ def _execute(  # noqa: PLR0913 (re-entry wiring: store/ctx/root/stages + reserva
     stages: ReentryStages,
     *,
     reservation_sequence: int | None = None,
+    applied_command: str | None = None,
     job_status: str | None = None,
     defer_terminal_success: bool = False,
     editorial_runtime: Path | None = None,
@@ -1186,6 +1208,7 @@ def _execute(  # noqa: PLR0913 (re-entry wiring: store/ctx/root/stages + reserva
                 ctx.log,
                 run_id=ctx.run_id,
                 reservation_sequence=reservation_sequence,
+                applied_command=applied_command,
                 job_status=job_status,
                 editorial_runtime=editorial_runtime,
             )
@@ -1211,6 +1234,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
     *,
     run_id: str,
     reservation_sequence: int | None = None,
+    applied_command: str | None = None,
     job_status: str | None = None,
     editorial_runtime: Path | None = None,
 ) -> str:
@@ -1228,9 +1252,9 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
         # W4: the remaining wall budget bounds EVERY re-entry path, not
         # just the director call and the preview render — a reserved run
         # whose allowance is already spent stops before plan/compile work.
-        # The fold includes the ruling-exempt full-re-render scope, so an
-        # exempt preview's wall seconds stay deadline-bounded.
-        remaining = remaining_wall_seconds_with_exempt(episode_root)
+        # The fold also reads unauthorized historical rows, so their wall
+        # seconds stay deadline-bounded.
+        remaining = remaining_wall_seconds_with_legacy(episode_root)
         if remaining <= 0:
             raise RebuildStageError(
                 "consultation-selection-deadline-exceeded",
@@ -1238,7 +1262,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
             )
     if stage == "selection":
         if reservation_sequence is not None:
-            remaining = remaining_wall_seconds_with_exempt(episode_root)
+            remaining = remaining_wall_seconds_with_legacy(episode_root)
             deadline = (
                 time.monotonic() + remaining if remaining > 0 else None
             )
@@ -1290,6 +1314,9 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
         carried.plan, carried.ir = stage_compile(episode_root, carried.head)
         _consume_presentation(episode_root, carried, log, run_id)
         return carried.head.index.versions[str(carried.head.version)].ir_sha256
+    refuse_unauthorized_full_preview(
+        episode_root, applied_command, reservation_sequence
+    )
     if carried.plan is None or carried.ir is None:
         carried.plan, carried.ir = stage_compile(episode_root, carried.head)
         _consume_presentation(episode_root, carried, log, run_id)
@@ -1299,7 +1326,7 @@ def _run_stage(  # noqa: PLR0913, C901, PLR0912 (stage dispatch: stage/root/stat
             episode_root, reservation_sequence, job_status=job_status,
             for_preview=True,
         )
-        remaining = remaining_wall_seconds_with_exempt(episode_root)
+        remaining = remaining_wall_seconds_with_legacy(episode_root)
         if remaining <= 0:
             raise RebuildStageError(
                 "consultation-selection-deadline-exceeded",
@@ -1324,16 +1351,32 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
     the metrics write, excluding only the terminal bookkeeping row/log
     writes that follow it (the metrics write itself is likewise excluded,
     since writing it first is the whole point).
+
+    ``call.stop_stage`` truncates the chain: a consultation-triggered
+    rebuild stops at ``compile`` — the candidate plan is committed to the
+    review store, no preview is re-rendered or republished, and the job
+    keeps its pre-rebuild ``PREVIEW_READY`` state. The ``rebuild_finished``
+    line then carries ``stopped_at`` + ``reason`` instead of claiming a
+    preview run.
     """
 
     from services.cli.episode_runner import EXIT_SUCCESS  # noqa: PLC0415 (avoids import cycle)
 
-    stages = reentry_stages(call.from_stage if call.from_stage is not None else "")
+    stop_stage = call.stop_stage or STOP_STAGE
+    stages = reentry_stages(
+        call.from_stage if call.from_stage is not None else "", stop_stage
+    )
     for stage in BEYOND_STOP_STAGES:
         log_event(
             log, "rebuild_stage_skipped", run_id=ctx.run_id, stage=stage,
             reason=f"beyond {call.stop} stop",
         )
+    if stop_stage != STOP_STAGE:
+        for skipped in REENTRY_FROM_STAGES[REENTRY_FROM_STAGES.index(stop_stage) + 1:]:
+            log_event(
+                log, "rebuild_stage_skipped", run_id=ctx.run_id, stage=skipped,
+                reason=f"consultation stop at {stop_stage} ({CONSULTATION_STOP_REASON})",
+            )
     snapshot = store.get_job_snapshot(ctx.job_id)
     if snapshot.job.status == "FROZEN":
         raise RebuildStageError(
@@ -1352,6 +1395,7 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
         call.episode_root,
         stages,
         reservation_sequence=call.reservation_sequence,
+        applied_command=call.applied_command,
         job_status=snapshot.job.status,
         defer_terminal_success=True,
         editorial_runtime=call.editorial_runtime,
@@ -1366,10 +1410,17 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
             log, "rebuild_stage", run_id=ctx.run_id, stage=terminal_stage,
             status="succeeded",
         )
-    log_event(
-        log, "rebuild_finished", run_id=ctx.run_id,
-        stages=list(stages.executed), wall_seconds=round(wall, 3),
-    )
+    if stop_stage != STOP_STAGE:
+        log_event(
+            log, "rebuild_finished", run_id=ctx.run_id,
+            stages=list(stages.executed), wall_seconds=round(wall, 3),
+            stopped_at=stop_stage, reason=CONSULTATION_STOP_REASON,
+        )
+    else:
+        log_event(
+            log, "rebuild_finished", run_id=ctx.run_id,
+            stages=list(stages.executed), wall_seconds=round(wall, 3),
+        )
     return EXIT_SUCCESS
 
 
@@ -1397,6 +1448,9 @@ def _append_metric(
 
 __all__ = [
     "BEYOND_STOP_STAGES",
+    "CONSULTATION_FLOW_MARKER_PREFIX",
+    "CONSULTATION_STOP_REASON",
+    "CONSULTATION_STOP_STAGE",
     "METRICS_NAME",
     "REBUILD_LOG_NAME",
     "REENTRY_FROM_STAGES",
@@ -1405,10 +1459,24 @@ __all__ = [
     "RebuildStageError",
     "assert_reservation_fresh",
     "find_reservation",
+    "is_sample_flow_run",
     "reentry_stages",
+    "refuse_unauthorized_full_preview",
     "run_reentry",
     "stage_compile",
     "stage_plan",
     "stage_preview",
     "stage_selection",
 ]
+
+
+def _bundle_or_none(bundle_file: Path) -> ReviewBundle | None:
+    try:
+        return load_bundle(bundle_file)
+    except BundleDriftError as error:
+        if error.code != "bundle_unreadable":
+            raise
+        bootstrapped = _bootstrap_bundle(bundle_file)
+        if bootstrapped is None:
+            return None
+        return bootstrapped

@@ -6,14 +6,13 @@ across selection attempts. This journal is runtime state, NEVER an
 authoritative artifact. A reservation without its matching settle counts
 as still reserved, so a crash never replays a paid attempt for free.
 
-Amendment (2026-09-10 ruling): the 30 s cap is a SAMPLE cap. Sample
-renders (≤ the allowance) stay capped exactly as designed
-(ux-slice2-p1-fix-design.md §P1-3); a full preview re-render commissioned
-by an adopted judgment's selection-rebuild reservation is exempt from the
-sample-seconds refusal (the wall-clock deadline and LLM-call caps remain
-fully in force for it, matching the initial chain's free full previews).
-Exempt renders are recorded under the "full_rebuild_exempt" scope, which
-every SAMPLE gate ignores; the combined WALL fold still counts them.
+Historical note (not a live rule): some older rows carry a
+"full_rebuild_exempt" scope from an unauthorized change that is no
+longer in force — no new rows may be written under that scope (no
+writer exists for it). The scope string stays in the type (and the
+generic scope fold below) ONLY so those unauthorized historical rows
+keep folding into the wall deadline honestly; every SAMPLE gate
+ignores that scope.
 """
 
 # allow: SIZE_OK — one ledger concern per file (the entry model + the
@@ -54,10 +53,8 @@ class SelectionBudgetEntryV1(StrictModel):
     ``scope`` is the sample→full-episode boundary: "sample" lines feed
     the sample allowance, "full_episode" lines feed only the
     full-episode allowance — neither gate ever counts the other.
-    "full_rebuild_exempt" lines are the 2026-09-10 ruling's honest
-    record of a judgment-commissioned full preview re-render: excluded
-    from the sample allowance (and from every gate), counted only by
-    the combined wall fold. ``model_id`` attributes the line to one
+    "full_rebuild_exempt" marks unauthorized historical rows — read for
+    budget fold compatibility; no new writes. ``model_id`` attributes the line to one
     production model (None = unattributed). ``retry_index`` itemizes
     internal retries so every attempt of a retried call settles its own
     line. Absent (defaults) on legacy lines.
@@ -294,47 +291,6 @@ def reserve_preview(
     return entry
 
 
-def reserve_preview_full_rebuild_exempt(
-    episode_dir: Path, attempt: SelectionAttempt, preview_seconds: float
-) -> SelectionBudgetEntryV1:
-    """Honest ledger line for a ruling-exempt full re-render reservation.
-
-    Same shape as a sample reservation, tagged with the
-    "full_rebuild_exempt" scope: the seconds never enter the sample
-    allowance (the sample gate ignores this scope), the combined wall
-    fold still counts the line once settled. Nothing is silently
-    dropped from the journal.
-    """
-
-    entry = _entry(
-        attempt, "preview_reserved", preview_reserved=preview_seconds,
-    )
-    entry = entry.model_copy(update={"scope": "full_rebuild_exempt"})
-    append_selection_budget_entry(episode_dir, entry)
-    return entry
-
-
-def settle_preview_full_rebuild_exempt(  # noqa: PLR0913 (ledger-line settle; kwargs are the entry contract)
-    episode_dir: Path,
-    attempt: SelectionAttempt,
-    *,
-    preview_seconds: float,
-    wall_elapsed: float,
-    result: BudgetResult,
-    failure_code: str | None = None,
-) -> SelectionBudgetEntryV1:
-    """Settle a ruling-exempt full re-render under its exempt scope."""
-
-    entry = _entry(
-        attempt, "preview_settled", wall_used=wall_elapsed,
-        preview_used=preview_seconds, result=result,
-        failure_code=failure_code,
-    )
-    entry = entry.model_copy(update={"scope": "full_rebuild_exempt"})
-    append_selection_budget_entry(episode_dir, entry)
-    return entry
-
-
 def settle_preview(  # noqa: PLR0913 (ledger-line settle; kwargs are the entry contract)
     episode_dir: Path,
     attempt: SelectionAttempt,
@@ -386,10 +342,8 @@ __all__ = [
     "plan_preview_seconds",
     "reserve_director",
     "reserve_preview",
-    "reserve_preview_full_rebuild_exempt",
     "selection_budget_used",
     "selection_budget_used_in_scope",
     "settle_director",
     "settle_preview",
-    "settle_preview_full_rebuild_exempt",
 ]

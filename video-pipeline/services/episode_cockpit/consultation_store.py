@@ -42,6 +42,12 @@ from services.editorial.models import (
     AdoptedPolicySummaryV1,
     PresentationCondition,
 )
+from services.episode_cockpit.consultation_authorization import (
+    FullAuthorizationBinding,
+    append_full_authorization_once,
+    full_authorization_content_key,
+    full_render_authorized,
+)
 from services.episode_cockpit.consultation_selection_budget import (
     DIRECTOR_WALL_ALLOWANCE_SECONDS,
     BudgetScope,
@@ -147,7 +153,9 @@ def unconfirmed_for_policy(policy: AdoptedPolicyV1) -> tuple[str, ...]:
     merged = (*policy.unconfirmed, TRIAL_VIEW_UNCONFIRMED_JA)
     return tuple(dict.fromkeys(merged))
 
-type ConsultationDecision = Literal["adopt", "revise", "reject", "both_wrong", "delegate"]
+type ConsultationDecision = Literal[
+    "adopt", "revise", "reject", "both_wrong", "delegate", "full_authorized"
+]
 
 type PanelRole = Literal["a", "b", "real_frame"]
 
@@ -319,6 +327,12 @@ class ConsultationJudgmentV1(StrictModel):
     the WHOLE journal — never just the latest row. A deliberate
     re-adoption is a NEW operation id and appends a new row. Absent
     (None) on legacy lines.
+
+    The ``auth_*`` binding (``full_authorized`` only) is server-fixed at
+    append time from the current review-store head, the adopted policy,
+    and the viewed sample's stored manifest — never client-claimed.
+    Absent (None) on every other decision and on legacy unbound
+    ``full_authorized`` rows, which authorize nothing (fail-closed).
     """
 
     schema_version: Literal["cockpit-consultation-judgment-v1"] = (
@@ -331,6 +345,11 @@ class ConsultationJudgmentV1(StrictModel):
     scope: ConsultationScope
     note: str | None = None
     operation_id: str | None = None
+    auth_sample_id: str | None = None
+    auth_sample_content_sha256: str | None = None
+    auth_base_version: str | None = None
+    auth_base_plan_sha256: str | None = None
+    auth_policy_sha256: str | None = None
     created_at: str
 
 
@@ -567,6 +586,65 @@ def load_judgments(episode_dir: Path) -> list[ConsultationJudgmentV1]:
     )
 
 
+def _join_policy(
+    episode_dir: Path, judgment: ConsultationJudgmentV1
+) -> AdoptedPolicyV1 | None:
+    """Join one judgment with its proposal; None when not adoptable.
+
+    Shared by the latest-policy view and the authorization binding, so
+    both read the SAME proposal table the same way: adopt|revise with a
+    non-empty scope, a named proposal, and that proposal still on the
+    table. Anything else (withdrawals, whole-consultation judgments,
+    missing proposals) yields no policy.
+    """
+
+    if judgment.decision not in ("adopt", "revise"):
+        return None
+    if not (
+        judgment.scope.composition
+        or judgment.scope.appearance
+        or judgment.scope.audio
+    ):
+        return None
+    if judgment.proposal_id is None:
+        return None
+    proposal_set = load_latest_proposal_sets(episode_dir).get(
+        judgment.consultation_id
+    )
+    proposal = next(
+        (
+            candidate
+            for candidate in (
+                proposal_set.proposals if proposal_set is not None else ()
+            )
+            if candidate.proposal_id == judgment.proposal_id
+        ),
+        None,
+    )
+    if proposal is None:
+        return None
+    details = proposal.details
+    return AdoptedPolicyV1(
+        consultation_id=judgment.consultation_id,
+        judgment_id=judgment.judgment_id,
+        proposal_id=proposal.proposal_id,
+        decision=judgment.decision,
+        scope=judgment.scope,
+        audience_message=details.audience_message,
+        structure=details.structure,
+        duration_estimate=details.duration_estimate,
+        candidate_scenes=details.candidate_scenes,
+        subtitle_policy=details.subtitle_policy,
+        audio_policy=details.audio_policy,
+        tempo_policy=details.tempo_policy,
+        reference_mapping=details.reference_mapping,
+        unused_reasons=details.unused_reasons,
+        unconfirmed=details.unconfirmed,
+        note=judgment.note,
+        presentation_condition=details.presentation_condition,
+    )
+
+
 def latest_adopted_policy(episode_dir: Path) -> AdoptedPolicyV1 | None:
     """The latest adoptable judgment joined with its proposal (None = none).
 
@@ -581,46 +659,7 @@ def latest_adopted_policy(episode_dir: Path) -> AdoptedPolicyV1 | None:
     judgments = load_judgments(episode_dir)
     if not judgments:
         return None
-    latest = judgments[-1]
-    if latest.decision not in ("adopt", "revise"):
-        return None
-    if not (
-        latest.scope.composition or latest.scope.appearance or latest.scope.audio
-    ):
-        return None
-    if latest.proposal_id is None:
-        return None
-    proposal_set = load_latest_proposal_sets(episode_dir).get(latest.consultation_id)
-    proposal = next(
-        (
-            candidate
-            for candidate in (proposal_set.proposals if proposal_set is not None else ())
-            if candidate.proposal_id == latest.proposal_id
-        ),
-        None,
-    )
-    if proposal is None:
-        return None
-    details = proposal.details
-    return AdoptedPolicyV1(
-        consultation_id=latest.consultation_id,
-        judgment_id=latest.judgment_id,
-        proposal_id=proposal.proposal_id,
-        decision=latest.decision,
-        scope=latest.scope,
-        audience_message=details.audience_message,
-        structure=details.structure,
-        duration_estimate=details.duration_estimate,
-        candidate_scenes=details.candidate_scenes,
-        subtitle_policy=details.subtitle_policy,
-        audio_policy=details.audio_policy,
-        tempo_policy=details.tempo_policy,
-        reference_mapping=details.reference_mapping,
-        unused_reasons=details.unused_reasons,
-        unconfirmed=details.unconfirmed,
-        note=latest.note,
-        presentation_condition=details.presentation_condition,
-    )
+    return _join_policy(episode_dir, judgments[-1])
 
 
 def policy_summary(policy: AdoptedPolicyV1) -> AdoptedPolicySummaryV1:
@@ -1016,6 +1055,25 @@ def derive_policy_rebuild(  # noqa: PLR0911 (one return per rebuild state; the s
     }
 
 
+def consultation_adoption_open(episode_dir: Path) -> bool:
+    """Whether an adoption stands open (a newer withdrawal closes it).
+
+    Trailing 全編へ rows neither adopt nor withdraw: the adoption they
+    stand on keeps the consultation open until a newer adoption decision
+    or withdrawal moves it. A legacy or expired authorization therefore
+    never silently returns the flow to ordinary routing — the sample
+    path stays the preview surface until a BOUND authorization holds.
+    """
+
+    judgments = load_judgments(episode_dir)
+    prefix = list(judgments)
+    while prefix and prefix[-1].decision == "full_authorized":
+        prefix.pop()
+    if not prefix:
+        return False
+    return _join_policy(episode_dir, prefix[-1]) is not None
+
+
 def selection_rebuild_active(
     episode_dir: Path, stage_runs: Sequence[StageRunRow] = ()
 ) -> bool:
@@ -1226,9 +1284,10 @@ def combined_wall_used_in_scope(episode_dir: Path, *scopes: BudgetScope) -> floa
     """Proposal-journal wall + the named ledger scopes' wall seconds.
 
     ``combined_wall_used`` is exactly this over the "sample" scope — the
-    deadline fold adds "full_rebuild_exempt" so ruling-exempt re-render
-    lines stay wall-bounded (the wall deadline enforcement is unchanged;
-    only the SAMPLE cap is scoped).
+    deadline fold also reads the unauthorized historical
+    "full_rebuild_exempt" rows (read for budget fold compatibility; no
+    new writes), so their wall seconds stay wall-bounded (the wall
+    deadline enforcement is unchanged; only the SAMPLE cap is scoped).
     """
 
     wall = budget_used(episode_dir).wall_seconds
@@ -1272,11 +1331,10 @@ def ensure_preview_budget_available(
 
     Fail-closed: an over-allowance plan is never silently truncated to
     fit — the bundle stays whole-plan-bound and the run stops. This is
-    the SAMPLE gate (2026-09-10 ruling): it folds the "sample" ledger
-    scope only; a full re-render commissioned by a selection-rebuild
-    reservation is exempt (see
-    consultation_selection_budget.reserve_preview_full_rebuild_exempt)
-    while its wall time stays under the unchanged wall deadline.
+    the SAMPLE gate: it folds the "sample" ledger scope only.
+    Unauthorized historical "full_rebuild_exempt" rows (read for budget
+    fold compatibility; no new writes) never enter this gate, while
+    their wall time stays under the unchanged wall deadline.
     """
 
     used = selection_budget_used(episode_dir).preview_seconds
@@ -1514,6 +1572,7 @@ __all__ = [
     "ConsultationRecordV1",
     "ConsultationScope",
     "DirectorConnection",
+    "FullAuthorizationBinding",
     "GenerationDecision",
     "GenerationEventV1",
     "GenerationPermissionV1",
@@ -1525,6 +1584,7 @@ __all__ = [
     "append_budget_event",
     "append_consultation",
     "append_effective_judgment_once",
+    "append_full_authorization_once",
     "append_generation_event",
     "append_judgment",
     "append_panel",
@@ -1536,6 +1596,7 @@ __all__ = [
     "combined_llm_used",
     "combined_wall_used",
     "combined_wall_used_in_scope",
+    "consultation_adoption_open",
     "consultation_view",
     "consultation_write_locked",
     "consume_budget",
@@ -1546,6 +1607,8 @@ __all__ = [
     "ensure_model_call_budget_available",
     "ensure_preview_budget_available",
     "ensure_selection_budget_available",
+    "full_authorization_content_key",
+    "full_render_authorized",
     "image_calls_used",
     "judgment_operation_key",
     "latest_adopted_policy",

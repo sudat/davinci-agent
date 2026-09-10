@@ -1,14 +1,11 @@
-"""Deterministic presentation-intent consumption (r9e gap).
+"""Deterministic presentation-intent consumption.
 
-Applied NL presentation commands (``subtitle_shorter`` etc.) journal an
-intent via :mod:`services.episode_cockpit.review_chat`, but nothing consumed
-it — the rebuild re-rendered the unchanged plan, so the operator's fix
-published a content-identical re-encode. This module is the deterministic
-(no-LLM) translation layer: presentation intents become render/compile
-settings overrides, derived cumulatively in journal order and bounded to
-the presentation domain. Every mapping is recorded with its command id
-(intent → setting → render traceability); kinds with no review-plane knob
-are honestly-unimplemented typed notes, never fake effects.
+Applied NL presentation commands journal an intent via
+:mod:`services.episode_cockpit.review_chat`; this module is the
+deterministic (no-LLM) translation layer from intents to render/compile
+settings overrides, derived cumulatively in journal order. Every mapping
+is recorded with its command id; kinds with no review-plane knob are
+honestly-unimplemented typed notes, never fake effects.
 """
 
 from __future__ import annotations
@@ -19,6 +16,11 @@ from typing import Literal
 
 from pydantic import Field
 
+from services.compile.subtitle_policy import (
+    SUBTITLE_NARROWING_KINDS,
+    SUBTITLE_NO_KNOB_DETAILS,
+    subtitle_wrap_widths,
+)
 from services.contracts.primitives import Identifier, StrictModel
 from services.episode_cockpit.errors import CockpitUnprocessableError
 from services.episode_cockpit.review_chat import (
@@ -36,12 +38,6 @@ from services.preview.models import (
 
 type PresentationSettingKind = Literal["subtitle_max_chars_per_line", "bgm_gain_mb"]
 
-# The subtitle base width is the frozen Phase-1 QC policy
-# (``services/cli/compile_ir.py:qc_policy`` ``max_chars_per_line=20``);
-# each ``subtitle_shorter`` steps it down, floored so cues stay renderable.
-SUBTITLE_BASE_CHARS_PER_LINE: int = 20
-SUBTITLE_SHORTER_STEP_CHARS: int = 4
-SUBTITLE_MIN_CHARS_PER_LINE: int = 8
 # BGM gain steps are integer millibels on the music-anchor knob
 # (``services/presentation/audio_models.py:AudioAnchor.gain_mb``);
 # each ``lower_bgm`` deepens the cut, floored at -6 dB.
@@ -50,11 +46,8 @@ LOWER_BGM_FLOOR_MB: int = -6000
 
 PRESENTATION_KINDS: frozenset[ReviewCommandKind] = frozenset(
     {
-        "subtitle_shorter",
-        "remove_effect",
-        "lower_bgm",
-        "match_color",
-        "channel_lower_third",
+        "subtitle_shorter", "split_display", "duration_shorten", "text_summary_ack",
+        "line_wrap", "remove_effect", "lower_bgm", "match_color", "channel_lower_third"
     }
 )
 
@@ -98,6 +91,12 @@ class UnimplementedPresentationNote(StrictModel):
     code: Literal["no-review-plane-knob"] = "no-review-plane-knob"
     detail: str = Field(min_length=1, strict=True)
 
+    def to_trace(self) -> TracePresentationNote:
+        return TracePresentationNote(
+            command_id=self.command_id, command_kind=self.command_kind,
+            code=self.code, detail=self.detail,
+        )
+
 
 class PresentationOverrideSet(StrictModel):
     """Cumulative presentation overrides in journal order (presentation only)."""
@@ -112,37 +111,25 @@ class PresentationOverrideSet(StrictModel):
         return not self.overrides and not self.notes
 
     def applied_command_ids(self) -> tuple[str, ...]:
-        return tuple(
-            dict.fromkeys(
-                (
-                    *(entry.command_id for entry in self.overrides),
-                    *(entry.command_id for entry in self.notes),
-                )
-            )
-        )
+        ids = [entry.command_id for entry in (*self.overrides, *self.notes)]
+        return tuple(dict.fromkeys(ids))
+
+    def _last_value(self, setting: PresentationSettingKind) -> int | None:
+        values = [entry.value for entry in self.overrides if entry.setting == setting]
+        return values[-1] if values else None
 
     def effective_subtitle_max_chars(self) -> int | None:
-        values = [
-            entry.value
-            for entry in self.overrides
-            if entry.setting == "subtitle_max_chars_per_line"
-        ]
-        return values[-1] if values else None
+        return self._last_value("subtitle_max_chars_per_line")
 
     def effective_bgm_gain_mb(self) -> int | None:
-        values = [
-            entry.value for entry in self.overrides if entry.setting == "bgm_gain_mb"
-        ]
-        return values[-1] if values else None
+        return self._last_value("bgm_gain_mb")
 
     def to_render_settings(self) -> PresentationRenderSettings | None:
         subtitle = self.effective_subtitle_max_chars()
         bgm = self.effective_bgm_gain_mb()
         if subtitle is None and bgm is None:
             return None
-        return PresentationRenderSettings(
-            subtitle_max_chars_per_line=subtitle, bgm_gain_mb=bgm
-        )
+        return PresentationRenderSettings(subtitle_max_chars_per_line=subtitle, bgm_gain_mb=bgm)
 
     def to_trace_presentation(self) -> TracePresentation | None:
         """Audit record for the preview trace (None for plain rebuilds)."""
@@ -156,15 +143,7 @@ class PresentationOverrideSet(StrictModel):
                 settings.subtitle_max_chars_per_line if settings is not None else None
             ),
             bgm_gain_mb=settings.bgm_gain_mb if settings is not None else None,
-            notes=tuple(
-                TracePresentationNote(
-                    command_id=note.command_id,
-                    command_kind=note.command_kind,
-                    code=note.code,
-                    detail=note.detail,
-                )
-                for note in self.notes
-            ),
+            notes=tuple(note.to_trace() for note in self.notes),
         )
 
 
@@ -181,54 +160,54 @@ class CompilePresentationManifest(StrictModel):
     recorded_at: str = Field(min_length=1, strict=True)
 
 
+def _override(
+    command: AppliedCommand, setting: PresentationSettingKind, value: int
+) -> PresentationSettingOverride:
+    return PresentationSettingOverride(
+        command_id=command.command_id, command_kind=command.command_kind,
+        setting=setting, value=value,
+    )
+
+
 def derive_presentation_overrides(
     commands: tuple[AppliedCommand, ...],
 ) -> PresentationOverrideSet:
     """Translate applied commands to settings overrides (journal order).
 
-    Cumulative and order-preserving: each ``subtitle_shorter`` steps the
-    width down from the previous value; each ``lower_bgm`` deepens the
+    Cumulative and order-preserving: legacy ``subtitle_shorter`` and
+    explicit ``line_wrap`` share one wrap-width sequence (history fact:
+    legacy entries narrowed the width); each ``lower_bgm`` deepens the
     gain cut down to the floor. Non-presentation domains (selection,
     edit_plan, scope) are ignored — never translated, never noted.
     """
 
     overrides: list[PresentationSettingOverride] = []
     notes: list[UnimplementedPresentationNote] = []
-    subtitle_width = SUBTITLE_BASE_CHARS_PER_LINE
+    narrowing = sum(1 for c in commands if c.command_kind in SUBTITLE_NARROWING_KINDS)
+    subtitle_widths = iter(subtitle_wrap_widths(narrowing))
     bgm_gain = 0
     for command in commands:
         if command.command_kind not in PRESENTATION_KINDS:
             continue
         match command.command_kind:
-            case "subtitle_shorter":
-                subtitle_width = max(
-                    subtitle_width - SUBTITLE_SHORTER_STEP_CHARS,
-                    SUBTITLE_MIN_CHARS_PER_LINE,
-                )
+            case "subtitle_shorter" | "line_wrap":
                 overrides.append(
-                    PresentationSettingOverride(
-                        command_id=command.command_id,
-                        command_kind=command.command_kind,
-                        setting="subtitle_max_chars_per_line",
-                        value=subtitle_width,
-                    )
+                    _override(command, "subtitle_max_chars_per_line", next(subtitle_widths))
                 )
             case "lower_bgm":
                 bgm_gain = max(bgm_gain + LOWER_BGM_STEP_MB, LOWER_BGM_FLOOR_MB)
-                overrides.append(
-                    PresentationSettingOverride(
-                        command_id=command.command_id,
-                        command_kind=command.command_kind,
-                        setting="bgm_gain_mb",
-                        value=bgm_gain,
-                    )
+                overrides.append(_override(command, "bgm_gain_mb", bgm_gain))
+            case "text_summary_ack" if not command.explicit_ack:
+                raise PresentationTranslationError(
+                    "summary-ack-required",
+                    f"{command.command_id} summarizes speech without explicit ack",
                 )
             case _:
+                kind = command.command_kind
+                detail = _UNIMPLEMENTED_DETAILS.get(kind) or SUBTITLE_NO_KNOB_DETAILS[kind]
                 notes.append(
                     UnimplementedPresentationNote(
-                        command_id=command.command_id,
-                        command_kind=command.command_kind,
-                        detail=_UNIMPLEMENTED_DETAILS[command.command_kind],
+                        command_id=command.command_id, command_kind=kind, detail=detail,
                     )
                 )
     return PresentationOverrideSet(overrides=tuple(overrides), notes=tuple(notes))
@@ -314,21 +293,10 @@ def consume_presentation_intents(
 
 
 __all__ = [
-    "LOWER_BGM_FLOOR_MB",
-    "LOWER_BGM_STEP_MB",
-    "PRESENTATION_KINDS",
-    "SUBTITLE_BASE_CHARS_PER_LINE",
-    "SUBTITLE_MIN_CHARS_PER_LINE",
-    "SUBTITLE_SHORTER_STEP_CHARS",
-    "CompilePresentationManifest",
-    "PresentationOverrideSet",
-    "PresentationSettingKind",
-    "PresentationSettingOverride",
-    "PresentationTranslationError",
-    "UnimplementedPresentationNote",
-    "consume_presentation_intents",
-    "derive_presentation_overrides",
-    "load_journal_commands",
-    "presentation_manifest_name",
+    "LOWER_BGM_FLOOR_MB", "LOWER_BGM_STEP_MB", "PRESENTATION_KINDS",
+    "CompilePresentationManifest", "PresentationOverrideSet", "PresentationSettingKind",
+    "PresentationSettingOverride", "PresentationTranslationError",
+    "UnimplementedPresentationNote", "consume_presentation_intents",
+    "derive_presentation_overrides", "load_journal_commands", "presentation_manifest_name",
     "write_presentation_manifest",
 ]

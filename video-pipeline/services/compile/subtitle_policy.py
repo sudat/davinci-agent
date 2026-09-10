@@ -124,11 +124,65 @@ class SubtitleQcPolicy(StrictModel):
         )
 
 
+# Presentation wrap rules (moved from
+# services/episode_cockpit/presentation_overrides.py: the step constants +
+# wrap derivation live beside this subtitle rule module; the journal
+# derivation loop stays there and imports from here).
+
+# The subtitle base width is the frozen Phase-1 QC policy
+# (``services/cli/compile_ir.py:qc_policy`` ``max_chars_per_line=20``);
+# each narrowing intent steps it down, floored so cues stay renderable.
+SUBTITLE_BASE_CHARS_PER_LINE: int = 20
+SUBTITLE_SHORTER_STEP_CHARS: int = 4
+SUBTITLE_MIN_CHARS_PER_LINE: int = 8
+
+SUBTITLE_NARROWING_KINDS: frozenset[str] = frozenset({"subtitle_shorter", "line_wrap"})
+"""Kinds that narrow the subtitle wrap width, journal order.
+
+``subtitle_shorter`` is the legacy ambiguous intent (history fact: it
+narrowed the width); ``line_wrap`` is its explicit 4-choice successor.
+Both step the same cumulative width.
+"""
+
+SUBTITLE_NO_KNOB_DETAILS: dict[str, str] = {
+    "split_display": (
+        "splitting one cue into smaller display chunks is a compile "
+        "cue-table change with no review-plane knob; recorded, not rendered"
+    ),
+    "duration_shorten": (
+        "shortening cue display time risks unreadable cues and "
+        "speech-timing drift with no review-plane knob; recorded, not rendered"
+    ),
+    "text_summary_ack": (
+        "summarizing spoken content needs an operator acknowledgment and "
+        "has no deterministic review-plane knob; the ack is journaled, "
+        "the text is never rewritten here"
+    ),
+}
+
+
+def subtitle_wrap_widths(narrowing_requests: int) -> tuple[int, ...]:
+    """Cumulative wrap widths for N narrowing intents in journal order."""
+
+    widths: list[int] = []
+    width = SUBTITLE_BASE_CHARS_PER_LINE
+    for _ in range(narrowing_requests):
+        width = max(width - SUBTITLE_SHORTER_STEP_CHARS, SUBTITLE_MIN_CHARS_PER_LINE)
+        widths.append(width)
+    return tuple(widths)
+
+
 __all__ = [
+    "SUBTITLE_BASE_CHARS_PER_LINE",
+    "SUBTITLE_MIN_CHARS_PER_LINE",
+    "SUBTITLE_NARROWING_KINDS",
+    "SUBTITLE_NO_KNOB_DETAILS",
+    "SUBTITLE_SHORTER_STEP_CHARS",
     "CueSpan",
     "FrameCueSpan",
     "SampleCueSpan",
     "SubtitleQcPolicy",
     "TranscriptCueSegment",
     "TranscriptCueSource",
+    "subtitle_wrap_widths",
 ]

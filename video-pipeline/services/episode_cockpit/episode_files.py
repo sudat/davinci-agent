@@ -28,7 +28,9 @@ from pydantic import ValidationError
 
 from services.episode_cockpit.consultation_store import (
     canonical_policy_sha256,
+    consultation_adoption_open,
     consultation_write_locked,
+    full_render_authorized,
     latest_adopted_policy,
     policy_for_judgment,
     policy_scope_list,
@@ -127,7 +129,45 @@ EXECUTABLE_DOMAINS = frozenset({"edit_plan", "presentation"})
 NOT_EXECUTABLE_REASON = "command kind not rebuild-executable yet"
 
 
-_SELECTION_STAGES = ("selection", "plan", "compile", "preview")
+_SELECTION_STAGES = ("selection", "plan", "compile")
+# An adopted consultation judgment rebuilds selection→plan→compile and
+# stops: the full preview render waits for the operator's explicit 全編へ
+# judgment, and the sample flow is the terminal preview surface. The
+# spawned runner carries --stop PREVIEW_READY (the job's terminal state
+# stays PREVIEW_READY) plus the explicit --stop-stage compile flag, so the
+# runner truncates the chain at compile instead of re-rendering.
+
+# Rebuild-flow markers (mirror of the runner's sample-flow routing — kept
+# inline so services/ does not depend on cli/): a "consultation-flow:"
+# marker names an NL rebuild spawned inside an open consultation flow
+# (the runner treats every "consultation-"-prefixed marker as sample
+# flow and refuses its full preview without an explicit 全編へ); a
+# "review-command:" marker names an ordinary non-consultation rebuild
+# that runs to preview as before.
+_CONSULTATION_FLOW_MARKER_PREFIX = "consultation-flow:"
+_ORDINARY_REBUILD_MARKER_PREFIX = "review-command:"
+_CONSULTATION_FLOW_STOP_STAGE = "compile"
+
+
+def consultation_flow_routing(
+    episode_dir: Path, command_id: str
+) -> tuple[str, str | None]:
+    """Marker + stop-stage for one NL rebuild spawn.
+
+    An open consultation flow (an adopted policy whose latest judgment
+    is not the explicit 全編へ authorization) routes the rebuild to
+    stop at compile: the sample path is the terminal preview surface
+    pre-authorization, so the run never reaches stage_preview's full
+    render. Ordinary rebuilds — and post-authorization ones — carry an
+    explicit non-consultation marker and run to preview as before.
+    """
+    if not full_render_authorized(episode_dir) and consultation_adoption_open(
+        episode_dir
+    ):
+        return f"{_CONSULTATION_FLOW_MARKER_PREFIX}{command_id}", (
+            _CONSULTATION_FLOW_STOP_STAGE
+        )
+    return f"{_ORDINARY_REBUILD_MARKER_PREFIX}{command_id}", None
 
 
 def review_store_location(
@@ -588,11 +628,22 @@ class FileOps(WorkspaceContext):
         reads as "nothing happened". A resend whose head is still an
         UNspawned revert relaunches the SAME step (same new_version, no
         second walk-back); only a spawned revert (or another apply moving
-        the head) lets the next revert walk one more step.
+        the head) lets the next revert walk one more step. Inside an open
+        consultation the same routing determination that stops NL-fix
+        rebuilds at compile stops the revert BEFORE any head change
+        (typed 409, head untouched): advancing the head while leaving
+        rendering stopped is not allowed.
         """
 
         snapshot = self._require_snapshot(episode_id)
         episode_dir = self._episode_dir(snapshot.job.episode_id)
+        _, revert_stop = consultation_flow_routing(episode_dir, "revert")
+        if revert_stop is not None:
+            raise CockpitConflictError(
+                "consultation-revert-not-authorized",
+                "相談中は巻き戻しを確定していません。試し動画で確認するか、"
+                "全編へを承認してください。",
+            )
         self._bootstrap_review_store_if_needed(episode_dir, output_id)
         store = review_store_location(episode_dir, output_id)
         head = load_head(store.log_path, store.plan_dir)
@@ -849,14 +900,18 @@ class FileOps(WorkspaceContext):
              if command.result_plan_version is not None),
             None,
         )
+        primary = applied[0]
+        flow_marker, flow_stop = consultation_flow_routing(
+            episode_dir, primary.command_id
+        )
         entry = RebuildRequestEntry(
             sequence=self._next_sequence(log_path),
             stage_hint=resolved_hint,
+            marker=flow_marker,
             target_version=target_version,
             output_id=output_id,
         )
         self._append_jsonl(log_path, entry)  # the 予約 (pre-spawn reservation)
-        primary = applied[0]
         result: dict[str, object]
         if any(command.affected_domain not in EXECUTABLE_DOMAINS for command in applied):
             result = {
@@ -868,25 +923,28 @@ class FileOps(WorkspaceContext):
             }
         else:
             run_id = uuid.uuid4().hex[:12]
+            spawn_argv = [
+                sys.executable,
+                "-m",
+                RUNNER_MODULE,
+                "--episode-root",
+                str(episode_dir),
+                "--stop",
+                RUNNER_STOP,
+                "--from-stage",
+                stages[0],
+                "--applied-command",
+                primary.command_id,
+                "--run-id",
+                run_id,
+                "--state-store",
+                str(self._state_store_path),
+            ]
+            if flow_stop is not None:
+                spawn_argv.extend(["--stop-stage", flow_stop])
             try:
                 _spawn_runner(
-                    [
-                        sys.executable,
-                        "-m",
-                        RUNNER_MODULE,
-                        "--episode-root",
-                        str(episode_dir),
-                        "--stop",
-                        RUNNER_STOP,
-                        "--from-stage",
-                        stages[0],
-                        "--applied-command",
-                        primary.command_id,
-                        "--run-id",
-                        run_id,
-                        "--state-store",
-                        str(self._state_store_path),
-                    ],
+                    spawn_argv,
                     cwd=_PIPELINE_ROOT,
                     log_path=episode_dir / RUNNER_LOG_NAME,
                 )
@@ -899,6 +957,7 @@ class FileOps(WorkspaceContext):
                 RebuildRequestEntry(
                     sequence=self._next_sequence(log_path),
                     stage_hint=resolved_hint,
+                    marker=flow_marker,
                     spawned=True,
                     run_id=run_id,
                     target_version=target_version,
@@ -913,6 +972,8 @@ class FileOps(WorkspaceContext):
                 "applied_command": primary.command_id,
                 "run_id": run_id,
             }
+            if flow_stop is not None:
+                result["stop_stage"] = flow_stop
         if len(applied) > 1:
             result["applied_commands"] = [command.command_id for command in applied]
         return result
@@ -926,7 +987,13 @@ class FileOps(WorkspaceContext):
         review-store base so the runner refuses a stale run instead of
         silently using the latest policy (the 予約→起動→成果 discipline).
         The lineage is the selection re-entry projection
-        (selection→plan→compile→preview). The rebuild consumes NO
+        (selection→plan→compile): an adoption rebuild must NOT reach the
+        full preview render before the operator's explicit 全編へ
+        judgment — the sample flow is the terminal preview surface. The
+        spawned runner carries --stop PREVIEW_READY (the job's terminal
+        state stays PREVIEW_READY) plus the explicit --stop-stage compile
+        flag, so the runner truncates the chain at compile.
+        The rebuild consumes NO
         consultation LLM budget (deterministic orchestration + the chain's
         own director path). ``runner-active`` (a runner holds the lock)
         propagates as the typed 409 — the judgment route maps it to an
@@ -968,9 +1035,7 @@ class FileOps(WorkspaceContext):
                     "reservation_sequence": existing.sequence,
                     "reused": True,
                 }
-            start = PIPELINE_STAGES.index("selection")
-            stop = PIPELINE_STAGES.index("preview")
-            stages = tuple(PIPELINE_STAGES[start : stop + 1])
+            stages = _SELECTION_STAGES  # the recorded lineage ends at compile
             marker = f"consultation-{judgment_id}"
             base_version, base_sha = _review_base_pin(episode_dir, output_id)
             reservation = RebuildRequestEntry(
@@ -997,6 +1062,8 @@ class FileOps(WorkspaceContext):
                     RUNNER_STOP,
                     "--from-stage",
                     stages[0],
+                    "--stop-stage",
+                    "compile",
                     "--applied-command",
                     marker,
                     "--reservation-sequence",

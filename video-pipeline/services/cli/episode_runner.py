@@ -11,7 +11,9 @@ the chain's expected episode_root layout (no media copies; preview
 linked into ``<episode-root>/previews/``). Task 9 adds the
 ``--from-stage`` stage-subset re-entry (``episode_runner_rebuild``):
 plan/compile/preview against the CURRENT committed review store, then
-always re-render + republish the preview.
+re-render + republish the preview — unless ``--stop-stage compile``
+(the consultation adoption path) truncates the chain at compile so the
+run stops before the full preview render.
 
 Exit codes: 0 success, 1 blocked (typed reason in runner.log + a
 ``failed_blocked`` stage run through existing state semantics), 2
@@ -48,6 +50,7 @@ from services.cli.episode_runner_editorial import (
     sanitized_env,
 )
 from services.cli.episode_runner_rebuild import (
+    CONSULTATION_STOP_STAGE,
     REENTRY_FROM_STAGES,
     RebuildStageError,
     run_reentry,
@@ -115,6 +118,7 @@ class RunnerInvocation:
     run_id: str | None = None
     reservation_sequence: int | None = None
     runner_lock_fd: int | None = None
+    stop_stage: str | None = None
 
 
 def _frame_count_from_normalize_record(episode_root: Path) -> int | None:
@@ -320,6 +324,19 @@ def _reentry_exit(store: StateStore, ctx: RunContext, call: RunnerInvocation, lo
             "stop-unsupported-for-reentry",
             "re-entry always re-renders the preview; --stop must be PREVIEW_READY",
         )
+    if call.stop_stage is not None:
+        if call.stop_stage != CONSULTATION_STOP_STAGE:
+            raise RunnerMalformedError(
+                "reentry-malformed",
+                f"--stop-stage must be {CONSULTATION_STOP_STAGE}, got {call.stop_stage!r}",
+            )
+        if REENTRY_FROM_STAGES.index(call.stop_stage) < REENTRY_FROM_STAGES.index(
+            call.from_stage if call.from_stage is not None else ""
+        ):
+            raise RunnerMalformedError(
+                "reentry-malformed",
+                f"--stop-stage {call.stop_stage!r} ends before --from-stage {call.from_stage!r}",
+            )
     _assert_inherited_runner_lock(call.episode_root, call.runner_lock_fd)
     try:
         return run_reentry(store, ctx, call, log)
@@ -328,15 +345,16 @@ def _reentry_exit(store: StateStore, ctx: RunContext, call: RunnerInvocation, lo
 
 
 def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
-    log_event(
-        log,
-        "runner_started",
-        run_id=run_id,
-        pid=os.getpid(),
-        stop=call.stop,
-        from_stage=call.from_stage,
-        applied_command=call.applied_command,
-    )
+    started_fields: dict[str, object] = {
+        "run_id": run_id,
+        "pid": os.getpid(),
+        "stop": call.stop,
+        "from_stage": call.from_stage,
+        "applied_command": call.applied_command,
+    }
+    if call.stop_stage is not None:
+        started_fields["stop_stage"] = call.stop_stage
+    log_event(log, "runner_started", **started_fields)
     if call.stop not in STAGE_ORDER:
         raise RunnerMalformedError(
             "stop-unknown", f"--stop must be one of {STAGE_ORDER}"
@@ -403,6 +421,7 @@ def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
     run_id: str | None = None,
     reservation_sequence: int | None = None,
     runner_lock_fd: int | None = None,
+    stop_stage: str | None = None,
 ) -> int:
     """Advance one cockpit episode through the existing chain; 0/1/2.
 
@@ -413,6 +432,10 @@ def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
     re-entry executes (selection re-entry pins to it instead of reading
     the latest policy). ``runner_lock_fd`` is the inherited episode-lock
     descriptor a re-entry must prove (fail-closed without it).
+    ``stop_stage`` truncates a re-entry chain: a consultation-triggered
+    rebuild passes ``"compile"`` so the run commits the candidate plan
+    and stops WITHOUT the full preview render (the job stays
+    PREVIEW_READY); absent, the re-entry runs to ``preview`` as before.
     """
 
     call = RunnerInvocation(
@@ -426,6 +449,7 @@ def run(  # noqa: PLR0913 (keyword surface mirrors the argparse flag group)
         run_id,
         reservation_sequence,
         runner_lock_fd,
+        stop_stage,
     )
     call.episode_root.mkdir(parents=True, exist_ok=True)
     run_id = call.run_id if call.run_id is not None else uuid.uuid4().hex[:12]
@@ -485,6 +509,14 @@ def _parser() -> argparse.ArgumentParser:
         "re-entry must prove (fail-closed without it)",
     )
     parser.add_argument(
+        "--stop-stage",
+        choices=REENTRY_FROM_STAGES,
+        default=None,
+        help="P1-4: truncate a re-entry chain at this stage (consultation "
+        "rebuilds pass 'compile' so the run stops before the full preview "
+        "render); absent, the re-entry runs to preview as before",
+    )
+    parser.add_argument(
         "--state-store",
         type=Path,
         default=None,
@@ -505,6 +537,7 @@ def main(argv: list[str] | None = None) -> int:
         run_id=arguments.run_id,
         reservation_sequence=arguments.reservation_sequence,
         runner_lock_fd=arguments.runner_lock_fd,
+        stop_stage=arguments.stop_stage,
     )
 
 

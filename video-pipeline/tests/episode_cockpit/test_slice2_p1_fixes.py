@@ -43,15 +43,15 @@ from services.episode_cockpit import episode_files
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.backend import CockpitWorkspace
 from services.episode_cockpit.consultation_selection_budget import (
+    SelectionBudgetEntryV1,
+    append_selection_budget_entry,
     attempt_for,
     reserve_director,
     reserve_preview,
-    reserve_preview_full_rebuild_exempt,
     selection_budget_used,
     selection_budget_used_in_scope,
     settle_director,
     settle_preview,
-    settle_preview_full_rebuild_exempt,
 )
 from services.episode_cockpit.consultation_store import (
     CONNECTED_POLICY_FIELDS,
@@ -77,6 +77,7 @@ from services.episode_cockpit.consultation_store import (
     ensure_full_episode_budget_available,
     ensure_model_call_budget_available,
     ensure_preview_budget_available,
+    full_render_authorized,
     latest_adopted_policy,
     load_budget_limits,
     load_consultations,
@@ -117,6 +118,11 @@ from services.review_command.store import (
     OperatorDecision0C,
     initialize_store,
     load_head,
+)
+from tests.episode_cockpit.test_full_authorization_binding import (
+    _seed_plan_av,
+    authorize_bound,
+    seed_viewed_sample,
 )
 
 RATE = RationalFrameRate(num=30, den=1)
@@ -205,11 +211,15 @@ def _judge(
     return judgment
 
 
-def _episode_with_policy(tmp_path: Path, name: str = "ep-policy") -> Path:
+def _episode_with_policy(
+    tmp_path: Path, name: str = "ep-policy", plan: EditPlan0C | None = None
+) -> Path:
     episode_root = tmp_path / name
     store_dir = episode_root / "review" / "store"
     store_dir.mkdir(parents=True)
-    initialize_store(_seed_plan(), episode_root / "review" / "events.jsonl", store_dir)
+    initialize_store(
+        plan or _seed_plan(), episode_root / "review" / "events.jsonl", store_dir
+    )
     _seed_consultation(episode_root)
     _judge(episode_root, "j1")
     return episode_root
@@ -1048,28 +1058,23 @@ def _huge_plan(episode_root: Path) -> EditPlan0C:
     )
 
 
-def test_full_rebuild_over_remaining_sample_budget_commits(
+def test_selection_commit_ignores_candidate_preview_size(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """2026-09-10 ruling: a judgment-commissioned full re-render is not
-    sample-budget-capped — it passes the preview gate and commits (the
-    r9 blocker: a 282 s real-footage re-render used to fail-close here).
-    """
+    """A candidate commit is not a render: stage_selection performs NO
+    preview-budget check and swallows no overrun — even a 282 s
+    candidate commits with the sample allowance nearly spent. The 30 s
+    cap is enforced at sample-render time; the full render is
+    post-authorization."""
 
     episode_dir = _episode_with_policy(tmp_path)
     _live_env(monkeypatch)
     captured: dict[str, Any] = {}
     _fake_ok(monkeypatch, captured, plan_factory=_huge_plan)
-    renders: list[str] = []
-    monkeypatch.setattr(
-        episode_runner_rebuild,
-        "render_review_preview",
-        lambda *args, **kwargs: renders.append("render") or "sha",
-    )
     attempt = attempt_for(9, "c1", "j1")
-    reserve_preview(episode_dir, attempt, 25.0)
+    reserve_preview(episode_dir, attempt, 29.0)
     settle_preview(
-        episode_dir, attempt, preview_seconds=25.0, wall_elapsed=1.0,
+        episode_dir, attempt, preview_seconds=29.0, wall_elapsed=1.0,
         result="succeeded",
     )
     reservation = _reserve(episode_dir, "j1")
@@ -1083,7 +1088,6 @@ def test_full_rebuild_over_remaining_sample_budget_commits(
         job_status="PREVIEW_READY",
     )
 
-    assert renders == []
     assert load_head(
         episode_dir / "review" / "events.jsonl", episode_dir / "review" / "store"
     ).version == 2
@@ -1091,14 +1095,19 @@ def test_full_rebuild_over_remaining_sample_budget_commits(
     assert plan_sha == plan_sha256(
         store_plan(episode_dir / "review" / "store" / "plan-v2.json")
     )
+    assert selection_budget_used(episode_dir).preview_seconds == pytest.approx(29.0)
 
 
-def test_full_rebuild_preview_ledgers_exemption_not_sample(
+def test_over_allowance_render_refused_before_renderer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The exempt re-render settles under "full_rebuild_exempt": visible
-    in the journal and the wall fold, invisible to the sample totals and
-    the sample gate (2026-09-10 ruling, honest ledger representation).
+    """A render whose sample seconds exceed the remaining allowance is
+    REFUSED with the typed consultation-preview-budget-exhausted error
+    BEFORE any render — no renderer contact, no new journal lines (the
+    ≤30 s sample path is the pre-authorization loop and full renders
+    start only after the explicit 全編へ judgment under the separate
+    full_episode ledger; the unauthorized historical scope gains no
+    rows).
     """
 
     episode_dir = _episode_with_policy(tmp_path)
@@ -1113,9 +1122,13 @@ def test_full_rebuild_preview_ledgers_exemption_not_sample(
         result="succeeded",
     )
     attempt = attempt_for(2, "c1", "j1")
+    journal = episode_dir / "consultation" / "selection-budget.jsonl"
+    lines_before = [
+        json.loads(line) for line in journal.read_bytes().splitlines()
+    ]
 
     def fail_render(*args: Any, **kwargs: Any) -> Any:
-        raise RuntimeError("ffmpeg gone")
+        raise RuntimeError("renderer must not be reached")
 
     monkeypatch.setattr(
         episode_runner_rebuild, "render_review_preview", fail_render
@@ -1124,26 +1137,19 @@ def test_full_rebuild_preview_ledgers_exemption_not_sample(
     with pytest.raises(RebuildStageError) as exc_info:
         episode_runner_rebuild.stage_preview(
             episode_dir, head, head.plan, ir, io.BytesIO(),
-            run_id="run-preview-exempt", selection_attempt=attempt,
+            run_id="run-preview-refused", selection_attempt=attempt,
         )
 
-    assert exc_info.value.code == "preview-failed"
-    journal = episode_dir / "consultation" / "selection-budget.jsonl"
-    lines = [
+    assert exc_info.value.code == "consultation-preview-budget-exhausted"
+    lines_after = [
         json.loads(line) for line in journal.read_bytes().splitlines()
     ]
-    exempt_lines = [line for line in lines if line["scope"] == "full_rebuild_exempt"]
-    assert [line["phase"] for line in exempt_lines] == [
-        "preview_reserved", "preview_settled",
-    ]
-    assert exempt_lines[-1]["preview_seconds_used"] == pytest.approx(2.0)
-    assert exempt_lines[-1]["result"] == "failed"
-    assert all(line["scope"] == "sample" for line in lines[:-2])
+    assert lines_after == lines_before  # refused before reserve — zero new writes
+    assert not any(
+        line["scope"] == "full_rebuild_exempt" for line in lines_after
+    )
     used = selection_budget_used(episode_dir)
     assert used.preview_seconds == pytest.approx(29.0)
-    exempt_used = selection_budget_used_in_scope(episode_dir, "full_rebuild_exempt")
-    assert exempt_used.preview_seconds == pytest.approx(2.0)
-    assert exempt_used.wall_seconds > 0.0
     limits = load_budget_limits()
     ensure_preview_budget_available(episode_dir, limits, 1.0)
     with pytest.raises(CockpitUnprocessableError) as gate_error:
@@ -1151,23 +1157,63 @@ def test_full_rebuild_preview_ledgers_exemption_not_sample(
     assert gate_error.value.code == "consultation-preview-budget-exhausted"
 
 
-def test_wall_deadline_counts_full_rebuild_exempt_render_seconds(
+def _append_legacy_unauthorized_rows(episode_dir: Path) -> None:
+    """Test-only legacy-history simulation: writes unauthorized
+    historical "full_rebuild_exempt" ledger lines DIRECTLY via the raw
+    journal append. No production writer exists for this scope; the
+    fold must still read such historical rows."""
+
+    attempt = attempt_for(1, "c1", "j1")
+    append_selection_budget_entry(
+        episode_dir,
+        SelectionBudgetEntryV1(
+            attempt_id=attempt.attempt_id,
+            consultation_id=attempt.consultation_id,
+            judgment_id=attempt.judgment_id,
+            reservation_sequence=attempt.reservation_sequence,
+            phase="preview_reserved",
+            llm_calls_reserved=0,
+            llm_calls_used=0,
+            wall_seconds_reserved=0.0,
+            wall_seconds_used=0.0,
+            preview_seconds_reserved=60.0,
+            preview_seconds_used=0.0,
+            scope="full_rebuild_exempt",
+            created_at=now_stamp(),
+        ),
+    )
+    append_selection_budget_entry(
+        episode_dir,
+        SelectionBudgetEntryV1(
+            attempt_id=attempt.attempt_id,
+            consultation_id=attempt.consultation_id,
+            judgment_id=attempt.judgment_id,
+            reservation_sequence=attempt.reservation_sequence,
+            phase="preview_settled",
+            llm_calls_reserved=0,
+            llm_calls_used=0,
+            wall_seconds_reserved=0.0,
+            wall_seconds_used=601.0,
+            preview_seconds_reserved=0.0,
+            preview_seconds_used=60.0,
+            result="succeeded",
+            scope="full_rebuild_exempt",
+            created_at=now_stamp(),
+        ),
+    )
+
+
+def test_wall_deadline_counts_legacy_unauthorized_rows(
     tmp_path: Path,
 ) -> None:
-    """(d) The wall deadline stays fully in force for exempt re-renders:
-    the deadline fold counts their wall seconds even though the sample
-    gate ignores them.
+    """Unauthorized historical rows stay wall-bounded: the deadline fold
+    counts their wall seconds even though the sample gate ignores them.
     """
 
     episode_dir = _episode_with_policy(tmp_path)
-    attempt = attempt_for(1, "c1", "j1")
-    reserve_preview_full_rebuild_exempt(episode_dir, attempt, 60.0)
-    settle_preview_full_rebuild_exempt(
-        episode_dir, attempt, preview_seconds=60.0, wall_elapsed=601.0,
-        result="succeeded",
-    )
+    _append_legacy_unauthorized_rows(episode_dir)
 
-    assert episode_runner_rebuild.remaining_wall_seconds_with_exempt(
+    assert episode_runner_rebuild.remaining_wall_seconds_with_legacy(
         episode_dir
     ) <= 0.0
     assert remaining_wall_seconds(episode_dir, load_budget_limits()) > 0.0
@@ -1175,7 +1221,7 @@ def test_wall_deadline_counts_full_rebuild_exempt_render_seconds(
     with pytest.raises(RebuildStageError) as exc_info:
         episode_runner_rebuild._run_stage(
             "compile", episode_dir, carried, io.BytesIO(),
-            run_id="run-deadline-exempt", reservation_sequence=1,
+            run_id="run-deadline-legacy", reservation_sequence=1,
             job_status="PREVIEW_READY",
         )
     assert exc_info.value.code == "consultation-selection-deadline-exceeded"
@@ -1211,6 +1257,71 @@ def test_stage_preview_without_attempt_touches_no_ledger(
     assert not (
         episode_dir / "consultation" / "selection-budget.jsonl"
     ).exists()
+
+
+def test_sample_flow_preview_without_authorization_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A consultation-context run (reservation sequence + consultation
+    marker, no 全編へ) never reaches the full preview render: the real
+    routing refuses typed BEFORE any render and writes no ledger line."""
+
+    episode_dir = _episode_with_policy(tmp_path)
+    assert full_render_authorized(episode_dir) is False
+    renders: list[str] = []
+    monkeypatch.setattr(
+        episode_runner_rebuild, "render_review_preview",
+        lambda *args, **kwargs: renders.append("render") or "sha",
+    )
+
+    with pytest.raises(RebuildStageError) as exc_info:
+        episode_runner_rebuild._run_stage(
+            "preview", episode_dir, episode_runner_rebuild.ReentryState(),
+            io.BytesIO(), run_id="run-guard-1",
+            reservation_sequence=1, applied_command="consultation-j1",
+            job_status="PREVIEW_READY",
+        )
+
+    assert exc_info.value.code == "consultation-preview-not-authorized"
+    assert renders == []
+    assert not (
+        episode_dir / "consultation" / "selection-budget.jsonl"
+    ).exists()
+
+
+def test_sample_flow_preview_with_full_authorized_passes_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After the explicit bound 全編へ judgment the same run passes the
+    guard and continues into the normal preview path (here it stops later
+    at the missing run bundle — past the guard, not at it). The
+    authorization binds the current head + policy + viewed sample; a
+    legacy unbound row authorizes nothing (see
+    test_full_authorization_binding)."""
+
+    episode_dir = _episode_with_policy(tmp_path, plan=_seed_plan_av())
+    manifest = seed_viewed_sample(episode_dir)
+    authorize_bound(episode_dir, sample_id=manifest.sample_id)
+    assert full_render_authorized(episode_dir) is True
+    renders: list[str] = []
+    monkeypatch.setattr(
+        episode_runner_rebuild, "render_review_preview",
+        lambda *args, **kwargs: renders.append("render") or "sha",
+    )
+
+    with pytest.raises(RebuildStageError) as exc_info:
+        episode_runner_rebuild._run_stage(
+            "preview", episode_dir, episode_runner_rebuild.ReentryState(),
+            io.BytesIO(), run_id="run-guard-2",
+            reservation_sequence=1, applied_command="consultation-j1",
+            job_status="PREVIEW_READY",
+        )
+
+    # Past the guard into the normal preview path, which then fails on
+    # the missing run bundle — any code but the guard's refusal proves
+    # the authorization opened the render.
+    assert exc_info.value.code == "preview-failed"
+    assert renders == []
 
 
 def test_preview_failure_consumes_reserved_sample_seconds(
@@ -1574,8 +1685,10 @@ def test_reentry_with_inherited_runner_lock_reaches_selection(
     _live_env(monkeypatch)
     captured: dict[str, Any] = {}
     _fake_ok(monkeypatch, captured)
+    renders: list[str] = []
     monkeypatch.setattr(
-        episode_runner_rebuild, "stage_preview", lambda *a, **k: "f" * 64
+        episode_runner_rebuild, "stage_preview",
+        lambda *args, **kwargs: renders.append("render") or "f" * 64,
     )
     fd = _acquire_lock(episode_root)
     try:
@@ -1592,10 +1705,22 @@ def test_reentry_with_inherited_runner_lock_reaches_selection(
     finally:
         os.close(fd)
 
-    assert exit_code == episode_runner.EXIT_SUCCESS
+    # The inherited lock still carries the run through selection (the
+    # candidate commits v2), but the sample-flow run stops BEFORE the
+    # full preview render without an explicit 全編へ: typed block, zero
+    # renders.
+    assert exit_code == episode_runner.EXIT_BLOCKED
     assert load_head(
         episode_root / "review" / "events.jsonl", store_dir
     ).version == 2
+    assert renders == []
+    events = [
+        line
+        for line in (episode_root / "runner.log").read_text().splitlines()
+        if '"blocked"' in line
+    ]
+    assert events
+    assert json.loads(events[-1])["code"] == "consultation-preview-not-authorized"
 
 
 def test_frozen_job_refuses_before_director_and_commit(
