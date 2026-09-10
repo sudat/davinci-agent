@@ -733,6 +733,25 @@ export default function ConsultationPanel({
     </details>
   );
 
+  const sampleRecordJournal = (
+    <>
+      {recordNotes}
+      <ConsultationEntryList
+        payload={payload}
+        busy={busy}
+        episodeId={episodeId}
+        onJudgment={submitJudgment}
+        onPanelRetry={sendPanelRetry}
+        interactive={false}
+      />
+    </>
+  );
+
+  const sampleRecordBudget =
+    latestBudget !== null && budgetNearLimit ? (
+      <ConsultationBudgetReadout budget={latestBudget} degraded={budgetExhausted} />
+    ) : null;
+
   const feedback: SampleFeedback = {
     text: message,
     busy,
@@ -754,6 +773,8 @@ export default function ConsultationPanel({
         adoptedSummary={adoptedSummary}
         adoptedPolicy={adopted}
         feedback={feedback}
+        recordJournal={hasPublishedSample ? sampleRecordJournal : null}
+        recordBudget={hasPublishedSample ? sampleRecordBudget : null}
         onSamplesChange={({ hasPublished }: { hasPublished: boolean }) =>
           setHasPublishedSample(hasPublished)
         }
@@ -790,8 +811,11 @@ export default function ConsultationPanel({
         {sampleBlock}
         {liveBlock}
         {styleSaveBlock}
-        {journalDetails}
-        {budgetBlock}
+        {budgetNearLimit ? (
+          <p className="field-hint" data-testid="consultation-budget-warning">
+            この動画で試せる回数が残り少なくなっています（残り{budgetRemaining}回）
+          </p>
+        ) : null}
       </section>
     );
   }

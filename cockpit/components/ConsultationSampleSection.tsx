@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   apiFailure,
   CockpitApiError,
@@ -98,7 +99,7 @@ function formatSeconds(totalSeconds: number): string {
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
 }
 
-/** 「この動画で確認すること」の整形規則。構造化欄だけを見て、見て判断
+/** 「今回の確認ポイント」の整形規則。構造化欄だけを見て、見て判断
  *  できる項目だけを出す（生文は詳しい記録に置く）。 */
 const CHECK_BOILERPLATE = ["指定はありません", "変更指定はありません", "指定なし", "特になし"];
 const REORDER_SIGNALS = ["並び替", "並べ替", "順序を変更", "順番を変", "入れ替"];
@@ -107,19 +108,31 @@ function hasPhrase(value: unknown, phrases: readonly string[]): boolean {
   return typeof value === "string" && phrases.some((phrase) => value.includes(phrase));
 }
 
-export function sampleCheckItemsOf(
-  source: { scope?: { audio?: boolean } | null; audio_policy?: unknown; structure?: unknown } | null | undefined,
-): string[] {
-  const items: string[] = [];
+type SampleCheckSource = {
+  scope?: { audio?: boolean } | null;
+  audio_policy?: unknown;
+  structure?: unknown;
+} | null | undefined;
+
+export function sampleAudioApplies(source: SampleCheckSource): boolean {
   const audioText = source?.audio_policy;
-  if (
+  return (
     source?.scope?.audio === true ||
-    (typeof audioText === "string" && audioText.trim() !== "" && !hasPhrase(audioText, CHECK_BOILERPLATE))
-  ) {
-    items.push("BGMと話し声の聞きやすさ");
+    (typeof audioText === "string" &&
+      audioText.trim() !== "" &&
+      !hasPhrase(audioText, CHECK_BOILERPLATE))
+  );
+}
+
+function sampleReorderAbsent(source: SampleCheckSource): boolean {
+  return !hasPhrase(source?.structure, REORDER_SIGNALS);
+}
+
+export function sampleCheckItemsOf(source: SampleCheckSource): string[] {
+  if (sampleAudioApplies(source)) {
+    return ["BGMと話し声のバランス"];
   }
-  if (!hasPhrase(source?.structure, REORDER_SIGNALS)) items.push("映像の並びは変更していません");
-  return items;
+  return [];
 }
 
 export type SampleFeedback = {
@@ -139,6 +152,8 @@ export default function ConsultationSampleSection({
   adoptedSummary = null,
   adoptedPolicy = null,
   feedback = null,
+  recordJournal = null,
+  recordBudget = null,
   onSamplesChange,
 }: {
   episodeId: string;
@@ -148,11 +163,10 @@ export default function ConsultationSampleSection({
   fetchImpl?: typeof fetch;
   onView: (view: ConsultationPayload) => void;
   adoptedSummary?: readonly string[] | null;
-  /** 採用ポリシーの構造化欄（確認事項の整形と詳しい記録の生文用）。 */
   adoptedPolicy?: ConsultationAdoptedPolicy | null;
-  /** 直したいところの感想欄（親の相談送信へつなぐ）。修正した試し動画を
-   *  見る（副）と並べて出す。 */
   feedback?: SampleFeedback | null;
+  recordJournal?: ReactNode;
+  recordBudget?: ReactNode;
   onSamplesChange?: (info: { hasPublished: boolean }) => void;
 }) {
   const [samples, setSamples] = useState<ConsultationSample[] | null>(null);
@@ -223,7 +237,11 @@ export default function ConsultationSampleSection({
       : windowsOf(displayed)
           .map((window) => (typeof window.label === "string" ? window.label.trim() : ""))
           .filter((label) => label !== "");
-  const checks = sampleCheckItemsOf(adoptedPolicy ?? { scope });
+  const audioApplies = sampleAudioApplies(adoptedPolicy ?? { scope });
+  const reorderAbsent = sampleReorderAbsent(adoptedPolicy ?? { scope });
+  const mainCheck = audioApplies
+    ? "BGMと話し声のバランス"
+    : (reorderAbsent ? "映像の並びは変更していません" : null);
 
   const requestSample = () => {
     void (async () => {
@@ -290,11 +308,7 @@ export default function ConsultationSampleSection({
     <section data-testid="consultation-sample-section" className="sample-stage">
       <header className="sample-stage-header">
         <h2 className="sample-stage-title">試し動画を確認</h2>
-        <p className="field-hint">
-          {displayed !== null && displayedWindows.length > 0 && displayedSeconds !== null
-            ? `${displayedWindows.length}つの場面・${formatSeconds(displayedSeconds)}秒を見て、編集の方向を確認してください`
-            : "短い試し動画を見て、編集の方向を確認してください"}
-        </p>
+        <p className="field-hint">この試し動画を見て、編集の方向を確認してください</p>
       </header>
       {displayed === null ? (
         <>
@@ -328,33 +342,14 @@ export default function ConsultationSampleSection({
             ) : null}
           </div>
           <div className="sample-stage-side">
-            {checks.length > 0 ? (
+            {mainCheck !== null ? (
               <div>
-                <h3 className="sample-checks-title">この動画で確認すること</h3>
-                <ul className="sample-checks" data-testid="sample-checks">
-                  {checks.map((title) => <li key={title}>{title}</li>)}
-                </ul>
+                <h3 className="sample-checks-title">今回の確認ポイント</h3>
+                <p className="sample-check-main" data-testid="sample-checks">{mainCheck}</p>
+                {reorderAbsent && audioApplies ? (
+                  <p className="sample-check-note">映像の並びは変えていません</p>
+                ) : null}
               </div>
-            ) : null}
-            {feedback !== null ? (
-              <>
-                <label className="field" htmlFor="sample-feedback-input">
-                  直したいところ
-                  <textarea
-                    id="sample-feedback-input"
-                    rows={3}
-                    value={feedback.text}
-                    onChange={(event) => feedback.onChange(event.target.value)}
-                    placeholder="方向はいい。テロップをもう少し暗くして"
-                    data-testid="sample-feedback-input"
-                  />
-                </label>
-                <div className="actions">
-                  <button type="button" className="btn-small" onClick={feedback.onSubmit} disabled={feedback.busy || feedback.text.trim() === ""} data-testid="sample-feedback-submit">
-                    {feedback.busy ? "送信中…" : "修正した試し動画を見る"}
-                  </button>
-                </div>
-              </>
             ) : null}
             <div className="actions sample-primary">
               <button type="button" className="btn-primary" onClick={authorizeFull} disabled={authorizeBusy} data-testid="full-authorize">
@@ -369,6 +364,27 @@ export default function ConsultationSampleSection({
                 <ErrorNotice code={authorizeError.code} detail={authorizeError.detail} />
               </div>
             ) : null}
+            {feedback !== null ? (
+              <>
+                <p className="sample-fix-divider">直したいところがある場合</p>
+                <label className="field" htmlFor="sample-feedback-input">
+                  直したいところ
+                  <textarea
+                    id="sample-feedback-input"
+                    rows={3}
+                    value={feedback.text}
+                    onChange={(event) => feedback.onChange(event.target.value)}
+                    placeholder="例：BGMを少し下げて、声を聞きやすくして"
+                    data-testid="sample-feedback-input"
+                  />
+                </label>
+                <div className="actions">
+                  <button type="button" className="btn-small" onClick={feedback.onSubmit} disabled={feedback.busy || feedback.text.trim() === ""} data-testid="sample-feedback-submit">
+                    {feedback.busy ? "送信中…" : "修正した試し動画を見る"}
+                  </button>
+                </div>
+              </>
+            ) : null}
             <details data-testid="sample-record">
               <summary>詳しい記録</summary>
               {adoptedSummary !== null && adoptedSummary.length > 0 ? (
@@ -379,13 +395,14 @@ export default function ConsultationSampleSection({
               <p className="mono" data-testid="consultation-sample-id">{displayed.sample_id}</p>
               <p className="field-hint" data-testid="consultation-sample-status">{statusLineOf(displayed.status)}</p>
               {older.length > 0 ? (
-                <details data-testid="previous-samples">
-                  <summary>以前の試し動画の記録</summary>
+                <>
                   {older.map((sample) => (
                     <p className="mono" key={sample.sample_id}>{sample.sample_id} — {statusLineOf(sample.status)}</p>
                   ))}
-                </details>
+                </>
               ) : null}
+              {recordJournal}
+              {recordBudget}
               <div className="actions">
                 <button type="button" className="btn-small" onClick={requestSample} disabled={requestBusy} data-testid="sample-request">
                   {requestBusy ? "作成中…" : "試し動画を作り直す"}
