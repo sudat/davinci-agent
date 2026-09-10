@@ -110,7 +110,7 @@ describe("episode-stage（上部4段階の導出）", () => {
     ).toBe("試し動画");
   });
 
-  it("full_authorized 判断があれば全編確認", () => {
+  it("採用直後のfull_authorizedは全編確認（許可は直前の採用にだけ効く）", () => {
     expect(
       deriveStage({
         ...EMPTY,
@@ -123,6 +123,14 @@ describe("episode-stage（上部4段階の導出）", () => {
               message: "相談",
               proposals: [],
               judgments: [
+                {
+                  judgment_id: "j-0",
+                  proposal_id: "p-1",
+                  decision: "adopt",
+                  scope: { composition: true, appearance: true, audio: true },
+                  note: null,
+                  created_at: "2026-01-01T00:00:01Z",
+                },
                 {
                   judgment_id: "j-1",
                   proposal_id: null,

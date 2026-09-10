@@ -49,13 +49,19 @@ function hasAdoptedPolicy(consultations: ConsultationPayload | null): boolean {
 
 function hasFullAuthorization(consultations: ConsultationPayload | null): boolean {
   if (consultations === null) return false;
+  // Same rule as the panel/backend: strip the trailing full_authorized run;
+  // only an adopt/revise IMMEDIATELY before it is authorized. A later
+  // adoption returns the flow to its own sample stage.
+  const decisions: string[] = [];
   for (const entry of consultations.consultations) {
     if (isPolicyOutcomeEntry(entry)) continue;
-    for (const judgment of entry.judgments) {
-      if (judgment.decision === "full_authorized") return true;
-    }
+    for (const judgment of entry.judgments) decisions.push(judgment.decision);
   }
-  return false;
+  let end = decisions.length;
+  while (end > 0 && decisions[end - 1] === "full_authorized") end--;
+  if (end === decisions.length || end === 0) return false;
+  const preceding = decisions[end - 1];
+  return preceding === "adopt" || preceding === "revise";
 }
 
 function consultationCount(consultations: ConsultationPayload | null): number {
