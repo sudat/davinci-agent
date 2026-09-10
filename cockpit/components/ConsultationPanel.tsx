@@ -68,6 +68,26 @@ function isFullAuthorizedEntry(entry: ConsultationEntry): boolean {
   return entry.judgments.some((judgment) => judgment.decision === "full_authorized");
 }
 
+/** The CURRENT adoption is authorized — and only then. A new adoption
+ *  after an authorization returns the consultation to its own sample
+ *  stage (the old authorization authorizes the old policy, not the new
+ *  one). Mirrors the backend no-archaeology rule: strip the trailing
+ *  full_authorized run; the immediately preceding judgment must be
+ *  adopt/revise. A delayed idempotent resend appends nothing, so journal
+ *  order always reflects real causality. */
+function isCurrentAdoptionAuthorized(consultations: ConsultationEntry[]): boolean {
+  const decisions: string[] = [];
+  for (const entry of consultations) {
+    if (isPolicyOutcomeEntry(entry)) continue;
+    for (const judgment of entry.judgments) decisions.push(judgment.decision);
+  }
+  let end = decisions.length;
+  while (end > 0 && decisions[end - 1] === "full_authorized") end--;
+  if (end === decisions.length || end === 0) return false;
+  const preceding = decisions[end - 1];
+  return preceding === "adopt" || preceding === "revise";
+}
+
 function isConsultationPayload(value: unknown): value is ConsultationPayload {
   if (typeof value !== "object" || value === null) return false;
   return Array.isArray((value as { consultations?: unknown }).consultations);
@@ -480,8 +500,7 @@ export default function ConsultationPanel({
 
   const adopted = payload?.policy?.adopted ?? null;
   const adoptedSummary = adoptedSummaryLinesOf(adopted);
-  const fullAuthorized =
-    payload?.consultations.some(isFullAuthorizedEntry) ?? false;
+  const fullAuthorized = isCurrentAdoptionAuthorized(payload?.consultations ?? []);
   const messageEntries =
     payload?.consultations.filter((entry) => !isPolicyOutcomeEntry(entry)) ?? [];
   const hasConsultation = messageEntries.length > 0;

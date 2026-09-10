@@ -114,6 +114,80 @@ const entrySent: Consultation = {
 };
 
 const payloadOne: ConsultationPayload = { consultations: [entryOne] };
+
+describe("ConsultationPanel — 全編許可後も新しい採用は独自の試し動画段階を持つ", () => {
+  const authJudgment: ConsultationJudgment = {
+    judgment_id: "j-auth",
+    proposal_id: null,
+    decision: "full_authorized",
+    scope: { composition: true, appearance: true, audio: true },
+    note: null,
+    created_at: "2026-09-08T10:12:00Z",
+  };
+  const newAdoptJudgment: ConsultationJudgment = {
+    judgment_id: "j-2",
+    proposal_id: "p-1",
+    decision: "adopt",
+    scope: { composition: true, appearance: false, audio: true },
+    note: "別案も試す",
+    created_at: "2026-09-08T10:15:00Z",
+  };
+
+  it("adopt→許可の後は採用済み方針だけを表示する", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({
+        consultations: [
+          { ...entryOneJudged, judgments: [recordedJudgment, authJudgment] },
+        ],
+      }),
+    );
+    renderPanel(fetchImpl);
+    await screen.findByText("採用した方針");
+    expect(screen.queryByTestId("sample-request")).toBeNull();
+  });
+
+  it("許可後の新しい採用は試し動画段階に戻る（古い許可は新方針を認めない）", async () => {
+    // backendのviewは新しい採用をpolicy.adoptedとして返す（取り下げではない
+    // full_authorizedを読み飛ばす——製品の実挙動に合わせたfixture）
+    const newAdoptedPolicy = {
+      consultation_id: "c-1",
+      judgment_id: "j-2",
+      proposal_id: "p-1",
+      decision: "adopt",
+      scope: { composition: true, appearance: false, audio: true },
+      audience_message: "",
+      structure: "",
+      duration_estimate: "",
+      candidate_scenes: [],
+      subtitle_policy: "",
+      audio_policy: "",
+      tempo_policy: "",
+      reference_mapping: "",
+      unused_reasons: "",
+      unconfirmed: [],
+      note: "",
+    };
+    const { fetchImpl } = recordingFetch((url: string) => {
+      if (url.endsWith("/consultation/samples")) {
+        return jsonResponse({ samples: [] });
+      }
+      return jsonResponse({
+        consultations: [
+          {
+            ...entryOneJudged,
+            judgments: [recordedJudgment, authJudgment, newAdoptJudgment],
+            policy: { adopted: newAdoptedPolicy },
+          },
+        ],
+      });
+    });
+    renderPanel(fetchImpl);
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-request")).toBeVisible();
+    });
+    expect(screen.getByTestId("consultation-panel")).toBeVisible();
+  });
+});
 const payloadOneJudged: ConsultationPayload = { consultations: [entryOneJudged] };
 const payloadEmpty: ConsultationPayload = { consultations: [] };
 
