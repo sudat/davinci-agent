@@ -33,7 +33,10 @@ class _PolicyStub:
         self._text = text
 
     def model_dump_json(self) -> str:
-        return json.dumps({"audio": self._text}, ensure_ascii=False)
+        return json.dumps(
+            {"scope": {"audio": True}, "audio_policy": self._text},
+            ensure_ascii=False,
+        )
 
 
 def _write_real_index(episode_dir: Path, rows: list[tuple[str, int, int, str]]) -> Path:

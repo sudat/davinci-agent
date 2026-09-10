@@ -81,6 +81,55 @@ def test_auto_stays_visual_without_audio_policy() -> None:
     )
 
 
+def test_unspecified_audio_policy_boilerplate_stays_visual() -> None:
+    # Live-measured 2026-09-11: every policy dump carries an audio_policy
+    # field whose "未確認…指定されていない。" boilerplate contains 音/音楽 —
+    # a bare substring match routed nearly every episode to audiovisual.
+    policy = json.dumps(
+        {
+            "scope": {"composition": True, "appearance": True, "audio": False},
+            "audio_policy": "未確認。会話、現場音、音楽の優先順位は指定されていない。",
+            "tempo_policy": "動きのある場面を中心に",
+        },
+        ensure_ascii=False,
+    )
+    assert (
+        select_observation_route(
+            override="auto", has_transcript=True, policy_text=policy
+        )
+        == "visual"
+    )
+
+
+def test_positive_audio_policy_sentence_routes_audiovisual() -> None:
+    policy = json.dumps(
+        {
+            "scope": {"composition": True, "appearance": True, "audio": False},
+            "audio_policy": "BGMを従来より前に出します。声や現場音との音量バランスは未確認です。",
+        },
+        ensure_ascii=False,
+    )
+    assert (
+        select_observation_route(
+            override="auto", has_transcript=True, policy_text=policy
+        )
+        == "audiovisual"
+    )
+
+
+def test_scope_audio_switch_routes_audiovisual() -> None:
+    policy = json.dumps(
+        {"scope": {"audio": True}, "audio_policy": "未確認。"},
+        ensure_ascii=False,
+    )
+    assert (
+        select_observation_route(
+            override="auto", has_transcript=True, policy_text=policy
+        )
+        == "audiovisual"
+    )
+
+
 def _write_consent(
     episode_dir: Path, episode_id: str, *, allowed: bool, note: str = ""
 ) -> Path:

@@ -20,6 +20,7 @@ default). Transcripts and policy text are untrusted DATA throughout.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Final, Literal
 
@@ -44,6 +45,47 @@ AUDIO_POLICY_TERMS: Final[tuple[str, ...]] = (
 
 AV_CONSENT_NAME: Final = "av-analysis-consent.json"
 
+#: Boilerplate that marks an audio_policy sentence as NOT specifying intent.
+_NO_AUDIO_INTENT_MARKERS: Final[tuple[str, ...]] = (
+    "未確認",
+    "指定されていない",
+    "指定なし",
+)
+
+
+def _audio_intent(policy_json: str) -> bool:
+    """True only where the policy ACTUALLY specifies sound/voice intent.
+
+    ``scope.audio`` is the operator's own switch. The LLM ``audio_policy``
+    text always carries a field — including the "未確認。…指定されていない。"
+    unspecified boilerplate — so a bare substring match over the whole dump
+    would route nearly every episode to audiovisual. A sentence counts as
+    intent only if it mentions a term AND carries no negation marker.
+    """
+
+    try:
+        document: object = json.loads(policy_json)
+    except ValueError:
+        lowered = policy_json.casefold()
+        return any(term in lowered for term in AUDIO_POLICY_TERMS)
+    if not isinstance(document, dict):
+        return False
+    scope = document.get("scope")
+    if isinstance(scope, dict) and scope.get("audio") is True:
+        return True
+    audio_policy = document.get("audio_policy")
+    if not isinstance(audio_policy, str) or not audio_policy:
+        return False
+    for sentence in audio_policy.split("。"):  # noqa: RUF001 (Japanese policy prose)
+        if not sentence:
+            continue
+        lowered = sentence.casefold()
+        if any(negation in sentence for negation in _NO_AUDIO_INTENT_MARKERS):
+            continue
+        if any(term in lowered for term in AUDIO_POLICY_TERMS):
+            return True
+    return False
+
 
 def select_observation_route(
     *,
@@ -55,17 +97,16 @@ def select_observation_route(
 
     An explicit ``visual``/``audiovisual`` override always wins. ``auto``
     (or absent) yields ``audiovisual`` only when the episode has a speech
-    transcript AND the adopted policy mentions sound/voice terms;
-    otherwise ``visual``.
+    transcript AND the adopted policy specifies sound/voice intent
+    (scope.audio or a non-negated audio_policy sentence); otherwise
+    ``visual``.
     """
 
     if override == "visual":
         return "visual"
     if override == "audiovisual":
         return "audiovisual"
-    lowered = policy_text.casefold()
-    mentions_audio = any(term in lowered for term in AUDIO_POLICY_TERMS)
-    if has_transcript and mentions_audio:
+    if has_transcript and _audio_intent(policy_text):
         return "audiovisual"
     return "visual"
 
