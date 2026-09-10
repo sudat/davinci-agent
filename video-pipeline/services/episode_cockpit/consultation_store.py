@@ -958,6 +958,12 @@ def _selection_run_state(
             failed = True
         if row.stage_name == "preview" and row.status == "succeeded":
             preview_done = True
+        if row.stage_name == "compile" and row.status == "succeeded":
+            # A consultation rebuild legitimately stops at compile (the
+            # sample flow is the preview surface — no full render). Count
+            # its compile success as completion so the view does not show
+            # 反映中 forever after the run legitimately finished (r10).
+            preview_done = True
     if failed:
         return "failed"
     if preview_done:
