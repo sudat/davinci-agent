@@ -676,6 +676,72 @@ video { max-width: 100%; height: auto; }
   .sample-stage-grid { grid-template-columns: 1fr; }
 }
 
+/* Sample review: quiet premium. Mobile order relies on DOM order — no order overrides. */
+.sample-stage-player video {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #101216;
+  border-radius: 10px;
+}
+/* 試し動画段階だけ外側の大見出しを隠し、section内の「試し動画を確認」を唯一の大見出しにする */
+.page:has(.sample-stage) .page-header {
+  display: none;
+}
+
+.sample-stage .sample-stage-title {
+  font-size: var(--font-size-title, 1.25rem);
+  font-weight: 700;
+  margin: 0;
+}
+
+.sample-stage .sample-stage-header {
+  margin: 0 0 var(--space-3);
+}
+
+.sample-stage .sample-checks-title {
+  font-size: var(--font-size-body);
+  font-weight: 700;
+  margin: 0 0 var(--space-2);
+}
+.sample-checks {
+  margin: 0 0 var(--space-4);
+  padding-left: 1.25em;
+}
+.sample-checks > li {
+  margin-bottom: var(--space-1);
+}
+.sample-places {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.sample-places > li {
+  font-size: var(--font-size-caption);
+  color: var(--muted);
+}
+.sample-stage-side textarea {
+  min-height: 72px;
+}
+.sample-stage .btn-primary {
+  background: #23272e;
+  border-color: #23272e;
+}
+.sample-primary {
+  justify-content: stretch;
+}
+.sample-primary .btn-primary {
+  flex: 1;
+}
+.sample-stage details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--font-size-caption);
+}
+
 /* Narrow screens: full stepper collapses to "N/4 段階" one-liner */
 .step-mobile { display: none; }
 @media (max-width: 640px) {

@@ -752,6 +752,7 @@ export default function ConsultationPanel({
         fetchImpl={fetchImpl}
         onView={absorbView}
         adoptedSummary={adoptedSummary}
+        adoptedPolicy={adopted}
         feedback={feedback}
         onSamplesChange={({ hasPublished }: { hasPublished: boolean }) =>
           setHasPublishedSample(hasPublished)
@@ -785,7 +786,6 @@ export default function ConsultationPanel({
   if (adopted !== null && hasPublishedSample) {
     return (
       <section className="card" data-testid="consultation-panel">
-        <h2 className="card-title">試し動画を確認する</h2>
         {noticeBlock}
         {sampleBlock}
         {liveBlock}
