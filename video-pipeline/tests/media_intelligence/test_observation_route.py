@@ -6,16 +6,21 @@ Pure-function and tmp-dir tests only — no network, no GLM, no Gemini.
 from __future__ import annotations
 
 import json
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
 
-from services.media_intelligence.gemini_av_observation import (
-    av_call_key,
+from services.media_intelligence.gemini_av_models import (
+    adopt_core_events,
+    partition_av_cores,
+    validate_chunk_events,
+)
+from services.media_intelligence.gemini_av_record import (
+    chunk_av_call_key,
     cost_from_usage,
     load_cached_av_call,
     store_av_call,
-    validate_av_events,
 )
 from services.media_intelligence.observation_route import (
     AvAnalysisConsentV1,
@@ -176,58 +181,81 @@ def _event(start: float, end: float, reason: str = "") -> dict[str, object]:
     }
 
 
-def test_validation_keeps_in_bounds_events_clean() -> None:
-    validation = validate_av_events(
-        [_event(0.0, 56.0, "導入"), _event(56.0, 101.0)], 282.24
+def test_cores_cover_duration_without_overlap_or_gap() -> None:
+    # Reviewer P1-1 (1): property-style over several durations incl. 282.24s.
+    for duration in (30.0, 60.0, 60.5, 120.0, 282.24, 300.0):
+        chunks = partition_av_cores(duration)
+        assert chunks[0].core_start == 0.0
+        assert chunks[-1].core_end == duration
+        for previous, current in pairwise(chunks):
+            assert current.core_start == previous.core_end
+            assert current.index == previous.index + 1
+        for chunk in chunks:
+            assert chunk.clip_start == max(0.0, chunk.core_start - 3.0)
+            assert chunk.clip_end == min(duration, chunk.core_end + 3.0)
+            assert chunk.clip_duration_seconds == chunk.clip_end - chunk.clip_start
+    five = partition_av_cores(282.24)
+    assert len(five) == 5
+    assert [(c.core_start, c.core_end) for c in five] == [
+        (0.0, 60.0),
+        (60.0, 120.0),
+        (120.0, 180.0),
+        (180.0, 240.0),
+        (240.0, 282.24),
+    ]
+    assert (five[0].clip_start, five[0].clip_end) == (0.0, 63.0)
+    assert (five[-1].clip_start, five[-1].clip_end) == (237.0, 282.24)
+
+
+def test_context_region_starts_are_not_adopted() -> None:
+    # Reviewer P1-1 (2): a 61.0s-global start lives in chunk 1's core, so
+    # chunk 0 (clip [0, 63)) drops it while chunk 1 adopts it — no dup.
+    chunks = partition_av_cores(282.24)
+    first, second = chunks[0], chunks[1]
+    validation = validate_chunk_events(
+        [_event(10.0, 20.0, "導入"), _event(61.0, 62.0, "文脈")], first
     )
-    assert validation.route_quality_insufficient is False
+    assert validation.chunk_insufficient is False
+    assert [e.start_seconds for e in adopt_core_events(validation, first)] == [10.0]
+    neighbor = validate_chunk_events([_event(4.0, 5.0, "文脈")], second)
+    adopted = adopt_core_events(neighbor, second)
+    assert [e.start_seconds for e in adopted] == [61.0]
+
+
+def test_out_of_range_events_never_become_candidates() -> None:
+    # Reviewer P1-1 (3): the live failure shape (chunk-0 clip is 63s; a
+    # 30-70s local event exceeds it) marks the chunk insufficient and
+    # adopts nothing — no clamp, no rescue.
+    chunk = partition_av_cores(282.24)[0]
+    validation = validate_chunk_events([_event(10.0, 20.0), _event(30.0, 70.0)], chunk)
+    assert validation.chunk_insufficient is True
+    assert validation.events == ()
+    assert [(f.index, f.raw_end) for f in validation.drift_flags] == [(1, 70.0)]
+    assert adopt_core_events(validation, chunk) == ()
+
+
+def test_validation_keeps_in_bounds_events_clean() -> None:
+    chunk = partition_av_cores(282.24)[0]
+    validation = validate_chunk_events(
+        [_event(0.0, 56.0, "導入"), _event(56.0, 62.0)], chunk
+    )
+    assert validation.chunk_insufficient is False
     assert validation.drift_flags == ()
     assert [e.start_seconds for e in validation.events] == [0.0, 56.0]
 
 
-def test_validation_clamps_tail_drift_and_flags_it() -> None:
-    # The live A/B shape: 2/5 events drift past the 282.24s duration.
-    validation = validate_av_events(
-        [
-            _event(0.0, 56.0, "導入"),
-            _event(56.0, 101.0),
-            _event(101.0, 213.0),
-            _event(213.0, 332.0, "混乱"),
-            _event(332.0, 441.0, "独白"),
-        ],
-        282.24,
-    )
-    assert [e.end_seconds for e in validation.events][3:] == [282.24, 282.24]
-    assert [(f.index, f.raw_end) for f in validation.drift_flags] == [
-        (3, 332.0),
-        (4, 441.0),
-    ]
-    # 2/5 = 40% drift stays USABLE (clamped+flagged): the reproducible
-    # whole-video tail behavior must not discard a content-verified
-    # observation. Insufficient needs a MAJORITY (e.g. 3/5).
-    assert validation.route_quality_insufficient is False
-    majority = validate_av_events(
-        [
-            _event(0.0, 56.0, "導入"),
-            _event(101.0, 332.0),
-            _event(213.0, 332.0, "混乱"),
-            _event(332.0, 441.0, "独白"),
-            _event(441.0, 500.0),
-        ],
-        282.24,
-    )
-    assert majority.route_quality_insufficient is True
-
-
 def test_validation_empty_or_malformed_is_typed() -> None:
-    assert validate_av_events([], 100.0).route_quality_insufficient is True
+    chunk = partition_av_cores(100.0)[0]
+    assert validate_chunk_events([], chunk).chunk_insufficient is True
     with pytest.raises(SampleObservationError) as exc_info:
-        validate_av_events([{"start_seconds": "soon"}], 100.0)
+        validate_chunk_events([{"start_seconds": "soon"}], chunk)
     assert exc_info.value.code == "sample-av-bad-response"
 
 
 def test_cost_split_matches_live_ab_numbers() -> None:
-    # gemini-run.json usage: TEXT 304 + VIDEO 25662 prompt, 1160 out.
+    # gemini-run.json usage: TEXT 304 + VIDEO 25662 prompt, 1160 out —
+    # at the corrected gemini-3.5-flash-lite Standard rates (all input
+    # $0.30/1M, output $2.50/1M).
     cost, method = cost_from_usage(
         {
             "promptTokenCount": 25966,
@@ -239,19 +267,46 @@ def test_cost_split_matches_live_ab_numbers() -> None:
         }
     )
     assert method == "per-modality promptTokensDetails"
-    assert cost == {"input_usd": 0.007729, "output_usd": 0.000464, "total_usd": 0.008193}
+    assert cost == {"input_usd": 0.00779, "output_usd": 0.0029, "total_usd": 0.01069}
+
+
+def test_cost_math_with_corrected_35_rates() -> None:
+    # Reviewer P1-2 (4): C4 call = 25,974 input + 1,182 output.
+    cost, _ = cost_from_usage(
+        {
+            "promptTokenCount": 25974,
+            "candidatesTokenCount": 1182,
+            "promptTokensDetails": [
+                {"modality": "TEXT", "tokenCount": 312},
+                {"modality": "VIDEO", "tokenCount": 25662},
+            ],
+        }
+    )
+    assert cost == {"input_usd": 0.007792, "output_usd": 0.002955, "total_usd": 0.010747}
 
 
 def test_call_cache_reuses_same_contract_only(tmp_path: Path) -> None:
-    key = av_call_key(
-        file_sha256="abc", model_id="m", prompt_sha256="p", schema_sha256="s"
+    key = chunk_av_call_key(
+        proxy_sha256="abc",
+        chunk_index=0,
+        core_start_seconds=0.0,
+        core_end_seconds=60.0,
+        model_id="m",
+        prompt_sha256="p",
+        schema_sha256="s",
     )
     assert load_cached_av_call(tmp_path, key) is None
     record = {"model": "m", "events": []}
     store_av_call(tmp_path, key, record)
     assert load_cached_av_call(tmp_path, key) == record
-    other = av_call_key(
-        file_sha256="different", model_id="m", prompt_sha256="p", schema_sha256="s"
+    other = chunk_av_call_key(
+        proxy_sha256="different",
+        chunk_index=0,
+        core_start_seconds=0.0,
+        core_end_seconds=60.0,
+        model_id="m",
+        prompt_sha256="p",
+        schema_sha256="s",
     )
     assert load_cached_av_call(tmp_path, other) is None
 
