@@ -119,6 +119,25 @@ export function outcomeLineOf(entry: ConsultationPolicyOutcomeEntry): string {
   return "採用した方針の反映結果：不明";
 }
 
+/** U2: 通常画面の短い行。編集長・対象版・構造検査・未確認/未対応の
+ *  一覧は出さない（詳しい記録に移す）。行動に必要な結論だけを残す。 */
+export function outcomeShortLineOf(entry: ConsultationPolicyOutcomeEntry): string {
+  const status: unknown = entry.status;
+  if (status === "connected") {
+    return (
+      "採用した方針の接続ができました。" +
+      "内容・見た目・音が方針どおりかは、この検査では確認していません。"
+    );
+  }
+  if (status === "failed") {
+    return "採用した方針を反映できませんでした。相談へ戻れます。";
+  }
+  if (status === "honored") {
+    return "採用した方針の古い記録です。";
+  }
+  return "採用した方針の反映結果：不明";
+}
+
 function outcomeKeyOf(entry: ConsultationPolicyOutcomeEntry, index: number): string {
   return `policy-outcome:${nonEmptyText(entry.judgment_id) ?? nonEmptyText(entry.recorded_at) ?? `row-${index}`}`;
 }
@@ -145,7 +164,11 @@ function JournalRow({
         data-testid="consultation-policy-outcome"
         data-judgment-id={nonEmptyText(entry.judgment_id) ?? undefined}
       >
-        <p>{outcomeLineOf(entry)}</p>
+        <p>{outcomeShortLineOf(entry)}</p>
+        <details data-testid="consultation-policy-record">
+          <summary>詳しい記録</summary>
+          <p>{outcomeLineOf(entry)}</p>
+        </details>
       </div>
     );
   }

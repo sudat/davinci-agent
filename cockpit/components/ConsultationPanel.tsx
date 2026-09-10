@@ -17,18 +17,19 @@ import {
   postConsultationMessage,
   postConsultationPanelRetry,
   type Consultation,
+  type ConsultationAdoptedPolicy,
   type ConsultationEntry,
   type ConsultationGenerationPanel,
   type ConsultationGenerationState,
   type ConsultationJudgmentInput,
-  type ConsultationPayload,
-  type ConsultationRebuild,
+  type ConsultationPayload,  type ConsultationRebuild,
   type EpisodeStatus,
 } from "@/lib/api";
 import ConsultationBudgetReadout, {
   latestBudgetOf,
 } from "@/components/ConsultationBudgetReadout";
 import ConsultationEntryList from "@/components/ConsultationEntryList";
+import { scopeSummary } from "@/components/ConsultationJudgmentForm";
 import ConsultationSampleSection from "@/components/ConsultationSampleSection";
 import StyleSaveButton from "@/components/StyleSaveButton";
 import ErrorNotice from "@/components/ErrorNotice";
@@ -128,6 +129,55 @@ function refusedReasonOf(state: ConsultationGenerationState | null): string | nu
   if (state === null) return null;
   const reason: unknown = state.refused_reason;
   return typeof reason === "string" && reason !== "" ? reason : null;
+}
+
+function adoptedDirectionLines(adopted: ConsultationAdoptedPolicy): string[] {
+  const lines: string[] = [`範囲：${scopeSummary(adopted.scope)}`];
+  if (adopted.structure !== "") lines.push(`構成：${adopted.structure}`);
+  if (adopted.audience_message !== "") lines.push(`伝えたいこと：${adopted.audience_message}`);
+  return lines.slice(0, 3);
+}
+
+function adoptedRecordEntries(adopted: ConsultationAdoptedPolicy): Array<[string, string]> {
+  const entries: Array<[string, string]> = [];
+  if (adopted.duration_estimate !== "") entries.push(["尺のめやす", adopted.duration_estimate]);
+  if (adopted.candidate_scenes.length > 0) entries.push(["候補シーン", adopted.candidate_scenes.join("、")]);
+  if (adopted.subtitle_policy !== "") entries.push(["字幕の方針", adopted.subtitle_policy]);
+  if (adopted.audio_policy !== "") entries.push(["音声の方針", adopted.audio_policy]);
+  if (adopted.tempo_policy !== "") entries.push(["テンポの方針", adopted.tempo_policy]);
+  if (adopted.reference_mapping !== "") entries.push(["いつもの作りとの対応", adopted.reference_mapping]);
+  if (adopted.unused_reasons !== "") entries.push(["使わなかった候補と理由", adopted.unused_reasons]);
+  if (adopted.unconfirmed.length > 0) entries.push(["確認できていないこと", adopted.unconfirmed.join("、")]);
+  if (adopted.note !== "") entries.push(["メモ", adopted.note]);
+  return entries;
+}
+
+function AdoptedDirection({ adopted }: { adopted: ConsultationAdoptedPolicy }) {
+  const lines = adoptedDirectionLines(adopted);
+  const record = adoptedRecordEntries(adopted);
+  return (
+    <section data-testid="consultation-adopted-direction">
+      <h3 className="section-title">採用した方向</h3>
+      <ul className="list-plain">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      {record.length > 0 ? (
+        <details data-testid="consultation-adopted-record">
+          <summary>詳しい記録</summary>
+          <dl className="status-list">
+            {record.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      ) : null}
+    </section>
+  );
 }
 
 /**
@@ -447,6 +497,8 @@ export default function ConsultationPanel({
   const llmUnavailable = error?.code === "consultation-llm-unavailable";
   const latestBudget = latestBudgetOf(payload);
   const rebuildLine = rebuildLineOf(payload?.rebuild);
+  const rebuildFailed = payload?.rebuild?.status === "failed";
+  const adopted = payload?.policy?.adopted ?? null;
   const generationState = generationStateOf(payload);
   const refusedReason = refusedReasonOf(generationState);
   const generationRemaining =
@@ -511,6 +563,16 @@ export default function ConsultationPanel({
         </button>
       </div>
       <p className="field-hint">提案が届くまで時間がかかります。届けば自動で表示されます。</p>
+      {payload?.policy?.adopted !== null && payload?.policy?.adopted !== undefined ? (
+        <ConsultationSampleSection
+          episodeId={episodeId}
+          consultationId={payload.policy.adopted.consultation_id}
+          judgmentId={payload.policy.adopted.judgment_id}
+          scope={payload.policy.adopted.scope}
+          fetchImpl={fetchImpl}
+          onView={absorbView}
+        />
+      ) : null}
       <div data-testid="generation-permission">
         <button
           type="button"
@@ -591,11 +653,23 @@ export default function ConsultationPanel({
           </p>
         ) : null}
         {rebuildLine !== null ? (
-          <p className="field-hint" data-testid="consultation-rebuild-state">
-            {rebuildLine}
-          </p>
+          rebuildFailed ? (
+            <p className="field-hint" data-testid="consultation-rebuild-state">
+              {rebuildLine}
+            </p>
+          ) : (
+            <details data-testid="consultation-rebuild-record">
+              <summary>詳しい記録</summary>
+              <p className="field-hint" data-testid="consultation-rebuild-state">
+                {rebuildLine}
+              </p>
+            </details>
+          )
         ) : null}
       </div>
+      {adopted !== null && adopted !== undefined ? (
+        <AdoptedDirection adopted={adopted} />
+      ) : null}
       <ConsultationEntryList
         payload={payload}
         busy={busy}
@@ -609,16 +683,6 @@ export default function ConsultationPanel({
           adopted={payload.policy.adopted}
           channelId={appliedChannelOf(status)}
           fetchImpl={fetchImpl}
-        />
-      ) : null}
-      {payload?.policy?.adopted !== null && payload?.policy?.adopted !== undefined ? (
-        <ConsultationSampleSection
-          episodeId={episodeId}
-          consultationId={payload.policy.adopted.consultation_id}
-          judgmentId={payload.policy.adopted.judgment_id}
-          scope={payload.policy.adopted.scope}
-          fetchImpl={fetchImpl}
-          onView={absorbView}
         />
       ) : null}
     </section>

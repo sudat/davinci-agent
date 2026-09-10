@@ -274,6 +274,70 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           </button>
         </div>
       ) : null}
+      <section className="card preview-hero" data-testid="preview-hero">
+        <h2 className="card-title">全編のプレビュー</h2>
+        <div className="hero-grid">
+          <div className="hero-video">
+            <PreviewPlayer
+              episodeId={episodeId}
+              state={playerState}
+              contentHash={probedHash}
+              videoRef={videoRef}
+              output={selectedOutput}
+            />
+            <p className="field-hint" aria-live="polite" data-testid="preview-binding">
+              {previewBindingLine(binding)}
+            </p>
+          </div>
+          <div className="hero-side">
+            {multiOutput ? (
+              <div data-testid="output-select" role="group" aria-label="出力の切り替え">
+                {(outputScope.outputs ?? []).map((output) => (
+                  <button
+                    key={output.output_id}
+                    type="button"
+                    className={output.output_id === selectedOutput ? "btn-primary" : "btn-small"}
+                    aria-pressed={output.output_id === selectedOutput}
+                    data-testid={`output-option-${output.output_id}`}
+                    onClick={() =>
+                      output.output_id === "landscape" || output.output_id === "vertical"
+                        ? outputScope.select(output.output_id)
+                        : undefined
+                    }
+                  >
+                    {outputLabel(output.output_id)}
+                  </button>
+                ))}
+                <p className="field-hint" data-testid="output-independence-note">
+                  横版と縦版の承認は別々です。表示中のプレビュー・再構築は選択中の版にだけ適用されます。
+                </p>
+              </div>
+            ) : null}
+            {outputScope.outputs !== null && !verticalRegistered ? (
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn-small"
+                  data-testid="output-add"
+                  onClick={addVerticalOutput}
+                  disabled={addBusy}
+                >
+                  {addBusy ? "追加中…" : "縦版を追加する"}
+                </button>
+              </div>
+            ) : null}
+            {addResult !== null ? (
+              <p className="field-hint" aria-live="polite" data-testid="output-add-result">
+                {addResult}
+              </p>
+            ) : null}
+            <p className="field-hint" data-testid="preview-trial-pointer">
+              採用した方針がある場合、短い試し動画は下の「編集の方針相談」の中の「30秒以内の試し動画」に表示されます。
+            </p>
+          </div>
+        </div>
+      </section>
+      <ConsultationPanel episodeId={episodeId} status={status} />
       <section className="card">
         <h2 className="card-title">進捗</h2>
         <dl className="status-list">
@@ -314,61 +378,6 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         )}
       </section>
       <FinishingDomainPanel episodeId={episodeId} />
-      <ConsultationPanel episodeId={episodeId} status={status} />
-      <section className="card">
-        <h2 className="card-title">全編のプレビュー</h2>
-        {multiOutput ? (
-          <div data-testid="output-select" role="group" aria-label="出力の切り替え">
-            {(outputScope.outputs ?? []).map((output) => (
-              <button
-                key={output.output_id}
-                type="button"
-                className={output.output_id === selectedOutput ? "btn-primary" : "btn-small"}
-                aria-pressed={output.output_id === selectedOutput}
-                data-testid={`output-option-${output.output_id}`}
-                onClick={() =>
-                  output.output_id === "landscape" || output.output_id === "vertical"
-                    ? outputScope.select(output.output_id)
-                    : undefined
-                }
-              >
-                {outputLabel(output.output_id)}
-              </button>
-            ))}
-            <p className="field-hint" data-testid="output-independence-note">
-              横版と縦版の承認は別々です。表示中のプレビュー・再構築は選択中の版にだけ適用されます。
-            </p>
-          </div>
-        ) : null}
-        {outputScope.outputs !== null && !verticalRegistered ? (
-          <div className="actions">
-            <button
-              type="button"
-              className="btn-small"
-              data-testid="output-add"
-              onClick={addVerticalOutput}
-              disabled={addBusy}
-            >
-              {addBusy ? "追加中…" : "縦版を追加する"}
-            </button>
-          </div>
-        ) : null}
-        {addResult !== null ? (
-          <p className="field-hint" aria-live="polite" data-testid="output-add-result">
-            {addResult}
-          </p>
-        ) : null}
-        <PreviewPlayer
-          episodeId={episodeId}
-          state={playerState}
-          contentHash={probedHash}
-          videoRef={videoRef}
-          output={selectedOutput}
-        />
-        <p className="field-hint" aria-live="polite" data-testid="preview-binding">
-          {previewBindingLine(binding)}
-        </p>
-      </section>
       <section className="card">
         <h2 className="card-title">レビューflag</h2>
         {flags !== null ? (

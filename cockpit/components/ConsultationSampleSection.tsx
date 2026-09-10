@@ -207,9 +207,12 @@ export default function ConsultationSampleSection({
           <p className="field-hint" data-testid="consultation-sample-kind">
             30秒以内の試し動画
           </p>
-          <p className="mono" data-testid="consultation-sample-id">
-            {sample.sample_id}
-          </p>
+          <details data-testid="consultation-sample-record">
+            <summary>詳しい記録</summary>
+            <p className="mono" data-testid="consultation-sample-id">
+              {sample.sample_id}
+            </p>
+          </details>
           <p className="field-hint" data-testid="consultation-sample-status">
             {sampleStatusLine(sample)}
           </p>

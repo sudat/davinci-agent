@@ -24,9 +24,19 @@ export function latestBudgetOf(payload: ConsultationPayload | null): Consultatio
   return latest;
 }
 
+function nearLimit(budget: ConsultationBudget): boolean {
+  const ratios = [
+    budget.llm_calls_used / budget.llm_calls_limit,
+    budget.wall_seconds_used / budget.wall_seconds_limit,
+  ];
+  return ratios.some((ratio) => ratio >= 0.8);
+}
+
 /** Budget readout: cumulative per episode, managed by LLM call count
- *  because cost cannot be measured directly, NEVER reset. `degraded`
- *  adds the explicit notice while the service is in the text-only state. */
+ *  because cost cannot be measured directly, NEVER reset. Numbers stay
+ *  behind 詳しい記録; the normal screen shows a warning only when a
+ *  limit is near (or the text-only degraded state). The intervals line
+ *  is intentionally not rendered. */
 export default function ConsultationBudgetReadout({
   budget,
   degraded,
@@ -34,29 +44,32 @@ export default function ConsultationBudgetReadout({
   budget: ConsultationBudget;
   degraded: boolean;
 }) {
+  const warn = degraded || nearLimit(budget);
   return (
     <div data-testid="consultation-budget">
       <p className="field-hint">AIの利用状況（このエピソードの累計）</p>
-      <dl className="status-list">
-        <div>
-          <dt>AIの呼び出し回数</dt>
-          <dd data-testid="consultation-budget-llm-calls">
-            {budget.llm_calls_used} / {budget.llm_calls_limit}回
-          </dd>
-        </div>
-        <div>
-          <dt>区間の使用数</dt>
-          <dd data-testid="consultation-budget-intervals">
-            {budget.intervals_used} / {budget.intervals_limit}
-          </dd>
-        </div>
-        <div>
-          <dt>処理時間の合計</dt>
-          <dd data-testid="consultation-budget-wall-seconds">
-            {budget.wall_seconds_used} / {budget.wall_seconds_limit}秒
-          </dd>
-        </div>
-      </dl>
+      {warn && !degraded ? (
+        <p className="field-hint" data-testid="consultation-budget-warning">
+          AIの利用が上限に近づいています。上限に達すると、相談は提案なし・文章のみになります。
+        </p>
+      ) : null}
+      <details data-testid="consultation-budget-details">
+        <summary>詳しい記録</summary>
+        <dl className="status-list">
+          <div>
+            <dt>AIの呼び出し回数</dt>
+            <dd data-testid="consultation-budget-llm-calls">
+              {budget.llm_calls_used} / {budget.llm_calls_limit}回
+            </dd>
+          </div>
+          <div>
+            <dt>処理時間の合計</dt>
+            <dd data-testid="consultation-budget-wall-seconds">
+              {budget.wall_seconds_used} / {budget.wall_seconds_limit}秒
+            </dd>
+          </div>
+        </dl>
+      </details>
       <p className="field-hint" data-testid="consultation-budget-policy">
         費用は直接計測できないため、AIの呼び出し回数で管理しています。この数はリセットされません。
       </p>

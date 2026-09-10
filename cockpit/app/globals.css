@@ -539,3 +539,30 @@ table.stage-runs th {
   margin: var(--space-1) 0 0;
   word-break: break-word;
 }
+
+.preview-kind-label {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.hero-video {
+  min-width: 0;
+}
+
+.hero-side {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+}

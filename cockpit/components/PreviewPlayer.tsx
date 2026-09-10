@@ -60,16 +60,28 @@ export default function PreviewPlayer({
     );
   }
   const vertical = output === "vertical";
+  const src = previewVideoSrc(episodeId, output, contentHash);
+  // U1 hero: what is ACTUALLY playing, derived from the real video src —
+  // this player only ever serves the full-preview route, but the label
+  // reads the src (not a static assumption) so a trial src would name
+  // itself as one if this player is ever reused for it.
+  const kindLabel = src.includes("/consultation/samples/")
+    ? "30秒以内の試し動画"
+    : "全編のプレビュー";
   return (
-    <video
-      key={`${output}/${contentHash ?? "unverified"}`}
-      data-testid="preview-player"
-      data-output={output}
-      className="video-player"
-      controls
-      preload="metadata"
-      src={previewVideoSrc(episodeId, output, contentHash)}
-      ref={videoRef}
+    <>
+      <p className="preview-kind-label" data-testid="preview-kind-label">
+        {kindLabel}
+      </p>
+      <video
+        key={`${output}/${contentHash ?? "unverified"}`}
+        data-testid="preview-player"
+        data-output={output}
+        className="video-player"
+        controls
+        preload="metadata"
+        src={src}
+        ref={videoRef}
       {...(vertical
         ? {
             width: PREVIEW_SIZES.vertical.width,
@@ -77,6 +89,7 @@ export default function PreviewPlayer({
             style: { maxWidth: PREVIEW_SIZES.vertical.width },
           }
         : {})}
-    />
+      />
+    </>
   );
 }

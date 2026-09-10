@@ -278,7 +278,7 @@ describe("ConsultationPanel（UX 2.5 slice-1）", () => {
     expect(recorded[0]!.textContent).toContain("メモ: 字幕は減らす");
   });
 
-  it("budgetは累計と上限を出し、費用は回数管理・リセットされないと明示する", async () => {
+  it("budgetは数値を詳しい記録に移し、区間の使用数は出さず、警告は上限接近時だけ", async () => {
     const { fetchImpl } = recordingFetch(() => jsonResponse(payloadOne));
     renderPanel(fetchImpl);
 
@@ -286,10 +286,12 @@ describe("ConsultationPanel（UX 2.5 slice-1）", () => {
       expect(screen.getByTestId("consultation-budget")).toBeVisible();
     });
     expect(screen.getByTestId("consultation-budget-llm-calls").textContent).toBe("3 / 10回");
-    expect(screen.getByTestId("consultation-budget-intervals").textContent).toBe("2 / 6");
     expect(screen.getByTestId("consultation-budget-wall-seconds").textContent).toBe(
       "120 / 600秒",
     );
+    expect(screen.queryByTestId("consultation-budget-intervals")).toBeNull();
+    expect(screen.queryByText("区間の使用数")).toBeNull();
+    expect(screen.queryByTestId("consultation-budget-warning")).toBeNull();
     const policy = screen.getByTestId("consultation-budget-policy").textContent ?? "";
     expect(policy).toContain("直接計測できない");
     expect(policy).toContain("呼び出し回数で管理");
