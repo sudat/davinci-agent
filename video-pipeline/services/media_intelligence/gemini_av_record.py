@@ -13,13 +13,23 @@ import hashlib
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from services.foundation_io import atomic_write
 from services.media_intelligence.gemini_av_models import (
+    AV_VALIDATION_VERSION,
     GEMINI_AV_RATE_OUT,
     GEMINI_AV_RATES_IN,
+    AvChunk,
+    AvChunkOutcome,
+    AvDriftFlag,
+    GeminiAvEvent,
+    gemini_av_prompt,
+    gemini_av_schema,
 )
+
+if TYPE_CHECKING:
+    from services.editorial_v2.editorial_pins import EditorialPinV2
 
 #: Metered-call reuse journal (chunked; same name the whole-video path used).
 AV_CALLS_NAME: Final = "gemini-av-calls.json"
@@ -132,10 +142,87 @@ def store_av_call(episode_dir: Path, key: str, record: dict[str, Any]) -> None:
     )
 
 
+def chunk_cache_key(
+    *,
+    proxy_sha256: str,
+    pin: EditorialPinV2,
+    chunk: AvChunk,
+) -> str:
+    """Reuse key for one chunk (prompt/schema hashed; no file read needed)."""
+
+    prompt = gemini_av_prompt(chunk.clip_duration_seconds)
+    prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
+    schema_sha = hashlib.sha256(
+        json.dumps(gemini_av_schema(), sort_keys=True).encode()
+    ).hexdigest()
+    return chunk_av_call_key(
+        proxy_sha256=proxy_sha256,
+        chunk_index=chunk.index,
+        core_start_seconds=chunk.core_start,
+        core_end_seconds=chunk.core_end,
+        model_id=pin.model_id,
+        prompt_sha256=prompt_sha,
+        schema_sha256=schema_sha,
+        validation_version=AV_VALIDATION_VERSION,
+    )
+
+
+def chunk_outcome_from_record(
+    record: Mapping[str, Any], chunk: AvChunk, *, reused: bool
+) -> AvChunkOutcome:
+    """Rebuild one chunk's outcome from its journal record (no re-billing)."""
+
+    raw_events = record.get("events")
+    events = (
+        tuple(GeminiAvEvent.model_validate(item) for item in raw_events)
+        if isinstance(raw_events, list)
+        else ()
+    )
+    raw_flags = record.get("drift_flags")
+    flags = (
+        tuple(AvDriftFlag.model_validate(item) for item in raw_flags)
+        if isinstance(raw_flags, list)
+        else ()
+    )
+    meter = record.get("meter", record)
+    notes = record.get("notes")
+    uncertain = record.get("uncertain_flags")
+    insufficient = record.get("chunk_insufficient")
+    return AvChunkOutcome(
+        chunk_index=chunk.index,
+        events=events,
+        drift_flags=flags,
+        chunk_insufficient=bool(insufficient),
+        notes=notes if isinstance(notes, str) else "",
+        uncertain_flags=uncertain if isinstance(uncertain, str) else "",
+        meter=meter if isinstance(meter, Mapping) else {},
+        reused=reused,
+    )
+
+
+def cached_chunk_outcome(
+    *,
+    episode_dir: Path,
+    proxy_sha256: str,
+    pin: EditorialPinV2,
+    chunk: AvChunk,
+) -> AvChunkOutcome | None:
+    """The recorded outcome for this (proxy, bounds, contract), if any."""
+
+    key = chunk_cache_key(proxy_sha256=proxy_sha256, pin=pin, chunk=chunk)
+    cached = load_cached_av_call(episode_dir, key)
+    if cached is None:
+        return None
+    return chunk_outcome_from_record(cached, chunk, reused=True)
+
+
 __all__ = [
     "AV_CALLS_NAME",
     "AV_FILE_REUSE_SECONDS",
+    "cached_chunk_outcome",
     "chunk_av_call_key",
+    "chunk_cache_key",
+    "chunk_outcome_from_record",
     "cost_from_usage",
     "load_cached_av_call",
     "store_av_call",

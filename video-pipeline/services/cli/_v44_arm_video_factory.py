@@ -30,8 +30,8 @@ from services.editorial_v2.model_provider import (
     EditorialRedirectRefusedError,
 )
 from services.foundation_io import sha256_file
+from services.media_intelligence.gemini_av_files import GeminiAvHttpResponse
 from services.media_intelligence.gemini_av_models import GEMINI_AV_HOST
-from services.media_intelligence.gemini_av_wire import GeminiAvHttpResponse
 from services.media_intelligence.moment_review_real import RealAudioContext, RealTranscriptLookup
 from services.media_intelligence.video_clip_extraction import ClipExtractor
 from services.media_intelligence.video_review_providers import (
