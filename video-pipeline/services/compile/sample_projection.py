@@ -60,7 +60,7 @@ def derive_sample_windows(
         if pick not in unique:
             unique.append(pick)
     per_cap = max(
-        int(limit_seconds * ir.rate.den / ir.rate.num / len(unique)), 1
+        int(limit_seconds * ir.rate.num / ir.rate.den / len(unique)), 1
     )
     windows: list[RecordFrameSpan] = []
     for item in unique:

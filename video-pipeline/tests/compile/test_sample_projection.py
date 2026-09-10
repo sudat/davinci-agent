@@ -22,6 +22,7 @@ import pytest
 from pydantic_core import PydanticCustomError
 
 from services.compile.sample_projection import (
+    derive_sample_windows,
     project_sample_ir,
     sample_total_frames,
     sample_total_seconds,
@@ -320,3 +321,13 @@ def test_av_track_count_multiple_audio_is_typed_failure() -> None:
     with pytest.raises(PydanticCustomError) as exc_info:
         project_sample_ir(doubled, [_span(0, 30)])
     assert "sample-av-track-count" in repr(exc_info.value)
+
+
+def test_derive_sample_windows_picks_three_scenes_up_to_cap() -> None:
+    ir = _full_ir()  # video v1[0,60) v2[60,120) @30fps (2 scenes)
+    windows = derive_sample_windows(ir, limit_seconds=3.0)
+    assert len(windows) == 2  # one per distinct scene — never the head only
+    assert windows[0].start_frame < windows[1].start_frame
+    assert sample_total_seconds(windows, RATE) == pytest.approx(3.0)  # 2x1.5s caps
+    capped = derive_sample_windows(ir, limit_seconds=1.0)
+    assert sample_total_seconds(capped, RATE) <= 1.0 + 1 / 30
