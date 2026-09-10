@@ -75,17 +75,20 @@ def chunk_av_call_key(  # noqa: PLR0913 (call-cache key: one field per slot)
     model_id: str,
     prompt_sha256: str,
     schema_sha256: str,
+    validation_version: str = "",
 ) -> str:
     """Stable reuse key: same proxy + bounds + model + contract = no re-bill.
 
     Keyed on the WHOLE-PROXY bytes (not the re-encoded chunk clip: the
     VideoToolbox chunk encodes are not byte-stable across runs, so a
-    clip-sha key would never hit twice).
+    clip-sha key would never hit twice). ``validation_version`` busts the
+    cache when local validation rules change.
     """
 
     joined = (
         f"{proxy_sha256}\n{chunk_index}\n{core_start_seconds!r}\n"
         f"{core_end_seconds!r}\n{model_id}\n{prompt_sha256}\n{schema_sha256}"
+        f"\n{validation_version}"
     )
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 

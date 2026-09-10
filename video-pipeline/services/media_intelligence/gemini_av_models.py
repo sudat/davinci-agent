@@ -41,6 +41,12 @@ GEMINI_AV_RATE_OUT: Final = 2.50
 AV_CHUNK_SECONDS: Final = 60.0
 AV_CHUNK_CONTEXT_S: Final = 3.0
 
+#: Validation contract version — bump to invalidate stale cached chunk
+#: outcomes when the local validation rules change (v2: end-at-duration ok).
+AV_VALIDATION_VERSION: Final = "v2"
+
+_CLIP_BOUNDARY_EPSILON: Final = 1e-6
+
 AV_EVENT_FIELDS: Final = (
     "start_seconds",
     "end_seconds",
@@ -226,9 +232,12 @@ def validate_chunk_events(
                 "(provider-controlled text is never echoed)",
             ) from None
         raw_start, raw_end = event.start_seconds, event.end_seconds
+        # End-at-clip-duration is the NATURAL last-event boundary (live:
+        # 4/5 chunks died solely on end == clip_duration); only genuinely
+        # out-of-range timestamps reject. Start stays strictly inside.
         in_range = (
             0.0 <= raw_start < clip_duration
-            and 0.0 <= raw_end < clip_duration
+            and 0.0 <= raw_end <= clip_duration + _CLIP_BOUNDARY_EPSILON
             and raw_end >= raw_start
         )
         if not in_range:

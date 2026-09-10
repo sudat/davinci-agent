@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from services.foundation_io import sha256_file
 from services.media_intelligence.gemini_av_models import (
+    AV_VALIDATION_VERSION,
     GEMINI_AV_API_SURFACE,
     GEMINI_AV_HOST,
     GEMINI_AV_MODEL_ID,
@@ -364,6 +365,7 @@ def chunk_cache_key(
         model_id=pin.model_id,
         prompt_sha256=prompt_sha,
         schema_sha256=schema_sha,
+        validation_version=AV_VALIDATION_VERSION,
     )
 
 

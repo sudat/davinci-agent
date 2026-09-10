@@ -244,6 +244,20 @@ def test_validation_keeps_in_bounds_events_clean() -> None:
     assert [e.start_seconds for e in validation.events] == [0.0, 56.0]
 
 
+def test_end_at_clip_duration_is_valid() -> None:
+    # Live regression (2026-09-11): 4/5 chunks were discarded solely
+    # because their LAST event ended exactly AT the clip duration (63.0
+    # on a 63s clip, 66.0 on a 66s clip) — the natural closing boundary.
+    for chunk in partition_av_cores(282.24)[:4]:
+        last = _event(50.0, chunk.clip_duration_seconds, "結び")
+        local = validate_chunk_events(
+            [_event(0.5, 10.0, "導入"), last], chunk
+        )
+        assert local.chunk_insufficient is False, chunk.index
+        assert local.drift_flags == ()
+        assert len(local.events) == 2
+
+
 def test_validation_empty_or_malformed_is_typed() -> None:
     chunk = partition_av_cores(100.0)[0]
     assert validate_chunk_events([], chunk).chunk_insufficient is True
