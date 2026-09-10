@@ -262,6 +262,30 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         ? "まだ生成されていません"
         : `${flags.flags.length}件`;
 
+  const outputControls = multiOutput ? (
+    <div data-testid="output-select" role="group" aria-label="出力の切り替え">
+      {(outputScope.outputs ?? []).map((output) => (
+        <button
+          key={output.output_id}
+          type="button"
+          className={output.output_id === selectedOutput ? "btn-primary" : "btn-small"}
+          aria-pressed={output.output_id === selectedOutput}
+          data-testid={`output-option-${output.output_id}`}
+          onClick={() =>
+            output.output_id === "landscape" || output.output_id === "vertical"
+              ? outputScope.select(output.output_id)
+              : undefined
+          }
+        >
+          {outputLabel(output.output_id)}
+        </button>
+      ))}
+      <p className="field-hint" data-testid="output-independence-note">
+        横版と縦版の承認は別々です。表示中のプレビュー・再構築は選択中の版にだけ適用されます。
+      </p>
+    </div>
+  ) : null;
+
   const footageSlot = (
     <>
       <PreviewPlayer
@@ -271,6 +295,25 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         videoRef={videoRef}
         output={selectedOutput}
       />
+      {outputControls}
+      {outputScope.outputs !== null && !verticalRegistered ? (
+        <div className="actions">
+          <button
+            type="button"
+            className="btn-small"
+            data-testid="output-add"
+            onClick={addVerticalOutput}
+            disabled={addBusy}
+          >
+            {addBusy ? "追加中…" : "縦版を追加する"}
+          </button>
+        </div>
+      ) : null}
+      {addResult !== null ? (
+        <p className="field-hint" aria-live="polite" data-testid="output-add-result">
+          {addResult}
+        </p>
+      ) : null}
       <p className="field-hint" aria-live="polite" data-testid="preview-binding">
         {previewBindingLine(binding)}
       </p>
@@ -432,6 +475,24 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           status={status}
           footageSlot={footageSlot}
           onStageHint={setStageHint}
+        />
+        {showFlagsNormally ? (
+          <section className="card">
+            <h2 className="card-title">レビューflag</h2>
+            <FlagList
+              flags={flags!.flags}
+              notYetGenerated={flags!.not_yet_generated}
+              canSeek={playerState === "available"}
+              onSeek={seekTo}
+            />
+          </section>
+        ) : null}
+        <ReviewChatPanel
+          episodeId={episodeId}
+          getAtSeconds={() => videoRef.current?.currentTime ?? null}
+          status={status}
+          previewOk={previewOk}
+          outputId={selectedOutput}
         />
         {detailsBlock(true, false)}
       </div>

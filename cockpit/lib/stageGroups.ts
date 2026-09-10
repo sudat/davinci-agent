@@ -162,7 +162,11 @@ export function jobStatusSuffix(jobStatus: string): string | null {
  *  plan確定（PLAN_COMMITTED）まで = 上位2グループ（素材の受付と確認・
  *  方針の準備）の段階のみ。可否判定もこの表からだけ導く（新規の段階
  *  語彙を作らない）。 */
-const CONSULTATION_STAGE_GROUP_LABELS = ["素材の受付と確認", "方針の準備"];
+const CONSULTATION_STAGE_GROUP_LABELS = [
+  "素材の受付と確認",
+  "方針の準備",
+  "試し編集",
+];
 
 export function isConsultationStage(stageName: string): boolean {
   return STAGE_GROUPS.filter((group) =>

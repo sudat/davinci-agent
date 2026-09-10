@@ -206,7 +206,7 @@ afterEach(() => {
 });
 
 describe("ConsultationPanel（UX 2.5 slice-1）", () => {
-  it("plan確定後の段階（compile）では表示しない・fetchもしない", () => {
+  it("試し編集段階（compile）でも相談を表示する（再構成後: 流れはcompile以降も続く）", () => {
     const { fetchImpl, calls } = recordingFetch(() => jsonResponse(payloadOne));
     render(
       <ConsultationPanel
@@ -215,8 +215,8 @@ describe("ConsultationPanel（UX 2.5 slice-1）", () => {
         fetchImpl={fetchImpl}
       />,
     );
-    expect(screen.queryByTestId("consultation-panel")).toBeNull();
-    expect(calls).toHaveLength(0);
+    expect(screen.getByTestId("consultation-panel")).not.toBeNull();
+    expect(calls.length).toBeGreaterThan(0);
   });
 
   it("status未取得・review段階では出さず、その間はfetchもしない", () => {

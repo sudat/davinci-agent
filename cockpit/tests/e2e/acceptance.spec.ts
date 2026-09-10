@@ -194,7 +194,7 @@ function seedPipelineState(episodeId: string): void {
       EPISODES_ROOT,
       STATE_STORE,
     ],
-    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore", env: { ...process.env, PYTHONPATH: VIDEO_PIPELINE_DIR } },
   );
 }
 
@@ -202,7 +202,7 @@ function seedReviewStore(episodeId: string): void {
   execFileSync(
     "uv",
     ["run", "python", "-c", SEED_REVIEW_STORE, path.join(EPISODES_ROOT, episodeId)],
-    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore", env: { ...process.env, PYTHONPATH: VIDEO_PIPELINE_DIR } },
   );
 }
 
@@ -333,7 +333,7 @@ function seedConsultation(episodeId: string): void {
   execFileSync(
     "uv",
     ["run", "python", "-c", SEED_CONSULTATION, path.join(EPISODES_ROOT, episodeId)],
-    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore", env: { ...process.env, PYTHONPATH: VIDEO_PIPELINE_DIR } },
   );
 }
 
@@ -341,7 +341,7 @@ function setJobState(episodeId: string, status: string, stage: string): void {
   execFileSync(
     "uv",
     ["run", "python", "-c", SET_JOB_STATE, episodeId, STATE_STORE, status, stage],
-    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore", env: { ...process.env, PYTHONPATH: VIDEO_PIPELINE_DIR } },
   );
 }
 
@@ -349,7 +349,7 @@ function waitRunnerIdle(episodeId: string): void {
   execFileSync(
     "uv",
     ["run", "python", "-c", WAIT_RUNNER_IDLE, path.join(EPISODES_ROOT, episodeId)],
-    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore" },
+    { cwd: VIDEO_PIPELINE_DIR, stdio: "ignore", env: { ...process.env, PYTHONPATH: VIDEO_PIPELINE_DIR } },
   );
 }
 
@@ -443,9 +443,9 @@ test("intake: brief+ソース+Start一回で開始（artifact欄なし / malform
   const createButton = page.getByTestId("create-button");
   await expect(createButton).toBeDisabled();
 
-  await page.getByLabel("この動画は何について？").fill("受け入れ: 話したいテーマを簡潔に");
+  await page.getByLabel("どんな動画にしたいですか？").fill("受け入れ: 話したいテーマを簡潔に");
   const sourceDir = fs.mkdtempSync(path.join(os.tmpdir(), "cockpit-accept-src-"));
-  await page.getByLabel("ソースフォルダ").fill(sourceDir);
+  await page.getByLabel("撮影素材のフォルダを選ぶ").fill(sourceDir);
 
   const offendingFields = await page.evaluate(() =>
     Array.from(document.querySelectorAll("input, textarea, select"))
@@ -461,8 +461,8 @@ test("intake: brief+ソース+Start一回で開始（artifact欄なし / malform
   );
   expect(offendingFields, "intake must not expose artifact/job-id fields").toEqual([]);
 
+  await page.getByText("参考動画", { exact: true }).click(); // collapse is closed by default in the redesign
   await expect(page.locator("label[for='reference-input']")).toBeVisible();
-  await expect(page.getByLabel("参照（URL / ローカルパス / 保存済みID）")).toBeAttached();
 
   await createButton.click();
   await page.waitForURL(/\/episodes\/ep-[0-9a-f]+$/, { timeout: 20_000 });
@@ -495,6 +495,11 @@ test("合成fast-path: review可能な状態まで到達（stage実行待ちな�
 
   await page.goto(`/episodes/${episodeId}`);
   // 受入a（codex指摘反映）: 語彙と正直な接尾辞をそれぞれ確認する。
+  // 再構成後は技術状態が「詳しい記録」details内にあるため開いてから確認する。
+  const details = page.getByTestId("episode-details");
+  if ((await details.count()) > 0) {
+    await details.locator("summary").click();
+  }
   await expect(page.getByTestId("episode-status")).toContainText("PREVIEW_READY", {
     timeout: 15_000,
   });
