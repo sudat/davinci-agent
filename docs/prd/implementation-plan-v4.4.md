@@ -645,10 +645,12 @@ PRD §6.7の「1回の的を絞った設計修正と1回の再実行」の枠内
 
 | 役割 | model / surface | 責務 | 境界 |
 |---|---|---|---|
-| 全編音声映像map/reduce | `gemini-3.7-flash`（Gemini Developer API） | 局所windowの一意和集合がEdit Source全体 `[0, source_duration)` を厳密に覆うmap確認と、episode単位のreduce 1回 | 実装前にlive-probeで保証する。Vertex AI等への黙替えおよびprovider/model fallbackは禁止。利用不可は型付きblocked |
-| 的を絞った映像専属 | `glm-5v-turbo`（公式にサポートされる動画転送方式） | 決定論的またはGemini指定の不確実・高価値領域について、音声除去済みの対象clipのみ確認 | 編集判断は行わない。音声は送らない |
-| fusion | 同一の`gemini-3.7-flash` pin | 局所/reduce結果と専属観察をprovider中立に融合 | 型付きpayload外の文章は信頼しない |
+| 全編の分割映像観察（主経路） | `glm-5v-turbo`（公式にサポートされる動画転送方式・定額枠） | Edit Source全体を実測採用長（現在60秒・live-probe済み）の区間へ重複・欠落なく分割し、各区間の音声除去済み映像とその区間の話し言葉transcript（比較条件として渡す文字情報のみ）を観察 | 編集判断は行わない。音声mediaは送らない——話し言葉はtranscriptテキストとしてのみ渡す。timestampはprompt駆動のため本地で厳密検証する |
+| 区間補助（従量・任意） | `gemini-3.7-flash`（Gemini Developer API・検証済みpinのみ。model idの黙変更禁止） | GLM品質不足と記録された特定区間のみ、オペレーターが従量呼出を明示許可した場合に限定補助 | 主経路の構成要素ではない。自動切替・全編再走は禁止。利用不可は型付きblocked |
+| fusion | 本地の決定論的統合 | 区間観察を既存`MomentDeepReviewV1`記録へprovider中立・型付きpayloadでのみ統合 | 型付きpayload外の文章は信頼しない |
 | 編集判断の唯一の所有者 | GPT-5.6 Sol（DirectorV2） | keep/remove/順序/編集意図の選択はこの役割のみ | 融合evidenceを検証・commitの前に消費する。どのmodelもJob State・Selection Plan・Edit Plan・Resolveに書き込まない |
+
+（2026-09-10 オペレーター指示により主経路をGLM-5v-turbo単独へ変更: 定額はGLMのみ、Gemini Flashは従量のため品質不足実測区間のみ許可制で補助。）
 
 権威artifactは融合済み`MomentDeepReviewV1`記録のみとし、段階別の来歴は既存記録内で検査可能とする。map/reduce/専属の実行時payloadは再生成可能な実行データであり、第三のauthoritative artifactは作らない（§0.3）。
 

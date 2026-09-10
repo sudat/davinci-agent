@@ -834,16 +834,16 @@ This is one of the central reasons v4.4 retains Progressive Attention.
 
 ## 8.5 `[FIRST-PUBLISH]` Video-understanding roles for the corrected Arm B
 
-The §6.7.1 correction defines four bounded roles. They are evidence-generation roles only; this is not a generic multi-agent framework.
+The §6.7.1 correction defines bounded evidence-generation roles only; this is not a generic multi-agent framework. Per the 2026-09-10 operator directive (GLM-5v-turbo is the fixed-rate plan; Gemini Flash is metered), the primary full-source observation path runs on GLM alone.
 
 | Role | Model / provider surface | Responsibility | Boundary |
 |---|---|---|---|
-| Full-source audiovisual map/reduce | `gemini-3.7-flash` via Gemini Developer API | Review bounded local windows whose unique union covers the entire Edit Source exactly `[0, source_duration)`, then produce one episode-level reduce | The provider surface is live-probe-gated before implementation. It must not silently switch to Vertex AI or any other provider/model; unavailability is a typed blocked state, not a fallback |
-| Targeted video-only specialist | `glm-5v-turbo` via its officially supported video transfer | Inspect audio-stripped targeted clips for deterministic or Gemini-selected uncertainty/high-value regions | Not an editorial decision maker; never receives audio |
-| Fusion | the same `gemini-3.7-flash` pin | Fuse local/reduce evidence and specialist observations into provider-neutral fused reviews | Does not trust provider prose outside the typed payload |
+| Full-source chunked observation (primary) | `glm-5v-turbo` via its officially supported video transfer | Partition the entire Edit Source into contiguous measured-length chunks (live-probe-adopted, currently 60s) with no overlap or gap; observe each chunk's audio-stripped video together with that chunk's speech transcript (text only, passed as comparison data) | Not an editorial decision maker. Never receives audio media — speech reaches it as transcript text only. Timestamps are prompt-driven and locally validated |
+| Chunk-level assist (metered, optional) | `gemini-3.7-flash` via Gemini Developer API (the only verified pin; do not silently switch model ids or provider surface) | Assist ONLY specific chunks recorded as GLM-quality-insufficient, and ONLY when the operator has explicitly approved the metered call | Not part of the primary path; no automatic switchover, no full-source re-run, unavailability is a typed blocked state |
+| Fusion | local deterministic assembly | Assemble chunk observations into the existing `MomentDeepReviewV1` records (provider-neutral, typed payloads only) | Does not trust provider prose outside the typed payload |
 | Editorial decision owner | GPT-5.6 Sol (DirectorV2) | The sole component allowed to choose keep/remove/order/edit intent | Consumes fused evidence before proposal validation and commit. No model writes Job State, Selection Plan, Edit Plan, or Resolve |
 
-Only fused `MomentDeepReviewV1` records are committed and indexed as authoritative evidence; per-stage provenance remains inspectable inside those existing records. Runtime map/reduce/specialist payloads are rebuildable execution data and do not create a third authoritative artifact type (§0.2).
+Only fused `MomentDeepReviewV1` records are committed and indexed as authoritative evidence; per-stage provenance remains inspectable inside those existing records. Runtime chunk/specialist payloads are rebuildable execution data and do not create a third authoritative artifact type (§0.2).
 
 ---
 
