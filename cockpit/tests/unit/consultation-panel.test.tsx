@@ -181,7 +181,7 @@ describe("ConsultationPanel（UX 2.5 slice-1）", () => {
     const cards = await screen.findAllByTestId("consultation-proposal");
     expect(cards).toHaveLength(1);
     expect(screen.getByTestId("consultation-proposal-title").textContent).toBe(
-      "冒頭から引きで見せる構成",
+      "AIの提案: 冒頭から引きで見せる構成",
     );
     expect(screen.getByTestId("consultation-proposal-summary").textContent).toContain(
       "いつものシリーズらしく",

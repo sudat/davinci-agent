@@ -316,7 +316,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       <FinishingDomainPanel episodeId={episodeId} />
       <ConsultationPanel episodeId={episodeId} status={status} />
       <section className="card">
-        <h2 className="card-title">プレビュー</h2>
+        <h2 className="card-title">全編のプレビュー</h2>
         {multiOutput ? (
           <div data-testid="output-select" role="group" aria-label="出力の切り替え">
             {(outputScope.outputs ?? []).map((output) => (

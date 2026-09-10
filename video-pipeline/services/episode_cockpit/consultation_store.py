@@ -662,6 +662,12 @@ def latest_adopted_policy(episode_dir: Path) -> AdoptedPolicyV1 | None:
     """
 
     judgments = load_judgments(episode_dir)
+    # Trailing 全編へ rows neither adopt nor withdraw (consultation_adoption_open
+    # walks the same way) — the adoption they stand on stays the latest policy,
+    # so the consultation view keeps showing the adopted policy + its samples
+    # after the operator authorized the full render (2026-09-10 UI bug).
+    while judgments and judgments[-1].decision == "full_authorized":
+        judgments = judgments[:-1]
     if not judgments:
         return None
     return _join_policy(episode_dir, judgments[-1])

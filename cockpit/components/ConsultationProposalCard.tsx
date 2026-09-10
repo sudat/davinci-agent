@@ -162,7 +162,7 @@ export default function ConsultationProposalCard({
   return (
     <div data-testid="consultation-proposal" data-proposal-id={proposal.proposal_id}>
       <h3 className="section-title" data-testid="consultation-proposal-title">
-        {proposal.title}
+        AIの提案: {proposal.title}
       </h3>
       <p data-testid="consultation-proposal-summary">{proposal.summary}</p>
       {panels.length > 0 ? (

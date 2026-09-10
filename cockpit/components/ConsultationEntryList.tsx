@@ -181,7 +181,7 @@ function JournalRow({
       data-consultation-id={entry.consultation_id}
     >
       <p data-testid="consultation-entry-message">
-        相談: {entry.message}（{clockOf(entry.created_at)}）
+        相談した内容: {entry.message}（{clockOf(entry.created_at)}）
       </p>
       {entry.proposals.map((proposal) => {
         const recorded = entry.judgments.filter(
