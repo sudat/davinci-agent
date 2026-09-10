@@ -7,7 +7,7 @@ import type {
   ConsultationScope,
 } from "@/lib/api";
 
-export const DECISION_ORDER: ConsultationDecision[] = [
+export const DECISION_ORDER: Exclude<ConsultationDecision, "full_authorized">[] = [
   "adopt",
   "revise",
   "reject",
@@ -15,7 +15,10 @@ export const DECISION_ORDER: ConsultationDecision[] = [
   "delegate",
 ];
 
-export const DECISION_LABEL: Record<ConsultationDecision, string> = {
+export const DECISION_LABEL: Record<
+  Exclude<ConsultationDecision, "full_authorized">,
+  string
+> = {
   adopt: "この方針を採用",
   revise: "コメントで修正する",
   reject: "見送る",
@@ -23,7 +26,10 @@ export const DECISION_LABEL: Record<ConsultationDecision, string> = {
   delegate: "いつもの方向性におまかせ",
 };
 
-const DECISION_TESTID: Record<ConsultationDecision, string> = {
+const DECISION_TESTID: Record<
+  Exclude<ConsultationDecision, "full_authorized">,
+  string
+> = {
   adopt: "consultation-judgment-adopt",
   revise: "consultation-judgment-revise",
   reject: "consultation-judgment-reject",
@@ -76,7 +82,10 @@ export default function ConsultationJudgmentForm({
   busy,
   onSubmit,
 }: ConsultationJudgmentFormProps) {
-  const [decision, setDecision] = useState<ConsultationDecision | null>(null);
+  const [decision, setDecision] = useState<Exclude<
+    ConsultationDecision,
+    "full_authorized"
+  > | null>(null);
   const [scope, setScope] = useState<ConsultationScope>({
     composition: true,
     appearance: true,

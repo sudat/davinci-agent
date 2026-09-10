@@ -60,6 +60,11 @@ from services.episode_cockpit.errors import (
 )
 from services.episode_cockpit.models import RebuildRequestEntry
 from services.episode_cockpit.policy_settings import PolicySettingEntryV1
+from services.episode_cockpit.sample_identity import (
+    SAMPLE_MANIFEST_NAME,
+    SampleManifestV1,
+    samples_root,
+)
 from services.foundation_io import canonical_model_bytes
 
 if TYPE_CHECKING:
@@ -1457,6 +1462,39 @@ def require_proposal(
     )
 
 
+def sample_summaries(
+    episode_dir: Path, consultation_id: str | None = None
+) -> list[dict[str, object]]:
+    """Published sample manifests as wire dicts (never raises).
+
+    A journal-only reserve has no directory, so the directory scan
+    naturally lists only manifested samples; unreadable manifests are
+    skipped, never fatal. ``consultation_id=None`` lists the episode's
+    whole table (the GET samples route); otherwise one consultation's
+    slice (the consultation view).
+    """
+
+    try:
+        children = sorted(samples_root(episode_dir).iterdir())
+    except OSError:
+        return []
+    summaries: list[dict[str, object]] = []
+    for child in children:
+        try:
+            manifest = SampleManifestV1.model_validate_json(
+                (child / SAMPLE_MANIFEST_NAME).read_bytes()
+            )
+        except (OSError, ValidationError, ValueError):
+            continue
+        if (
+            consultation_id is not None
+            and manifest.identity.consultation_id != consultation_id
+        ):
+            continue
+        summaries.append(manifest.model_dump(mode="json"))
+    return summaries
+
+
 def consultation_view(
     episode_dir: Path,
     record: ConsultationRecordV1,
@@ -1512,6 +1550,7 @@ def consultation_view(
         },
         "rebuild": derive_policy_rebuild(episode_dir, policy, stage_runs),
         "policy_outcomes": outcomes,
+        "samples": sample_summaries(episode_dir, record.consultation_id),
     }
     # 工程4: generation keys ride ONLY consultations with panel/event
     # records — every other view stays byte-identical to today's shape.
@@ -1631,6 +1670,7 @@ __all__ = [
     "remaining_wall_seconds",
     "require_consultation",
     "require_proposal",
+    "sample_summaries",
     "selection_rebuild_active",
     "unaddressed_for_scope",
     "unconfirmed_for_policy",

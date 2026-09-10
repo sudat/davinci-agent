@@ -177,7 +177,7 @@ def test_message_creates_consultation_with_one_proposal(
 
     assert set(body) == {
         "consultation_id", "created_at", "message", "proposals", "judgments", "budget",
-        "policy", "rebuild", "policy_outcomes",
+        "policy", "rebuild", "policy_outcomes", "samples",
     }
     assert body["message"] == "ブログ告知用に短くしたい"
     assert body["judgments"] == []

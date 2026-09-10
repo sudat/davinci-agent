@@ -51,7 +51,7 @@ _DETAILS = {
 
 _TODAY_KEYS = {
     "consultation_id", "created_at", "message", "proposals", "judgments",
-    "budget", "policy", "rebuild", "policy_outcomes",
+    "budget", "policy", "rebuild", "policy_outcomes", "samples",
 }
 
 _FAKE_MODEL = "gpt-5.6-sol"

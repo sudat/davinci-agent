@@ -113,6 +113,7 @@ export default function ReviewDraftCard({
       {draft.needs_confirmation ? (
         <p
           className="field-hint"
+          style={{ whiteSpace: "pre-line" }}
           data-testid={`review-draft-needs-confirmation${suffix}`}
         >
           曖昧のため確認が必要: {confirmationReasonJa(draft.confirmation_reason)}

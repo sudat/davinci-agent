@@ -12,6 +12,7 @@ import ConsultationProposalCard, {
 } from "@/components/ConsultationProposalCard";
 import {
   isPolicyOutcomeEntry,
+  type ConsultationDecision,
   type ConsultationEntry,
   type ConsultationGenerationPanel,
   type ConsultationJudgmentInput,
@@ -204,7 +205,7 @@ function JournalRow({
               <ul className="list-plain" data-testid="consultation-judgments-recorded">
                 {recorded.map((judgment) => (
                   <li key={judgment.judgment_id} data-testid="consultation-judgment-recorded">
-                    記録済みの判断: {DECISION_LABEL[judgment.decision] ?? judgment.decision}
+                    記録済みの判断: {(DECISION_LABEL as Partial<Record<ConsultationDecision, string>>)[judgment.decision] ?? judgment.decision}
                     （{scopeSummary(judgment.scope)}）{clockOf(judgment.created_at)}
                     {judgment.note !== null && judgment.note !== "" ? (
                       <span className="field-hint">メモ: {judgment.note}</span>

@@ -348,8 +348,9 @@ def test_consultation_view_matches_pinned_contract(episode_dir: Path) -> None:
 
     assert set(view) == {
         "consultation_id", "created_at", "message", "proposals", "judgments", "budget",
-        "policy", "rebuild", "policy_outcomes",
+        "policy", "rebuild", "policy_outcomes", "samples",
     }
+    assert view["samples"] == []
     assert view["message"] == "ブログ告知用に短くしたい"
     proposal = cast("list[dict[str, object]]", view["proposals"])[0]
     assert set(proposal) == {"proposal_id", "title", "summary", "details"}

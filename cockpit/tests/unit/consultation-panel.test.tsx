@@ -910,4 +910,35 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
       );
     });
   });
+
+  it("採用済みの方針があると試し動画の要求ボタンが出て、ない旧viewでは出さない", async () => {
+    const adopted: ConsultationPayload = {
+      consultations: [
+        { ...entryOneJudged, policy: { adopted: adoptedPolicy } },
+      ],
+    };
+    const adoptedFetch = recordingFetch((url) => {
+      if (url.endsWith("/consultation/samples")) {
+        return jsonResponse({ samples: [] });
+      }
+      return jsonResponse(adopted);
+    });
+    const first = renderPanel(adoptedFetch.fetchImpl);
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-request")).toBeVisible();
+    });
+    expect(screen.getByTestId("sample-request").textContent).toContain(
+      "30秒の試し動画を作る",
+    );
+    first.unmount();
+
+    const { fetchImpl } = recordingFetch(() => jsonResponse(payloadOne));
+    renderPanel(fetchImpl);
+    await waitFor(() => {
+      expect(screen.getByTestId("consultation-panel")).toBeVisible();
+    });
+    expect(
+      screen.queryByTestId("consultation-sample-section"),
+    ).toBeNull();
+  });
 });

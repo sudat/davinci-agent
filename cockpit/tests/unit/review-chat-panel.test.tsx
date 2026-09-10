@@ -446,4 +446,104 @@ describe("ReviewChatPanel（NL修正→構造化プレビュー→部分rebuild�
       "どの修正にも当てはまりませんでした",
     );
   });
+
+  it("字幕4択の確認は4つの選択肢をそのまま出す", async () => {
+    const draftFourChoice = {
+      ...DRAFT_KEEP_LONGER,
+      command_id: "rcmd-subtitle00001",
+      command_kind: "subtitle_shorter",
+      text: "字幕を短く",
+      needs_confirmation: true,
+      confirmation_reason:
+        "「字幕を短く」には4つの意味があります。番号で教えてください:\n" +
+        "1) 言葉は変えず、一度に出す文字を少なく分ける\n" +
+        "2) 表示している時間を短くする\n" +
+        "3) 話した内容を要約して文章自体を短くする（発話どおりではなくなる——明示了承が必要）\n" +
+        "4) 一行の幅だけ狭くして折り返す",
+      target_seconds: null,
+      seconds_delta: null,
+    };
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ received: true, sequence: 6, draft: draftFourChoice }),
+    );
+    render(
+      <ReviewChatPanel
+        episodeId="ep-abc"
+        getAtSeconds={() => null}
+        status={null}
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+      target: { value: "字幕を短く" },
+    });
+    fireEvent.click(screen.getByTestId("review-chat-send"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("review-draft-needs-confirmation")).toBeTruthy();
+    });
+    const reason = screen.getByTestId("review-draft-needs-confirmation").textContent ?? "";
+    expect(reason).toContain("言葉は変えず、一度に出す文字を少なく分ける");
+    expect(reason).toContain("表示している時間を短くする");
+    expect(reason).toContain("話した内容を要約して文章自体を短くする");
+    expect(reason).toContain("一行の幅だけ狭くして折り返す");
+    expect((screen.getByTestId("review-apply-button") as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("未対応の選択肢はバックエンドの正直な拒否文をそのまま出す", async () => {
+    const draftSplit = {
+      ...DRAFT_KEEP_LONGER,
+      command_id: "rcmd-split00000001",
+      command_kind: "split_display",
+      text: "1番",
+      needs_confirmation: false,
+      confirmation_reason: null,
+      target_seconds: null,
+      seconds_delta: null,
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/review-chat")) {
+        return jsonResponse({ received: true, sequence: 7, draft: draftSplit });
+      }
+      if (url.endsWith("/review-chat/apply")) {
+        return jsonResponse(
+          {
+            error: {
+              code: "subtitle-choice-not-implemented",
+              detail:
+                "現在の仕組みではまだ対応していません。別の選択肢を選ぶか、相談へ戻ってください。",
+            },
+          },
+          422,
+        );
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    render(
+      <ReviewChatPanel
+        episodeId="ep-abc"
+        getAtSeconds={() => null}
+        status={statusOf([])}
+        fetchImpl={fetchImpl as unknown as typeof fetch}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("修正指示（自然言語）"), {
+      target: { value: "1番" },
+    });
+    fireEvent.click(screen.getByTestId("review-chat-send"));
+    await waitFor(() => {
+      expect(screen.getByTestId("review-draft")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("review-apply-button"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error-notice")).toBeTruthy();
+    });
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "現在の仕組みではまだ対応していません。別の選択肢を選ぶか、相談へ戻ってください。",
+    );
+  });
 });

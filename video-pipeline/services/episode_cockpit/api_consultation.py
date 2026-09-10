@@ -45,6 +45,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BeforeValidator, Field, ValidationError, model_validator
 
+from services.compile.sample_projection import sample_total_seconds
 from services.contracts.primitives import Identifier, StrictModel
 from services.episode_cockpit.backend import CockpitWorkspace
 from services.episode_cockpit.consultation_store import (
@@ -65,12 +66,14 @@ from services.episode_cockpit.consultation_store import (
     append_generation_event,
     append_panel,
     append_proposal_set,
+    canonical_policy_sha256,
     consultation_view,
     consume_budget,
     derive_policy_rebuild,
     ensure_budget_available,
     ensure_image_budget_available,
     ensure_model_call_budget_available,
+    ensure_preview_budget_available,
     latest_adopted_policy,
     load_budget_limits,
     load_consultations,
@@ -82,14 +85,27 @@ from services.episode_cockpit.consultation_store import (
     policy_for_judgment,
     require_consultation,
     require_proposal,
+    sample_summaries,
     selection_rebuild_active,
 )
+from services.episode_cockpit.episode_files import review_store_location
 from services.episode_cockpit.errors import (
     CockpitConflictError,
     CockpitNotFoundError,
     CockpitUnprocessableError,
 )
 from services.episode_cockpit.models import NonEmpty  # noqa: TC001 (FastAPI get_type_hints)
+from services.episode_cockpit.sample_identity import (
+    SAMPLE_MANIFEST_NAME,
+    SAMPLE_PREVIEW_NAME,
+    SampleManifestV1,
+    SampleRequestIdentityV1,
+    WindowSequence,
+    sample_dir,
+)
+from services.episode_cockpit.sample_journal import request_sample
+from services.foundation_io import sha256_file
+from services.review_command.store import load_head
 
 if TYPE_CHECKING:
     from services.job_runner.state_models import JobSnapshot
@@ -259,6 +275,20 @@ class ConsultationJudgmentRequest(StrictModel):
     note: str | None = None
     operation_id: str | None = None
     sample_id: Identifier | None = None
+
+
+class ConsultationSampleRequestV1(StrictModel):
+    """POST /episodes/{id}/consultation/samples — one sample request.
+
+    Only consultation/judgment/windows/operation ride the wire; the base
+    version, plan sha, policy sha, and full-IR sha are pinned server-side
+    from the committed store (never client-claimed).
+    """
+
+    consultation_id: NonEmpty
+    judgment_id: NonEmpty
+    operation_id: NonEmpty
+    windows: WindowSequence
 
 
 def _workspace(request: Request) -> CockpitWorkspace:
@@ -1661,6 +1691,145 @@ def consultation_judgment(
     return JSONResponse(
         status_code=200,
         content=consultation_view(episode_dir, record, limits, snapshot=snapshot),
+    )
+
+
+@router.post("/episodes/{episode_id}/consultation/samples")
+def consultation_sample_request(
+    episode_id: str, request: ConsultationSampleRequestV1, workspace: Workspace
+) -> dict[str, object]:
+    """Reserve one sample and render it as the attempt owner.
+
+    The preview budget gate runs BEFORE the reserve (exhausted = typed
+    422 with zero render). A stored/recovering reserve returns its
+    manifest with zero render; only the open attempt's owner renders
+    (lazy ``render_sample_now`` — renders, publishes, settles; a stage
+    failure surfaces as a typed 422 carrying its code).
+    """
+
+    episode_dir = _episode_dir(workspace, episode_id)
+    limits = load_budget_limits()
+    require_consultation(episode_dir, request.consultation_id)
+    policy_for_judgment(episode_dir, request.judgment_id)
+    windows = list(request.windows)
+    if not windows or any(
+        window.end_frame <= window.start_frame for window in windows
+    ):
+        raise CockpitUnprocessableError(
+            "sample-windows-invalid",
+            "試し動画の区間を指定してください。"
+            "各区間は開始より後ろで終わるものにしてください。",
+        )
+    from services.cli.review_common import store_ir  # noqa: PLC0415 (lazy CLI-side IR read)
+
+    store = review_store_location(episode_dir)
+    head = load_head(store.log_path, store.plan_dir)
+    head_entry = head.index.versions.get(str(head.version))
+    if head_entry is None:
+        raise CockpitUnprocessableError(
+            "sample-base-unreadable",
+            "編集の版が読めないため、試し動画を作れませんでした。",
+        )
+    base_version = f"v{head.version}"
+    ir_path = store.plan_dir / f"ir-{base_version}.json"
+    try:
+        full_ir_sha = sha256_file(ir_path)
+        full_ir = store_ir(ir_path)
+    except OSError as error:
+        raise CockpitUnprocessableError(
+            "sample-base-unreadable",
+            f"編集の版が読めないため、試し動画を作れませんでした: {error}",
+        ) from error
+    policy = latest_adopted_policy(episode_dir)
+    try:
+        identity = SampleRequestIdentityV1(
+            episode_id=episode_id,
+            consultation_id=request.consultation_id,
+            judgment_id=request.judgment_id,
+            base_version=base_version,
+            base_plan_sha256=head_entry.plan_sha256,
+            policy_sha256=(
+                canonical_policy_sha256(policy) if policy is not None else None
+            ),
+            output_id="landscape",
+            windows=tuple(windows),
+            operation_id=request.operation_id,
+            full_ir_sha256=full_ir_sha,
+        )
+    except ValidationError as error:
+        raise CockpitUnprocessableError(
+            "sample-request-invalid",
+            f"試し動画の依頼が受け付けられませんでした: {error}",
+        ) from error
+    total_seconds = sample_total_seconds(tuple(windows), full_ir.rate)
+    ensure_preview_budget_available(episode_dir, limits, total_seconds)
+    outcome = request_sample(episode_dir, identity)
+    if outcome["state"] in ("stored", "recovering"):
+        manifest: SampleManifestV1 = outcome["manifest"]
+        return {
+            "state": outcome["state"],
+            "sample_id": manifest.sample_id,
+            "manifest": manifest.model_dump(mode="json"),
+        }
+    from services.cli.episode_runner_rebuild import (  # noqa: PLC0415 (lazy: rebuild owns the error type)
+        RebuildStageError,
+    )
+    from services.cli.sample_render import (  # noqa: PLC0415 (lazy: render only on the owner path)
+        render_sample_now,
+    )
+
+    try:
+        rendered = render_sample_now(
+            episode_dir,
+            identity,
+            sample_attempt_id=outcome["sample_attempt_id"],
+        )
+    except RebuildStageError as error:
+        raise CockpitUnprocessableError(error.code, error.detail) from error
+    published: SampleManifestV1 = rendered["manifest"]
+    return {
+        "state": rendered["state"],
+        "sample_id": published.sample_id,
+        "manifest": published.model_dump(mode="json"),
+    }
+
+
+@router.get("/episodes/{episode_id}/consultation/samples")
+def consultation_sample_list(
+    episode_id: str, workspace: Workspace
+) -> dict[str, object]:
+    """The episode's manifested samples (empty list when none — never errors)."""
+
+    episode_dir = _episode_dir(workspace, episode_id)
+    return {"samples": sample_summaries(episode_dir)}
+
+
+@router.get("/episodes/{episode_id}/consultation/samples/{sample_id}/preview")
+def consultation_sample_preview(
+    episode_id: str, sample_id: Identifier, workspace: Workspace
+) -> FileResponse:
+    """Serve one published sample's preview bytes (absent/unpublished → 404)."""
+
+    episode_dir = _episode_dir(workspace, episode_id)
+    try:
+        manifest = SampleManifestV1.model_validate_json(
+            (sample_dir(episode_dir, sample_id) / SAMPLE_MANIFEST_NAME).read_bytes()
+        )
+    except (OSError, ValidationError, ValueError):
+        raise CockpitNotFoundError(
+            "sample-not-found", f"no published sample {sample_id} is served"
+        ) from None
+    if manifest.status != "published":
+        raise CockpitNotFoundError(
+            "sample-not-found", f"no published sample {sample_id} is served"
+        )
+    video_path = sample_dir(episode_dir, sample_id) / SAMPLE_PREVIEW_NAME
+    if not video_path.is_file():
+        raise CockpitNotFoundError(
+            "sample-not-found", f"no published sample {sample_id} is served"
+        )
+    return FileResponse(
+        video_path, media_type="video/mp4", filename=f"{sample_id}.mp4"
     )
 
 

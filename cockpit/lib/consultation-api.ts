@@ -8,17 +8,20 @@
  *  never reset; cost is managed by call count because it cannot be
  *  measured directly (cost_display carries the honest service wording). */
 
-import { CockpitApiError, request, requestWithStatus, type FetchLike } from "@/lib/http";
+import { apiBase, CockpitApiError, request, requestWithStatus, type FetchLike } from "@/lib/http";
 
 /** The closed decision set of a judgment (backend `ConsultationDecision`).
  *  `both_wrong` mirrors the review chat 「両方違う」 vocabulary as a
- *  whole-set judgment; `delegate` is いつもの方向性におまかせ. */
+ *  whole-set judgment; `delegate` is いつもの方向性におまかせ;
+ *  `full_authorized` is the explicit 全編へ bound to the DISPLAYED sample
+ *  (carries `sample_id`; missing/invalid → typed 422). */
 export type ConsultationDecision =
   | "adopt"
   | "revise"
   | "reject"
   | "both_wrong"
-  | "delegate";
+  | "delegate"
+  | "full_authorized";
 
 export type ConsultationScope = {
   composition: boolean;
@@ -338,12 +341,18 @@ export async function postConsultationMessage(
 export type ConsultationJudgmentInput = {
   consultation_id: string;
   /** `null` judges the whole consultation (both_wrong); otherwise the
-   *  per-proposal judgment the form was rendered for. */
+   *  per-proposal judgment the form was rendered for. `full_authorized`
+   *  always uses null (whole-consultation authorization). */
   proposal_id: string | null;
   decision: ConsultationDecision;
   scope: ConsultationScope;
   /** Optional free text — empty input is sent as null. */
   note: string | null;
+  /** `full_authorized` only: the DISPLAYED sample's id (explicit — never
+   *  guessed server-side). Absent on old callers. */
+  sample_id?: string | null;
+  /** Adoption-operation dedup key for late re-sends. Absent on old callers. */
+  operation_id?: string | null;
 };
 
 /** Slice-2 result: the HTTP status decides the UX branch — 202 means an
@@ -384,4 +393,111 @@ export async function postConsultationJudgment(
     status,
     "判断の応答の形式が期待と違います",
   );
+}
+
+/** Wave-1 sample (30秒試し動画) routes — fixed UI contract:
+ *  POST .../consultation/samples {consultation_id, judgment_id,
+ *  operation_id, windows:[{start_frame,end_frame}]} → 200
+ *  {state, sample_id, manifest} | 409 | 422;
+ *  GET .../consultation/samples → {samples:[{sample_id, status,
+ *  total_seconds, created_at, published_at?}]};
+ *  GET .../consultation/samples/{sample_id}/preview → video bytes.
+ *  Every reader is absent-tolerant: old backends (404 / missing fields)
+ *  yield empty lists, never a crash — the panel then renders no sample UI. */
+
+export type ConsultationSampleWindow = {
+  start_frame: number;
+  end_frame: number;
+};
+
+export type ConsultationSampleState =
+  | "published"
+  | "stored"
+  | "recovering"
+  | "in_progress";
+
+export type ConsultationSample = {
+  sample_id: string;
+  status: string;
+  total_seconds: number | null;
+  created_at: string;
+  published_at?: string | null;
+};
+
+export type ConsultationSampleInput = {
+  consultation_id: string;
+  judgment_id: string;
+  operation_id: string;
+  windows: ConsultationSampleWindow[];
+};
+
+export type ConsultationSampleResult = {
+  state: string;
+  sample_id: string;
+  manifest: unknown;
+};
+
+export type ConsultationSamplesPayload = {
+  samples: ConsultationSample[];
+};
+
+function isSampleLike(value: unknown): value is ConsultationSample {
+  if (typeof value !== "object" || value === null) return false;
+  return (
+    typeof (value as { sample_id?: unknown }).sample_id === "string" &&
+    (value as { sample_id?: string }).sample_id !== ""
+  );
+}
+
+function samplesOf(body: unknown): ConsultationSample[] {
+  if (typeof body !== "object" || body === null) return [];
+  const raw: unknown = (body as { samples?: unknown }).samples;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(isSampleLike);
+}
+
+export async function postConsultationSample(
+  episodeId: string,
+  input: ConsultationSampleInput,
+  fetchImpl: FetchLike = fetch,
+): Promise<ConsultationSampleResult> {
+  const body = await request<Record<string, unknown>>(
+    `/episodes/${encodeURIComponent(episodeId)}/consultation/samples`,
+    { method: "POST", body: JSON.stringify(input) },
+    fetchImpl,
+  );
+  const state: unknown = body["state"];
+  const sampleId: unknown = body["sample_id"];
+  if (typeof state !== "string" || typeof sampleId !== "string" || sampleId === "") {
+    throw new CockpitApiError(
+      "unexpected-response",
+      200,
+      "試し動画の応答の形式が期待と違います",
+    );
+  }
+  return { state, sample_id: sampleId, manifest: body["manifest"] ?? null };
+}
+
+export async function getConsultationSamples(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<ConsultationSamplesPayload> {
+  const body = await request<unknown>(
+    `/episodes/${encodeURIComponent(episodeId)}/consultation/samples`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  return { samples: samplesOf(body) };
+}
+
+export function samplePreviewUrl(episodeId: string, sampleId: string): string {
+  return `${apiBase()}/episodes/${encodeURIComponent(episodeId)}/consultation/samples/${encodeURIComponent(sampleId)}/preview`;
+}
+
+export function isSamplePublished(sample: ConsultationSample): boolean {
+  return sample.status === "published";
+}
+
+export function isSampleWorking(status: string): boolean {
+  return (["stored", "recovering", "in_progress"] as string[]).includes(status);
 }

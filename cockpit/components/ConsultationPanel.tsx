@@ -29,6 +29,7 @@ import ConsultationBudgetReadout, {
   latestBudgetOf,
 } from "@/components/ConsultationBudgetReadout";
 import ConsultationEntryList from "@/components/ConsultationEntryList";
+import ConsultationSampleSection from "@/components/ConsultationSampleSection";
 import StyleSaveButton from "@/components/StyleSaveButton";
 import ErrorNotice from "@/components/ErrorNotice";
 import { isConsultationStage } from "@/lib/stageGroups";
@@ -608,6 +609,16 @@ export default function ConsultationPanel({
           adopted={payload.policy.adopted}
           channelId={appliedChannelOf(status)}
           fetchImpl={fetchImpl}
+        />
+      ) : null}
+      {payload?.policy?.adopted !== null && payload?.policy?.adopted !== undefined ? (
+        <ConsultationSampleSection
+          episodeId={episodeId}
+          consultationId={payload.policy.adopted.consultation_id}
+          judgmentId={payload.policy.adopted.judgment_id}
+          scope={payload.policy.adopted.scope}
+          fetchImpl={fetchImpl}
+          onView={absorbView}
         />
       ) : null}
     </section>
