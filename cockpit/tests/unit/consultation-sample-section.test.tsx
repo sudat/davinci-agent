@@ -172,7 +172,11 @@ describe("ConsultationSampleSection（30秒試し動画・全編許可）", () =
     fireEvent.click(screen.getByTestId("full-authorize"));
 
     await waitFor(() => {
+      // The ID itself now lives in 詳しい記録; the done line is ID-free.
       expect(screen.getByTestId("full-authorize-done").textContent).toContain(
+        "この方向で全編へ進めます",
+      );
+      expect(screen.getByTestId("consultation-sample-id").textContent).toContain(
         "sample-new",
       );
     });
@@ -190,7 +194,7 @@ describe("ConsultationSampleSection（30秒試し動画・全編許可）", () =
       operation_id: expect.any(String),
     });
     expect(screen.getByTestId("full-authorize-done").textContent).toContain(
-      "この方向で全編へ進めます（試し動画 sample-new の確認に基づく）",
+      "この方向で全編へ進めます（確認した試し動画に基づく）",
     );
     expect(onView).toHaveBeenCalledTimes(1);
   });

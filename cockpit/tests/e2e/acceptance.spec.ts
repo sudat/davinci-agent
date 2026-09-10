@@ -628,6 +628,13 @@ test("承認bundling: ブロックセッション2回で全承認（≤2）", as
   const consoleErrors = trackConsoleErrors(page);
 
   await page.goto(`/episodes/${episodeId}`);
+  // ApprovalSessions は page 直下の「その他の記録」details 内にあるため
+  // それを開く（main 直下の details はこの1つだけ——EpisodeView 内の
+  // details とは階層が違う）。
+  const pageDetails = page.locator("main > details.episode-details").first();
+  if ((await pageDetails.count()) > 0) {
+    await pageDetails.locator("summary").click();
+  }
   const sessions = page.getByTestId("approval-session");
   await expect(sessions.first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("blocking-session-count")).toHaveText(
@@ -682,6 +689,10 @@ test("軽量Publishability feedback: 注釈保存・スコアカードなし", a
   fs.writeFileSync(refFile, `acceptance-ref-bytes-${runKey}`);
 
   await page.goto(`/episodes/${episodeId}`);
+  const pageDetails = page.locator("main > details.episode-details").first();
+  if ((await pageDetails.count()) > 0) {
+    await pageDetails.locator("summary").click();
+  }
   await expect(page.getByTestId("reference-annotator")).toBeVisible({
     timeout: 15_000,
   });
@@ -715,6 +726,10 @@ test("restart resume: SIGTERM→再起→episode状態と承認済みが保持",
   await restartBackend();
 
   await page.goto(`/episodes/${episodeId}`);
+  const pageDetails = page.locator("main > details.episode-details").first();
+  if ((await pageDetails.count()) > 0) {
+    await pageDetails.locator("summary").click();
+  }
   // 受入a（codex指摘反映）: restart後も語彙と接尾辞が揃って表示され続ける。
   await expect(page.getByTestId("episode-status")).toContainText("PREVIEW_READY", {
     timeout: 20_000,

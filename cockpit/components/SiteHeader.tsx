@@ -65,7 +65,7 @@ export default function SiteHeader() {
       </Link>
       <nav className="step-nav" aria-label="制作の段階">
         {STEPS.map((step, index) => (
-          <span key={step}>
+          <span key={step} className="step-item">
             {index > 0 ? <span className="step-sep">→</span> : null}
             <span
               className="step"
@@ -76,6 +76,9 @@ export default function SiteHeader() {
             </span>
           </span>
         ))}
+        <span className="step-mobile" data-testid="step-mobile">
+          {stage !== null ? `${STEPS.indexOf(stage) + 1}/${STEPS.length} ${stage}` : ""}
+        </span>
       </nav>
       <a href="#details" className="site-details-link">
         詳しい記録

@@ -45,7 +45,7 @@ body {
 }
 
 .page {
-  max-width: 720px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: var(--space-6) var(--space-4) var(--space-6);
 }
@@ -663,4 +663,22 @@ video { max-width: 100%; height: auto; }
   font-weight: 700;
   color: var(--text);
   margin: 0 0 var(--space-1);
+}
+
+/* Sample stage: video left 2/3, actions right 1/3 (mock 03). 1-col ≤640px. */
+.sample-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: var(--space-4);
+}
+.sample-stage-grid > * { min-width: 0; }
+@media (max-width: 640px) {
+  .sample-stage-grid { grid-template-columns: 1fr; }
+}
+
+/* Narrow screens: full stepper collapses to "N/4 段階" one-liner */
+.step-mobile { display: none; }
+@media (max-width: 640px) {
+  .step-item { display: none; }
+  .step-mobile { display: inline; }
 }

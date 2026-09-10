@@ -79,12 +79,22 @@ export function newestPublishedSample(
 type SampleWindowLike = { label?: unknown };
 
 function windowsOf(sample: ConsultationSample): SampleWindowLike[] {
-  const windows: unknown = (sample as { windows?: unknown }).windows;
-  if (!Array.isArray(windows)) return [];
-  return windows.filter(
-    (window): window is SampleWindowLike =>
-      typeof window === "object" && window !== null,
-  );
+  // Live payloads nest the scene windows under identity.windows; older
+  // payloads carry top-level windows. Either source drives the breakdown.
+  const record = sample as { windows?: unknown; identity?: unknown };
+  const sources: unknown[] = [record.windows];
+  if (typeof record.identity === "object" && record.identity !== null) {
+    sources.push((record.identity as { windows?: unknown }).windows);
+  }
+  for (const source of sources) {
+    if (!Array.isArray(source)) continue;
+    const windows = source.filter(
+      (window): window is SampleWindowLike =>
+        typeof window === "object" && window !== null,
+    );
+    if (windows.length > 0) return windows;
+  }
+  return [];
 }
 
 function formatSeconds(totalSeconds: number): string {
@@ -255,7 +265,7 @@ export default function ConsultationSampleSection({
       {adoptedSummary !== null && adoptedSummary.length > 0 ? (
         <div data-testid="adopted-policy-summary">
           <h4>採用した方針</h4>
-          {adoptedSummary.map((line, index) => (
+          {adoptedSummary.slice(0, 3).map((line, index) => (
             <p key={index}>{line}</p>
           ))}
         </div>
@@ -307,12 +317,6 @@ export default function ConsultationSampleSection({
             <p className="field-hint" data-testid="consultation-sample-kind">
               試し動画（撮影素材から作成）
             </p>
-            <p className="mono" data-testid="consultation-sample-id">
-              {displayed.sample_id}
-            </p>
-            <p className="field-hint" data-testid="consultation-sample-status">
-              {sampleStatusLine(displayed)}
-            </p>
           </div>
           <div className="sample-stage-feedback">
             {feedback !== null ? (
@@ -344,7 +348,7 @@ export default function ConsultationSampleSection({
             <div className="actions">
               <button
                 type="button"
-                className="btn-primary"
+                className="btn-small"
                 onClick={requestSample}
                 disabled={requestBusy}
                 data-testid="sample-request"
@@ -363,8 +367,7 @@ export default function ConsultationSampleSection({
             </div>
             {authorizedSampleId !== null ? (
               <p className="field-hint" data-testid="full-authorize-done">
-                この方向で全編へ進めます（試し動画 {authorizedSampleId}{" "}
-                の確認に基づく）
+                この方向で全編へ進めます（確認した試し動画に基づく）
               </p>
             ) : null}
             {authorizeError !== null ? (
@@ -372,6 +375,25 @@ export default function ConsultationSampleSection({
                 <ErrorNotice code={authorizeError.code} detail={authorizeError.detail} />
               </div>
             ) : null}
+            <details data-testid="sample-record">
+              <summary>試し動画の記録</summary>
+              <p className="mono" data-testid="consultation-sample-id">
+                {displayed.sample_id}
+              </p>
+              <p className="field-hint" data-testid="consultation-sample-status">
+                {sampleStatusLine(displayed)}
+              </p>
+              {older.length > 0 ? (
+                <details data-testid="previous-samples">
+                  <summary>以前の試し動画の記録</summary>
+                  {older.map((sample) => (
+                    <p className="mono" key={sample.sample_id}>
+                      {sample.sample_id} — {sampleStatusLine(sample)}
+                    </p>
+                  ))}
+                </details>
+              ) : null}
+            </details>
           </div>
         </div>
       )}
@@ -399,18 +421,7 @@ export default function ConsultationSampleSection({
           </p>
         </div>
       ))}
-      {older.length > 0 ? (
-        <details data-testid="consultation-sample-history">
-          <summary>以前の試し動画の記録</summary>
-          {older.map((sample) => (
-            <div className="card" key={sample.sample_id} data-testid="consultation-sample">
-              <p className="field-hint">試し動画</p>
-              <p className="mono">{sample.sample_id}</p>
-              <p className="field-hint">{sampleStatusLine(sample)}</p>
-            </div>
-          ))}
-        </details>
-      ) : null}
+
       <div aria-live="polite">
         {announcement !== null ? (
           <p className="field-hint" data-testid="consultation-sample-announcement">

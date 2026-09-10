@@ -693,17 +693,35 @@ export default function ConsultationPanel({
           {announcement}
         </p>
       ) : null}
+    </div>
+  );
+
+  // 内部状態の行（再編集の対象版・保存先チャンネル不明）。試し動画の
+  // 段階では相談の記録 details の中に置き、通常表示に出さない。方向の
+  // 段階（journalDetails がない分岐）では従来どおり通常表示に出す。
+  const saveChannelId = appliedChannelOf(status);
+  const recordNotes = (
+    <>
       {rebuildLine !== null ? (
         <p className="field-hint" data-testid="consultation-rebuild-state">
           {rebuildLine}
         </p>
       ) : null}
-    </div>
+      {adopted !== null && saveChannelId === null ? (
+        <StyleSaveButton
+          episodeId={episodeId}
+          adopted={adopted}
+          channelId={null}
+          fetchImpl={fetchImpl}
+        />
+      ) : null}
+    </>
   );
 
   const journalDetails = (
     <details data-testid="consultation-journal-details">
       <summary>相談の記録</summary>
+      {recordNotes}
       <ConsultationEntryList
         payload={payload}
         busy={busy}
@@ -742,11 +760,11 @@ export default function ConsultationPanel({
     ) : null;
 
   const styleSaveBlock =
-    adopted !== null ? (
+    adopted !== null && saveChannelId !== null ? (
       <StyleSaveButton
         episodeId={episodeId}
         adopted={adopted}
-        channelId={appliedChannelOf(status)}
+        channelId={saveChannelId}
         fetchImpl={fetchImpl}
       />
     ) : null;
@@ -806,6 +824,7 @@ export default function ConsultationPanel({
         </div>
       </div>
       {liveBlock}
+      {recordNotes}
       {sampleBlock}
       {styleSaveBlock}
       {budgetBlock}
