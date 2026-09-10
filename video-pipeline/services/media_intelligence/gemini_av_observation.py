@@ -55,9 +55,12 @@ GEMINI_AV_API_SURFACE: Final = "google-gemini-developer-api-generate-content-res
 GEMINI_AV_RATES_IN: Final = {"TEXT": 0.10, "AUDIO": 0.30, "IMAGE": 0.30, "VIDEO": 0.30}
 GEMINI_AV_RATE_OUT: Final = 0.40
 
-#: Drift tolerance: >30% of events out of bounds marks the observation
-#: route-quality-insufficient (known Gemini tail behavior).
-AV_DRIFT_INSUFFICIENT_RATIO: Final = 0.30
+#: Drift tolerance: a MAJORITY of events out of bounds marks the
+#: observation route-quality-insufficient. The known Gemini whole-video
+#: tail behavior (live-measured 2/2 runs, 2026-09-11: last ~2 events
+#: stretch past the duration) stays USABLE — clamped, flagged, content
+#: verified against real frames — so it must not discard the observation.
+AV_DRIFT_INSUFFICIENT_RATIO: Final = 0.50
 
 #: Uploaded-file sidecar reuse window (Files API TTL is 48h; stay inside it).
 AV_FILE_REUSE_SECONDS: Final = 24.0 * 3600.0
@@ -174,8 +177,8 @@ def validate_av_events(raw_events: object, duration_seconds: float) -> AvValidat
     """Strict-parse, clamp to ``[0, duration)``, flag drift (pure).
 
     Out-of-bounds events are clamped (never dropped, never fatal); the
-    observation is route-quality-insufficient when empty or when more
-    than 30% of events drifted. Malformed payloads are a typed failure
+    observation is route-quality-insufficient when empty or when a
+    MAJORITY of events drifted. Malformed payloads are a typed failure
     whose message carries NO provider text.
     """
 

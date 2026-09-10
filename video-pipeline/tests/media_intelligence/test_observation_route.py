@@ -202,8 +202,21 @@ def test_validation_clamps_tail_drift_and_flags_it() -> None:
         (3, 332.0),
         (4, 441.0),
     ]
-    # 2/5 = 40% drift exceeds the 30% bar → insufficient, never fatal.
-    assert validation.route_quality_insufficient is True
+    # 2/5 = 40% drift stays USABLE (clamped+flagged): the reproducible
+    # whole-video tail behavior must not discard a content-verified
+    # observation. Insufficient needs a MAJORITY (e.g. 3/5).
+    assert validation.route_quality_insufficient is False
+    majority = validate_av_events(
+        [
+            _event(0.0, 56.0, "導入"),
+            _event(101.0, 332.0),
+            _event(213.0, 332.0, "混乱"),
+            _event(332.0, 441.0, "独白"),
+            _event(441.0, 500.0),
+        ],
+        282.24,
+    )
+    assert majority.route_quality_insufficient is True
 
 
 def test_validation_empty_or_malformed_is_typed() -> None:
