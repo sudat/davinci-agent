@@ -76,7 +76,7 @@ def _audio_intent(policy_json: str) -> bool:
     audio_policy = document.get("audio_policy")
     if not isinstance(audio_policy, str) or not audio_policy:
         return False
-    for sentence in audio_policy.split("。"):  # noqa: RUF001 (Japanese policy prose)
+    for sentence in audio_policy.split("。"):
         if not sentence:
             continue
         lowered = sentence.casefold()
