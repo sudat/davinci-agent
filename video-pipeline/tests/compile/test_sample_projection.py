@@ -323,11 +323,41 @@ def test_av_track_count_multiple_audio_is_typed_failure() -> None:
     assert "sample-av-track-count" in repr(exc_info.value)
 
 
-def test_derive_sample_windows_picks_three_scenes_up_to_cap() -> None:
-    ir = _full_ir()  # video v1[0,60) v2[60,120) @30fps (2 scenes)
-    windows = derive_sample_windows(ir, limit_seconds=3.0)
-    assert len(windows) == 2  # one per distinct scene — never the head only
-    assert windows[0].start_frame < windows[1].start_frame
-    assert sample_total_seconds(windows, RATE) == pytest.approx(3.0)  # 2x1.5s caps
-    capped = derive_sample_windows(ir, limit_seconds=1.0)
+def test_derive_sample_windows_picks_three_positions_up_to_cap() -> None:
+    """Head/middle/late POSITION sampling widened to contiguous ~8s
+    spans (5-10s band), merged when they nearly touch, and capped to
+    the limit — never a single short edit cut as-is (2026-09-10)."""
+    video = TimelineTrack0C(
+        track=TrackRef0C(kind="video", index=1),
+        items=(
+            _item("v1", "video", 1, (0, 150)),
+            _item("v2", "video", 1, (600, 750)),
+            _item("v3", "video", 1, (1200, 1350)),
+        ),
+    )
+    ir = TimelineIr0C(
+        artifact_id="ir-long-video-test",
+        artifact_type="timeline_ir_0c",
+        schema_version="timeline-ir-0c-v1",
+        content_hash="e" * 64,
+        producer=PRODUCER,
+        inputs=(),
+        rate=RATE,
+        tracks=(video,),
+    )
+    windows = derive_sample_windows(ir, limit_seconds=30.0)
+    assert len(windows) == 3  # head/middle/late anchors, far apart
+    anchors = (0, 600, 1200)
+    for window, anchor in zip(windows, anchors, strict=True):
+        length = window.end_frame - window.start_frame
+        assert 5 * 30 <= length <= 10 * 30  # contiguous 5-10s band
+        assert window.start_frame <= anchor < window.end_frame
+    assert sample_total_seconds(windows, RATE) <= 30.0
+    # near-identical picks merge; the real (merged) count is the count
+    merged = derive_sample_windows(_full_ir(), limit_seconds=30.0)
+    assert len(merged) == 1  # head+middle anchors sit in one 4s span
+    assert merged[0] == _span(0, 120)
+    trimmed = derive_sample_windows(_full_ir(), limit_seconds=3.0)
+    assert sample_total_seconds(trimmed, RATE) == pytest.approx(3.0)
+    capped = derive_sample_windows(_full_ir(), limit_seconds=1.0)
     assert sample_total_seconds(capped, RATE) <= 1.0 + 1 / 30

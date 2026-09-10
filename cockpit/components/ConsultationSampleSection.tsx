@@ -290,7 +290,7 @@ export default function ConsultationSampleSection({
           <div className="sample-stage-player">
             {displayedWindows.length > 0 && displayedSeconds !== null ? (
               <p className="field-hint" data-testid="sample-breakdown">
-                {displayedWindows.length}場面・{formatSeconds(displayedSeconds)}秒
+                {displayedWindows.length}か所・{formatSeconds(displayedSeconds)}秒
               </p>
             ) : displayedSeconds !== null ? (
               <p className="field-hint" data-testid="sample-breakdown">
@@ -303,7 +303,7 @@ export default function ConsultationSampleSection({
                   <li key={index}>
                     {typeof window.label === "string" && window.label !== ""
                       ? window.label
-                      : `場面${index + 1}`}
+                      : `か所${index + 1}`}
                   </li>
                 ))}
               </ul>

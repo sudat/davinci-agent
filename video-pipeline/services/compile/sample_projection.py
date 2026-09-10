@@ -43,13 +43,59 @@ def sample_total_frames(windows: Sequence[RecordFrameSpan]) -> int:
     return sum(w.end_frame - w.start_frame for w in windows)
 
 
+def _merge_nearby_windows(
+    windows: Sequence[RecordFrameSpan], gap_frames: float
+) -> list[RecordFrameSpan]:
+    """Coalesce windows that overlap or nearly touch (≤``gap_frames``
+    apart, sorted first) into one contiguous span — the merged count is
+    the real count shown to the operator."""
+    ordered = sorted(windows, key=lambda w: (w.start_frame, w.end_frame))
+    merged: list[RecordFrameSpan] = [ordered[0]]
+    for window in ordered[1:]:
+        if window.start_frame - merged[-1].end_frame <= gap_frames:
+            merged[-1] = RecordFrameSpan(
+                start_frame=merged[-1].start_frame,
+                end_frame=max(merged[-1].end_frame, window.end_frame),
+            )
+        else:
+            merged.append(window)
+    return merged
+
+
+def _cap_window_total(
+    windows: Sequence[RecordFrameSpan], budget_frames: int, floor_frames: int
+) -> list[RecordFrameSpan]:
+    """Proportionally shrink ``windows`` (end-anchored) to
+    ``budget_frames`` total, never below ``floor_frames`` per window;
+    latest windows give way first when the floor saturates the budget."""
+    total = sum(w.end_frame - w.start_frame for w in windows)
+    if total <= budget_frames:
+        return list(windows)
+    capped: list[RecordFrameSpan] = []
+    for window in windows:
+        length = window.end_frame - window.start_frame
+        take = min(length, max(length * budget_frames // total, floor_frames))
+        capped.append(
+            RecordFrameSpan(
+                start_frame=window.end_frame - take,
+                end_frame=window.end_frame,
+            )
+        )
+    while sum(w.end_frame - w.start_frame for w in capped) > budget_frames:
+        capped.pop()  # the real count shrinks
+    return capped
+
+
 def derive_sample_windows(
     ir: TimelineIr0C, limit_seconds: float = 30.0
 ) -> tuple[RecordFrameSpan, ...]:
-    """Pick up to three representative edit intervals (head/middle/late)
-    from the committed IR's video track, capped to ``limit_seconds`` in
-    total — the operator sees the adopted policy across DIFFERENT
-    scenes, not just the opening (2026-09-10 main-path review)."""
+    """Sample up to three POSITIONS (head/middle/late) of the committed
+    IR's video track as CONTIGUOUS ~8s spans (5-10s band), not single
+    short edit cuts. The honest unit is a 「か所」 (a place), never a
+    「場面」 (a scene): position sampling only. Windows that overlap or
+    nearly touch (≤1s apart) merge and the merged count is the real
+    count; the total is kept within ``limit_seconds`` by proportional
+    shrinking with a ≥1s floor (latest windows give way first)."""
     video = next((t for t in ir.tracks if t.track.kind == "video"), None)
     if video is None or not video.items:
         raise PydanticCustomError("sample-empty-track", "no video interval")
@@ -59,15 +105,26 @@ def derive_sample_windows(
     for pick in picks:
         if pick not in unique:
             unique.append(pick)
-    per_cap = max(
-        int(limit_seconds * ir.rate.num / ir.rate.den / len(unique)), 1
+    fps = float(ir.rate.num) / float(ir.rate.den)
+    track_end = max(item.record_span.end_frame for item in items)
+    span_frames = max(round(8.0 * fps), 1)
+    half = span_frames // 2
+    raw: list[RecordFrameSpan] = []
+    for pick in unique:
+        anchor = pick.record_span.start_frame
+        start = max(anchor - half, 0)
+        end = min(start + span_frames, track_end)
+        if end >= track_end:  # keep the nominal length when an edge clamps
+            start = max(end - span_frames, 0)
+        raw.append(RecordFrameSpan(start_frame=start, end_frame=end))
+    merged = _merge_nearby_windows(raw, gap_frames=fps)
+    return tuple(
+        _cap_window_total(
+            merged,
+            budget_frames=max(int(limit_seconds * fps), 0),
+            floor_frames=max(round(1.0 * fps), 1),
+        )
     )
-    windows: list[RecordFrameSpan] = []
-    for item in unique:
-        start = item.record_span.start_frame
-        end = min(item.record_span.end_frame, start + per_cap)
-        windows.append(RecordFrameSpan(start_frame=start, end_frame=end))
-    return tuple(windows)
 
 
 def sample_total_seconds(
