@@ -1,0 +1,40 @@
+{
+ "schema_version": "v44-0-asr-argv-experiment-outcome-v1",
+ "run_label": "argv-experiment-2026-09-12",
+ "recorded_at": "2026-09-12",
+ "predeclaration": "asr-argv-experiment-predeclaration.json (commit 1664b75, before measurement)",
+ "codex_authorization": "2026-09-12T15:48Z order item 3: max 2 mechanism-based candidates, predeclared, throwaway runs, frozen scoring, discard non-improvers, no third trial",
+ "baseline_at_experiment": {
+  "cer": 0.11466666666666667,
+  "timestamp_error_p95_ms": 2620.0,
+  "omitted": 5,
+  "duplicated": 4,
+  "state": "after operator-confirmed reference region re-authoring (232-268s, 10 phrases), offline replay of the saved r4 whisper artifact"
+ },
+ "candidate_A": {
+  "argv_delta": "--max-len 8 --split-on-word",
+  "mechanism_hypothesis": "break merged segments so starts re-anchor nearer content",
+  "result": "rc=0, 67s, 99 segments, output byte-identical to baseline (176634 bytes) — flags accepted but inert on this build's --output-json-full segmenting",
+  "frozen_scoring": "cer 0.11466666666666667 / p95 2620.0 / omitted 5 / duplicated 4 — exact baseline reproduction (scoring-path fidelity control)",
+  "decision": "DISCARD (no-op)"
+ },
+ "candidate_B": {
+  "argv_delta": "--beam-size 10 --best-of 10",
+  "mechanism_hypothesis": "wider decode search improves segment timestamp token quality",
+  "result": "rc=10 'failed to process audio' in ~1s, no output; isolated: --beam-size 10 alone fails, --best-of 10 alone fails; control (frozen template verbatim) runs rc=0/68s/byte-identical — the pinned build refuses any non-default search width",
+  "frozen_scoring": "not obtainable (no output)",
+  "decision": "DISCARD (unrunnable on pinned build)"
+ },
+ "net_finding": "neither CLI-level lever moves p95 on the pinned whisper-cli (ggml 0.20.0): segmentation flags are inert and search-width flags are refused. The remaining +/-2-6s start scatter (29/88 pairs over 500ms, near-all pair-cer 0.00) is not reachable through argv tunables; a product cutover in this direction is not supported by evidence",
+ "remaining_gap": {
+  "p95": "2620ms vs 500ms frozen bar — no in-scope lever found (argv exhausted; VAD/DTW need unpinned models; reference already operator-corrected in the diagnosed coarse region)",
+  "cer": "0.11467 vs 0.10 — kana-mapping re-derivation against the re-authored reference may recover ~7-9 of ~86 edits (est. landing ~0.103), likely insufficient alone"
+ },
+ "compliance": {
+  "paid_calls": 0,
+  "product_code_changed": false,
+  "thresholds_changed": false,
+  "third_trial": false,
+  "artifacts": "/tmp/argv-exp/ (asr-16k.wav, A/B/CTRL outputs and logs, throwaway scorer)"
+ }
+}
