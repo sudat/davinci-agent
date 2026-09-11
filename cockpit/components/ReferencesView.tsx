@@ -38,6 +38,15 @@ function baseNameOf(location: string): string {
   return parts[parts.length - 1] ?? location;
 }
 
+/** Plain short display name derived from the stored path only: basename
+ *  minus the final extension, separators folded to spaces. */
+export function plainNameOf(location: string): string {
+  const base = baseNameOf(location);
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  return stem.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() || base;
+}
+
 export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
@@ -153,7 +162,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
               aria-label="参照ファイルパス"
               value={path}
               onChange={(event) => setPath(event.target.value)}
-              placeholder="例: /path/to/reference.mp4"
+              placeholder="参考動画のフォルダまたはファイル"
             />
             <p className="field-hint">
               ここに動画をドラッグ＆ドロップ、または下の欄に場所を書いて保存できます
@@ -191,25 +200,31 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <p className="empty-note">ライブラリを読み込んでいます…</p>
           ) : library.length > 0 ? (
             <ul className="list-plain" data-testid="library-reference-list">
-              {library.map((item) => (
-                <li key={item.source_id} data-testid="library-reference-item">
-                  <span className="ref-thumb" aria-hidden="true" />
-                  <span className="ref-memo">
-                    {compareIds.indexOf(item.source_id) === 0 ? (
-                      <span className="ref-slot">動画A</span>
-                    ) : compareIds.indexOf(item.source_id) === 1 ? (
-                      <span className="ref-slot">動画B</span>
-                    ) : null}
-                    <span className="ref-name">{baseNameOf(item.location)}</span>
-                  </span>
-                  <details className="ref-internals">
-                    <summary>詳細</summary>
-                    <span className="ref-path">{item.location}</span>
-                    <span>{item.source_id}</span>
-                    <span>{item.sha256}</span>
-                  </details>
-                </li>
-              ))}
+              {library.map((item) => {
+                const slot = compareIds.indexOf(item.source_id);
+                return (
+                  <li key={item.source_id} data-testid="library-reference-item">
+                    <span className="ref-thumb" aria-hidden="true">
+                      <span className="ref-thumb-label">見本なし</span>
+                    </span>
+                    <span className="ref-memo">
+                      {slot === 0 ? (
+                        <span className="ref-slot">動画A</span>
+                      ) : slot === 1 ? (
+                        <span className="ref-slot">動画B</span>
+                      ) : null}
+                      {slot > 1 ? (
+                        <span className="ref-name">{plainNameOf(item.location)}</span>
+                      ) : null}
+                    </span>
+                    <details className="ref-internals">
+                      <summary>この動画の詳細</summary>
+                      <span className="ref-path">{item.location}</span>
+                      <span>{item.sha256}</span>
+                    </details>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="empty-note" data-testid="library-reference-empty">
@@ -218,27 +233,33 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
           )}
           {references.length > 0 ? (
             <ul className="list-plain" data-testid="reference-list">
-              {references.map((item, index) => (
-                <li key={`${item.source_id}-${index}`} data-testid="reference-item">
-                  <span className="ref-thumb" aria-hidden="true" />
-                  <span className="ref-memo">
-                    {compareIds.indexOf(item.source_id) === 0 ? (
-                      <span className="ref-slot">動画A</span>
-                    ) : compareIds.indexOf(item.source_id) === 1 ? (
-                      <span className="ref-slot">動画B</span>
-                    ) : null}
-                    <span className="ref-name">{baseNameOf(item.path)}</span>
-                  </span>
-                  <details className="ref-internals">
-                    <summary>詳細</summary>
-                    <span className="ref-path">{item.path}</span>
-                    <span>
-                      {item.source_id}（ライブラリ版 {item.library_version}）
+              {references.map((item, index) => {
+                const slot = compareIds.indexOf(item.source_id);
+                return (
+                  <li key={`${item.source_id}-${index}`} data-testid="reference-item">
+                    <span className="ref-thumb" aria-hidden="true">
+                      <span className="ref-thumb-label">見本なし</span>
                     </span>
-                    <span>{item.sha256}</span>
-                  </details>
-                </li>
-              ))}
+                    <span className="ref-memo">
+                      {slot === 0 ? (
+                        <span className="ref-slot">動画A</span>
+                      ) : slot === 1 ? (
+                        <span className="ref-slot">動画B</span>
+                      ) : null}
+                      {slot > 1 ? (
+                        <span className="ref-name">{plainNameOf(item.path)}</span>
+                      ) : null}
+                      <span className="visually-hidden">{item.source_id}</span>
+                    </span>
+                    <details className="ref-internals">
+                      <summary>この動画の詳細</summary>
+                      <span className="ref-path">{item.path}</span>
+                      <span>ライブラリ版 {item.library_version}</span>
+                      <span>{item.sha256}</span>
+                    </details>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
           {annotations.length > 0 ? (
@@ -248,8 +269,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                   <span className="ref-thumb" aria-hidden="true" />
                   <span className="ref-memo">{item.comment}</span>
                   <details className="ref-internals">
-                    <summary>詳細</summary>
-                    <span>{item.source_id}</span>
+                    <summary>保存の詳細</summary>
                     <span>
                       {item.named_domains
                         .map(
@@ -288,7 +308,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
               ))}
             </ul>
           ) : (
-            <p className="empty-note">A/Bの記録はまだありません</p>
+            <p className="empty-note">見比べの記録はまだありません</p>
           )}
         </details>
       </section>

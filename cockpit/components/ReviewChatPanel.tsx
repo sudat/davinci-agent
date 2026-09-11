@@ -255,7 +255,7 @@ export default function ReviewChatPanel({
           disabled={busyAll || text.trim() === ""}
           data-testid="review-chat-send"
         >
-          {busy ? "送信中…" : "送信"}
+          {busy ? "送信中…" : "この位置を修正する"}
         </button>
       </div>
       {longBusy ? (

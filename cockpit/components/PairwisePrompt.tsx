@@ -58,15 +58,16 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
 
   return (
     <div className="card" data-testid="pairwise-prompt">
-      <h2 className="section-title">A/B比較（スタイルの好みを1つだけ聞きます）</h2>
+      <h2 className="section-title">見比べて好みを教える</h2>
+      <p className="field-hint">スタイルの好みを1つだけ聞きます。</p>
       {referenceIds.length < 2 ? (
         <p className="empty-note" data-testid="pairwise-insufficient">
-          A/B比較には2つの参照が必要です。まず参照を登録・注釈してください。
+          見比べには2つの参考動画が必要です。まず参考動画を保存してください。
         </p>
       ) : (
         <div>
           <div className="inline-row" style={{ marginBottom: "var(--space-3)", flexWrap: "wrap" }}>
-            <label htmlFor="pairwise-domain" style={{ whiteSpace: "nowrap" }}>ドメイン</label>
+            <label htmlFor="pairwise-domain" style={{ whiteSpace: "nowrap" }}>比べる点</label>
             <select
               id="pairwise-domain"
               value={domain}
@@ -111,11 +112,6 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
               どちらも違う
             </button>
           </div>
-          <details className="pairwise-ids">
-            <summary>詳細</summary>
-            <span>動画A: {referenceIds[0]}</span>
-            <span>動画B: {referenceIds[1]}</span>
-          </details>
           <label className="field" htmlFor="pairwise-reason">
             理由（任意）
             <textarea
@@ -141,16 +137,19 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
         </div>
       )}
       {records.length > 0 ? (
-        <ul className="list-plain" data-testid="pairwise-records">
-          {records.map((item, index) => (
-            <li key={`${item.saved_at}-${index}`} data-testid="saved-pairwise-item">
-              <span>
-                {DOMAIN_LABEL[item.domain]}: {pairwiseChoiceLabel(item.choice)}
-                {item.reason !== null ? ` — ${item.reason}` : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <details className="pairwise-history">
+          <summary>これまでの見比べ</summary>
+          <ul className="list-plain" data-testid="pairwise-records">
+            {records.map((item, index) => (
+              <li key={`${item.saved_at}-${index}`} data-testid="saved-pairwise-item">
+                <span>
+                  {DOMAIN_LABEL[item.domain]}: {pairwiseChoiceLabel(item.choice)}
+                  {item.reason !== null ? ` — ${item.reason}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </div>
   );

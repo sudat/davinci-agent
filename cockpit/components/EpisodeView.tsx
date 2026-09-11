@@ -135,6 +135,13 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   if (openedAtRef.current === null) openedAtRef.current = Date.now();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const requeryRef = useRef<(() => void) | null>(null);
+  const statusRef = useRef<EpisodeStatus | null>(null);
+  const probeKnownAbsentRef = useRef(false);
+  const probeAbsentSigRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   const seekTo = useCallback((seconds: number) => {
     const video = videoRef.current;
@@ -145,25 +152,79 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    const refreshAux = () => {
-      void Promise.allSettled([
-        getEpisodeFlags(episodeId, fetch, selectedOutput),
-        probeEpisodePreview(episodeId, fetch, selectedOutput),
-      ]).then(([flagsResult, previewResult]) => {
+    const refreshAux = (freshStatus?: EpisodeStatus | null) => {
+      void getEpisodeFlags(episodeId, fetch, selectedOutput).then(
+        (value) => {
+          if (cancelled) return;
+          setFlags(value);
+        },
+        () => {},
+      );
+      const current = freshStatus ?? statusRef.current;
+      // P3 blocked: the preview is definitively absent — set the honest
+      // not-generated state directly, without fetching at all (not even
+      // once). The known-absent mark carries this status signature so
+      // later polls with the same status skip silently too; a status
+      // change (retry / new run) clears the failed predicate and the
+      // probe fires again below.
+      const latestRun = current?.stage_runs[current.stage_runs.length - 1];
+      const isLatestFailed = latestRun !== undefined && latestRun.status.startsWith("failed");
+      const previewCapable = current?.status === "PREVIEW_READY";
+      if (current !== null && isLatestFailed && !previewCapable) {
         if (cancelled) return;
-        if (flagsResult.status === "fulfilled") setFlags(flagsResult.value);
-        if (previewResult.status === "fulfilled") {
-          setProbeObservation({ kind: "probed", probe: previewResult.value });
-          setPlayerState(previewResult.value.available ? "available" : "not_generated");
-          if (previewResult.value.available) {
-            setPlayableHash(previewResult.value.content_hash);
+        const blockedSig = JSON.stringify(current);
+        if (
+          probeKnownAbsentRef.current &&
+          blockedSig === probeAbsentSigRef.current
+        ) {
+          return;
+        }
+        setProbeObservation({
+          kind: "probed",
+          probe: {
+            available: false,
+            run_id: null,
+            target_version: null,
+            content_hash: null,
+            output_arrived_at: null,
+          },
+        });
+        setPlayerState("not_generated");
+        probeKnownAbsentRef.current = true;
+        probeAbsentSigRef.current = blockedSig;
+        return;
+      }
+      // P3 404×7 guard: an idle episode status is byte-stable, so once the
+      // probe has answered not-generated, re-polling the same preview URL
+      // only repeats the 404. Skip until the status changes (a retry or a
+      // new output always changes it); probe outages keep retrying.
+      const sig = current === null ? null : JSON.stringify(current);
+      if (
+        probeKnownAbsentRef.current &&
+        sig !== null &&
+        sig === probeAbsentSigRef.current
+      ) {
+        return;
+      }
+      void probeEpisodePreview(episodeId, fetch, selectedOutput).then(
+        (value) => {
+          if (cancelled) return;
+          setProbeObservation({ kind: "probed", probe: value });
+          setPlayerState(value.available ? "available" : "not_generated");
+          if (value.available) {
+            setPlayableHash(value.content_hash);
           }
-        } else {
+          probeKnownAbsentRef.current = !value.available;
+          probeAbsentSigRef.current = sig;
+        },
+        () => {
+          if (cancelled) return;
           // probe失敗は専用状態（確認できません）。直前の再生可能videoは
           // 消さず、binding行とpreviewOkだけ即座に今回claimを落とす。
           setProbeObservation({ kind: "failed" });
-        }
-      });
+          probeKnownAbsentRef.current = false;
+        },
+      );
     };
 
     const poll = async () => {
@@ -174,7 +235,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         setError(null);
         setFetchedAt(Date.now());
         timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
-        refreshAux();
+        refreshAux(next);
       } catch (cause) {
         if (cancelled) return;
         setError(apiFailure(cause));
@@ -235,6 +296,8 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     setPlayerState("checking");
     setPlayableHash(null);
     setFlags(null);
+    probeKnownAbsentRef.current = false;
+    probeAbsentSigRef.current = null;
   }, [episodeId, selectedOutput]);
 
   const addVerticalOutput = () => {
@@ -513,10 +576,16 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         で止まっています。詳しい記録に理由があります。
       </p>
     ) : null;
+  const p3NextAction =
+    lastFailedRun !== undefined ? (
+      <p className="p3-next-action" data-testid="p3-next-action">
+        次は、ページ末尾の「詳しい記録」を開いて、止まった理由を確認してください。
+      </p>
+    ) : null;
 
   if (step === "方向") {
     return (
-      <div className="p2-page">
+      <div className={lastFailedRun !== undefined ? "p2-page is-blocked" : "p2-page"}>
         {topNotices}
         {lastFailedRun !== undefined ? (
           <section className="card p3-stage">
@@ -524,6 +593,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
               <h2 className="p3-stage-title">処理の状況</h2>
             </header>
             {p3BlockedLine}
+            {p3NextAction}
           </section>
         ) : null}
         <ConsultationPanel
@@ -623,13 +693,14 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   }
 
   return (
-    <div className="p3-page">
+    <div className={lastFailedRun !== undefined ? "p3-page is-blocked" : "p3-page"}>
       {topNotices}
       <section className="card p3-stage">
         <header className="p3-stage-header">
           <h2 className="p3-stage-title">処理の状況</h2>
         </header>
         {p3BlockedLine}
+        {p3NextAction}
         <dl className="status-list">
           <div>
             <dt>エピソード</dt>

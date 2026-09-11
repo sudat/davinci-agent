@@ -142,7 +142,7 @@ describe("ReviewChatPanel — 送信中ラベルと長時間注意", () => {
     );
     // waitFor cannot advance vitest fake timers — flush deterministically.
     await vi.advanceTimersByTimeAsync(32_000);
-    expect(screen.getByTestId("review-chat-send").textContent).toBe("送信");
+    expect(screen.getByTestId("review-chat-send").textContent).toBe("この位置を修正する");
     expect(screen.queryByTestId("chat-long-warn")).toBeNull();
   });
 

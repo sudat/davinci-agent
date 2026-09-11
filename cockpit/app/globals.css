@@ -1171,6 +1171,32 @@ body:has(.sample-stage) {
   background: #101216;
   border-color: var(--p1-border);
   border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ref-thumb-label {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pairwise-history {
+  margin-top: var(--space-2);
+}
+.pairwise-history > summary {
+  cursor: pointer;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 0 var(--space-1);
+}
+.pairwise-history > summary:hover {
+  color: var(--text);
+  background: #f3efe7;
 }
 .p6 .ref-memo {
   display: flex;
@@ -1218,6 +1244,15 @@ body:has(.sample-stage) {
 }
 .p6 [data-testid="pairwise-prompt"] button {
   min-height: 44px;
+}
+/* Debugging ids stay in the DOM (pins/tests) but never show visually. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 /* 375px: saved rows carry a plain A/B badge; raw paths/ids fold into
    details so the row never forces horizontal scroll */
@@ -1571,6 +1606,21 @@ body:has(.sample-stage) {
   margin: 0 0 var(--space-4);
 }
 
+.p3-next-action {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  margin: 0 0 var(--space-4);
+}
+
+/* Blocked only: the direction form drops to a supporting role so the
+   stop reason + the single next step stay the lead. Both branches that
+   can render a blocked episode (方向 p2-page, fallback p3-page). */
+.p3-page.is-blocked [data-testid="consultation-panel"],
+.p2-page.is-blocked [data-testid="consultation-panel"] {
+  opacity: 0.62;
+}
+
 .p3-stage [data-testid="episode-progress"] {
   margin-top: var(--space-3);
 }
@@ -1659,6 +1709,31 @@ body:has(.sample-stage) {
 
 .self-check-question .actions .btn-small:hover {
   background: #f1ece2;
+}
+
+/* Selected answer stays weaker than the primary save action: muted fill
+   + ink outline instead of the solid dark primary. */
+.self-check-question .actions .self-check-selected {
+  background: #f1ece2;
+  border: 1px solid var(--p90-ink);
+  outline: 2px solid var(--p90-ink);
+  outline-offset: -2px;
+  color: var(--p90-ink);
+}
+
+/* Narrow (375px): the 3 answers wrap instead of squeezing; memo breathes. */
+@media (max-width: 640px) {
+  .p5-side .self-check-question .actions {
+    flex-wrap: wrap;
+  }
+  .p5-side .self-check-question .actions button {
+    flex: 1 1 30%;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .p5-side [data-testid="self-check-section"] .field {
+    margin-top: var(--space-2);
+  }
 }
 
 @media (max-width: 640px) {
@@ -1846,19 +1921,6 @@ body:has(.sample-stage) {
   display: none;
 }
 
-/* P2-10: direction desktop — the workspace owns the first view. Offset 320
-   = chrome above the grid (~170: page padding + top link + stage header)
-   + summary rows below (~130). Stretching the row track here deliberately
-   overrides the P2-8 content-hug on desktop only, so the side rail spans
-   the workspace with 詳しい記録 at its foot; cards keep hugging content.
-   Narrow (≤640px) stays as P2-8 left it. */
-@media (min-width: 641px) {
-  .p2-stage-grid {
-    align-content: stretch;
-    align-items: stretch;
-    min-height: min(720px, calc(100vh - 320px));
-  }
-  .p2-side > .p2-record {
-    margin-top: auto;
-  }
-}
+/* P2-10: REMOVED per image review (P2 82→90 gate): the desktop
+   workspace stretch (min-height + bottom-pinned record) inflated density.
+   Page height is the natural content height (P2-8 content-hug above). */

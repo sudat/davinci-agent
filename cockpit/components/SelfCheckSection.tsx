@@ -160,7 +160,11 @@ export default function SelfCheckSection({
               <button
                 key={option.label}
                 type="button"
-                className={answers[question.key] === option.value ? "btn-primary" : "btn-small"}
+                className={
+                  answers[question.key] === option.value
+                    ? "btn-small self-check-selected"
+                    : "btn-small"
+                }
                 aria-pressed={answers[question.key] === option.value}
                 data-testid={`${question.testId}-${option.label === "はい" ? "yes" : option.label === "いいえ" ? "no" : "unanswered"}`}
                 onClick={() => choose(question.key, option.value)}
@@ -196,7 +200,7 @@ export default function SelfCheckSection({
           disabled={busy}
           data-testid="self-check-submit"
         >
-          {busy ? "送信中…" : "送信"}
+          {busy ? "送信中…" : "確認結果を保存する"}
         </button>
       </div>
       {sent ? (
