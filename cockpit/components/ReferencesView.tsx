@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
 import {
   apiFailure,
   listReferences,
@@ -164,6 +164,19 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
     setFailedPreviews((prev) => (prev.includes(sourceId) ? prev : [...prev, sourceId]));
   }, []);
 
+  /** HEVC などブラウザがデコードできない映像は、metadata（duration、
+   *  readyState>0）は読めるのに最初のフレームが復号できず videoWidth が
+   *  0 のままになる。onError は発火しないため、loadedmetadata 後の
+   *  videoWidth === 0 も再生不能として扱う。 */
+  const checkPreviewDecodable = useCallback(
+    (sourceId: string) => (event: SyntheticEvent<HTMLVideoElement>) => {
+      if (event.currentTarget.videoWidth === 0) {
+        markPreviewFailed(sourceId);
+      }
+    },
+    [markPreviewFailed],
+  );
+
   return (
     <div className="p6" data-testid="references-view">
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
@@ -241,6 +254,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                       preload="metadata"
                       controls
                       onError={() => markPreviewFailed(item.source_id)}
+                      onLoadedMetadata={checkPreviewDecodable(item.source_id)}
                     />
                     <span className="ref-memo">
                       {slot === 0 ? (
@@ -278,6 +292,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                       preload="metadata"
                       controls
                       onError={() => markPreviewFailed(item.source_id)}
+                      onLoadedMetadata={checkPreviewDecodable(item.source_id)}
                     />
                     <span className="ref-memo">
                       {slot === 0 ? (

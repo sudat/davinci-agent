@@ -126,4 +126,46 @@ describe("ReferencesView（参照登録と永続化ライブラリ一覧）", ()
     expect(screen.queryByTestId("scorecard")).toBeNull();
     expect(screen.queryByTestId("pairwise-prompt")).toBeNull();
   });
+
+  it("metadataは読めるがデコードできない映像（videoWidth 0）は比較不出になる", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        available: true,
+        references: [
+          {
+            source_id: "ref-aaa",
+            kind: "local_file",
+            location: "/tmp/hevc-a.mp4",
+            sha256: "a".repeat(64),
+            created_at: "2026-01-01T00:00:00Z",
+          },
+          {
+            source_id: "ref-bbb",
+            kind: "local_file",
+            location: "/tmp/hevc-b.mov",
+            sha256: "c".repeat(64),
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    render(<ReferencesView fetchImpl={fetchImpl as unknown as typeof fetch} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("library-reference-item")).toHaveLength(2);
+    });
+    const videos = screen.getAllByTestId(
+      "library-reference-preview",
+    ) as unknown as HTMLVideoElement[];
+    expect(videos.length).toBe(2);
+    for (const video of videos) {
+      Object.defineProperty(video, "videoWidth", { value: 0, configurable: true });
+      fireEvent(video, new Event("loadedmetadata"));
+    }
+
+    await waitFor(() => {
+      expect(screen.getByTestId("reference-compare-unavailable")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("pairwise-prompt")).toBeNull();
+  });
 });
