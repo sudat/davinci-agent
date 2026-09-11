@@ -1845,3 +1845,20 @@ body:has(.sample-stage) {
 .page:has(.p5-page) details[data-testid="consultation-record-details"] {
   display: none;
 }
+
+/* P2-10: direction desktop — the workspace owns the first view. Offset 320
+   = chrome above the grid (~170: page padding + top link + stage header)
+   + summary rows below (~130). Stretching the row track here deliberately
+   overrides the P2-8 content-hug on desktop only, so the side rail spans
+   the workspace with 詳しい記録 at its foot; cards keep hugging content.
+   Narrow (≤640px) stays as P2-8 left it. */
+@media (min-width: 641px) {
+  .p2-stage-grid {
+    align-content: stretch;
+    align-items: stretch;
+    min-height: min(720px, calc(100vh - 320px));
+  }
+  .p2-side > .p2-record {
+    margin-top: auto;
+  }
+}
