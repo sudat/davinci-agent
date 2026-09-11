@@ -1,0 +1,32 @@
+{
+ "schema_version": "v44-0-reference-vnext-scoring-v1",
+ "run_label": "reference-vnext-scoring-2026-09-12",
+ "recorded_at": "2026-09-12",
+ "codex_directive": "2026-09-11T23:38:44Z: after operator through-watch approval, save reference vNext and re-run frozen scoring ONCE with raw Gemini times (no display padding); report separated as operator evaluation / product subtitle display / scoring values",
+ "operator_evaluation": {
+  "comparison_clips_judgment": "「Geminiの方が圧倒的に正確」 (all 3 clips, consistent) + display refinement request: extend subtitle display by about +/-0.5s for viewer naturalness (Gemini word timing alone feels too pinpoint)",
+  "full_preview_approval": "承認する（通して問題なし） — full 282.24s preview watched through, Gemini timing + display padding +/-500ms",
+  "basis": "question-form answers recorded 2026-09-12; preview at runs/sync-comparison-20260912/full-preview-gemini-timing.mp4; timings JSON with raw-vs-padded separation at full-preview-timings.json"
+ },
+ "product_subtitle_display": {
+  "approved_display_rule": "subtitle display window = [utterance_start - 500ms, utterance_end + 500ms], clamped to episode bounds; multi-line groups split the padded span sequentially (never simultaneous); 4 seam trims where subtitles were under 1s apart (trimmed end always remains past the raw utterance end)",
+  "display_vs_measurement": "display padding is presentation-only; measurement anchors are raw Gemini utterance times"
+ },
+ "reference_vnext": {
+  "file": "private/reference-episodes/v44-real-01/transcript-sample-corrected.json (updated in place; backup .bak-20260912-pre-vNext)",
+  "content": "93 segments: operator-corrected TEXTS unchanged; TIMING = raw Gemini segment times (operator-approved); 5 groups where multiple reference lines share one Gemini segment use the raw segment evenly split (no padding); monotonic starts verified",
+  "independence": "the scoring reference timings are now human-approved (operator watched and approved the full-episode render), no longer whisper-derived (cf. reference-timestamp-provenance.json)"
+ },
+ "frozen_scoring_rerun": {
+  "method": "offline replay of the saved probe-system-asr-r4 whisper artifact (product lane hypothesis, kana normalization as committed at 8b9de65) through compute_arm_evidence_quality v2 against reference vNext — same frozen scoring, single run",
+  "transcript_cer": 0.11466666666666667,
+  "timestamp_error_p95_ms": 3460.0,
+  "omitted_utterances": 5,
+  "duplicated_utterances": 4,
+  "pairs_over_500ms": "62/88",
+  "top_residuals": "-6.30s (ってことでね), -5.02s (で、一通り探したと思う), -3.72s (どこ行ったかな), -3.54s (どうしちゃったんだろ), -3.46s (このDJI Pocket4) — all pair-cer ~0.00 (whisper text matches, whisper STARTS are late vs approved timing)",
+  "verdict": "product whisper lane FAILS against the now-independent reference: CER 0.1147 > 0.10 and p95 3460ms > 500ms; omitted/duplicated pass. Note p95 is WORSE than the circular era showed (2620 -> 3460): the whisper-derived reference had been masking whisper's true timing error",
+  "residual_cer_note": "text-side unchanged by design (texts identical to the previous reference state); CER 0.1147 reflects whisper-vs-operator-orthography distance"
+ },
+ "state_after": "ASR product-lane blocker is now precisely characterized against a human-approved reference: whisper's TEXT is close but not within 0.10, and its TIMING is 3.5s-class off. The operator-approved timing source is Gemini word timestamps (its verbatim TEXT earlier failed CER 0.1667 against operator texts — asr-cloud-transcribe-v1.json). Product entry-point decision (minimal adapter/pin) belongs to codex"
+}
