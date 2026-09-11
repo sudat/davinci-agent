@@ -1,0 +1,36 @@
+{
+ "schema_version": "v44-0-asr-cloud-transcribe-v1-v1",
+ "run_label": "gemini-transcribe-probe-2026-09-12",
+ "recorded_at": "2026-09-12",
+ "codex_authorization": "2026-09-12T17:12Z: single cloud-ASR candidate (Gemini 3.5 Transcribe), one measured run, frozen reference + frozen scoring, stop on fail",
+ "consent": {
+  "operator": "suda",
+  "basis": "explicit question-form consent 2026-09-12 (~02:44 JST): 「同意する。何度でも試していいよ。」— recorded as episode-av-analysis-consent-v1 artifact at private/reference-episodes/v44-real-01/av-analysis-consent.json (existing schema, no new framework); execution kept to the single mandated run",
+  "typed_stop_earlier": "consent artifact was absent at first check; orchestrator typed-stopped and reported per codex instruction 1 before asking the operator"
+ },
+ "request": {
+  "model": "gemini-3.5-transcribe",
+  "endpoint": "v1beta generateContent, inline audio/wav (16kHz mono, sha e89690bb…, same input as the whisper path)",
+  "config": "audioTranscriptionConfig: mode=VERBATIM, word_timestamp=true, language_codes=[ja-JP]; no diarization, no custom vocabulary",
+  "wall_seconds": 8.5,
+  "usage": "7056 AUDIO prompt tokens; ~USD 0.0235 at list pricing (~$0.30/h)",
+  "response_shape": "candidates[0].content.parts[0].audioTranscription: {text, words[437] each {word, startOffset, endOffset}}"
+ },
+ "segmentation_rule": {
+  "rule": "split the word stream at inter-word gaps >= 700 ms (declared from the pause distribution BEFORE any alignment/scoring: gaps>=0.5s=95, >=0.7s=92, >=1.0s=85 breaks; punctuation-only=45 vs reference 93)",
+  "resulting_segments": 93
+ },
+ "frozen_scoring_result": {
+  "transcript_cer": 0.16666666666666667,
+  "timestamp_error_p95_ms": 2820.0,
+  "omitted_utterances": 9,
+  "duplicated_utterances": 2,
+  "proper_noun_substitutions": 2,
+  "pairs_over_500ms": "56/84",
+  "verdict": "FAIL: CER > 0.10, p95 > 500ms, omitted > 5; duplicated passes. Stopped per instruction 5 — no further cloud/local model comparison"
+ },
+ "notable_cross_engine_observation": "the top residual pairs mirror whisper's failure shape: multiple pairs with pair-cer 0.00 and +2.5…+5.1s start diffs (e.g. R[2.8 テスト動画だよ] vs H[5.6], R[90.5 そこにさ] vs H[93.4]). Two independent engines (local whisper, cloud Gemini) showing the same late-start pattern against the same reference suggests a reference-side quantization component in the residual timing error — directly relevant to the deterministic onset-correction option codex queued as the next consideration",
+ "cer_note": "CER is segmentation-invariant (concatenated-text): 0.1667 fails regardless of the grouping rule. Verbatim mode preserves filler/disfluency text; the operator reference uses casual colloquial orthography — plus the officially-noted accuracy degradation when word timestamps are enabled. No second run attempted (no matrix)",
+ "artifacts": "/tmp/transcribe-req.json, /tmp/transcribe-resp.json (kept for inspection)",
+ "gate_state_after": "product-lane ASR remains blocked: whisper.cpp argv dead (asr-argv-experiment-outcome.json), whisper.cpp upgrade dead (asr-whisper-upgrade-v1.json), Gemini 3.5 Transcribe failed (this record). Remaining codex-queued option: deterministic audio-onset correction pass"
+}
