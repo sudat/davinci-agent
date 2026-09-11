@@ -1,0 +1,42 @@
+{
+ "schema_version": "v44-0-asr-alignment-v3-v1",
+ "run_label": "probe-system-asr-r3",
+ "recorded_at": "2026-09-12",
+ "measurement_policy": "v44-asr-measurement-v2",
+ "evidence_lane": "system_asr",
+ "supersedes_caveat": "asr-alignment-v2.json recorded a replay over saved r1 inputs; this r3 record is a fresh full-workspace run (ingest -> normalize -> real analyzers -> transcript gate) on the migrated v2 toolchain (commit 94bfb3c), discharging that replay caveat",
+ "workspace": "private/reference-episodes/v44-real-01/runs/probe-system-asr-r3 (uncommitted local run data)",
+ "start_conditions": {
+  "commit": "25bbf21",
+  "tracked_diff": 0,
+  "decode_policy": "V44_MAX_DECODE_FRAMES=12000 (operator-owned env per visual_constants.py documented contract; hashed into the visual artifact frozen-constants payload)"
+ },
+ "inputs": {
+  "effective_transcript_sha256": "835f5bb0256bb1e484e099c90315a90e524d9dc45d67405dfc7e52b61beaed10",
+  "effective_transcript_sha256_provenance": "computed from the r1 saved ASR artifact via the production substitution functions BEFORE the run; the run's evaluation binding verified it in-run (no evaluation-binding-mismatch) — determinism across the v1->v2 toolchain migration confirmed for the ASR path",
+  "asr_artifact_sha256_r1_era": "9b40e189420388917d4c8e410fd4a3e2c9036711c0095574363cfd550ff5a8a3",
+  "proper_noun_substitutions": 2,
+  "total_frames": 8467,
+  "binding_note": "whisper-cli binary sha and mezzanine media sha differ from r1 (v2 toolchain paths); wav sha and substituted transcript sha are identical"
+ },
+ "thresholds": {
+  "source": "services.cli._v44_arm_transcript",
+  "cer_max": 0.1,
+  "timestamp_p95_ms_max": 500.0,
+  "omitted_max": 5,
+  "duplicated_max": 5
+ },
+ "gate_metrics": {
+  "transcript_cer": 0.10372340425531915,
+  "timestamp_error_p95_ms": 4200.0
+ },
+ "gate_decision": "asr-alignment-failed",
+ "refusal_detail": "system_asr transcript alignment failed the predeclared thresholds: transcript_cer=0.10372340425531915 exceeds 0.1; timestamp_error_p95_ms=4200.0 exceeds 500.0 — honest typed failure, no report written (refusal is pre-model, zero paid calls)",
+ "comparison_to_r2": "the two failing metrics are byte-identical to asr-alignment-v2.json (same CER, same p95); the blocker classification and operator context of v2 carry over unchanged",
+ "operator_context": "the operator's 2026-09-01 recorded judgment (transcript quality passing for publishing purposes in the episode diagnostic viewing; machine gate still refuses honestly) remains the standing context; no operator re-judgment was requested for this probe",
+ "incidental_findings": [
+  "fresh-workspace decode required V44_MAX_DECODE_FRAMES=12000 (documented policy-env contract; default 900 is sized for <=30s fixtures)",
+  "re-running run-arm in an already-used workspace raises typed asr_cache_conflict (foreign cache entry: binding differs, overwrite refused) — consistent with nondeterministic mezzanine container bytes (creation metadata) entering the ASR cache binding while the cache key matches; one clean run per fresh workspace is the working procedure. Recorded as an execution-path improvement candidate, not corrected here"
+ ],
+ "gate_v44_2_passed": false
+}

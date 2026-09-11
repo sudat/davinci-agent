@@ -1,0 +1,72 @@
+{
+ "schema_version": "v44-0-r5-diagnostic-summary-v1",
+ "run_label": "v44-0-r5",
+ "recorded_at": "2026-09-12",
+ "episode": "v44-real-01",
+ "execution_class": "operator_corrected_diagnostic (non-synthetic, honestly labeled DIAGNOSTIC ONLY, never product proof)",
+ "start_conditions": {
+  "commit": "25bbf21",
+  "tracked_diff": 0,
+  "director_model_pin": "gpt-5.6-sol (transport codex-exec, production_model mode)",
+  "moment_review_lead_pin": "gemini-3.7-flash",
+  "moment_review_specialist_pin": "glm-5v-turbo (0 specialist calls needed this episode)",
+  "ground_truth": "ground-truth-v2.json (77 must_keep / 0 must_remove anchors)",
+  "transcript_binding": "operator corrected sample, sha256 53d64618214db24ceb42fecf4987a0bfbb0d8b86fbf2d26cefc438abb01b32bf",
+  "decode_policy": "V44_MAX_DECODE_FRAMES=12000 (documented operator-env contract)"
+ },
+ "arms": {
+  "A": {
+   "report": "private/reference-episodes/v44-real-01/runs/arm-A-r5/report.json",
+   "report_sha256_prefix": "459973174d8e",
+   "wall_clock_seconds": 906.2,
+   "codex_calls": 3,
+   "must_keep_recall": "77/77 (1.0)",
+   "catastrophic_removal_count": 0,
+   "escalated": 0,
+   "kept_candidates": "93/93 speech shots",
+   "evaluate": "passed=true (0 failed, 0 pending after operator verdict)"
+  },
+  "B": {
+   "report": "private/reference-episodes/v44-real-01/runs/arm-B-r5/report.json",
+   "report_sha256_prefix": "02e7916b6578",
+   "wall_clock_seconds": 1139.5,
+   "codex_calls": 3,
+   "moment_reviews": 3,
+   "video_understanding": "source_coverage=1.0, unresolved=0, retries=0, specialist_calls=0",
+   "must_keep_recall": "77/77 (1.0)",
+   "catastrophic_removal_count": 0,
+   "escalated": 0,
+   "kept_candidates": "93/93 speech shots",
+   "evaluate": "passed=true (0 failed, 0 pending after operator verdict)"
+  }
+ },
+ "progressive_lift": {
+  "must_keep_recall_delta": 0.0,
+  "catastrophic_delta": 0,
+  "wall_clock_seconds_delta": 233.3,
+  "interpretation": "no measurable lift: arm A is already at the recall ceiling of this ground truth. The predeclared pass policy's b-lift branch resolves through the operator continuation branch (operator answered YES to the GT-defined continuation question)"
+ },
+ "operator_verdict": {
+  "continuation_yes_no": true,
+  "publishability": "not_yet",
+  "comments": "選択段階のみの実験であり、字幕・加工を含む完成動画ではないため公開可能性は本段階の測定対象外（オペレーター指摘どおり）",
+  "asked_via": "structured operator question (chat surface), single GT-defined question「この選択なら続きを作る価値があるか」"
+ },
+ "honest_caveats": [
+  "GT v2 is keep-everything shaped (77 must_keep, 0 must_remove): recall is trivially perfect for a selection that keeps all 93 speech shots (~89.3% of frames kept, ~10.7% non-speech removed); the ability to cut the RIGHT things is NOT measured by this GT",
+  "diagnostic lane: operator-corrected transcript, not the system_asr product lane (product-lane refusal re-verified fresh the same night, see asr-alignment-v3.json)",
+  "the new dual-route chunked-AV observation (gemini-3.5-flash-lite) is NOT wired into the moment-deep-review evidence path; arm B used the clip-based gemini-3.7-flash + glm-5v-turbo providers (wiring unchanged from r4)"
+ ],
+ "failure_classification": {
+  "素材理解": "none recorded (coverage 1.0, 0 unresolved)",
+  "音声認識": "standing product-lane blocker unchanged: CER 0.10372 > 0.10, p95 4200ms > 500ms (asr-alignment-v3.json, fresh-workspace re-verification)",
+  "編集判断": "none measured beyond the keep-everything ceiling (see honest_caveats)",
+  "実行経路": "two recorded operational notes: (1) V44_MAX_DECODE_FRAMES=12000 env required for full-episode decode (documented contract, worked as designed); (2) typed asr_cache_conflict when re-running in an already-used workspace (nondeterministic mezzanine container bytes enter the ASR cache binding) — improvement candidate, not corrected"
+ },
+ "gate_v44_0_state": "NOT PASSED (codex ruling 2026-09-12T00:36Z): the r5 evidence is diagnostic-lane only (operator_corrected_diagnostic / DIAGNOSTIC ONLY / never product proof), and the product system_asr lane actually refuses at the entrance (asr-alignment-v3.json). PRD 'actual evidence path used' / 'evidence quality adequate or known fallback' is not satisfied on the product path. Re-judgment deferred until the product ASR lane passes thresholds in-route or a product-usable existing fallback is proven; then the r5 editorial evidence combines into one bundled V44-0 re-judgment. The editorial-feasibility machine evidence itself (recall 77/77, catastrophic 0, operator continuation YES) is valid as diagnostic evidence.",
+ "next": [
+  "report consolidated results to codex (done after this record)",
+  "2.5-flash-lite minimal A/B on the observation route per codex instruction (single run, same material, same schema)",
+  "V44-1 Cockpit real vertical slice preparation"
+ ]
+}
