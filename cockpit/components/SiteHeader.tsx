@@ -60,6 +60,7 @@ export default function SiteHeader() {
 
   return (
     <header className="site-header" data-testid="site-header">
+      <div className="site-header-rail">
       <Link href="/" className="site-brand">
         DaVinci Agent
       </Link>
@@ -83,6 +84,7 @@ export default function SiteHeader() {
       <a href="#details" className="site-details-link">
         詳しい記録
       </a>
+      </div>
     </header>
   );
 }

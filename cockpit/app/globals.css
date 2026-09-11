@@ -571,12 +571,22 @@ table.stage-runs th {
 video { max-width: 100%; height: auto; }
 
 .site-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+}
+
+.site-header-rail {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-4);
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+}
+
+.site-header-rail > .step-nav {
+  min-width: 0;
 }
 
 .site-brand {
@@ -665,25 +675,29 @@ video { max-width: 100%; height: auto; }
   margin: 0 0 var(--space-1);
 }
 
-/* Sample stage: video-heavy ~2/3 left, judgment zone ~1/3 right. 1-col ≤640px. */
-.sample-stage-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: var(--space-4);
-}
-.sample-stage-grid > * { min-width: 0; }
-@media (max-width: 640px) {
-  .sample-stage-grid { grid-template-columns: 1fr; }
+/* Sample stage review workspace (試し動画を確認): video + judgment column
+   sit on the page canvas as ONE workspace — no outer card, no nested card.
+   The right column is an inspector on the same surface, split by a hairline.
+   Type scale: stage 26 / check-main 21 / body 14-15 / auxiliary 12-13.
+   Rhythm steps only: 8 / 12 / 16 / 24. Palette: warm canvas, white surface,
+   charcoal ink, muted, very-light warm border. No shadows, no gradients. */
+body:has(.sample-stage) {
+  background: #faf8f4;
 }
 
-/* Sample review: quiet premium. Mobile order relies on DOM order — no order overrides. */
-.sample-stage-player video {
-  display: block;
-  width: 100%;
-  height: auto;
-  background: #101216;
-  border-radius: 10px;
+.page:has(.sample-stage) {
+  --sample-border: #e7e0d3;
+  --sample-ink: #23272e;
 }
+
+/* A: outer card frame OFF on the sample stage only (scoped, no tsx change) */
+.page:has(.sample-stage) [data-testid="consultation-panel"] {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+
 /* 試し動画段階だけ外側の大見出しを隠し、section内の「試し動画を確認」を唯一の大見出しにする */
 .page:has(.sample-stage) .page-header {
   display: none;
@@ -695,46 +709,74 @@ video { max-width: 100%; height: auto; }
   display: none;
 }
 
+/* B: workspace grid — roomy video column + inspector column, same axis */
+.sample-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  column-gap: var(--space-5);
+  row-gap: var(--space-4);
+}
+.sample-stage-grid > * { min-width: 0; }
+
+/* C: explicit type scale (system font only) */
 .sample-stage .sample-stage-title {
-  font-size: var(--font-size-title, 1.25rem);
+  font-size: 26px;
   font-weight: 700;
+  line-height: 1.4;
   margin: 0;
 }
 
 .sample-stage .sample-stage-header {
-  margin: 0 0 var(--space-3);
+  margin: 0 0 var(--space-4);
+}
+
+.sample-stage-header .field-hint {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-top: var(--space-2);
 }
 
 .sample-stage .sample-checks-title {
-  font-size: var(--font-size-body);
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.6;
+  color: var(--muted);
   margin: 0 0 var(--space-2);
 }
 .sample-check-main {
-  font-size: var(--font-size-heading);
+  font-size: 21px;
   font-weight: 700;
+  line-height: 1.5;
   margin: 0;
 }
 .sample-check-note {
   color: var(--muted);
-  font-size: var(--font-size-caption);
-  margin: var(--space-2) 0 0;
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--sample-border);
 }
-.sample-fix-divider {
+
+/* F: video — 16:9, full column width, radius 8, no frame, no shadow */
+.sample-stage-player {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--muted);
-  font-size: var(--font-size-caption);
-  margin: var(--space-4) 0 var(--space-2);
+  flex-direction: column;
+  min-width: 0;
 }
-.sample-fix-divider::before,
-.sample-fix-divider::after {
-  content: "";
-  flex: 1;
-  border-top: 1px solid var(--border);
+.sample-stage-player video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  background: #101216;
+  border-radius: 8px;
+}
+/* 「3つの場面・24秒」は動画直下の静かなメタ情報 */
+.sample-stage-player [data-testid="sample-breakdown"] {
+  font-size: 13px;
+  margin-top: var(--space-2);
 }
 .sample-places {
   list-style: none;
@@ -745,35 +787,117 @@ video { max-width: 100%; height: auto; }
   gap: var(--space-1) var(--space-3);
 }
 .sample-places > li {
-  font-size: var(--font-size-caption);
+  font-size: 12px;
   color: var(--muted);
 }
-.sample-stage-side textarea {
-  min-height: 72px;
-}
+
+/* A+D: inspector — same surface, left hairline + 24px gutter, 16px rhythm */
 .sample-stage-side {
-  background: #faf7f2;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: var(--space-4);
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--sample-border);
+  border-radius: 0;
+  padding: 0 0 0 var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
 }
-.sample-stage a {
-  color: var(--muted);
+.sample-stage-side .actions {
+  margin-top: 0;
+}
+
+/* D: 「直したいところがある場合」は通常の小見出し（飾り罫なし） */
+.sample-fix-divider {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--text);
+  margin: var(--space-2) 0 0;
+}
+.sample-fix-divider::before,
+.sample-fix-divider::after {
+  content: none;
+}
+.sample-stage-side .field {
+  margin-bottom: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* E: one button system — full width, >=44px, radius 8, shared across
+   primary / secondary / textarea; the small right-aligned secondary is gone */
+.sample-stage .actions {
+  justify-content: stretch;
+}
+.sample-stage .actions .btn-primary,
+.sample-stage-side .actions .btn-small {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+  padding: var(--space-2) var(--space-4);
 }
 .sample-stage .btn-primary {
   background: #23272e;
   border-color: #23272e;
 }
-.sample-primary {
-  justify-content: stretch;
+.sample-stage .btn-primary:hover {
+  background: #101318;
+  border-color: #101318;
 }
-.sample-primary .btn-primary {
-  flex: 1;
+.sample-stage-side .actions .btn-small {
+  background: var(--surface);
+  border: 1px solid var(--sample-ink);
+  color: var(--sample-ink);
 }
-.sample-stage details > summary {
-  cursor: pointer;
+.sample-stage-side .actions .btn-small:hover {
+  background: #f1ece2;
+}
+.sample-stage .btn-primary:disabled,
+.sample-stage-side .actions .btn-small:disabled {
+  background: var(--bg);
+  border-color: var(--border);
   color: var(--muted);
-  font-size: var(--font-size-caption);
+}
+.sample-stage-side textarea {
+  min-height: 88px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  width: 100%;
+}
+.sample-stage-side textarea:hover {
+  border-color: var(--muted);
+}
+.sample-stage a {
+  color: var(--muted);
+}
+
+/* F: 「詳しい記録」は罫線だけの静かなフッター入口（箱なし） */
+.page:has(.sample-stage) details.episode-details {
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--sample-border);
+  padding-top: var(--space-3);
+}
+.page:has(.sample-stage) details.episode-details > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* H: 375px single column — DOM order already reads
+   動画→確認事項→主ボタン→修正欄→副ボタン→詳しい記録; hairline turns horizontal */
+@media (max-width: 640px) {
+  .sample-stage-grid { grid-template-columns: 1fr; }
+  .sample-stage-side {
+    border-left: none;
+    border-top: 1px solid var(--sample-border);
+    padding: var(--space-4) 0 0;
+  }
 }
 
 /* Narrow screens: full stepper collapses to "N/4 段階" one-liner */
