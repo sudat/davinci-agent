@@ -65,13 +65,14 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
         </p>
       ) : (
         <div>
-          <div className="inline-row" style={{ marginBottom: "var(--space-3)" }}>
-            <label htmlFor="pairwise-domain">ドメイン</label>
+          <div className="inline-row" style={{ marginBottom: "var(--space-3)", flexWrap: "wrap" }}>
+            <label htmlFor="pairwise-domain" style={{ whiteSpace: "nowrap" }}>ドメイン</label>
             <select
               id="pairwise-domain"
               value={domain}
               onChange={(event) => setDomain(event.target.value as PreferenceDomain)}
               data-testid="pairwise-domain"
+              style={{ flex: 1, minWidth: 0 }}
             >
               {PREFERENCE_DOMAINS.map((value) => (
                 <option key={value} value={value}>
@@ -80,7 +81,7 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
               ))}
             </select>
           </div>
-          <div className="inline-row" style={{ marginBottom: "var(--space-3)" }}>
+          <div className="inline-row" style={{ marginBottom: "var(--space-3)", flexWrap: "wrap" }}>
             <span>選択:</span>
             <button
               type="button"
@@ -89,7 +90,7 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
               onClick={() => setChoice("a")}
               data-testid="pairwise-choice-a"
             >
-              A（{referenceIds[0]}）
+              動画A
             </button>
             <button
               type="button"
@@ -98,7 +99,7 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
               onClick={() => setChoice("b")}
               data-testid="pairwise-choice-b"
             >
-              B（{referenceIds[1]}）
+              動画B
             </button>
             <button
               type="button"
@@ -110,6 +111,11 @@ export default function PairwisePrompt({ referenceIds }: PairwisePromptProps) {
               どちらも違う
             </button>
           </div>
+          <details className="pairwise-ids">
+            <summary>詳細</summary>
+            <span>動画A: {referenceIds[0]}</span>
+            <span>動画B: {referenceIds[1]}</span>
+          </details>
           <label className="field" htmlFor="pairwise-reason">
             理由（任意）
             <textarea

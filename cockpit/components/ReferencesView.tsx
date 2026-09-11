@@ -195,11 +195,16 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                 <li key={item.source_id} data-testid="library-reference-item">
                   <span className="ref-thumb" aria-hidden="true" />
                   <span className="ref-memo">
+                    {compareIds.indexOf(item.source_id) === 0 ? (
+                      <span className="ref-slot">動画A</span>
+                    ) : compareIds.indexOf(item.source_id) === 1 ? (
+                      <span className="ref-slot">動画B</span>
+                    ) : null}
                     <span className="ref-name">{baseNameOf(item.location)}</span>
-                    <span className="ref-path">{item.location}</span>
                   </span>
                   <details className="ref-internals">
                     <summary>詳細</summary>
+                    <span className="ref-path">{item.location}</span>
                     <span>{item.source_id}</span>
                     <span>{item.sha256}</span>
                   </details>
@@ -217,11 +222,16 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                 <li key={`${item.source_id}-${index}`} data-testid="reference-item">
                   <span className="ref-thumb" aria-hidden="true" />
                   <span className="ref-memo">
+                    {compareIds.indexOf(item.source_id) === 0 ? (
+                      <span className="ref-slot">動画A</span>
+                    ) : compareIds.indexOf(item.source_id) === 1 ? (
+                      <span className="ref-slot">動画B</span>
+                    ) : null}
                     <span className="ref-name">{baseNameOf(item.path)}</span>
-                    <span className="ref-path">{item.path}</span>
                   </span>
                   <details className="ref-internals">
                     <summary>詳細</summary>
+                    <span className="ref-path">{item.path}</span>
                     <span>
                       {item.source_id}（ライブラリ版 {item.library_version}）
                     </span>

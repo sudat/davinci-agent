@@ -513,11 +513,15 @@ export default function ConsultationPanel({
   }, [episodeId, adoptedJudgmentId]);
 
   useEffect(() => {
-    if (!payloadLoaded || hasPublishedSample === null) return;
+    if (!payloadLoaded) return;
+    // full_authorized episodes never mount ConsultationSampleSection, so
+    // hasPublishedSample stays null there — but stage-steps checks
+    // fullAuthorized first, so the value is irrelevant in that case.
+    if (hasPublishedSample === null && !fullAuthorized) return;
     onStageHint?.({
       hasConsultation,
       adopted: adopted !== null,
-      hasPublishedSample,
+      hasPublishedSample: hasPublishedSample ?? false,
       fullAuthorized,
     });
   }, [onStageHint, payloadLoaded, hasConsultation, adopted, hasPublishedSample, fullAuthorized]);

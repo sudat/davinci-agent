@@ -1219,6 +1219,30 @@ body:has(.sample-stage) {
 .p6 [data-testid="pairwise-prompt"] button {
   min-height: 44px;
 }
+/* 375px: saved rows carry a plain A/B badge; raw paths/ids fold into
+   details so the row never forces horizontal scroll */
+.p6 .ref-slot {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.p6 .ref-internals .ref-path {
+  display: block;
+}
+.pairwise-ids {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-caption);
+  color: var(--muted);
+}
+.pairwise-ids summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.pairwise-ids span {
+  display: block;
+  word-break: break-all;
+}
 .p6-record {
   margin-top: var(--space-5);
   border-bottom: 1px solid var(--p1-border);
@@ -1417,14 +1441,20 @@ body:has(.sample-stage) {
   border-color: #23272e;
 }
 
-.p2-stage .actions .btn-primary:hover,
-.p5-side .actions .btn-primary:hover {
+.p2-stage .actions .btn-primary:hover:not(:disabled),
+.p5-side .actions .btn-primary:hover:not(:disabled) {
   background: #0b0d10;
   border-color: #0b0d10;
 }
 
 .p2-stage .actions .btn-primary:disabled,
-.p5-side .actions .btn-primary:disabled,
+.p5-side .actions .btn-primary:disabled {
+  background: #4a4e57;
+  border-color: #4a4e57;
+  color: #fff;
+  opacity: 1;
+}
+
 .p5-side .actions .btn-small:disabled {
   background: var(--bg);
   border-color: var(--border);
