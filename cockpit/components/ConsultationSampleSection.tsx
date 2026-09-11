@@ -366,9 +366,8 @@ export default function ConsultationSampleSection({
             ) : null}
             {feedback !== null ? (
               <>
-                <p className="sample-fix-divider">直したいところがある場合</p>
-                <label className="field" htmlFor="sample-feedback-input">
-                  直したいところ
+                <label className="field field-heading" htmlFor="sample-feedback-input">
+                  直したいところがある場合
                   <textarea
                     id="sample-feedback-input"
                     rows={3}
