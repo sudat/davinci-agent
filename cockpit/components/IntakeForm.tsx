@@ -217,7 +217,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
               id="source-folder"
               name="source_folder"
               type="text"
-              placeholder="例: /Volumes/Camera/2026-08-20_shoot"
+              placeholder="フォルダのパスを入力、またはここへドラッグ"
               value={sourceFolder}
               onChange={(event) => setSourceFolder(event.target.value)}
               aria-describedby="source-folder-hint"

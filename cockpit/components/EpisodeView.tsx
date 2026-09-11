@@ -301,7 +301,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         <div className="actions">
           <button
             type="button"
-            className="btn-small"
+            className="p2-quiet-action"
             data-testid="output-add"
             onClick={addVerticalOutput}
             disabled={addBusy}
@@ -468,10 +468,39 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     </>
   );
 
+  // P3 状況行の正本はここ（全step分岐より上）で求める。方向分岐で先に
+  // return されても、止まっている実行の行は方向画面の先頭に出せる。
+  const lastFailedRun =
+    status !== null
+      ? [...status.stage_runs].reverse().find((run) => run.status.startsWith("failed"))
+      : undefined;
+
+  /** P3 ブロック行の唯一の正本 — 方向分岐の先頭カードと fallback の
+   *  カードで共有する（文言・role・testid を一か所で保つ）。 */
+  const p3BlockedLine =
+    lastFailedRun !== undefined ? (
+      <p className="p3-blocked-line" role="alert" data-testid="p3-blocked-line">
+        「{lastFailedRun.stage_name}」の処理で止まっています
+        {lastFailedRun.last_error_code !== null &&
+        lastFailedRun.last_error_code !== ""
+          ? `（記録: ${lastFailedRun.last_error_code}）`
+          : ""}
+        。下の詳しい記録を確認してください。
+      </p>
+    ) : null;
+
   if (step === "方向") {
     return (
       <div className="p2-page">
         {topNotices}
+        {lastFailedRun !== undefined ? (
+          <section className="card p3-stage">
+            <header className="p3-stage-header">
+              <h2 className="p3-stage-title">処理の状況</h2>
+            </header>
+            {p3BlockedLine}
+          </section>
+        ) : null}
         <ConsultationPanel
           episodeId={episodeId}
           status={status}
@@ -489,15 +518,18 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             />
           </section>
         ) : null}
-        <div className="p2-chat">
-          <ReviewChatPanel
-            episodeId={episodeId}
-            getAtSeconds={() => videoRef.current?.currentTime ?? null}
-            status={status}
-            previewOk={previewOk}
-            outputId={selectedOutput}
-          />
-        </div>
+        <details className="p2-chat-details">
+          <summary>気になるところを伝える</summary>
+          <div className="p2-chat">
+            <ReviewChatPanel
+              episodeId={episodeId}
+              getAtSeconds={() => videoRef.current?.currentTime ?? null}
+              status={status}
+              previewOk={previewOk}
+              outputId={selectedOutput}
+            />
+          </div>
+        </details>
         {detailsBlock(true, false)}
       </div>
     );
@@ -521,11 +553,6 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     return (
       <div className="p5-page">
         {topNotices}
-        <ConsultationPanel
-          episodeId={episodeId}
-          status={status}
-          onStageHint={setStageHint}
-        />
         <div className="p5-stage-grid">
           <div className="p5-player">
             <header className="p5-stage-header">
@@ -560,15 +587,15 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             />
           </div>
         </div>
+        <ConsultationPanel
+          episodeId={episodeId}
+          status={status}
+          onStageHint={setStageHint}
+        />
         {detailsBlock(false, true)}
       </div>
     );
   }
-
-  const lastFailedRun =
-    status !== null
-      ? [...status.stage_runs].reverse().find((run) => run.status === "failed")
-      : undefined;
 
   return (
     <div className="p3-page">
@@ -577,16 +604,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         <header className="p3-stage-header">
           <h2 className="p3-stage-title">処理の状況</h2>
         </header>
-        {lastFailedRun !== undefined ? (
-          <p className="p3-blocked-line" role="alert" data-testid="p3-blocked-line">
-            「{lastFailedRun.stage_name}」の処理で止まっています
-            {lastFailedRun.last_error_code !== null &&
-            lastFailedRun.last_error_code !== ""
-              ? `（記録: ${lastFailedRun.last_error_code}）`
-              : ""}
-            。下の詳しい記録を確認してください。
-          </p>
-        ) : null}
+        {p3BlockedLine}
         <dl className="status-list">
           <div>
             <dt>エピソード</dt>

@@ -587,6 +587,10 @@ test("NL修正→構造化プレビュー→適用→部分rebuild 202", async (
     if (video !== null) video.currentTime = 1.0;
   });
 
+  const chatDetails = page.locator("details.p2-chat-details");
+  if ((await chatDetails.count()) > 0 && !(await chatDetails.getAttribute("open"))) {
+    await chatDetails.locator("summary").click();
+  }
   await page
     .getByLabel("気になるところを伝える")
     .fill("この後2秒残して");

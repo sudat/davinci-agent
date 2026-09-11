@@ -682,7 +682,7 @@ export default function ConsultationPanel({
           {busy ? "送信中…" : "希望を伝える"}
         </button>
       </div>
-      <p className="field-hint">提案が届くまで時間がかかります。届けば自動で表示されます。</p>
+      <p className="field-hint">希望を送ると、編集案が自動で届きます。</p>
     </>
   );
 
@@ -795,11 +795,14 @@ export default function ConsultationPanel({
     return (
       <section className="card p5-adopted" data-testid="consultation-panel">
         <h2 className="card-title">採用した方針</h2>
-        {adoptedSummary.map((line, index) => (
-          <p key={index}>{line}</p>
-        ))}
         {noticeBlock}
-        {journalDetails}
+        <details className="p5-policy-details">
+          <summary>方針の詳細</summary>
+          {adoptedSummary.map((line, index) => (
+            <p key={index}>{line}</p>
+          ))}
+          {journalDetails}
+        </details>
       </section>
     );
   }

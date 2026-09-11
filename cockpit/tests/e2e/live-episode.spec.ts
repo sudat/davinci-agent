@@ -182,6 +182,10 @@ test.describe("live real-chain episode", () => {
 
     // Regex path (deterministic interpreter): explicit 0:02 timestamp +
     // remove_section phrasing → fully determined draft, no LLM involved.
+    const chatDetails = page.locator("details.p2-chat-details");
+    if ((await chatDetails.count()) > 0 && !(await chatDetails.getAttribute("open"))) {
+      await chatDetails.locator("summary").click();
+    }
     await page.getByLabel("気になるところを伝える").fill("0:02の区間を削除して");
     await page.getByTestId("review-chat-send").click();
 

@@ -228,7 +228,7 @@ export default function ReviewChatPanel({
     <section className="card" data-testid="review-chat-panel">
       <h2 className="card-title">気になるところを伝える</h2>
       <p className="page-subtitle" style={{ marginBottom: "var(--space-3)" }}>
-        自然言語で修正を伝えると、構造化コマンドの解釈プレビューを返します。確認して適用すると、影響stageのみの部分rebuildが実行されます。
+        直したいことを書いて送ると、反映案が返ってきます。適用すると映像が部分的に作り直されます。
       </p>
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       <label className="field" htmlFor="review-chat-input">

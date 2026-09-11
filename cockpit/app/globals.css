@@ -976,9 +976,18 @@ body:has(.sample-stage) {
 .p1 .dropzone input {
   min-height: 44px;
   font-size: 15px;
+  background: transparent;
+  border-color: transparent;
+}
+.p1 .dropzone input::placeholder {
+  color: var(--muted);
+}
+.p1 .dropzone input:focus-visible {
+  border-color: var(--accent);
 }
 .p1 .dropzone .field-hint {
   font-size: 13px;
+  color: var(--text);
   margin: var(--space-1) 0 0;
 }
 .p1 textarea {
@@ -1005,6 +1014,13 @@ body:has(.sample-stage) {
 .p1-cta .btn-primary:hover:not(:disabled) {
   background: #0b0d10;
   border-color: #0b0d10;
+}
+.p1-cta .btn-primary:disabled {
+  background: #23272e;
+  border-color: #23272e;
+  color: #fff;
+  opacity: 0.38;
+  cursor: not-allowed;
 }
 .p1-cta .field-hint {
   font-size: 13px;
@@ -1627,4 +1643,135 @@ body:has(.sample-stage) {
     border-top: 1px solid var(--p90-border);
     padding: var(--space-4) 0 0;
   }
+}
+
+/* === P2/P3/P5 display quieting (90pt gaps) ===
+   Warm canvas system only: 8/12/16/24 rhythm, flat surfaces,
+   no shadows, no gradients. */
+
+/* P2-1 / P5-11: stage h2 is the single heading — hide the page header */
+.page:has(.p2-page) .page-header,
+.page:has(.p5-page) .page-header {
+  display: none;
+}
+
+/* P2-5: 縦版を追加する is a quiet text link, not a competing button */
+.p2-quiet-action {
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 12px var(--space-2);
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+.p2-quiet-action:hover:not(:disabled) {
+  color: var(--text);
+  text-decoration: underline;
+}
+.p2-quiet-action:disabled {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+}
+
+/* P2-4: the not-yet binding line stays readable but stops shouting */
+.p2-side [data-testid="preview-binding"] {
+  font-size: 12px;
+  margin-top: var(--space-1);
+}
+
+/* P2-6: empty preview placeholder no longer plays lead in the right column */
+.p2-side [data-testid="preview-pending"] {
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: var(--space-2) var(--space-3);
+  border-color: var(--p90-border);
+}
+.p2-side [data-testid="preview-pending"] .field-hint {
+  font-size: 12px;
+}
+
+/* P2-4: empty sample request card folds into the quiet register */
+.p2-page [data-testid="consultation-sample-section"] .sample-stage-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.p2-page [data-testid="consultation-sample-section"] .sample-stage-header {
+  margin-bottom: var(--space-2);
+}
+
+/* P2-7: chat card folds under one summary row; its inner title would double */
+.p2-chat-details {
+  border-top: 1px solid var(--p90-border);
+  margin-top: var(--space-4);
+}
+.p2-chat-details > summary {
+  cursor: pointer;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 12px var(--space-2);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.p2-chat-details > summary:hover {
+  color: var(--text);
+  background: #f3efe7;
+}
+.p2-chat-details .card-title {
+  display: none;
+}
+.p2-chat-details [data-testid="review-chat-panel"] {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0 0 var(--space-2);
+  margin-bottom: 0;
+}
+
+/* P5-10: adopted policy lines fold under one summary row */
+.p5-policy-details > summary {
+  cursor: pointer;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 12px var(--space-2);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.p5-policy-details > summary:hover {
+  color: var(--text);
+  background: #f3efe7;
+}
+
+/* P5-12: tighten the right column so the 3 final questions peek sooner */
+.p5-page .p5-side {
+  gap: var(--space-2);
+}
+.p5-page .self-check-question {
+  padding: var(--space-2) 0;
+}
+
+/* p2/p3/p5: 記録入口をEpisodeViewの1つへ集約（試し動画段階と同型） */
+.page:has(.p2-page) > details.episode-details,
+.page:has(.p3-page) > details.episode-details,
+.page:has(.p5-page) > details.episode-details {
+  display: none;
+}
+.page:has(.p2-page) details[data-testid="consultation-record-details"],
+.page:has(.p3-page) details[data-testid="consultation-record-details"],
+.page:has(.p5-page) details[data-testid="consultation-record-details"] {
+  display: none;
 }
