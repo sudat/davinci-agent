@@ -91,19 +91,23 @@ export function deriveStage(signals: StageSignals): EpisodeStage {
   }
 
   const sampleList = samples?.samples ?? [];
+  // 契約（@/lib/stage-steps と body の currentStage）: 試し動画は
+  // 「採用＋公開済み試し動画」の両方が揃って初めて選ぶ。プレビュー到達
+  // だけ（preview_first_arrived_at / compile・preview 段階・未公開の
+  // sample）は方向に譲る — body はその場合 方向を出すため。
   if (
-    hasAdoptedPolicy(consultations) ||
-    sampleList.some(isSamplePublished) ||
-    sampleList.length > 0 ||
-    status?.preview_first_arrived_at != null ||
-    (stage !== null && SAMPLE_CHAIN_STAGES.includes(stage))
+    hasAdoptedPolicy(consultations) &&
+    sampleList.some(isSamplePublished)
   ) {
     return "試し動画";
   }
 
   if (
     consultationCount(consultations) > 0 ||
-    (stage !== null && DIRECTION_CHAIN_STAGES.includes(stage))
+    sampleList.length > 0 ||
+    status?.preview_first_arrived_at != null ||
+    (stage !== null && DIRECTION_CHAIN_STAGES.includes(stage)) ||
+    (stage !== null && SAMPLE_CHAIN_STAGES.includes(stage))
   ) {
     return "方向";
   }

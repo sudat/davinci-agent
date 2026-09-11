@@ -304,7 +304,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     </div>
   ) : null;
 
-  const footageSlot = (
+  const footageSlot = (hideUndeterminedBinding: boolean) => (
     <>
       <PreviewPlayer
         episodeId={episodeId}
@@ -332,9 +332,11 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           {addResult}
         </p>
       ) : null}
-      <p className="field-hint" aria-live="polite" data-testid="preview-binding">
-        {previewBindingLine(binding)}
-      </p>
+      {hideUndeterminedBinding && binding.kind === "unknown" ? null : (
+        <p className="field-hint" aria-live="polite" data-testid="preview-binding">
+          {previewBindingLine(binding)}
+        </p>
+      )}
     </>
   );
 
@@ -527,7 +529,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         <ConsultationPanel
           episodeId={episodeId}
           status={status}
-          footageSlot={footageSlot}
+          footageSlot={footageSlot(false)}
           onStageHint={handleStageHint}
         />
         {showFlagsNormally ? (
@@ -581,7 +583,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             <header className="p5-stage-header">
               <h2 className="p5-stage-title">全編の確認用動画</h2>
             </header>
-            {footageSlot}
+            {footageSlot(true)}
             {showFlagsNormally ? (
               <section className="card p5-flags">
                 <h2 className="card-title">レビューflag</h2>

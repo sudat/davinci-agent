@@ -1755,6 +1755,32 @@ body:has(.sample-stage) {
   margin-bottom: var(--space-2);
 }
 
+/* P2-8: direction desktop — grid tracks hug content (no stretched bottom
+   whitespace); side column tightens to the 12px rhythm step */
+.p2-stage-grid {
+  align-content: start;
+}
+.p2-side {
+  gap: var(--space-3);
+}
+
+/* P2-9: 「画像で雰囲気を見る」 reads as a secondary control — same
+   surface/ink-border/hover register as the other p2 secondary buttons,
+   never the primary charcoal */
+.p2-main [data-testid="generation-section-toggle"] {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--p90-ink);
+  background: var(--surface);
+  color: var(--p90-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.p2-main [data-testid="generation-section-toggle"]:hover:not(:disabled) {
+  background: #f1ece2;
+}
+
 /* P2-7: chat card folds under one summary row; its inner title would double */
 .p2-chat-details {
   border-top: 1px solid var(--p90-border);

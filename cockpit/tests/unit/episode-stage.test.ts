@@ -73,41 +73,60 @@ describe("episode-stage（上部4段階の導出）", () => {
     ).toBe("方向");
   });
 
-  it("採用方針があれば試し動画（chain が selection でも上位を取る）", () => {
+  it("採用のみ（試し動画なし）は方向・採用＋公開済み試し動画で試し動画", () => {
+    const adoptedPolicy: ConsultationPayload["policy"] = {
+      adopted: {
+        consultation_id: "c-1",
+        judgment_id: "j-1",
+        proposal_id: "p-1",
+        decision: "adopt",
+        scope: { composition: true, appearance: true, audio: true },
+        audience_message: "",
+        structure: "",
+        duration_estimate: "",
+        candidate_scenes: [],
+        subtitle_policy: "",
+        audio_policy: "",
+        tempo_policy: "",
+        reference_mapping: "",
+        unused_reasons: "",
+        unconfirmed: [],
+        note: "",
+      },
+    };
     expect(
       deriveStage({
         ...EMPTY,
         status: statusOf({ current_stage: "selection" }),
-        consultations: consultationsOf({
-          policy: {
-            adopted: {
-              consultation_id: "c-1",
-              judgment_id: "j-1",
-              proposal_id: "p-1",
-              decision: "adopt",
-              scope: { composition: true, appearance: true, audio: true },
-              audience_message: "",
-              structure: "",
-              duration_estimate: "",
-              candidate_scenes: [],
-              subtitle_policy: "",
-              audio_policy: "",
-              tempo_policy: "",
-              reference_mapping: "",
-              unused_reasons: "",
-              unconfirmed: [],
-              note: "",
-            },
-          },
-        }),
+        consultations: consultationsOf({ policy: adoptedPolicy }),
+      }),
+    ).toBe("方向");
+    expect(
+      deriveStage({
+        ...EMPTY,
+        status: statusOf({ current_stage: "selection" }),
+        consultations: consultationsOf({ policy: adoptedPolicy }),
+        samples: samplesOf(1, true),
       }),
     ).toBe("試し動画");
   });
 
-  it("公開済み試し動画があれば試し動画", () => {
+  it("公開済み試し動画だけ（採用なし）は方向", () => {
     expect(
       deriveStage({ ...EMPTY, samples: samplesOf(1, true) }),
-    ).toBe("試し動画");
+    ).toBe("方向");
+  });
+
+  it("プレビュー到達だけ（相談なし）は方向（試し動画に捏造しない）", () => {
+    expect(
+      deriveStage({
+        ...EMPTY,
+        status: statusOf({
+          current_stage: "preview",
+          preview_first_arrived_at: "2026-09-09T00:00:00+00:00",
+        }),
+      }),
+    ).toBe("方向");
   });
 
   it("採用直後のfull_authorizedは全編確認（許可は直前の採用にだけ効く）", () => {
