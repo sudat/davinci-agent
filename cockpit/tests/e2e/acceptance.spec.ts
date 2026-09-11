@@ -353,6 +353,21 @@ function waitRunnerIdle(episodeId: string): void {
   );
 }
 
+// r6 redesign: the full judgment form (採用/見送る/送信) lives behind the
+// 「詳しく選ぶ」disclosure so it never competes with the primary
+// 「この方向で試す」button — open it before touching the form. Idempotent:
+// no-op when the form is already reachable.
+async function openJudgmentForm(
+  entry: import("@playwright/test").Locator,
+): Promise<void> {
+  if (await entry.getByTestId("consultation-judgment-submit").isVisible()) return;
+  await entry
+    .getByTestId("consultation-judgment-details")
+    .locator("summary")
+    .click();
+  await expect(entry.getByTestId("consultation-judgment-submit")).toBeVisible();
+}
+
 function seedPreviewClip(episodeId: string): void {
   const previewDir = path.join(EPISODES_ROOT, episodeId, "previews");
   fs.mkdirSync(previewDir, { recursive: true });
@@ -792,6 +807,7 @@ test("consultation slice2: REJECT判断は200で再生成なし（告知のみ�
     "e2e: 見送る方針の相談",
   );
 
+  await openJudgmentForm(entry);
   await entry.getByTestId("consultation-judgment-reject").click();
   await entry.getByTestId("consultation-judgment-submit").click();
 
@@ -825,6 +841,7 @@ test("consultation slice2: ADOPT判断は202で再編集予約→正直な失敗
     "e2e: 採用する方針の相談",
   );
 
+  await openJudgmentForm(entry);
   await entry.getByTestId("consultation-judgment-adopt").click();
   await expect(entry.getByTestId("consultation-adopt-note")).toBeVisible();
   await entry.getByTestId("consultation-judgment-submit").click();

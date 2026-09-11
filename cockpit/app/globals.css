@@ -1613,12 +1613,24 @@ body:has(.sample-stage) {
   margin: 0 0 var(--space-4);
 }
 
-/* Blocked only: the direction form drops to a supporting role so the
-   stop reason + the single next step stay the lead. Both branches that
-   can render a blocked episode (方向 p2-page, fallback p3-page). */
-.p3-page.is-blocked [data-testid="consultation-panel"],
-.p2-page.is-blocked [data-testid="consultation-panel"] {
-  opacity: 0.62;
+/* Blocked: the direction form is hidden from normal display entirely
+   (EpisodeView skips ConsultationPanel while a failed run exists), so no
+   dimming rule remains — a dimmed form still reads as operable. */
+.p3-reason > summary {
+  cursor: pointer;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 12px var(--space-2);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.p3-reason > summary:hover {
+  color: var(--text);
+  background: #f3efe7;
 }
 
 .p3-stage [data-testid="episode-progress"] {

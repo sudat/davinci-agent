@@ -552,8 +552,10 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
   // P3 状況行の正本はここ（全step分岐より上）で求める。方向分岐で先に
   // return されても、止まっている実行の行は方向画面の先頭に出せる。
+  // PREVIEW_READY の episode は古い失敗記録が残っていても完成品がある
+  // ので blocked 扱いにしない（e2e fixture・実運用ともに誤隠しを防ぐ）。
   const lastFailedRun =
-    status !== null
+    status !== null && status.status !== "PREVIEW_READY"
       ? [...status.stage_runs].reverse().find((run) => run.status.startsWith("failed"))
       : undefined;
 
@@ -579,8 +581,36 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const p3NextAction =
     lastFailedRun !== undefined ? (
       <p className="p3-next-action" data-testid="p3-next-action">
-        次は、ページ末尾の「詳しい記録」を開いて、止まった理由を確認してください。
+        次は、下の「理由を見る」を開いて、止まった理由を確認してください。
       </p>
+    ) : null;
+  // P3: 停止理由の内訳はカード内のinline detailsに置く（ページ末尾まで
+  // スクロールさせない）。読むのはポーリング済みstatusの正直な欄だけ。
+  const p3ReasonDetails =
+    lastFailedRun !== undefined ? (
+      <details className="p3-reason" data-testid="p3-reason-details">
+        <summary>理由を見る</summary>
+        <dl className="status-list">
+          <div>
+            <dt>止まった工程</dt>
+            <dd>{STAGE_PLAIN_NAMES[lastFailedRun.stage_name] ?? lastFailedRun.stage_name}</dd>
+          </div>
+          <div>
+            <dt>状態</dt>
+            <dd className="mono">{lastFailedRun.status}</dd>
+          </div>
+          {lastFailedRun.last_error_code !== null ? (
+            <div>
+              <dt>エラー</dt>
+              <dd className="mono">{lastFailedRun.last_error_code}</dd>
+            </div>
+          ) : null}
+          <div>
+            <dt>再試行</dt>
+            <dd>{lastFailedRun.retry_count}回</dd>
+          </div>
+        </dl>
+      </details>
     ) : null;
 
   if (step === "方向") {
@@ -594,14 +624,19 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             </header>
             {p3BlockedLine}
             {p3NextAction}
+            {p3ReasonDetails}
           </section>
         ) : null}
-        <ConsultationPanel
-          episodeId={episodeId}
-          status={status}
-          footageSlot={footageSlot(false)}
-          onStageHint={handleStageHint}
-        />
+        {lastFailedRun === undefined ? (
+          <ConsultationPanel
+            episodeId={episodeId}
+            status={status}
+            footageSlot={footageSlot(false)}
+            onStageHint={handleStageHint}
+          />
+        ) : (
+          <div className="p3-quiet-footage">{footageSlot(false)}</div>
+        )}
         {showFlagsNormally ? (
           <section className="card p2-flags">
             <h2 className="card-title">レビューflag</h2>
@@ -701,6 +736,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         </header>
         {p3BlockedLine}
         {p3NextAction}
+        {p3ReasonDetails}
         <dl className="status-list">
           <div>
             <dt>エピソード</dt>

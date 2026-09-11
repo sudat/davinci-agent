@@ -63,6 +63,19 @@ export function adoptedSummaryLinesOf(
     .slice(0, 3);
 }
 
+/** 採用サマリーの1行が実内容を持つか。「〜に関する指定はありません」系の
+ *  否定定型だけの行は内容なしとみなす（空欄は adoptedSummaryLinesOf が
+ *  既に落としている）。P5: 否定だけの「採用した方針」カードを出さない
+ *  ための判定。 */
+const SUMMARY_BOILERPLATE = ["指定はありません", "変更指定はありません", "指定なし", "特になし"];
+
+function isMeaningfulSummaryLine(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed !== "" &&
+    !SUMMARY_BOILERPLATE.some((phrase) => trimmed.includes(phrase))
+  );
+}
 function isFullAuthorizedEntry(entry: ConsultationEntry): boolean {
   if (isPolicyOutcomeEntry(entry)) return false;
   return entry.judgments.some((judgment) => judgment.decision === "full_authorized");
@@ -502,8 +515,13 @@ export default function ConsultationPanel({
   const adoptedSummary = adoptedSummaryLinesOf(adopted);
   const fullAuthorized = isCurrentAdoptionAuthorized(payload?.consultations ?? []);
   const messageEntries =
-    payload?.consultations.filter((entry) => !isPolicyOutcomeEntry(entry)) ?? [];
+    payload?.consultations.filter(
+      (entry): entry is Consultation => !isPolicyOutcomeEntry(entry),
+    ) ?? [];
   const hasConsultation = messageEntries.length > 0;
+  // P2: 提案が見えている通常表示では、底の相談欄（新規相談用）は主操作と
+  // 競合するため閉じたdetailsに畳む。提案なしの初回は従来どおり直接出す。
+  const hasProposal = messageEntries.some((entry) => entry.proposals.length > 0);
 
   const payloadLoaded = payload !== null;
   const adoptedJudgmentId = adopted?.judgment_id ?? null;
@@ -804,6 +822,12 @@ export default function ConsultationPanel({
     ) : null;
 
   if (fullAuthorized) {
+    // P5: 採用方針があるのに要約が空・否定定型だけのときは未完成に
+    // 見えるカード全体を出さない。adopted自体がない旧形は従来どおり
+    // （記録の閲覧口を残す）。
+    if (adopted !== null && !adoptedSummary.some(isMeaningfulSummaryLine)) {
+      return null;
+    }
     return (
       <section className="card p5-adopted" data-testid="consultation-panel">
         <h2 className="card-title">採用した方針</h2>
@@ -854,7 +878,14 @@ export default function ConsultationPanel({
             onPanelRetry={sendPanelRetry}
             onQuickAdopt={quickAdopt}
           />
-          {messageBlock}
+          {hasProposal ? (
+            <details data-testid="consultation-new-details">
+              <summary>少し変えたい・新しい相談を始める</summary>
+              {messageBlock}
+            </details>
+          ) : (
+            messageBlock
+          )}
           {generationBlock}
           {liveBlock}
         </div>

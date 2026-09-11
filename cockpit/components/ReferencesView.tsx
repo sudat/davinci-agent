@@ -77,23 +77,41 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
 
   useEffect(() => {
     let cancelled = false;
+    let settled = false;
     const impl = fetchImpl ?? fetch;
+    // P6: スタイル取得は確定状態で終わらせる。channels空（未保存）も
+    // 応答なしの停滞も、無限の「確認しています…」にしない。
+    const settle = (apply: () => void) => {
+      if (cancelled || settled) return;
+      settled = true;
+      clearTimeout(timer);
+      apply();
+    };
+    const timer = setTimeout(() => {
+      settle(() => setStyleFailed(true));
+    }, 8000);
     void (async () => {
       try {
         const channels = await getChannels(impl);
-        if (cancelled || channels.length === 0) return;
+        if (cancelled || settled) return;
+        if (channels.length === 0) {
+          settle(() => setStyle({ channel_id: "", versions: [], current: null }));
+          return;
+        }
         const first = channels[0];
-        if (first === undefined) return;
+        if (first === undefined) {
+          settle(() => setStyleFailed(true));
+          return;
+        }
         const next = await getChannelStyle(first.channel_id, { fetchImpl: impl });
-        if (cancelled) return;
-        setStyle(next);
+        settle(() => setStyle(next));
       } catch {
-        if (cancelled) return;
-        setStyleFailed(true);
+        settle(() => setStyleFailed(true));
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [fetchImpl]);
 
@@ -202,10 +220,14 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <ul className="list-plain" data-testid="library-reference-list">
               {library.map((item) => {
                 const slot = compareIds.indexOf(item.source_id);
+                // P6: backendにサムネイル・ファイル配信口はないため、見本は
+                // 実パス由来の短い名（plainNameOf）を主表示にする。「見本なし」
+                // とは書かない。videoタグは出さない（指せるURLがない）。
+                const slotLabel = slot === 0 ? "動画A" : slot === 1 ? "動画B" : "動画";
                 return (
                   <li key={item.source_id} data-testid="library-reference-item">
                     <span className="ref-thumb" aria-hidden="true">
-                      <span className="ref-thumb-label">見本なし</span>
+                      <span className="ref-thumb-label">{slotLabel}</span>
                     </span>
                     <span className="ref-memo">
                       {slot === 0 ? (
@@ -213,9 +235,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                       ) : slot === 1 ? (
                         <span className="ref-slot">動画B</span>
                       ) : null}
-                      {slot > 1 ? (
-                        <span className="ref-name">{plainNameOf(item.location)}</span>
-                      ) : null}
+                      <span className="ref-name">{plainNameOf(item.location)}</span>
                     </span>
                     <details className="ref-internals">
                       <summary>この動画の詳細</summary>
@@ -235,10 +255,11 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <ul className="list-plain" data-testid="reference-list">
               {references.map((item, index) => {
                 const slot = compareIds.indexOf(item.source_id);
+                const slotLabel = slot === 0 ? "動画A" : slot === 1 ? "動画B" : "動画";
                 return (
                   <li key={`${item.source_id}-${index}`} data-testid="reference-item">
                     <span className="ref-thumb" aria-hidden="true">
-                      <span className="ref-thumb-label">見本なし</span>
+                      <span className="ref-thumb-label">{slotLabel}</span>
                     </span>
                     <span className="ref-memo">
                       {slot === 0 ? (
@@ -246,9 +267,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                       ) : slot === 1 ? (
                         <span className="ref-slot">動画B</span>
                       ) : null}
-                      {slot > 1 ? (
-                        <span className="ref-name">{plainNameOf(item.path)}</span>
-                      ) : null}
+                      <span className="ref-name">{plainNameOf(item.path)}</span>
                       <span className="visually-hidden">{item.source_id}</span>
                     </span>
                     <details className="ref-internals">

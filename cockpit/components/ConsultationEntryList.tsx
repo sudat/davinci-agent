@@ -231,12 +231,15 @@ function JournalRow({
               </ul>
             ) : null}
             {interactive ? (
-              <ConsultationJudgmentForm
-                consultationId={entry.consultation_id}
-                proposalId={proposal.proposal_id}
-                busy={busy}
-                onSubmit={(input) => submitWithPanelNote(proposal.proposal_id, input)}
-              />
+              <details data-testid="consultation-judgment-details">
+                <summary>詳しく選ぶ</summary>
+                <ConsultationJudgmentForm
+                  consultationId={entry.consultation_id}
+                  proposalId={proposal.proposal_id}
+                  busy={busy}
+                  onSubmit={(input) => submitWithPanelNote(proposal.proposal_id, input)}
+                />
+              </details>
             ) : null}
           </div>
         );

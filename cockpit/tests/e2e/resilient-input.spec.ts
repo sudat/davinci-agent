@@ -94,6 +94,20 @@ async function collectTabStops(page: Page, maxTabs: number): Promise<string[]> {
   return stops;
 }
 
+// r6 redesign: the judgment form sits behind the 「詳しく選ぶ」details —
+// a keyboard user opens it via the summary (Enter), so the harness does
+// the same before collecting Tab stops. No-op when already open.
+async function openJudgmentForm(
+  entry: import("@playwright/test").Locator,
+): Promise<void> {
+  if (await entry.getByTestId("consultation-judgment-submit").isVisible()) return;
+  await entry
+    .getByTestId("consultation-judgment-details")
+    .locator("summary")
+    .click();
+  await expect(entry.getByTestId("consultation-judgment-submit")).toBeVisible();
+}
+
 function assertSubsequence(stops: string[], wanted: string[]): void {
   let cursor = -1;
   for (const name of wanted) {
@@ -337,6 +351,8 @@ test("keyboard-only: consultation judgment reachable and submittable by keyboard
   await expect(entry.getByTestId("consultation-entry-message")).toContainText(
     "e2e: キーボード操作の相談",
   );
+
+  await openJudgmentForm(entry);
 
   // Submit starts disabled (判断しないことは同意にはならない) — a disabled
   // button is skipped in the Tab order, so the decision buttons must come
