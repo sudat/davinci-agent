@@ -480,12 +480,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const p3BlockedLine =
     lastFailedRun !== undefined ? (
       <p className="p3-blocked-line" role="alert" data-testid="p3-blocked-line">
-        「{lastFailedRun.stage_name}」の処理で止まっています
-        {lastFailedRun.last_error_code !== null &&
-        lastFailedRun.last_error_code !== ""
-          ? `（記録: ${lastFailedRun.last_error_code}）`
-          : ""}
-        。下の詳しい記録を確認してください。
+        処理が途中で止まっています。下の詳しい記録を確認してください。
       </p>
     ) : null;
 

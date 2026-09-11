@@ -217,7 +217,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
               id="source-folder"
               name="source_folder"
               type="text"
-              placeholder="フォルダのパスを入力、またはここへドラッグ"
+              placeholder="フォルダのパス"
               value={sourceFolder}
               onChange={(event) => setSourceFolder(event.target.value)}
               aria-describedby="source-folder-hint"
@@ -226,7 +226,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
               <p className="field-error">{fieldErrors.sourceFolder}</p>
             ) : (
               <p className="field-hint" id="source-folder-hint">
-                フォルダをここにドラッグ＆ドロップしても選択できます
+                ここにフォルダをドラッグ＆ドロップ、または欄にパスを貼り付け
               </p>
             )}
           </div>

@@ -1016,10 +1016,10 @@ body:has(.sample-stage) {
   border-color: #0b0d10;
 }
 .p1-cta .btn-primary:disabled {
-  background: #23272e;
-  border-color: #23272e;
+  background: #4a4e57;
+  border-color: #4a4e57;
   color: #fff;
-  opacity: 0.38;
+  opacity: 1;
   cursor: not-allowed;
 }
 .p1-cta .field-hint {
@@ -1645,6 +1645,25 @@ body:has(.sample-stage) {
   }
 }
 
+/* P5-14: the panel h2 duplicates its own field label — the label stays,
+   other stages unaffected (CSS-only, DOM/testids untouched) */
+.p5-page .p5-side h2.card-title {
+  display: none;
+}
+
+/* P5-15: lines directly under the p5 video read as quiet metadata, not
+   hero content — de-emphasis only, no hiding, testids/functionality kept */
+.p5-page .p5-player [data-testid="preview-binding"],
+.p5-page .p5-player [data-testid="output-add-result"] {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: var(--space-1);
+}
+.p5-page .p5-player [data-testid="output-add"] {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* === P2/P3/P5 display quieting (90pt gaps) ===
    Warm canvas system only: 8/12/16/24 rhythm, flat surfaces,
    no shadows, no gradients. */
@@ -1764,12 +1783,7 @@ body:has(.sample-stage) {
   padding: var(--space-2) 0;
 }
 
-/* p2/p3/p5: 記録入口をEpisodeViewの1つへ集約（試し動画段階と同型） */
-.page:has(.p2-page) > details.episode-details,
-.page:has(.p3-page) > details.episode-details,
-.page:has(.p5-page) > details.episode-details {
-  display: none;
-}
+/* p2/p3/p5: サイドバー内の記録入口を除去（ページ末尾の「その他の記録」は承認入口のため維持） */
 .page:has(.p2-page) details[data-testid="consultation-record-details"],
 .page:has(.p3-page) details[data-testid="consultation-record-details"],
 .page:has(.p5-page) details[data-testid="consultation-record-details"] {
