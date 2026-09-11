@@ -1,0 +1,59 @@
+{
+  "schema_version": "v44-0-asr-kana-fix-predeclaration-v1",
+  "recorded_at": "2026-09-12",
+  "measurement_policy": "v44-asr-measurement-v2",
+  "evidence_lane": "system_asr",
+  "change_class": "measured-blocker minimal fix, Round-3 correction-B pattern (same operation class as _v44_arm_proper_nouns proper-noun substitution); codex-authorized 2026-09-12",
+  "what_changes": {
+    "summary": "substituted_arm_transcript (services/cli/_v44_arm_proper_nouns.py) now also applies an ENUMERATED kana-orthography literal-replacement mapping to the same two text surfaces (ASR speech segments + ms hypothesis triples), AFTER proper-noun substitution. Signature and return contract unchanged; the returned count stays the proper-noun substitution count.",
+    "files": [
+      "video-pipeline/services/cli/_v44_arm_proper_nouns.py",
+      "video-pipeline/tests/cli/test_v44_arm_transcript.py",
+      "video-pipeline/capabilities/v4.4/product-proof/v44-0/asr-kana-fix-predeclaration.json"
+    ]
+  },
+  "why": {
+    "blocker": "asr-alignment-v3.json: probe-system-asr-r3 refused on transcript_cer=0.10372340425531915 > 0.1 (78 edits over 752 reference characters; 3 edits needed to close)",
+    "diagnosis": "segment-level diagnosis (deep agent, 2026-09-12) on v44-real-01: part of the CER edits are pure kana-orthography variants between the whisper hypothesis and the operator-corrected reference — the hypothesis writes the standardized orthography where the reference keeps the casual kana forms",
+    "direction_note": "mapping direction is hypothesis -> reference orthography: 無くした->なくした (R88/H94), わかんねえ->わかんねー (R92/H98), and at the single 本当は三脚 occurrence ほんとは三脚 (R71/H76). A bare 本当は->ほんとは map was measured to break the matching 本当はね segment's pairing (omitted 5->6) and is rejected; the enumerated third key therefore carries the 三脚 context"
+  },
+  "enumerated_mapping": [
+    ["わかんねえ", "わかんねー"],
+    ["無くした", "なくした"],
+    ["本当は三脚", "ほんとは三脚"]
+  ],
+  "offline_verification": {
+    "method": "saved r3 whisper artifact replayed through the production path (substituted_arm_transcript -> compute_arm_evidence_quality v2) against transcript-sample-corrected.json; no ASR rerun, no paid calls; verification script was a throwaway under /tmp (not committed, per repo rules)",
+    "asr_artifact": "private/reference-episodes/v44-real-01/runs/probe-system-asr-r3/asr-cache/d7c6efd3ee5986d316f9c32e9cd80d50eb046a23f5ea782630b7e20f43293a53/transcript-artifact.json",
+    "baseline_recorded_r3": {
+      "transcript_cer": 0.10372340425531915,
+      "timestamp_error_p95_ms": 4200.0,
+      "omitted_utterances": 5,
+      "duplicated_utterances": 4,
+      "proper_noun_substitutions": 2
+    },
+    "predicted_with_fix": {
+      "transcript_cer": 0.09707446808510638,
+      "timestamp_error_p95_ms": 4200.0,
+      "omitted_utterances": 5,
+      "duplicated_utterances": 4,
+      "proper_noun_substitutions": 2,
+      "kana_replacement_occurrences": 3,
+      "effective_transcript_sha256": "bfe1fb25f559d8d5a065324bd5e23cef8c548a8f341484c4442e19bfd35537c1"
+    },
+    "determinism": "replay is byte-identical across runs",
+    "in_scope_success": "transcript_cer < 0.1 (achieved: 0.09707446808510638) with omitted <= 5 and duplicated <= 4 (both held)"
+  },
+  "out_of_scope": {
+    "timestamp_error_p95_ms": "stays 4200.0 and still exceeds the frozen 500.0 threshold — unchanged by this fix and expected to remain the remaining blocker for the gate; it is addressed by the separate recorded diagnosis, not by kana orthography"
+  },
+  "thresholds": {
+    "untouched": true,
+    "statement": "CER_MAX=0.10, TIMESTAMP_P95_MS_MAX=500.0, OMITTED_MAX=5, DUPLICATED_MAX=5 in services.cli._v44_arm_transcript are FROZEN and unchanged by this commit; gate code and measurement code are untouched",
+    "source": "services.cli._v44_arm_transcript"
+  },
+  "next_step": {
+    "statement": "a fresh product-lane probe (probe-system-asr-r4, zero paid calls, FRESH workspace because re-running run-arm in an already-used workspace raises typed asr_cache_conflict per asr-alignment-v3.json incidental_findings) follows AFTER this commit, per PRD v4.4 §6.7.4 predeclare-before-remeasure",
+    "expected": "transcript_cer passes with omitted/duplicated held; timestamp_error_p95_ms is recorded honestly whether or not it passes"
+  }
+}

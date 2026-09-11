@@ -14,6 +14,10 @@ from pathlib import Path
 
 import pytest
 
+from services.cli._v44_arm_proper_nouns import (
+    _KANA_VARIANT_REPLACEMENTS,
+    substituted_arm_transcript,
+)
 from services.cli._v44_arm_transcript import (
     CER_MAX,
     DUPLICATED_MAX,
@@ -389,3 +393,61 @@ def test_alignment_records_the_predeclared_measurement_policy_version(
         data, _episode(tmp_path), TranscriptLaneInput(lane="system_asr")
     )
     assert alignment.measurement_policy == "v44-asr-measurement-v2"
+
+
+# ---------------------------------------------------------------------------
+# substituted_arm_transcript — enumerated kana-orthography normalization
+# (r3 CER blocker diagnosis; predeclaration
+# capabilities/v4.4/product-proof/v44-0/asr-kana-fix-predeclaration.json)
+# ---------------------------------------------------------------------------
+
+
+def test_kana_variants_normalize_speech_and_hypothesis(tmp_path: Path) -> None:
+    """Each enumerated variant normalizes toward the reference orthography on
+    BOTH text surfaces (speech segments and ms hypothesis triples), the
+    proper-noun substitution count is untouched by the kana pass, and the
+    result is deterministic."""
+    speech_ms = (
+        (0, 3000, "わかんねえってわけ"),
+        (3000, 6000, "無くしたとか言ったらさ"),
+        (6000, 9000, "本当は三脚で定点取りたかった"),
+    )
+    speech = segments_from_ms(speech_ms, 300)
+    out_speech, hypothesis, edits = substituted_arm_transcript(
+        speech, speech_ms, _episode(tmp_path)
+    )
+    normalized = ("わかんねーってわけ", "なくしたとか言ったらさ", "ほんとは三脚で定点取りたかった")
+    assert tuple(segment.text for segment in out_speech) == normalized
+    assert hypothesis == (
+        (0, 3000, normalized[0]),
+        (3000, 6000, normalized[1]),
+        (6000, 9000, normalized[2]),
+    )
+    assert edits == 0  # count semantics stay proper-noun-only
+    assert substituted_arm_transcript(speech, speech_ms, _episode(tmp_path)) == (
+        out_speech,
+        hypothesis,
+        edits,
+    )
+
+
+def test_kana_variants_are_exactly_the_diagnosed_enumeration() -> None:
+    """The mapping stays the enumerated diagnosis (no silent generalization):
+    one literal pair per diagnosed orthography variant, direction fixed."""
+    assert _KANA_VARIANT_REPLACEMENTS == (
+        ("わかんねえ", "わかんねー"),
+        ("無くした", "なくした"),
+        ("本当は三脚", "ほんとは三脚"),
+    )
+
+
+def test_kana_variants_leave_matching_text_untouched(tmp_path: Path) -> None:
+    """Text already in the reference orthography passes through unchanged
+    (the 本当はね segment must NOT be rewritten — measured pairing guard)."""
+    speech_ms = ((0, 3000, "本当はね"), (3000, 6000, "わかんねーってわけ"))
+    speech = segments_from_ms(speech_ms, 200)
+    out_speech, hypothesis, _edits = substituted_arm_transcript(
+        speech, speech_ms, _episode(tmp_path)
+    )
+    assert tuple(segment.text for segment in out_speech) == ("本当はね", "わかんねーってわけ")
+    assert tuple(text for _s, _e, text in hypothesis) == ("本当はね", "わかんねーってわけ")
