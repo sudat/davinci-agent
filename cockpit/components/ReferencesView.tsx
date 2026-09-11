@@ -33,6 +33,11 @@ function savedStyleName(style: ChannelStyle): string | null {
   return entry.name;
 }
 
+function baseNameOf(location: string): string {
+  const parts = location.split("/").filter((part) => part !== "");
+  return parts[parts.length - 1] ?? location;
+}
+
 export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
@@ -124,11 +129,12 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const styleName = style !== null ? savedStyleName(style) : null;
 
   return (
-    <div data-testid="references-view">
+    <div className="p6" data-testid="references-view">
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       <div className="refs-grid">
-        <section className="card">
-          <h2 className="card-title">参考動画を追加</h2>
+        <section className="p6-add" aria-label="参考動画の追加">
+          <h2 className="p6-region-title">参考動画を追加</h2>
+          <p className="p6-lead">好きな動画を1件ずつ足して、その場で好みとして保存します。</p>
           <div
             className={`dropzone${dropActive ? " is-over" : ""}`}
             data-testid="reference-dropzone"
@@ -147,12 +153,40 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
               aria-label="参照ファイルパス"
               value={path}
               onChange={(event) => setPath(event.target.value)}
-              placeholder="/path/to/reference.mp4"
+              placeholder="例: /path/to/reference.mp4"
             />
             <p className="field-hint">
-              ここに動画をドラッグ＆ドロップ、またはクリックして選択できます
+              ここに動画をドラッグ＆ドロップ、または下の欄に場所を書いて保存できます
             </p>
           </div>
+          <div className="p6-cta">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => void register()}
+              disabled={busy || path.trim() === ""}
+              data-testid="register-reference-button"
+            >
+              好みを保存
+            </button>
+          </div>
+        </section>
+        <section className="p6-saved" aria-label="保存済みの好み">
+          <h2 className="p6-region-title">保存済みの好み</h2>
+          <h3 className="p6-sub-title">いつものスタイル</h3>
+          {style === null && !styleFailed ? (
+            <p className="empty-note">スタイルを確認しています…</p>
+          ) : null}
+          {styleFailed ? (
+            <p className="empty-note">スタイルを確認できませんでした</p>
+          ) : null}
+          {style !== null && style.current !== null ? (
+            <p className="p6-style-name">{styleName ?? `版${style.current}のスタイル`}</p>
+          ) : null}
+          {style !== null && style.current === null ? (
+            <p className="empty-note">保存されたスタイルはまだありません</p>
+          ) : null}
+          <h3 className="p6-sub-title">保存済みの動画</h3>
           {library === null ? (
             <p className="empty-note">ライブラリを読み込んでいます…</p>
           ) : library.length > 0 ? (
@@ -160,9 +194,12 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
               {library.map((item) => (
                 <li key={item.source_id} data-testid="library-reference-item">
                   <span className="ref-thumb" aria-hidden="true" />
-                  <span className="ref-memo">{item.location}</span>
+                  <span className="ref-memo">
+                    <span className="ref-name">{baseNameOf(item.location)}</span>
+                    <span className="ref-path">{item.location}</span>
+                  </span>
                   <details className="ref-internals">
-                    <summary>・・・</summary>
+                    <summary>詳細</summary>
                     <span>{item.source_id}</span>
                     <span>{item.sha256}</span>
                   </details>
@@ -179,9 +216,12 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
               {references.map((item, index) => (
                 <li key={`${item.source_id}-${index}`} data-testid="reference-item">
                   <span className="ref-thumb" aria-hidden="true" />
-                  <span className="ref-memo">{item.path}</span>
+                  <span className="ref-memo">
+                    <span className="ref-name">{baseNameOf(item.path)}</span>
+                    <span className="ref-path">{item.path}</span>
+                  </span>
                   <details className="ref-internals">
-                    <summary>・・・</summary>
+                    <summary>詳細</summary>
                     <span>
                       {item.source_id}（ライブラリ版 {item.library_version}）
                     </span>
@@ -198,7 +238,7 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
                   <span className="ref-thumb" aria-hidden="true" />
                   <span className="ref-memo">{item.comment}</span>
                   <details className="ref-internals">
-                    <summary>・・・</summary>
+                    <summary>詳細</summary>
                     <span>{item.source_id}</span>
                     <span>
                       {item.named_domains
@@ -215,41 +255,15 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
               ))}
             </ul>
           ) : null}
-        </section>
-        <section className="card">
-          <h2 className="card-title">いつものスタイル</h2>
-          {style === null && !styleFailed ? (
-            <p className="empty-note">スタイルを確認しています…</p>
-          ) : null}
-          {styleFailed ? (
-            <p className="empty-note">スタイルを確認できませんでした</p>
-          ) : null}
-          {style !== null && style.current !== null ? (
-            <p>{styleName ?? `版${style.current}のスタイル`}</p>
-          ) : null}
-          {style !== null && style.current === null ? (
-            <p className="empty-note">保存されたスタイルはまだありません</p>
-          ) : null}
           {compareIds.length >= 2 ? (
-            <div style={{ marginTop: "var(--space-4)" }}>
-              <h3 className="card-title">どちらが近いですか？</h3>
+            <div className="p6-compare">
+              <h3 className="p6-sub-title">どちらが近いですか？</h3>
               <PairwisePrompt referenceIds={compareIds} />
             </div>
           ) : null}
-          <div className="actions">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void register()}
-              disabled={busy || path.trim() === ""}
-              data-testid="register-reference-button"
-            >
-              好みを保存
-            </button>
-          </div>
         </section>
       </div>
-      <section id="details" className="card">
+      <section id="details" className="p6-record">
         <details data-testid="references-record">
           <summary>詳しい記録</summary>
           {pairwise.length > 0 ? (

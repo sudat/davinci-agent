@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   apiFailure,
@@ -377,9 +378,10 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     </section>
   );
 
-  const detailsBlock = (withStageIds: boolean, withFinishing: boolean) => (
+  const detailsBlock = (withStageIds: boolean, withFinishing: boolean, extra?: ReactNode) => (
     <details id="details" className="episode-details" data-testid="episode-details">
       <summary>詳しい記録</summary>
+      {extra}
       <dl className="status-list">
         <div>
           <dt>エピソード</dt>
@@ -468,7 +470,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
   if (step === "方向") {
     return (
-      <div>
+      <div className="p2-page">
         {topNotices}
         <ConsultationPanel
           episodeId={episodeId}
@@ -477,7 +479,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           onStageHint={setStageHint}
         />
         {showFlagsNormally ? (
-          <section className="card">
+          <section className="card p2-flags">
             <h2 className="card-title">レビューflag</h2>
             <FlagList
               flags={flags!.flags}
@@ -487,13 +489,15 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             />
           </section>
         ) : null}
-        <ReviewChatPanel
-          episodeId={episodeId}
-          getAtSeconds={() => videoRef.current?.currentTime ?? null}
-          status={status}
-          previewOk={previewOk}
-          outputId={selectedOutput}
-        />
+        <div className="p2-chat">
+          <ReviewChatPanel
+            episodeId={episodeId}
+            getAtSeconds={() => videoRef.current?.currentTime ?? null}
+            status={status}
+            previewOk={previewOk}
+            outputId={selectedOutput}
+          />
+        </div>
         {detailsBlock(true, false)}
       </div>
     );
@@ -515,48 +519,74 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
   if (step === "全編確認") {
     return (
-      <div>
+      <div className="p5-page">
         {topNotices}
         <ConsultationPanel
           episodeId={episodeId}
           status={status}
           onStageHint={setStageHint}
         />
-        {previewSection("全編の確認用動画")}
-        {showFlagsNormally ? (
-          <section className="card">
-            <h2 className="card-title">レビューflag</h2>
-            <FlagList
-              flags={flags!.flags}
-              notYetGenerated={flags!.not_yet_generated}
-              canSeek={playerState === "available"}
-              onSeek={seekTo}
+        <div className="p5-stage-grid">
+          <div className="p5-player">
+            <header className="p5-stage-header">
+              <h2 className="p5-stage-title">全編の確認用動画</h2>
+            </header>
+            {footageSlot}
+            {showFlagsNormally ? (
+              <section className="card p5-flags">
+                <h2 className="card-title">レビューflag</h2>
+                <FlagList
+                  flags={flags!.flags}
+                  notYetGenerated={flags!.not_yet_generated}
+                  canSeek={playerState === "available"}
+                  onSeek={seekTo}
+                />
+              </section>
+            ) : null}
+          </div>
+          <div className="p5-side">
+            <FinishingDomainPanel episodeId={episodeId} summaryOnly />
+            <ReviewChatPanel
+              episodeId={episodeId}
+              getAtSeconds={() => videoRef.current?.currentTime ?? null}
+              status={status}
+              previewOk={previewOk}
+              outputId={selectedOutput}
             />
-          </section>
-        ) : null}
-        <ReviewChatPanel
-          episodeId={episodeId}
-          getAtSeconds={() => videoRef.current?.currentTime ?? null}
-          status={status}
-          previewOk={previewOk}
-          outputId={selectedOutput}
-        />
-        <FinishingDomainPanel episodeId={episodeId} summaryOnly />
-        <SelfCheckSection
-          episodeId={episodeId}
-          status={status}
-          beforeAfter={<BeforeAfterSummary summary={status?.before_after ?? null} />}
-        />
+            <SelfCheckSection
+              episodeId={episodeId}
+              status={status}
+              beforeAfter={<BeforeAfterSummary summary={status?.before_after ?? null} />}
+            />
+          </div>
+        </div>
         {detailsBlock(false, true)}
       </div>
     );
   }
 
+  const lastFailedRun =
+    status !== null
+      ? [...status.stage_runs].reverse().find((run) => run.status === "failed")
+      : undefined;
+
   return (
-    <div>
+    <div className="p3-page">
       {topNotices}
-      <section className="card">
-        <h2 className="card-title">進捗</h2>
+      <section className="card p3-stage">
+        <header className="p3-stage-header">
+          <h2 className="p3-stage-title">処理の状況</h2>
+        </header>
+        {lastFailedRun !== undefined ? (
+          <p className="p3-blocked-line" role="alert" data-testid="p3-blocked-line">
+            「{lastFailedRun.stage_name}」の処理で止まっています
+            {lastFailedRun.last_error_code !== null &&
+            lastFailedRun.last_error_code !== ""
+              ? `（記録: ${lastFailedRun.last_error_code}）`
+              : ""}
+            。下の詳しい記録を確認してください。
+          </p>
+        ) : null}
         <dl className="status-list">
           <div>
             <dt>エピソード</dt>
@@ -594,32 +624,39 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           <p className="empty-note">読み込み中…</p>
         )}
       </section>
-      <FinishingDomainPanel episodeId={episodeId} />
+      <FinishingDomainPanel episodeId={episodeId} summaryOnly />
       <ConsultationPanel episodeId={episodeId} status={status} onStageHint={setStageHint} />
-      {previewSection("全編の確認用動画")}
-      <section className="card">
-        <h2 className="card-title">レビューflag</h2>
-        {flags !== null ? (
-          <FlagList
-            flags={flags.flags}
-            notYetGenerated={flags.not_yet_generated}
-            canSeek={playerState === "available"}
-            onSeek={seekTo}
-          />
-        ) : (
-          <p className="empty-note">レビューflagの有無を確認しています…</p>
-        )}
-      </section>
-      <ReviewChatPanel
-        episodeId={episodeId}
-        getAtSeconds={() => videoRef.current?.currentTime ?? null}
-        status={status}
-        previewOk={previewOk}
-        outputId={selectedOutput}
-      />
-      <BeforeAfterSummary summary={status?.before_after ?? null} />
-      <SelfCheckSection episodeId={episodeId} status={status} />
-      {detailsBlock(false, false)}
+      <div className="p3-chat">
+        <ReviewChatPanel
+          episodeId={episodeId}
+          getAtSeconds={() => videoRef.current?.currentTime ?? null}
+          status={status}
+          previewOk={previewOk}
+          outputId={selectedOutput}
+        />
+      </div>
+      {detailsBlock(
+        false,
+        true,
+        <>
+          {previewSection("全編の確認用動画")}
+          <section className="card">
+            <h2 className="card-title">レビューflag</h2>
+            {flags !== null ? (
+              <FlagList
+                flags={flags.flags}
+                notYetGenerated={flags.not_yet_generated}
+                canSeek={playerState === "available"}
+                onSeek={seekTo}
+              />
+            ) : (
+              <p className="empty-note">レビューflagの有無を確認しています…</p>
+            )}
+          </section>
+          <BeforeAfterSummary summary={status?.before_after ?? null} />
+          <SelfCheckSection episodeId={episodeId} status={status} />
+        </>,
+      )}
     </div>
   );
 }

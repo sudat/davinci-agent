@@ -116,6 +116,8 @@ describe("EpisodeView — 計測裏付けのある前方互換payload形状", ()
 
     render(<EpisodeView episodeId="ep-unit02" />);
 
+    fireEvent.click(screen.getByText("詳しい記録"));
+
     expect(await screen.findByTestId("preview-player")).toBeVisible();
     expect(screen.getByTestId("eta").textContent).toContain("8");
     expect(screen.getByTestId("work-units").textContent).toContain("5");

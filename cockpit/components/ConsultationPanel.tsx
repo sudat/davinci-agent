@@ -793,7 +793,7 @@ export default function ConsultationPanel({
 
   if (fullAuthorized) {
     return (
-      <section className="card" data-testid="consultation-panel">
+      <section className="card p5-adopted" data-testid="consultation-panel">
         <h2 className="card-title">採用した方針</h2>
         {adoptedSummary.map((line, index) => (
           <p key={index}>{line}</p>
@@ -821,20 +821,16 @@ export default function ConsultationPanel({
   }
 
   return (
-    <section className="card direction-stage" data-testid="consultation-panel">
-      <h2 className="card-title">編集の方向を決める</h2>
-      <p className="page-subtitle">
-        やりたいイメージを教えてください。提案の中から選ぶか、言葉で直してください。
-      </p>
+    <section className="card direction-stage p2-stage" data-testid="consultation-panel">
+      <header className="p2-stage-header">
+        <h2 className="p2-stage-title">編集の方向を決める</h2>
+        <p className="page-subtitle">
+          やりたいイメージを教えてください。提案の中から選ぶか、言葉で直してください。
+        </p>
+      </header>
       {noticeBlock}
-      <div className="direction-grid">
-        {footageSlot !== null ? (
-          <div className="direction-footage">
-            <p className="footage-badge">撮影素材の見本</p>
-            {footageSlot}
-          </div>
-        ) : null}
-        <div className="direction-chat">
+      <div className="p2-stage-grid">
+        <div className="p2-main">
           <ConsultationEntryList
             payload={payload}
             busy={busy}
@@ -845,13 +841,29 @@ export default function ConsultationPanel({
           />
           {messageBlock}
           {generationBlock}
+          {liveBlock}
         </div>
+        {footageSlot !== null ? (
+          <div className="p2-side">
+            <p className="footage-badge">撮影素材の見本</p>
+            {footageSlot}
+            <details className="p2-record" data-testid="consultation-record-details">
+              <summary>詳しい記録</summary>
+              {recordNotes}
+              {budgetBlock}
+            </details>
+          </div>
+        ) : null}
       </div>
-      {liveBlock}
-      {recordNotes}
+      {footageSlot === null ? (
+        <details className="p2-record" data-testid="consultation-record-details">
+          <summary>詳しい記録</summary>
+          {recordNotes}
+          {budgetBlock}
+        </details>
+      ) : null}
       {sampleBlock}
       {styleSaveBlock}
-      {budgetBlock}
     </section>
   );
 }

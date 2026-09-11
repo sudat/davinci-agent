@@ -165,7 +165,7 @@ export default function ConsultationProposalCard({
   const details = proposal.details;
   const panels = panelsOf(proposal);
   return (
-    <div data-testid="consultation-proposal" data-proposal-id={proposal.proposal_id}>
+    <div data-testid="consultation-proposal" data-proposal-id={proposal.proposal_id} className="proposal-card">
       <h3 className="section-title" data-testid="consultation-proposal-title">
         AIの提案: {proposal.title}
       </h3>
@@ -174,7 +174,7 @@ export default function ConsultationProposalCard({
         <div className="actions">
           <button
             type="button"
-            className="btn-small"
+            className="btn-primary"
             onClick={onQuickAdopt}
             disabled={quickAdoptBusy}
             data-testid="proposal-quick-adopt"

@@ -141,76 +141,74 @@ export default function SelfCheckSection({
   };
 
   return (
-    <section className="card" data-testid="self-check-section">
-      <details>
-        <summary>最後の確認</summary>
-        <p className="field-hint">
-          分からない質問は「未回答のまま」でかまいません。未回答は未確認として残り、成功扱いにしません。
-        </p>
-        {QUESTIONS.map((question) => (
-          <div key={question.key} data-testid={question.testId} role="group" aria-label={question.label}>
-            <p>{question.label}</p>
-            <div className="actions">
-              {(
-                [
-                  { value: true, label: "はい" },
-                  { value: false, label: "いいえ" },
-                  { value: null, label: "未回答のまま" },
-                ] as { value: SelfCheckAnswer; label: string }[]
-              ).map((option) => (
-                <button
-                  key={option.label}
-                  type="button"
-                  className={answers[question.key] === option.value ? "btn-primary" : "btn-small"}
-                  aria-pressed={answers[question.key] === option.value}
-                  data-testid={`${question.testId}-${option.label === "はい" ? "yes" : option.label === "いいえ" ? "no" : "unanswered"}`}
-                  onClick={() => choose(question.key, option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <p className="field-hint" data-testid={`${question.testId}-current`}>
-              現在の回答: {answerLabel(answers[question.key])}
-            </p>
-            {question.key === "q_better_than_before" && beforeAfter !== null ? (
-              <div data-testid="self-check-before-after">{beforeAfter}</div>
-            ) : null}
+    <section className="card self-check" data-testid="self-check-section">
+      <h2 className="card-title">最後の確認</h2>
+      <p className="field-hint">
+        分からない質問は「未回答のまま」でかまいません。未回答は未確認として残り、成功扱いにしません。
+      </p>
+      {QUESTIONS.map((question) => (
+        <div key={question.key} data-testid={question.testId} role="group" aria-label={question.label} className="self-check-question">
+          <p className="self-check-main">{question.label}</p>
+          <div className="actions">
+            {(
+              [
+                { value: true, label: "はい" },
+                { value: false, label: "いいえ" },
+                { value: null, label: "未回答のまま" },
+              ] as { value: SelfCheckAnswer; label: string }[]
+            ).map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                className={answers[question.key] === option.value ? "btn-primary" : "btn-small"}
+                aria-pressed={answers[question.key] === option.value}
+                data-testid={`${question.testId}-${option.label === "はい" ? "yes" : option.label === "いいえ" ? "no" : "unanswered"}`}
+                onClick={() => choose(question.key, option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-        ))}
-        <label className="field" htmlFor="self-check-note">
-          メモ（自由記入）
-          <input
-            id="self-check-note"
-            type="text"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="気づいたことがあれば書きます"
-            data-testid="self-check-note"
-          />
-        </label>
-        <div className="actions">
-          <button
-            type="button"
-            className="btn-small"
-            onClick={submit}
-            disabled={busy}
-            data-testid="self-check-submit"
-          >
-            {busy ? "送信中…" : "送信"}
-          </button>
+          <p className="field-hint" data-testid={`${question.testId}-current`}>
+            現在の回答: {answerLabel(answers[question.key])}
+          </p>
+          {question.key === "q_better_than_before" && beforeAfter !== null ? (
+            <div data-testid="self-check-before-after">{beforeAfter}</div>
+          ) : null}
         </div>
-        {sent ? (
-          <p className="field-hint" data-testid="self-check-sent">
-            送信しました
-          </p>
-        ) : null}
-        {error !== null ? (
-          <p className="field-error" role="alert" data-testid="self-check-error">
-            {error.code}: {error.detail}
-          </p>
-        ) : null}
-      </details>
+      ))}
+      <label className="field" htmlFor="self-check-note">
+        メモ（自由記入）
+        <input
+          id="self-check-note"
+          type="text"
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="気づいたことがあれば書きます"
+          data-testid="self-check-note"
+        />
+      </label>
+      <div className="actions">
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={submit}
+          disabled={busy}
+          data-testid="self-check-submit"
+        >
+          {busy ? "送信中…" : "送信"}
+        </button>
+      </div>
+      {sent ? (
+        <p className="field-hint" data-testid="self-check-sent">
+          送信しました
+        </p>
+      ) : null}
+      {error !== null ? (
+        <p className="field-error" role="alert" data-testid="self-check-error">
+          {error.code}: {error.detail}
+        </p>
+      ) : null}
     </section>
   );
 }

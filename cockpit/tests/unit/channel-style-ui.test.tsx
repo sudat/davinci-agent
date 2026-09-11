@@ -516,6 +516,8 @@ describe("ConsultationPanel — 今後のスタイルとして保存（工程3�
         fetchImpl={fetchImpl}
       />,
     );
+    const record = await screen.findByTestId("consultation-record-details");
+    fireEvent.click(record.querySelector("summary")!);
     expect(await screen.findByTestId("style-save-no-channel")).toBeVisible();
     expect(screen.queryByTestId("style-save-button")).toBeNull();
   });

@@ -187,6 +187,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
 
   return (
     <form
+      className="p1"
       onSubmit={(event) => {
         event.preventDefault();
         void onSubmit();
@@ -196,7 +197,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
         <ErrorNotice code={apiError.code} detail={apiError.detail} />
       ) : null}
 
-      <section className="card">
+      <section className="p1-main" aria-label="素材と作りたい動画">
         <div className="field">
           <div
             className={`dropzone${dropActive ? " is-over" : ""}`}
@@ -216,7 +217,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
               id="source-folder"
               name="source_folder"
               type="text"
-              placeholder="/Volumes/Camera/2026-08-20_shoot"
+              placeholder="例: /Volumes/Camera/2026-08-20_shoot"
               value={sourceFolder}
               onChange={(event) => setSourceFolder(event.target.value)}
               aria-describedby="source-folder-hint"
@@ -266,6 +267,22 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
           </div>
         ) : null}
       </section>
+
+      <div className="p1-cta">
+        <button
+          type="submit"
+          className="btn-primary"
+          disabled={!submittable || submitting}
+          data-testid="create-button"
+        >
+          {submitting ? "作成中…" : "動画づくりを始める"}
+        </button>
+        {!submittable && touched ? (
+          <p className="field-hint">
+            素材フォルダと「どんな動画にしたいか」の両方がそろうと始められます
+          </p>
+        ) : null}
+      </div>
 
       <details className="advanced" data-testid="reference-collapse">
         <summary>参考動画</summary>
@@ -343,7 +360,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
 
       <AdvancedSection />
 
-      <section id="details" className="card">
+      <section id="details" className="p1-record">
         <details data-testid="intake-record">
           <summary>詳しい記録</summary>
           {style !== null && style.versions.length > 1 ? (
@@ -396,17 +413,6 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
           ) : null}
         </details>
       </section>
-
-      <div className="actions">
-        <button
-          type="submit"
-          className="btn-primary"
-          disabled={!submittable || submitting}
-          data-testid="create-button"
-        >
-          {submitting ? "作成中…" : "動画づくりを始める"}
-        </button>
-      </div>
     </form>
   );
 }
