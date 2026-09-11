@@ -1,0 +1,33 @@
+{
+ "schema_version": "v44-0-asr-alignment-v4-v1",
+ "run_label": "probe-system-asr-r4",
+ "recorded_at": "2026-09-12",
+ "measurement_policy": "v44-asr-measurement-v2",
+ "evidence_lane": "system_asr",
+ "supersedes": "asr-alignment-v3.json on the CER dimension (kana fix applied); timestamp dimension unchanged",
+ "predeclaration": "asr-kana-fix-predeclaration.json (commit 8b9de65, before this measurement) + asr-measurement-policy-v2.md",
+ "workspace": "private/reference-episodes/v44-real-01/runs/probe-system-asr-r4 (uncommitted local run data, fresh workspace)",
+ "start_conditions": {
+  "commit": "8b9de65",
+  "decode_policy": "V44_MAX_DECODE_FRAMES=12000"
+ },
+ "inputs": {
+  "effective_transcript_sha256": "bfe1fb25f559d8d5a065324bd5e23cef8c548a8f341484c4442e19bfd35537c1",
+  "binding_note": "in-run evaluation binding verified (no evaluation-binding-mismatch); the kana normalization is part of the pinned processing, so the effective transcript sha changed from 835f5bb0... (r3) as predicted",
+  "kana_occurrences": 3,
+  "proper_noun_substitutions": 2,
+  "total_frames": 8467
+ },
+ "gate_result": {
+  "gate_decision": "asr-alignment-failed",
+  "refusal_detail": "timestamp_error_p95_ms=4200.0 exceeds 500.0 — CER is no longer a failing criterion",
+  "transcript_cer": 0.09707446808510638,
+  "cer_status": "PASS (< 0.10, predicted exactly by the predeclaration offline replay)",
+  "timestamp_error_p95_ms": 4200.0,
+  "timestamp_status": "FAIL — the sole remaining product-lane blocker",
+  "omitted_utterances": 5,
+  "duplicated_utterances": 4
+ },
+ "remaining_blocker_scope": "global, not tail-local: 34/88 paired diffs exceed 500ms; per the r5-night deep diagnosis, five largest are cross-occurrence mispairings of genuine repetition (operator listening check 2026-09-12 confirmed bag-related words occur at 254-258s where the reference records a single 10s 'いやー' — reference-side data error confirmed for correction); the remaining mid-band scatter requires the predeclared whisper-argv experiment (max 2 candidates, codex-authorized 2026-09-12T15:48Z)",
+ "operator_context": "listening check answers recorded (Q1: bag words present at 254-264s, contradicting the reference text; Q2: operator judged the later utterance NOT a verbatim repetition of the 236-250s content). Exact corrected text for the reference span pending operator transcription before the reference file is touched (codex rule: correct only on person confirmation, record the basis)."
+}
