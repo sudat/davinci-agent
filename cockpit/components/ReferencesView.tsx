@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState, type DragEvent } from "react"
 import {
   apiFailure,
   listReferences,
+  referencePreviewUrl,
   registerReference,
-  samplePreviewUrlOf,
   type LibraryReference,
 } from "@/lib/api";
 import { DOMAIN_LABEL, POLARITY_LABEL } from "@/lib/domains";
@@ -59,6 +59,9 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const [library, setLibrary] = useState<LibraryReference[] | null>(null);
   const [style, setStyle] = useState<ChannelStyle | null>(null);
   const [styleFailed, setStyleFailed] = useState(false);
+  /** source_ids whose preview video failed to load (missing file, 404).
+   *  The comparison UI only shows while 2+ previews stay playable. */
+  const [failedPreviews, setFailedPreviews] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const refreshLibrary = useCallback(async () => {
@@ -154,7 +157,12 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const libraryIds = (library ?? []).map((item) => item.source_id);
   const sessionIds = distinctSourceIds();
   const compareIds = [...libraryIds, ...sessionIds.filter((id) => !libraryIds.includes(id))];
+  const playableIds = compareIds.filter((id) => !failedPreviews.includes(id));
   const styleName = style !== null ? savedStyleName(style) : null;
+
+  const markPreviewFailed = useCallback((sourceId: string) => {
+    setFailedPreviews((prev) => (prev.includes(sourceId) ? prev : [...prev, sourceId]));
+  }, []);
 
   return (
     <div className="p6" data-testid="references-view">
@@ -221,21 +229,19 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <ul className="list-plain" data-testid="library-reference-list">
               {library.map((item) => {
                 const slot = compareIds.indexOf(item.source_id);
-                // P6: sample-derived references play through the existing
-                // sample-preview route; raw source paths have no servable
-                // URL, so they render as an honest name row (no fake thumb).
-                const previewUrl = samplePreviewUrlOf(item.location);
+                // Every saved reference plays through the read-only preview
+                // route keyed by source_id — video A and video B alike.
+                const previewUrl = referencePreviewUrl(item.source_id);
                 return (
                   <li key={item.source_id} data-testid="library-reference-item">
-                    {previewUrl !== null ? (
-                      <video
-                        className="ref-video"
-                        data-testid="library-reference-preview"
-                        src={previewUrl}
-                        preload="metadata"
-                        controls
-                      />
-                    ) : null}
+                    <video
+                      className="ref-video"
+                      data-testid="library-reference-preview"
+                      src={previewUrl}
+                      preload="metadata"
+                      controls
+                      onError={() => markPreviewFailed(item.source_id)}
+                    />
                     <span className="ref-memo">
                       {slot === 0 ? (
                         <span className="ref-slot">動画A</span>
@@ -262,18 +268,17 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <ul className="list-plain" data-testid="reference-list">
               {references.map((item, index) => {
                 const slot = compareIds.indexOf(item.source_id);
-                const previewUrl = samplePreviewUrlOf(item.path);
+                const previewUrl = referencePreviewUrl(item.source_id);
                 return (
                   <li key={`${item.source_id}-${index}`} data-testid="reference-item">
-                    {previewUrl !== null ? (
-                      <video
-                        className="ref-video"
-                        data-testid="reference-preview"
-                        src={previewUrl}
-                        preload="metadata"
-                        controls
-                      />
-                    ) : null}
+                    <video
+                      className="ref-video"
+                      data-testid="reference-preview"
+                      src={previewUrl}
+                      preload="metadata"
+                      controls
+                      onError={() => markPreviewFailed(item.source_id)}
+                    />
                     <span className="ref-memo">
                       {slot === 0 ? (
                         <span className="ref-slot">動画A</span>
@@ -317,11 +322,16 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
               ))}
             </ul>
           ) : null}
-          {compareIds.length >= 2 ? (
+          {compareIds.length >= 2 && playableIds.length >= 2 ? (
             <div className="p6-compare">
               <h3 className="p6-sub-title">どちらが近いですか？</h3>
               <PairwisePrompt referenceIds={compareIds} />
             </div>
+          ) : null}
+          {compareIds.length >= 2 && playableIds.length < 2 ? (
+            <p className="empty-note" data-testid="reference-compare-unavailable">
+              比較するには再生できる動画が2本必要です
+            </p>
           ) : null}
         </section>
       </div>

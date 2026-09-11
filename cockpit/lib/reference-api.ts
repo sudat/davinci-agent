@@ -84,6 +84,12 @@ export async function listReferences(
   return request<ReferencesListResult>("/references", { method: "GET" }, fetchImpl);
 }
 
+/** Playable URL for ANY saved reference: the read-only preview route serves
+ *  the registered file by source_id, so both video A and video B play. */
+export function referencePreviewUrl(sourceId: string): string {
+  return `${apiBase()}/references/${encodeURIComponent(sourceId)}/preview`;
+}
+
 /** Playable URL for a saved reference location, or null when no existing
  *  route serves it. Sample-derived locations embed the consultation sample
  *  path, served by the existing sample-preview route; raw source file

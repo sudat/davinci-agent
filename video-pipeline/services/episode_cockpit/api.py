@@ -406,6 +406,17 @@ def list_references(workspace: Workspace) -> dict[str, object]:
     return workspace.list_references()
 
 
+@router.get("/references/{source_id}/preview")
+def reference_preview(source_id: Identifier, workspace: Workspace) -> FileResponse:
+    """Serve one registered reference's file read-only (unknown/missing → 404)."""
+
+    return FileResponse(
+        workspace.reference_preview_path(source_id),
+        media_type="video/mp4",
+        filename=f"{source_id}.mp4",
+    )
+
+
 @router.post("/references/parse-preview")
 def parse_reference_preview(
     request: ReferenceParsePreviewRequest,

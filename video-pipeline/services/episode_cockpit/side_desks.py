@@ -157,6 +157,28 @@ class ReferenceOps(WorkspaceContext):
             ],
         }
 
+    def reference_preview_path(self, source_id: str) -> Path:
+        """Read-only lookup of one registered reference's file for preview serving.
+
+        Unknown source_id or a missing file is a typed 404 — never a silent
+        substitute. The route serves the returned path as-is (FileResponse).
+        """
+
+        library = self._load_library()
+        source = next(
+            (entry for entry in library.sources if entry.source_id == source_id), None
+        )
+        if source is None:
+            raise CockpitNotFoundError(
+                "reference-not-found", f"no registered reference {source_id}"
+            )
+        path = Path(source.location)
+        if not path.is_file():
+            raise CockpitNotFoundError(
+                "reference-not-found", f"no file for registered reference {source_id}"
+            )
+        return path
+
     def _load_library(self) -> ReferenceLibraryV1:
         path: Path = self._episodes_root / LIBRARY_NAME
         if not path.is_file():

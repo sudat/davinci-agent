@@ -1320,6 +1320,19 @@ body:has(.sample-stage) {
     border-top: 1px solid var(--p1-border);
     padding: var(--space-4) 0 0;
   }
+  /* 375px: the two saved videos stack vertically (single column rows,
+     full-width video); keep-all stops the preview name wrapping mid-word. */
+  .p6 .list-plain > li {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .p6 .ref-video {
+    width: 100%;
+  }
+  .p6 .ref-name {
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
 }
 
 /* === P2/P3/P5 (subagent B) === */
@@ -1620,6 +1633,26 @@ body:has(.sample-stage) {
   font-weight: 700;
   line-height: 1.6;
   margin: 0 0 var(--space-4);
+}
+
+/* P3 recovery: a NORMAL PRIMARY BUTTON below the explanation text,
+   left-aligned (never flex-end/right-edge), reason details sit below
+   the button (DOM order unchanged — CSS/wording only, no card
+   restructuring). The anchor carries .btn-primary so it reads as one
+   button; keep-all stops the narrow-width black clump. */
+.p3-stage .actions {
+  justify-content: flex-start;
+}
+.p3-stage a.btn-primary {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+  word-break: keep-all;
+}
+@media (max-width: 640px) {
+  .p3-stage .actions .btn-primary {
+    width: 100%;
+  }
 }
 
 /* Blocked: the direction form is hidden from normal display entirely

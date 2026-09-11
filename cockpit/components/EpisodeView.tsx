@@ -581,7 +581,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const p3NextAction =
     lastFailedRun !== undefined ? (
       <p className="p3-next-action" data-testid="p3-next-action">
-        次は、下の「新しい動画としてやり直す」で、同じ素材から作り直してください。
+        次は、下の「素材を選び直してやり直す」から、素材を選び直してはじめからやり直してください。
       </p>
     ) : null;
   // P3 recovery: ONE actual action, not a reason viewer. A rebuild POST
@@ -599,7 +599,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           className="btn-primary"
           data-testid="p3-recovery-action"
         >
-          新しい動画としてやり直す
+          素材を選び直してやり直す
         </Link>
       </div>
     ) : null;
