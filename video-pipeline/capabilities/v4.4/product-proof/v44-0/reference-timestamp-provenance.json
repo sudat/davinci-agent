@@ -1,0 +1,21 @@
+{
+ "schema_version": "v44-0-reference-provenance-v1-v1",
+ "run_label": "reference-timestamp-provenance-2026-09-12",
+ "recorded_at": "2026-09-12",
+ "codex_directive": "2026-09-11T23:15:44Z: onset correction FORBIDDEN; first verify read-only whether the scoring reference is an independent timing ground truth; correct the circular cross-engine claim in asr-cloud-transcribe-v1.json",
+ "finding": {
+  "compared": "private/reference-episodes/v44-real-01/transcript-sample-corrected.json (93 segments) vs runs/asr-cache/9a948df2.../transcript-artifact.json (99 segments, old whisper run)",
+  "start_exact_matches": "83/93 reference starts are byte-exact (0 ms) to an old-whisper segment start; no additional matches within 50 or 100 ms (the 10 non-matching starts include the operator re-authored 232-268s region of 2026-09-12 and a few merge/split boundaries)",
+  "end_exact_matches": "84/93",
+  "zero_gap_consecutive_boundaries": "82/92 — the reference's back-to-back concatenation pattern is whisper's own segmentation shape, not independent human timing",
+  "conclusion": "the scoring reference is a TEXT-corrected derivative of the old whisper artifact: operator-corrected wording, whisper-inherited timestamps. The current 500ms p95 scoring is therefore NOT an independent subtitle-sync measurement — it compares new-whisper against old-whisper timings (same engine family, different run)"
+ },
+ "correction_of_prior_claim": "asr-cloud-transcribe-v1.json's 'notable_cross_engine_observation' suggested a reference-side quantization component because whisper and Gemini showed the same +2.5…5.1s late starts. That inference was CIRCULAR: the reference's timings are themselves whisper-derived, so engines agreeing against it is not independent evidence about the reference. The claim is hereby limited to the bare observation (both engines place certain phrases later than the whisper-inherited reference times) with NO attribution. The authoritative resolution is the operator-watched A/B comparison (this record's follow-up), not engine-vs-reference statistics",
+ "next_steps_codex_plan": [
+  "3 short comparison clips (head/middle/tail), same correct subtitle text, timing A = current product whisper, timing B = Gemini word timestamps — operator judges sync by watching",
+  "winner's timings → one full-episode low-res subtitle preview → operator watches once → approved timings become reference vNext",
+  "re-run frozen scoring against reference vNext",
+  "onset correction only reconsidered if NEITHER timing syncs"
+ ],
+ "onset_correction_status": "FORBIDDEN by codex until the above completes"
+}
