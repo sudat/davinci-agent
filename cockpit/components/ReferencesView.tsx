@@ -5,6 +5,7 @@ import {
   apiFailure,
   listReferences,
   registerReference,
+  samplePreviewUrlOf,
   type LibraryReference,
 } from "@/lib/api";
 import { DOMAIN_LABEL, POLARITY_LABEL } from "@/lib/domains";
@@ -220,15 +221,21 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <ul className="list-plain" data-testid="library-reference-list">
               {library.map((item) => {
                 const slot = compareIds.indexOf(item.source_id);
-                // P6: backendにサムネイル・ファイル配信口はないため、見本は
-                // 実パス由来の短い名（plainNameOf）を主表示にする。「見本なし」
-                // とは書かない。videoタグは出さない（指せるURLがない）。
-                const slotLabel = slot === 0 ? "動画A" : slot === 1 ? "動画B" : "動画";
+                // P6: sample-derived references play through the existing
+                // sample-preview route; raw source paths have no servable
+                // URL, so they render as an honest name row (no fake thumb).
+                const previewUrl = samplePreviewUrlOf(item.location);
                 return (
                   <li key={item.source_id} data-testid="library-reference-item">
-                    <span className="ref-thumb" aria-hidden="true">
-                      <span className="ref-thumb-label">{slotLabel}</span>
-                    </span>
+                    {previewUrl !== null ? (
+                      <video
+                        className="ref-video"
+                        data-testid="library-reference-preview"
+                        src={previewUrl}
+                        preload="metadata"
+                        controls
+                      />
+                    ) : null}
                     <span className="ref-memo">
                       {slot === 0 ? (
                         <span className="ref-slot">動画A</span>
@@ -255,12 +262,18 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <ul className="list-plain" data-testid="reference-list">
               {references.map((item, index) => {
                 const slot = compareIds.indexOf(item.source_id);
-                const slotLabel = slot === 0 ? "動画A" : slot === 1 ? "動画B" : "動画";
+                const previewUrl = samplePreviewUrlOf(item.path);
                 return (
                   <li key={`${item.source_id}-${index}`} data-testid="reference-item">
-                    <span className="ref-thumb" aria-hidden="true">
-                      <span className="ref-thumb-label">{slotLabel}</span>
-                    </span>
+                    {previewUrl !== null ? (
+                      <video
+                        className="ref-video"
+                        data-testid="reference-preview"
+                        src={previewUrl}
+                        preload="metadata"
+                        controls
+                      />
+                    ) : null}
                     <span className="ref-memo">
                       {slot === 0 ? (
                         <span className="ref-slot">動画A</span>

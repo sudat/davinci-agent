@@ -1,6 +1,6 @@
 /** Reference-learning endpoints: preference parsing, registration, listing. */
 
-import { request, type FetchLike } from "@/lib/http";
+import { apiBase, request, type FetchLike } from "@/lib/http";
 
 export const PREFERENCE_DOMAINS = [
   "story_structure",
@@ -82,4 +82,18 @@ export async function listReferences(
   fetchImpl: FetchLike = fetch,
 ): Promise<ReferencesListResult> {
   return request<ReferencesListResult>("/references", { method: "GET" }, fetchImpl);
+}
+
+/** Playable URL for a saved reference location, or null when no existing
+ *  route serves it. Sample-derived locations embed the consultation sample
+ *  path, served by the existing sample-preview route; raw source file
+ *  paths match nothing (the browser cannot load a local path). */
+export function samplePreviewUrlOf(location: string): string | null {
+  const match =
+    /\/episodes\/([^/]+)\/consultation\/samples\/([^/]+)\/preview\.mp4$/.exec(
+      location,
+    );
+  if (match === null) return null;
+  const [, episodeId, sampleId] = match;
+  return `${apiBase()}/episodes/${encodeURIComponent(episodeId)}/consultation/samples/${encodeURIComponent(sampleId)}/preview`;
 }

@@ -657,6 +657,15 @@ video { max-width: 100%; height: auto; }
   background: var(--bg);
 }
 
+.ref-video {
+  width: 160px;
+  height: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #000;
+}
+
 .ref-memo {
   flex: 1;
   min-width: 0;

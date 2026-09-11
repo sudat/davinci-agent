@@ -581,8 +581,27 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const p3NextAction =
     lastFailedRun !== undefined ? (
       <p className="p3-next-action" data-testid="p3-next-action">
-        次は、下の「理由を見る」を開いて、止まった理由を確認してください。
+        次は、下の「新しい動画としてやり直す」で、同じ素材から作り直してください。
       </p>
+    ) : null;
+  // P3 recovery: ONE actual action, not a reason viewer. A rebuild POST
+  // without an applied command only records intent (scheduled:false —
+  // episode_files.py::record_rebuild), and editorial-grant is a
+  // selection-stage transition, so neither restarts an analyze-blocked
+  // run whose runner already exited. The only honest existing path is
+  // starting over from the same material — plain navigation, no new
+  // mechanism.
+  const p3RecoveryAction =
+    lastFailedRun !== undefined ? (
+      <div className="actions">
+        <Link
+          href="/new-episode"
+          className="btn-primary"
+          data-testid="p3-recovery-action"
+        >
+          新しい動画としてやり直す
+        </Link>
+      </div>
     ) : null;
   // P3: 停止理由の内訳はカード内のinline detailsに置く（ページ末尾まで
   // スクロールさせない）。読むのはポーリング済みstatusの正直な欄だけ。
@@ -614,29 +633,34 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     ) : null;
 
   if (step === "方向") {
-    return (
-      <div className={lastFailedRun !== undefined ? "p2-page is-blocked" : "p2-page"}>
-        {topNotices}
-        {lastFailedRun !== undefined ? (
+    // P3 blocked: a stopped page shows ONLY the status card (recovery +
+    // reason). The footage slot, flags, chat and bottom record cannot act
+    // on a stopped run, so they stay hidden until the status changes.
+    if (lastFailedRun !== undefined) {
+      return (
+        <div className="p2-page is-blocked">
+          {topNotices}
           <section className="card p3-stage">
             <header className="p3-stage-header">
               <h2 className="p3-stage-title">処理の状況</h2>
             </header>
             {p3BlockedLine}
             {p3NextAction}
+            {p3RecoveryAction}
             {p3ReasonDetails}
           </section>
-        ) : null}
-        {lastFailedRun === undefined ? (
-          <ConsultationPanel
-            episodeId={episodeId}
-            status={status}
-            footageSlot={footageSlot(false)}
-            onStageHint={handleStageHint}
-          />
-        ) : (
-          <div className="p3-quiet-footage">{footageSlot(false)}</div>
-        )}
+        </div>
+      );
+    }
+    return (
+      <div className="p2-page">
+        {topNotices}
+        <ConsultationPanel
+          episodeId={episodeId}
+          status={status}
+          footageSlot={footageSlot(false)}
+          onStageHint={handleStageHint}
+        />
         {showFlagsNormally ? (
           <section className="card p2-flags">
             <h2 className="card-title">レビューflag</h2>
@@ -736,6 +760,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         </header>
         {p3BlockedLine}
         {p3NextAction}
+        {p3RecoveryAction}
         {p3ReasonDetails}
         <dl className="status-list">
           <div>
