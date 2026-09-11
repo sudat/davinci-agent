@@ -37,7 +37,7 @@ body {
 }
 
 body {
-  background: var(--bg);
+  background: #faf8f4;
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
@@ -55,8 +55,8 @@ body {
 }
 
 .page-title {
-  font-size: var(--font-size-heading);
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 700;
   margin: 0 0 var(--space-1);
 }
 
@@ -182,10 +182,13 @@ button:disabled {
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+  background: #23272e;
+  border-color: #23272e;
+  color: #ffffff;
   font-weight: 600;
+  font-size: 15px;
+  min-height: 44px;
+  box-sizing: border-box;
 }
 
 .btn-primary:disabled {
@@ -910,3 +913,7 @@ body:has(.sample-stage) {
   .step-item { display: none; }
   .step-mobile { display: inline; }
 }
+
+/* === P1/P6 (subagent A) === */
+
+/* === P2/P3/P5 (subagent B) === */
