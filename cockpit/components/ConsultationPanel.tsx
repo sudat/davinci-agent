@@ -194,7 +194,7 @@ export default function ConsultationPanel({
   onStageHint,
 }: ConsultationPanelProps) {
   const [payload, setPayload] = useState<ConsultationPayload | null>(null);
-  const [hasPublishedSample, setHasPublishedSample] = useState(false);
+  const [hasPublishedSample, setHasPublishedSample] = useState<boolean | null>(null);
   const [error, setError] = useState<{ code: string; detail: string } | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
@@ -505,14 +505,22 @@ export default function ConsultationPanel({
     payload?.consultations.filter((entry) => !isPolicyOutcomeEntry(entry)) ?? [];
   const hasConsultation = messageEntries.length > 0;
 
+  const payloadLoaded = payload !== null;
+  const adoptedJudgmentId = adopted?.judgment_id ?? null;
+  // null=未確定の間はhintを出さない（採用先行・samples後続の到着順を誤認させない）。
   useEffect(() => {
+    setHasPublishedSample(null);
+  }, [episodeId, adoptedJudgmentId]);
+
+  useEffect(() => {
+    if (!payloadLoaded || hasPublishedSample === null) return;
     onStageHint?.({
       hasConsultation,
       adopted: adopted !== null,
       hasPublishedSample,
       fullAuthorized,
     });
-  }, [onStageHint, hasConsultation, adopted, hasPublishedSample, fullAuthorized]);
+  }, [onStageHint, payloadLoaded, hasConsultation, adopted, hasPublishedSample, fullAuthorized]);
 
   if (!eligible || notFound) return null;
 

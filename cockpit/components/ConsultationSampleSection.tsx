@@ -293,7 +293,7 @@ export default function ConsultationSampleSection({
         );
         onView(view);
         setAuthorizedSampleId(sampleId);
-        setAnnouncement(`この方向で全編へ進めます（試し動画 ${sampleId} の確認に基づく）`);
+        setAnnouncement(`この内容で全編を作ります（試し動画 ${sampleId} の確認に基づく）`);
       } catch (cause) {
         const failure = apiFailure(cause);
         setAuthorizeError(failure);
@@ -357,7 +357,7 @@ export default function ConsultationSampleSection({
               </button>
             </div>
             {authorizedSampleId !== null ? (
-              <p className="field-hint" data-testid="full-authorize-done">この方向で全編へ進めます（確認した試し動画に基づく）</p>
+              <p className="field-hint" data-testid="full-authorize-done">この内容で全編を作ります（確認した試し動画に基づく）</p>
             ) : null}
             {authorizeError !== null ? (
               <div data-testid="full-authorize-error">

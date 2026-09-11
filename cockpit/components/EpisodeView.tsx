@@ -114,6 +114,23 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   const [addResult, setAddResult] = useState<string | null>(null);
   const now = useNow(true);
   const [stageHint, setStageHint] = useState<StageHint | null>(null);
+  const handleStageHint = useCallback((hint: StageHint) => {
+    setStageHint((prev) => {
+      if (
+        prev !== null &&
+        !hint.hasConsultation &&
+        !hint.adopted &&
+        !hint.hasPublishedSample &&
+        !hint.fullAuthorized
+      ) {
+        return prev;
+      }
+      return hint;
+    });
+  }, []);
+  useEffect(() => {
+    setStageHint(null);
+  }, [episodeId]);
   const openedAtRef = useRef<number | null>(null);
   if (openedAtRef.current === null) openedAtRef.current = Date.now();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -477,10 +494,21 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
 
   /** P3 ブロック行の唯一の正本 — 方向分岐の先頭カードと fallback の
    *  カードで共有する（文言・role・testid を一か所で保つ）。 */
+   const STAGE_PLAIN_NAMES: Record<string, string> = {
+    analyze: "素材の解析",
+    selection: "編集の方向の選定",
+    plan: "編集計画",
+    compile: "映像の組み立て",
+    preview: "プレビュー",
+    ingest: "素材の取込み",
+    normalize: "素材の正規化",
+    intake: "素材の受付",
+  };
   const p3BlockedLine =
     lastFailedRun !== undefined ? (
       <p className="p3-blocked-line" role="alert" data-testid="p3-blocked-line">
-        処理が途中で止まっています。下の詳しい記録を確認してください。
+        {STAGE_PLAIN_NAMES[lastFailedRun.stage_name] ?? "処理"}
+        で止まっています。詳しい記録に理由があります。
       </p>
     ) : null;
 
@@ -500,7 +528,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           episodeId={episodeId}
           status={status}
           footageSlot={footageSlot}
-          onStageHint={setStageHint}
+          onStageHint={handleStageHint}
         />
         {showFlagsNormally ? (
           <section className="card p2-flags">
@@ -537,7 +565,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         <ConsultationPanel
           episodeId={episodeId}
           status={status}
-          onStageHint={setStageHint}
+          onStageHint={handleStageHint}
         />
         {detailsBlock(true, false)}
       </div>
@@ -585,7 +613,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         <ConsultationPanel
           episodeId={episodeId}
           status={status}
-          onStageHint={setStageHint}
+          onStageHint={handleStageHint}
         />
         {detailsBlock(false, true)}
       </div>
@@ -638,7 +666,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         )}
       </section>
       <FinishingDomainPanel episodeId={episodeId} summaryOnly />
-      <ConsultationPanel episodeId={episodeId} status={status} onStageHint={setStageHint} />
+      <ConsultationPanel episodeId={episodeId} status={status} onStageHint={handleStageHint} />
       <div className="p3-chat">
         <ReviewChatPanel
           episodeId={episodeId}

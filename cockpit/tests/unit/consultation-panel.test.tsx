@@ -9,6 +9,7 @@ import type {
   ConsultationJudgment,
   EpisodeStatus,
 } from "@/lib/api";
+import type { StageHint } from "@/lib/stage-steps";
 
 /**
  * UX 2.5 slice-1 component tests against the pinned contract: GET lists
@@ -1007,5 +1008,93 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
     expect(
       screen.queryByTestId("consultation-sample-section"),
     ).toBeNull();
+  });
+});
+
+describe("ConsultationPanel（P4: 採用先行・samples後続でも中間hintを出さない）", () => {
+  const adoptedPolicy = {
+    consultation_id: "c-1",
+    judgment_id: "j-1",
+    proposal_id: "p-1",
+    decision: "adopt" as const,
+    scope: { composition: true, appearance: false, audio: true },
+    audience_message: "",
+    structure: "",
+    duration_estimate: "",
+    candidate_scenes: [],
+    subtitle_policy: "",
+    audio_policy: "",
+    tempo_policy: "",
+    reference_mapping: "",
+    unused_reasons: "",
+    unconfirmed: [],
+    note: "",
+  };
+  const adoptedView: ConsultationPayload = {
+    consultations: [
+      { ...entryOneJudged, policy: { adopted: adoptedPolicy } },
+    ],
+  };
+  const publishedSample = {
+    sample_id: "sample-1",
+    status: "published",
+    total_seconds: 28.5,
+    created_at: "2026-09-10T10:00:00Z",
+    published_at: "2026-09-10T10:01:00Z",
+  };
+
+  it("samples確定までhintを出さず、published到着後は確定値だけを出す（方向へ落下しない）", async () => {
+    const hints: StageHint[] = [];
+    let resolveSamples!: () => void;
+    const samplesGate = new Promise<void>((resolve) => {
+      resolveSamples = resolve;
+    });
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/consultation/samples")) {
+        await samplesGate;
+        return jsonResponse({ samples: [publishedSample] });
+      }
+      return jsonResponse(adoptedView);
+    }) as typeof fetch;
+
+    render(
+      <ConsultationPanel
+        episodeId="ep-c01"
+        status={stageStatus("selection")}
+        fetchImpl={fetchImpl}
+        onStageHint={(hint) => {
+          hints.push(hint);
+        }}
+      />,
+    );
+
+    // 採用は届いたがsamplesは未確定：方向レイアウトの中で要求ボタンが出る
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-request")).toBeVisible();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("consultation-entry")).toBeVisible();
+    });
+    // 中間hint（adopted:true + hasPublishedSample:false）は出さない
+    expect(hints).toHaveLength(0);
+    expect(screen.getByText("編集の方向を決める")).toBeVisible();
+
+    // samplesがpublishedで届く → 確定値だけを出す（poll毎の再送があっても値は確定値）
+    resolveSamples();
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-preview")).toBeVisible();
+    });
+    expect(hints.length).toBeGreaterThanOrEqual(1);
+    for (const hint of hints) {
+      expect(hint).toEqual({
+        hasConsultation: true,
+        adopted: true,
+        hasPublishedSample: true,
+        fullAuthorized: false,
+      });
+    }
+    // 試し動画段階に上がり、方向見出しに戻らない
+    expect(screen.queryByText("編集の方向を決める")).toBeNull();
   });
 });
