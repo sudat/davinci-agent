@@ -158,6 +158,19 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
   const sessionIds = distinctSourceIds();
   const compareIds = [...libraryIds, ...sessionIds.filter((id) => !libraryIds.includes(id))];
   const playableIds = compareIds.filter((id) => !failedPreviews.includes(id));
+  /** A/B comparison pair: the 2 playable refs in registration order whenever
+   *  2+ previews stay playable (non-playable HEVC originals and surplus 3rd+
+   *  refs fold into その他の参考動画 below the comparison area). Before
+   *  decode detection settles, fall back to the first 2 registered.
+   *  Automatic only — no new selection UI. */
+  const pairIds =
+    playableIds.length >= 2 ? playableIds.slice(0, 2) : compareIds.slice(0, 2);
+  const pairSet = new Set(pairIds);
+  const pairLibrary = (library ?? []).filter((item) => pairSet.has(item.source_id));
+  const extraLibrary = (library ?? []).filter((item) => !pairSet.has(item.source_id));
+  const pairSession = references.filter((item) => pairSet.has(item.source_id));
+  const extraSession = references.filter((item) => !pairSet.has(item.source_id));
+  const extraCount = extraLibrary.length + extraSession.length;
   const styleName = style !== null ? savedStyleName(style) : null;
 
   const markPreviewFailed = useCallback((sourceId: string) => {
@@ -176,6 +189,70 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
     },
     [markPreviewFailed],
   );
+
+  const renderLibraryRow = (item: LibraryReference) => {
+    const slot = pairIds.indexOf(item.source_id);
+    const previewUrl = referencePreviewUrl(item.source_id);
+    return (
+      <li key={item.source_id} data-testid="library-reference-item">
+        <video
+          className="ref-video"
+          data-testid="library-reference-preview"
+          src={previewUrl}
+          preload="metadata"
+          controls
+          onError={() => markPreviewFailed(item.source_id)}
+          onLoadedMetadata={checkPreviewDecodable(item.source_id)}
+        />
+        <span className="ref-memo">
+          {slot === 0 ? (
+            <span className="ref-slot">動画A</span>
+          ) : slot === 1 ? (
+            <span className="ref-slot">動画B</span>
+          ) : null}
+          <span className="ref-name">{plainNameOf(item.location)}</span>
+        </span>
+        <details className="ref-internals">
+          <summary>この動画の詳細</summary>
+          <span className="ref-path">{item.location}</span>
+          <span>{item.sha256}</span>
+        </details>
+      </li>
+    );
+  };
+
+  const renderSessionRow = (item: RegisteredReference, index: number) => {
+    const slot = pairIds.indexOf(item.source_id);
+    const previewUrl = referencePreviewUrl(item.source_id);
+    return (
+      <li key={`${item.source_id}-${index}`} data-testid="reference-item">
+        <video
+          className="ref-video"
+          data-testid="reference-preview"
+          src={previewUrl}
+          preload="metadata"
+          controls
+          onError={() => markPreviewFailed(item.source_id)}
+          onLoadedMetadata={checkPreviewDecodable(item.source_id)}
+        />
+        <span className="ref-memo">
+          {slot === 0 ? (
+            <span className="ref-slot">動画A</span>
+          ) : slot === 1 ? (
+            <span className="ref-slot">動画B</span>
+          ) : null}
+          <span className="ref-name">{plainNameOf(item.path)}</span>
+          <span className="visually-hidden">{item.source_id}</span>
+        </span>
+        <details className="ref-internals">
+          <summary>この動画の詳細</summary>
+          <span className="ref-path">{item.path}</span>
+          <span>ライブラリ版 {item.library_version}</span>
+          <span>{item.sha256}</span>
+        </details>
+      </li>
+    );
+  };
 
   return (
     <div className="p6" data-testid="references-view">
@@ -240,78 +317,16 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
             <p className="empty-note">ライブラリを読み込んでいます…</p>
           ) : library.length > 0 ? (
             <ul className="list-plain" data-testid="library-reference-list">
-              {library.map((item) => {
-                const slot = compareIds.indexOf(item.source_id);
-                // Every saved reference plays through the read-only preview
-                // route keyed by source_id — video A and video B alike.
-                const previewUrl = referencePreviewUrl(item.source_id);
-                return (
-                  <li key={item.source_id} data-testid="library-reference-item">
-                    <video
-                      className="ref-video"
-                      data-testid="library-reference-preview"
-                      src={previewUrl}
-                      preload="metadata"
-                      controls
-                      onError={() => markPreviewFailed(item.source_id)}
-                      onLoadedMetadata={checkPreviewDecodable(item.source_id)}
-                    />
-                    <span className="ref-memo">
-                      {slot === 0 ? (
-                        <span className="ref-slot">動画A</span>
-                      ) : slot === 1 ? (
-                        <span className="ref-slot">動画B</span>
-                      ) : null}
-                      <span className="ref-name">{plainNameOf(item.location)}</span>
-                    </span>
-                    <details className="ref-internals">
-                      <summary>この動画の詳細</summary>
-                      <span className="ref-path">{item.location}</span>
-                      <span>{item.sha256}</span>
-                    </details>
-                  </li>
-                );
-              })}
+              {pairLibrary.map((item) => renderLibraryRow(item))}
             </ul>
           ) : (
             <p className="empty-note" data-testid="library-reference-empty">
               ライブラリに保存済みの参照はまだありません。
             </p>
           )}
-          {references.length > 0 ? (
+          {pairSession.length > 0 ? (
             <ul className="list-plain" data-testid="reference-list">
-              {references.map((item, index) => {
-                const slot = compareIds.indexOf(item.source_id);
-                const previewUrl = referencePreviewUrl(item.source_id);
-                return (
-                  <li key={`${item.source_id}-${index}`} data-testid="reference-item">
-                    <video
-                      className="ref-video"
-                      data-testid="reference-preview"
-                      src={previewUrl}
-                      preload="metadata"
-                      controls
-                      onError={() => markPreviewFailed(item.source_id)}
-                      onLoadedMetadata={checkPreviewDecodable(item.source_id)}
-                    />
-                    <span className="ref-memo">
-                      {slot === 0 ? (
-                        <span className="ref-slot">動画A</span>
-                      ) : slot === 1 ? (
-                        <span className="ref-slot">動画B</span>
-                      ) : null}
-                      <span className="ref-name">{plainNameOf(item.path)}</span>
-                      <span className="visually-hidden">{item.source_id}</span>
-                    </span>
-                    <details className="ref-internals">
-                      <summary>この動画の詳細</summary>
-                      <span className="ref-path">{item.path}</span>
-                      <span>ライブラリ版 {item.library_version}</span>
-                      <span>{item.sha256}</span>
-                    </details>
-                  </li>
-                );
-              })}
+              {pairSession.map((item, index) => renderSessionRow(item, index))}
             </ul>
           ) : null}
           {annotations.length > 0 ? (
@@ -340,13 +355,22 @@ export default function ReferencesView({ fetchImpl }: ReferencesViewProps) {
           {compareIds.length >= 2 && playableIds.length >= 2 ? (
             <div className="p6-compare">
               <h3 className="p6-sub-title">どちらが近いですか？</h3>
-              <PairwisePrompt referenceIds={compareIds} />
+              <PairwisePrompt referenceIds={pairIds} />
             </div>
           ) : null}
           {compareIds.length >= 2 && playableIds.length < 2 ? (
             <p className="empty-note" data-testid="reference-compare-unavailable">
               比較するには再生できる動画が2本必要です
             </p>
+          ) : null}
+          {extraCount > 0 ? (
+            <details className="ref-others" data-testid="other-references">
+              <summary>その他の参考動画（{extraCount}件）</summary>
+              <ul className="list-plain">
+                {extraLibrary.map((item) => renderLibraryRow(item))}
+                {extraSession.map((item, index) => renderSessionRow(item, index))}
+              </ul>
+            </details>
           ) : null}
         </section>
       </div>

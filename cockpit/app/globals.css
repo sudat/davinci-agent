@@ -1251,6 +1251,27 @@ body:has(.sample-stage) {
   border-top: 1px solid var(--p1-border);
   padding-top: var(--space-2);
 }
+.p6 .ref-others {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--p1-border);
+  padding-top: var(--space-2);
+}
+.p6 .ref-others > summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 0 var(--space-2);
+}
+.p6 .ref-others > summary:hover {
+  color: var(--text);
+  background: #f3efe7;
+}
 .p6 [data-testid="pairwise-prompt"] button {
   min-height: 44px;
 }
