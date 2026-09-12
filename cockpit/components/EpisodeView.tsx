@@ -535,6 +535,9 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           </div>
         ) : null}
       </dl>
+      {status !== null ? (
+        <RemakeEpisodeButton episodeId={episodeId} sourceFolder={null} />
+      ) : null}
       {withFinishing ? <FinishingDomainPanel episodeId={episodeId} /> : null}
     </details>
   );
@@ -544,10 +547,21 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       <Link href="/new-episode" className="top-link">
         ← 新しいエピソード
       </Link>
-      {status !== null ? (
-        <RemakeEpisodeButton episodeId={episodeId} sourceFolder={null} />
+      {error !== null ? (
+        <>
+          <ErrorNotice code={error.code} detail={error.detail} />
+          <div className="actions">
+            <button
+              type="button"
+              className="btn-small"
+              data-testid="episode-error-requery"
+              onClick={() => requeryRef.current?.()}
+            >
+              状態を再取得
+            </button>
+          </div>
+        </>
       ) : null}
-      {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       {stale ? (
         <div className="card" data-testid="stale-banner">
           <p>状態の更新が途切れています（再接続中）</p>
@@ -778,6 +792,20 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         <header className="p3-stage-header">
           <h2 className="p3-stage-title">処理の状況</h2>
         </header>
+        {notFound ? (
+          <>
+            <p className="empty-note">このエピソードは見つかりません。</p>
+            <div className="actions">
+              <Link
+                href="/new-episode"
+                className="btn-small"
+                data-testid="episode-notfound-intake"
+              >
+                素材を選び直す
+              </Link>
+            </div>
+          </>
+        ) : null}
         {p3BlockedLine}
         {p3NextAction}
         {p3RecoveryAction}
@@ -811,9 +839,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
             {appliedStyleLine}
           </p>
         ) : null}
-        {notFound ? (
-          <p className="empty-note">このエピソードは見つかりません。</p>
-        ) : status !== null ? (
+        {notFound ? null : status !== null ? (
           <EpisodeProgress status={status} onRequery={() => requeryRef.current?.()} />
         ) : (
           <p className="empty-note">読み込み中…</p>

@@ -37,6 +37,7 @@ import ConsultationSampleSection, {
 import StyleSaveButton from "@/components/StyleSaveButton";
 import ErrorNotice from "@/components/ErrorNotice";
 import TaskProgress from "@/components/TaskProgress";
+import { deriveFlowState } from "@/lib/flow-state";
 import { isConsultationStage } from "@/lib/stageGroups";
 import type { StageHint } from "@/lib/stage-steps";
 import { useNow } from "@/components/useNow";
@@ -214,6 +215,8 @@ export default function ConsultationPanel({
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [sendTaskStartedAt, setSendTaskStartedAt] = useState<number | null>(null);
+  const [lastSentAt, setLastSentAt] = useState<number | null>(null);
+  const [sendRetryable, setSendRetryable] = useState(false);
   const [message, setMessage] = useState("");
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [generationOpen, setGenerationOpen] = useState(false);
@@ -386,6 +389,7 @@ export default function ConsultationPanel({
       return;
     }
     recordFailure(cause, "相談を送信できませんでした");
+    setSendRetryable(true);
   };
 
   const send = async () => {
@@ -393,6 +397,8 @@ export default function ConsultationPanel({
     if (trimmed === "" || busy) return;
     setBusy(true);
     setSendTaskStartedAt(Date.now());
+    setLastSentAt(Date.now());
+    setSendRetryable(false);
     setError(null);
     try {
       const entry = await postConsultationMessage(episodeId, { message: trimmed }, fetchImpl);
@@ -401,6 +407,7 @@ export default function ConsultationPanel({
       setFetchedAt(Date.now());
     } catch (cause) {
       recordFailure(cause, "相談を送信できませんでした");
+      setSendRetryable(true);
     } finally {
       setBusy(false);
       setSendTaskStartedAt(null);
@@ -412,6 +419,8 @@ export default function ConsultationPanel({
     if (trimmed === "" || busy) return;
     setBusy(true);
     setSendTaskStartedAt(Date.now());
+    setLastSentAt(Date.now());
+    setSendRetryable(false);
     setError(null);
     setGenerationError(null);
     try {
@@ -441,6 +450,8 @@ export default function ConsultationPanel({
     if (trimmed === "" || busy) return;
     setBusy(true);
     setSendTaskStartedAt(Date.now());
+    setLastSentAt(Date.now());
+    setSendRetryable(false);
     setError(null);
     try {
       const entry = await postConsultationMessage(episodeId, { message: trimmed }, fetchImpl);
@@ -491,6 +502,7 @@ export default function ConsultationPanel({
     void (async () => {
       if (busy) return;
       setBusy(true);
+      setSendRetryable(false);
       setError(null);
       try {
         const { status, view } = await postConsultationJudgment(episodeId, input, fetchImpl);
@@ -530,6 +542,19 @@ export default function ConsultationPanel({
   // P2: 提案が見えている通常表示では、底の相談欄（新規相談用）は主操作と
   // 競合するため閉じたdetailsに畳む。提案なしの初回は従来どおり直接出す。
   const hasProposal = messageEntries.some((entry) => entry.proposals.length > 0);
+
+  // 5-state screen discipline (codex 2026-09-12): ONE state at a time —
+  // one heading, one short explanation, one primary action. Derived only
+  // from the polled consultation view (+ the send clock), never invented.
+  const flowState = deriveFlowState({
+    loaded: payload !== null,
+    hasConsultation,
+    hasProposal,
+    adopted: adopted !== null,
+    hasPublishedSample: hasPublishedSample ?? false,
+    fullAuthorized,
+  });
+  const waitingSince = lastSentAt ?? openedAtRef.current ?? Date.now();
 
   const payloadLoaded = payload !== null;
   const adoptedJudgmentId = adopted?.judgment_id ?? null;
@@ -586,7 +611,22 @@ export default function ConsultationPanel({
           <p>提案を作るには本番用AIの実行環境が必要です。今は利用できないため、提案は表示できません。</p>
         </div>
       ) : error !== null ? (
-        <ErrorNotice code={error.code} detail={error.detail} />
+        <>
+          <ErrorNotice code={error.code} detail={error.detail} />
+          {sendRetryable && message.trim() !== "" ? (
+            <div className="actions">
+              <button
+                type="button"
+                className="btn-small"
+                onClick={() => void send()}
+                disabled={busy}
+                data-testid="consultation-retry"
+              >
+                {busy ? "送信中…" : "もう一度送る"}
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : null}
       {stale ? (
         <div data-testid="consultation-stale-banner">
@@ -841,7 +881,11 @@ export default function ConsultationPanel({
       return null;
     }
     return (
-      <section className="card p5-adopted" data-testid="consultation-panel">
+      <section
+        className="card p5-adopted"
+        data-testid="consultation-panel"
+        data-state="review"
+      >
         <h2 className="card-title">採用した方針</h2>
         {noticeBlock}
         <details className="p5-policy-details">
@@ -857,7 +901,7 @@ export default function ConsultationPanel({
 
   if (adopted !== null && hasPublishedSample) {
     return (
-      <section className="card" data-testid="consultation-panel">
+      <section className="card" data-testid="consultation-panel" data-state="review">
         {noticeBlock}
         {sampleBlock}
         {liveBlock}
@@ -871,45 +915,91 @@ export default function ConsultationPanel({
     );
   }
 
+  const entryList = (
+    <ConsultationEntryList
+      payload={payload}
+      busy={busy}
+      episodeId={episodeId}
+      onJudgment={submitJudgment}
+      onPanelRetry={sendPanelRetry}
+      onQuickAdopt={quickAdopt}
+    />
+  );
+
+  const proposalSection = (
+    <section aria-label="AIの提案" data-testid="consultation-proposals">
+      <h3 className="section-title">AIの提案</h3>
+      {entryList}
+    </section>
+  );
+
+  const flowFocus =
+    flowState === "waiting-proposals" ? (
+      <div data-testid="flow-state" data-state="waiting-proposals">
+        <h3 className="section-title" data-testid="flow-state-heading">
+          AIが提案を考えています
+        </h3>
+        <p className="field-hint" data-testid="flow-state-expl">
+          提案が届くまでこのままお待ちください。届いたらここに表示されます。
+        </p>
+        <TaskProgress taskName="提案を待っています" startedAt={waitingSince} />
+      </div>
+    ) : flowState === "choose" ? (
+      <div data-testid="flow-state" data-state="choose">
+        <h3 className="section-title" data-testid="flow-state-heading">
+          提案を選ぶ
+        </h3>
+        <p className="field-hint" data-testid="flow-state-expl">
+          気に入った方向があれば「この方向で試す」を押してください。
+        </p>
+      </div>
+    ) : flowState === "waiting-trial" ? (
+      <div data-testid="flow-state" data-state="waiting-trial">
+        <h3 className="section-title" data-testid="flow-state-heading">
+          試し動画の準備をしています
+        </h3>
+        <p className="field-hint" data-testid="flow-state-expl">
+          採用した方向で短い試し動画を用意します。できたらここで確認できます。
+        </p>
+      </div>
+    ) : null;
+
   return (
-    <section className="card direction-stage p2-stage" data-testid="consultation-panel">
+    <section
+      className="card direction-stage p2-stage"
+      data-testid="consultation-panel"
+      data-state={flowState}
+    >
       <header className="p2-stage-header">
         <h2 className="p2-stage-title">編集の方向を決める</h2>
       </header>
       {noticeBlock}
       <div className="p2-stage-grid">
         <div className="p2-main">
-          {hasProposal ? (
-            <section aria-label="AIの提案" data-testid="consultation-proposals">
-              <h3 className="section-title">AIの提案</h3>
-              <ConsultationEntryList
-                payload={payload}
-                busy={busy}
-                episodeId={episodeId}
-                onJudgment={submitJudgment}
-                onPanelRetry={sendPanelRetry}
-                onQuickAdopt={quickAdopt}
-              />
-            </section>
+          {flowFocus}
+          {flowState === "choose" ? (
+            <>
+              {proposalSection}
+              <details data-testid="consultation-new-details">
+                <summary>少し変えたい・新しい相談を始める</summary>
+                {messageBlock}
+              </details>
+            </>
+          ) : flowState === "waiting-proposals" ? (
+            <>
+              {entryList}
+              <details data-testid="consultation-waiting-form-details">
+                <summary>希望を書き直す・追加する</summary>
+                {messageBlock}
+              </details>
+            </>
           ) : (
-            <ConsultationEntryList
-              payload={payload}
-              busy={busy}
-              episodeId={episodeId}
-              onJudgment={submitJudgment}
-              onPanelRetry={sendPanelRetry}
-              onQuickAdopt={quickAdopt}
-            />
-          )}
-          {hasProposal ? (
-            <details data-testid="consultation-new-details">
-              <summary>少し変えたい・新しい相談を始める</summary>
+            <>
+              {entryList}
               {messageBlock}
-            </details>
-          ) : (
-            messageBlock
+            </>
           )}
-          {generationBlock}
+          {flowState === "compose" || flowState === "choose" ? generationBlock : null}
           {liveBlock}
         </div>
         {footageSlot !== null ? (

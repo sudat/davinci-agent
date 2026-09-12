@@ -661,6 +661,7 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
 
     renderPanel(fetchImpl);
     await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
     expect(screen.getAllByTestId("consultation-proposal")).toHaveLength(1);
 
     fireEvent.click(screen.getByTestId("consultation-judgment-adopt"));

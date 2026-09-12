@@ -92,7 +92,9 @@ function RemakeEpisodeButtonAction({
           <ErrorNotice code={error.code} detail={error.detail} />
           {error.code === "episode-exists" ? (
             <p className="field-hint" data-testid="episode-remake-duplicate">
-              今のバックエンドでは同じ素材の作り直しはまだ受け付けていません。素材を選び直して作る場合は「新しいエピソード」から始められます。
+              今のバックエンドでは同じ素材の作り直しはまだ受け付けていません。素材を選び直して作る場合は{" "}
+              <Link href="/new-episode">新しいエピソード</Link>{" "}
+              から始められます。
             </p>
           ) : null}
         </>

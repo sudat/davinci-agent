@@ -229,8 +229,159 @@ describe("ConsultationPanel（初期表示と言語）", () => {
       }),
     );
     await waitFor(() => {
-      expect(screen.queryByTestId("task-progress")).toBeNull();
+      expect(screen.getByTestId("consultation-entry-message").textContent).toContain(
+        "冒頭を引きから",
+      );
     });
+    const flow = screen.getByTestId("flow-state");
+    expect(flow.getAttribute("data-state")).toBe("waiting-proposals");
+    expect(screen.getByTestId("flow-state-heading").textContent).toContain(
+      "AIが提案を考えています",
+    );
+    expect(screen.getByTestId("task-progress-name").textContent).toBe(
+      "提案を待っています",
+    );
+  });
+});
+
+describe("フロー状態の見出し（5画面の一次表示）", () => {
+  function adoptedFetch() {
+    return recordingFetch((url: string) => {
+      if (url.endsWith("/consultation/samples")) {
+        return jsonResponse({ samples: [] });
+      }
+      return jsonResponse({
+        consultations: [{ ...judgedEntry, policy: { adopted: adoptedPolicy } }],
+      } as ConsultationPayload);
+    });
+  }
+
+  it("chooseでは「提案を選ぶ」の見出しと説明が出る", async () => {
+    const { fetchImpl } = recordingFetch(() =>
+      jsonResponse({ consultations: [entryWithProposal] } as ConsultationPayload),
+    );
+    render(
+      <ConsultationPanel
+        episodeId="ep-ux"
+        status={stageStatus("selection")}
+        fetchImpl={fetchImpl}
+      />,
+    );
+    const flow = await screen.findByTestId("flow-state");
+    expect(flow.getAttribute("data-state")).toBe("choose");
+    expect(screen.getByTestId("flow-state-heading").textContent).toContain(
+      "提案を選ぶ",
+    );
+    expect(screen.getByTestId("flow-state-expl").textContent).toContain(
+      "この方向で試す",
+    );
+  });
+
+  it("waiting-trialでは試し動画の準備見出しが出て、記録類は閉じたまま", async () => {
+    const { fetchImpl } = adoptedFetch();
+    render(
+      <ConsultationPanel
+        episodeId="ep-ux"
+        status={stageStatus("selection")}
+        fetchImpl={fetchImpl}
+      />,
+    );
+    const flow = await screen.findByTestId("flow-state");
+    expect(flow.getAttribute("data-state")).toBe("waiting-trial");
+    expect(screen.getByTestId("flow-state-heading").textContent).toContain(
+      "試し動画の準備をしています",
+    );
+    const record = screen.getByTestId("consultation-record-details");
+    expect(record.hasAttribute("open")).toBe(false);
+  });
+
+  it("reviewでは試し動画と全編への操作が焦点になる", async () => {
+    const { fetchImpl } = recordingFetch((url: string) => {
+      if (url.endsWith("/consultation/samples")) {
+        return jsonResponse({
+          samples: [
+            {
+              sample_id: "sample-1",
+              status: "published",
+              total_seconds: 28.5,
+              created_at: "2026-09-12T10:00:00Z",
+              published_at: "2026-09-12T10:01:00Z",
+            },
+          ],
+        });
+      }
+      return jsonResponse({
+        consultations: [{ ...judgedEntry, policy: { adopted: adoptedPolicy } }],
+      } as ConsultationPayload);
+    });
+    render(
+      <ConsultationPanel
+        episodeId="ep-ux"
+        status={stageStatus("selection")}
+        fetchImpl={fetchImpl}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("sample-preview")).toBeVisible();
+    });
+    expect(
+      screen.getByTestId("consultation-panel").getAttribute("data-state"),
+    ).toBe("review");
+    expect(screen.getByTestId("full-authorize").textContent).toContain(
+      "この内容で全編を作る",
+    );
+  });
+
+  it("送信失敗では原因の隣に「もう一度送る」が出て、押すと送り直す", async () => {
+    let posts = 0;
+    const { fetchImpl, calls } = recordingFetch((url: string) => {
+      if (url.endsWith("/consultation/message")) {
+        posts += 1;
+        if (posts === 1) {
+          return jsonResponse(
+            { error: { code: "consultation-send-failed", detail: "boom" } },
+            500,
+          );
+        }
+        return jsonResponse({
+          consultation_id: "c-9",
+          created_at: "2026-09-12T10:00:00Z",
+          message: "冒頭を引きから",
+          proposals: [],
+          judgments: [],
+          budget,
+        });
+      }
+      return jsonResponse({ consultations: [] });
+    });
+    render(
+      <ConsultationPanel
+        episodeId="ep-ux"
+        status={stageStatus("selection")}
+        fetchImpl={fetchImpl}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("consultation-message-input")).toBeVisible();
+    });
+    fireEvent.change(screen.getByTestId("consultation-message-input"), {
+      target: { value: "冒頭を引きから" },
+    });
+    fireEvent.click(screen.getByTestId("consultation-send"));
+    const retry = await screen.findByTestId("consultation-retry");
+    expect(screen.getByTestId("error-notice").textContent).toContain(
+      "consultation-send-failed",
+    );
+    fireEvent.click(retry);
+    await waitFor(() => {
+      expect(screen.getByTestId("consultation-entry-message").textContent).toContain(
+        "冒頭を引きから",
+      );
+    });
+    expect(
+      calls.filter((call) => call.url.endsWith("/consultation/message")),
+    ).toHaveLength(2);
+    expect(screen.queryByTestId("consultation-retry")).toBeNull();
   });
 });
 
@@ -460,6 +611,8 @@ describe("EpisodeView（H: preview待ち→自動遷移 / G-UI: 作り直し表�
       expect(
         screen.getByTestId("preview-pending").querySelector('[data-testid="task-progress"]'),
       ).not.toBeNull();
+      const record = screen.getByTestId("episode-details");
+      fireEvent.click(record.querySelector("summary") as HTMLElement);
       expect(screen.getByTestId("episode-remake")).toBeVisible();
 
       await waitFor(
