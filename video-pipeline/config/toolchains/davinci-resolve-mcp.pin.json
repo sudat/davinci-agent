@@ -5,7 +5,7 @@
   "server_mode": "compound",
   "server_entry_point": "src/server.py",
   "server_protocol": "stdio",
-  "venv_python": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/venv/bin/python",
+  "venv_python": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp/venv/bin/python",
   "venv_python_version": "3.12.10",
   "repo_python": "3.12.10",
   "advanced_server": {
