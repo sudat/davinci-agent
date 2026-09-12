@@ -57,6 +57,7 @@ from services.episode_cockpit.consultation_store import (
     append_proposal_set,
     now_stamp,
 )
+from services.episode_cockpit.models import RebuildRequestEntry
 from services.episode_cockpit.review_chat import (
     DEFAULT_LINEAGE,
     AppliedCommand,
@@ -170,8 +171,15 @@ def _seed_plan() -> EditPlan0C:
     )
 
 
-def _fake_chain_factory(captured: dict[str, object]) -> Callable[..., None]:
-    """Fake chain to PREVIEW_READY leaving a real review store + bundle."""
+def _fake_chain_factory(
+    captured: dict[str, object], *, full: bool = True
+) -> Callable[..., None]:
+    """Fake chain to PREVIEW_READY leaving a real review store + bundle.
+
+    ``full=False`` is the Candidate-F PLAN_COMMITTED first pass: the state
+    walk stops at PLAN_COMMITTED and only the mezzanine + review store
+    exist — no preview render and no bundle (they cannot exist yet).
+    """
 
     def fake_chain(  # noqa: PLR0913 (mirrors the run_real_chain seam)
         episode_root: Path, stop: str, out_dir: Path, *, env: dict[str, str] | None = None,
@@ -183,7 +191,8 @@ def _fake_chain_factory(captured: dict[str, object]) -> Callable[..., None]:
             chain.create_job(
                 job_id=CHAIN_JOB, episode_id="runner-fake", current_stage="editorial"
             )
-            for index, status in enumerate(MAIN_PATH[1:7]):
+            statuses = MAIN_PATH[1:7] if full else MAIN_PATH[1:6]
+            for index, status in enumerate(statuses):
                 snapshot = current_job_state(chain, CHAIN_JOB)
                 apply_transition(
                     chain,
@@ -196,12 +205,14 @@ def _fake_chain_factory(captured: dict[str, object]) -> Callable[..., None]:
         mezzanine = out_dir / "media" / "edit-source.mov"
         mezzanine.parent.mkdir(parents=True, exist_ok=True)
         mezzanine.write_bytes(b"fake-mezzanine")
-        preview_dir = out_dir / "preview-v1"
-        preview_dir.mkdir(parents=True, exist_ok=True)
-        (preview_dir / "preview.mp4").write_bytes(b"fake-preview-v1")
         seed = _seed_plan()
         store_dir = out_dir / "review-store"
         init_review_store(seed, store_dir)
+        if not full:
+            return
+        preview_dir = out_dir / "preview-v1"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        (preview_dir / "preview.mp4").write_bytes(b"fake-preview-v1")
         preview_sha = sha256_file(preview_dir / "preview.mp4")
         mezz_sha = sha256_file(mezzanine)
         save_bundle(
@@ -277,6 +288,38 @@ def _initial_preview_ready(
     assert exit_code == episode_runner.EXIT_SUCCESS
     assert (episode_dir / "review" / "store" / "versions.json").is_file()  # mirror ran
     assert (episode_dir / "previews" / "preview.mp4").read_bytes() == b"fake-preview-v1"
+    return episode_id, episode_dir
+
+
+def _initial_plan_committed(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[str, Path]:
+    """The Candidate-F first pass: full state machinery, stop PLAN_COMMITTED."""
+
+    monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        episode_runner, "run_real_chain", _fake_chain_factory(captured, full=False)
+    )
+    body = client.post(
+        "/episodes",
+        json={"source_folder": str(source_folder), "brief_text": "rebuild executor test"},
+    ).json()
+    episode_id = str(body["episode_id"])
+    episode_dir = workspace["episodes_root"] / episode_id
+    exit_code = episode_runner.run(
+        episode_root=episode_dir,
+        stop="PLAN_COMMITTED",
+        state_store_path=workspace["state_store"],
+    )
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    assert (episode_dir / "review" / "store" / "versions.json").is_file()  # mirror ran
+    assert not (episode_dir / "previews" / "preview.mp4").exists()
+    with StateStore.open(workspace["state_store"]) as store:
+        assert current_job_state(store, episode_id).status == "PLAN_COMMITTED"
     return episode_id, episode_dir
 
 
@@ -929,6 +972,66 @@ def test_stage_preview_first_render_bootstraps_bundle_at_plan_committed(
     assert (episode_dir / "previews" / "preview.mp4").read_bytes() == (
         b"first-full-preview"
     )
+
+
+def test_full_continuation_from_plan_committed_publishes_preview_ready(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E2E 56f5342: the 全編へ continuation from PLAN_COMMITTED lands the
+    job at PREVIEW_READY — the SAME publish edge the chain mirror takes —
+    and the status payload exposes the preview arrival the UI gates on."""
+    episode_id, episode_dir = _initial_plan_committed(client, workspace, source_folder,
+                                                     monkeypatch)
+    run_id = "run-fullcont1"
+    entry = RebuildRequestEntry(sequence=1, stage_hint="compile", spawned=True,
+                                run_id=run_id)
+    (episode_dir / "rebuild-requests.jsonl").write_bytes(
+        entry.model_dump_json().encode() + b"\n"
+    )
+    run_dir = episode_dir / "run"
+    (run_dir / "episode.json").write_text(
+        json.dumps({"episode_id": episode_id}), encoding="utf-8"
+    )
+    (run_dir / "source-manifest.json").write_text("{}")
+    (run_dir / "resolved-policy.json").write_text("{}")
+    orchestration = run_dir / "episode" / "analyze-state"
+    orchestration.mkdir(parents=True, exist_ok=True)
+    (orchestration / "orchestration-state.json").write_text(
+        json.dumps({"bindings": {"a": {"edit_source_sha256": "b" * 64}}})
+    )
+
+    def fake_render(*_args: object, **_kwargs: object) -> None:
+        preview_dir = run_dir / "preview-v1"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        (preview_dir / PREVIEW_NAME).write_bytes(b"first-full-preview")
+        (preview_dir / TRACE_NAME).write_text('{"note": "fake trace"}')
+
+    monkeypatch.setattr(episode_runner_rebuild, "render_review_preview", fake_render)
+    monkeypatch.setattr(episode_runner_rebuild, "load_tools", object)
+
+    exit_code = _locked_reentry_run(
+        episode_dir,
+        state_store_path=workspace["state_store"],
+        from_stage="compile",
+        applied_command="review-command:full-authorized-j1",
+        run_id=run_id,
+    )
+
+    assert exit_code == episode_runner.EXIT_SUCCESS
+    with StateStore.open(workspace["state_store"]) as store:
+        assert current_job_state(store, episode_id).status == "PREVIEW_READY"
+    status = client.get(f"/episodes/{episode_id}").json()
+    assert status["status"] == "PREVIEW_READY"
+    assert status["preview_first_arrived_at"] is not None
+    assert (episode_dir / "previews" / "preview.mp4").read_bytes() == (
+        b"first-full-preview"
+    )
+    counts = _stage_counts(workspace, episode_id)
+    assert counts["compile"] == ["succeeded"]
+    assert counts["preview"] == ["succeeded"]
 
 
 # ---------------------------------------------------------------------------

@@ -10,9 +10,11 @@ compile materializes its IR, and preview re-renders + re-publishes the
 operator preview. Stages before the re-entry point are untouched; lineage
 stages beyond ``PREVIEW_READY`` (resolve_build/qc/render) are skipped with
 a log line naming the stop bound. The chain's own job store under ``run/``
-is not regressed; the cockpit job keeps its status and the re-entry
-appends fresh per-run stage rows (uuid idempotency keys — the task-7
-mirror discipline).
+is not regressed; the re-entry appends fresh per-run stage rows (uuid
+idempotency keys — the task-7 mirror discipline) and, at the ``preview``
+stop, publishes the SAME ``PREVIEW_READY`` job edge the chain mirror takes
+(a ``PLAN_COMMITTED`` first pass lands ``PREVIEW_READY``; a job already
+there or beyond it is untouched).
 """
 
 # allow: SIZE_OK — plan-pinned single-file re-entry executor
@@ -46,7 +48,13 @@ from services.cli.bundle import (
     load_bundle,
     save_bundle,
 )
-from services.cli.episode_runner_state import RunContext, block_stage, log_event, record_stage
+from services.cli.episode_runner_state import (
+    RunContext,
+    block_stage,
+    log_event,
+    mirror_upto,
+    record_stage,
+)
 from services.cli.episode_runner_workspace import (
     RUN_DIR_NAME,
     publish_preview,
@@ -1401,12 +1409,15 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
 
     Metrics-before-completion: the rebuild-metrics record is durably
     appended BEFORE the terminal preview ``succeeded`` row (the state
-    transition that surfaces the observable 再build完了) is recorded, so
+    transition that surfaces     the observable 再build完了) is recorded, so
     no poll can ever observe 完了 without its recorded evidence.
     ``wall_seconds`` covers the stage execution itself — measured up to
     the metrics write, excluding only the terminal bookkeeping row/log
     writes that follow it (the metrics write itself is likewise excluded,
-    since writing it first is the whole point).
+    since writing it first is the whole point). A full-stop run then
+    publishes the ``PREVIEW_READY`` job edge through the same mirror the
+    chain path uses (a ``PLAN_COMMITTED`` first pass lands
+    ``PREVIEW_READY``).
 
     ``call.stop_stage`` truncates the chain: a consultation-triggered
     rebuild stops at ``compile`` — the candidate plan is committed to the
@@ -1466,6 +1477,13 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
             log, "rebuild_stage", run_id=ctx.run_id, stage=terminal_stage,
             status="succeeded",
         )
+        if stop_stage == STOP_STAGE:
+            # The chain path publishes the PREVIEW_READY job edge through
+            # the live mirror (mirror_upto); a re-entry owns no watcher, so
+            # it takes the SAME edge itself — the 全編へ continuation from a
+            # PLAN_COMMITTED first pass must land the job at PREVIEW_READY
+            # (a no-op when the job is already there or beyond it).
+            mirror_upto(store, ctx, REQUIRED_STATUS, terminal_adopted)
     if stop_stage != STOP_STAGE:
         log_event(
             log, "rebuild_finished", run_id=ctx.run_id,
