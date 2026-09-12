@@ -10,8 +10,7 @@ that could drift.
 
 from __future__ import annotations
 
-import sys
-import traceback
+import logging
 from pathlib import Path
 from typing import Final
 
@@ -39,6 +38,8 @@ from services.review_command.store import ReviewCommitError
 
 LOOPBACK_HOST: Final = "127.0.0.1"
 DEFAULT_PORT: Final = 8642
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _error_envelope(code: str, detail: object) -> dict[str, object]:
@@ -102,7 +103,7 @@ def _register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     def internal(_request: Request, exc: Exception) -> JSONResponse:
-        traceback.print_exc(file=sys.stderr)
+        _LOGGER.error("cockpit: unhandled route error", exc_info=exc)
         return JSONResponse(
             status_code=500,
             content=_error_envelope("internal-error", type(exc).__name__),

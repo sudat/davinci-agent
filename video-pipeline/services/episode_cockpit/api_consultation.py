@@ -1778,16 +1778,26 @@ def consultation_sample_request(
     """Reserve one sample and render it as the attempt owner.
 
     The preview budget gate runs BEFORE the reserve (exhausted = typed
-    422 with zero render). A stored/recovering reserve returns its
-    manifest with zero render; only the open attempt's owner renders
-    (lazy ``render_sample_now`` — renders, publishes, settles; a stage
-    failure surfaces as a typed 422 carrying its code).
+    422 with zero render). A judgment-linked rebuild that is still
+    unresolved (requested|running) refuses with a typed 409 BEFORE any
+    observation/render work: rendering against a base the rebuild is
+    about to move only burns minutes and fails stale. A stored/recovering
+    reserve returns its manifest with zero render; only the open
+    attempt's owner renders (lazy ``render_sample_now`` — renders,
+    publishes, settles; a stage failure surfaces as a typed 422 carrying
+    its code).
     """
 
     episode_dir = _episode_dir(workspace, episode_id)
     limits = load_budget_limits()
     require_consultation(episode_dir, request.consultation_id)
     policy_for_judgment(episode_dir, request.judgment_id)
+    snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
+    if selection_rebuild_active(episode_dir, snapshot.stage_runs):
+        raise CockpitConflictError(
+            "sample-rebuild-running",
+            "採用した方針の反映中です。反映が終わってから試し動画を作り直せます。",
+        )
     from services.cli.review_common import store_ir  # noqa: PLC0415 (lazy CLI-side IR read)
 
     store = review_store_location(episode_dir)
