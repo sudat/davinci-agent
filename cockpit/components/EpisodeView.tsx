@@ -173,7 +173,14 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       const latestRun = current?.stage_runs[current.stage_runs.length - 1];
       const isLatestFailed = latestRun !== undefined && latestRun.status.startsWith("failed");
       const previewCapable = current?.status === "PREVIEW_READY";
-      if (current !== null && isLatestFailed && !previewCapable) {
+      // preview_first_arrived_at is set only after the preview stage produced
+      // output — while unset, probing /preview would only log a 404 console
+      // error. not_generated directly until the status says an output exists.
+      const previewNotYetArrived =
+        current !== null &&
+        current.preview_first_arrived_at == null &&
+        !previewCapable;
+      if (current !== null && (isLatestFailed || previewNotYetArrived) && !previewCapable) {
         if (cancelled) return;
         const blockedSig = JSON.stringify(current);
         if (

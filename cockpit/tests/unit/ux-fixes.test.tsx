@@ -593,11 +593,12 @@ describe("EpisodeView（H: preview待ち→自動遷移 / G-UI: 作り直し表�
           jsonResponse({
             episode_id: "ep-ux",
             job_id: "ep-ux",
-            status: "ANALYZED",
-            current_stage: "selection",
+            status: polls <= 3 ? "ANALYZED" : "PREVIEW_READY",
+            current_stage: polls <= 3 ? "selection" : "preview",
             created_at_seq: 1,
             updated_at_seq: polls,
             stage_runs: [],
+            ...(polls > 3 ? { preview_first_arrived_at: "2026-09-12T00:00:00Z" } : {}),
           }),
         );
       });
