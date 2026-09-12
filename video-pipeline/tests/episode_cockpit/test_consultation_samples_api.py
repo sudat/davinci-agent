@@ -28,7 +28,7 @@ from services.compile.sample_projection import (
 )
 from services.contracts.primitives import RecordFrameSpan
 from services.contracts.timeline_ir import TimelineIr0C
-from services.episode_cockpit import sample_observation_router
+from services.episode_cockpit import episode_files, sample_observation_router
 from services.episode_cockpit.app import create_cockpit_app
 from services.episode_cockpit.consultation_selection_budget import (
     attempt_for,
@@ -45,6 +45,18 @@ from services.episode_cockpit.sample_identity import (
 from services.episode_cockpit.sample_journal import (
     load_sample_events,
     record_sample_success,
+)
+from services.job_runner.cas import (
+    ApprovalRef,
+    TransitionPayload,
+    apply_transition,
+    current_job_state,
+)
+from services.job_runner.state_store import StateStore
+from services.job_runner.transitions import (
+    APPROVAL_PURPOSE_EDITORIAL,
+    APPROVAL_PURPOSE_FINAL,
+    MAIN_PATH,
 )
 from services.media_intelligence.sample_observation import SampleObservationError
 from services.review_command.store import initialize_store
@@ -477,3 +489,92 @@ def test_sample_post_bodies_serialize_as_json(
         assert set(body) == {"state", "sample_id", "manifest"}
         assert json.loads(json.dumps(body)) == body
         assert body["manifest"]["sample_id"] == body["sample_id"]
+
+
+def _fast_forward_to_preview_ready(
+    workspace: dict[str, Path], episode_id: str
+) -> None:
+    gated = {
+        "EDITORIAL_APPROVED": APPROVAL_PURPOSE_EDITORIAL,
+        "FINAL_APPROVED": APPROVAL_PURPOSE_FINAL,
+    }
+    with StateStore.open(workspace["state_store"]) as store:
+        while True:
+            current = current_job_state(store, episode_id)
+            position = MAIN_PATH.index(current.status)
+            if position >= MAIN_PATH.index("PREVIEW_READY"):
+                return
+            nxt = MAIN_PATH[position + 1]
+            payload = (
+                TransitionPayload(
+                    approval=ApprovalRef(
+                        purpose=gated[nxt],
+                        target_hash=current.adopted_artifact_hash or "",
+                        artifact_ref=f"setup-ref-{gated[nxt]}",
+                    )
+                )
+                if nxt in gated
+                else None
+            )
+            apply_transition(
+                store,
+                episode_id,
+                expected_status=current.status,
+                expected_parent_hash=current.adopted_artifact_hash,
+                new_status=nxt,
+                new_artifact_hash="0" * 64,
+                payload=payload,
+            )
+
+
+def test_sample_while_rebuild_active_is_typed_busy_without_render(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Judgment (rebuild scheduled) -> sample POST refuses typed-busy.
+
+    The 2026-09-12 incident: the sample request ran its minutes-long
+    observation+render while the adoption rebuild was still unresolved,
+    the proxy connection died mid-request (bare 500, no journal, no
+    traceback), and the base moved underneath anyway. A pending
+    judgment-linked rebuild now refuses BEFORE any heavy work with a
+    typed 409 — the operator retries after the rebuild lands."""
+    episode_id = _create_episode(client, source_folder)
+    episode_dir = _seed_episode(workspace, episode_id)
+    _fast_forward_to_preview_ready(workspace, episode_id)
+    monkeypatch.setattr(
+        episode_files, "_spawn_runner", lambda *args, **kwargs: None
+    )
+    calls: list[str] = []
+    _install_fake_render(monkeypatch, calls)
+
+    judged = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json={
+            "consultation_id": "c1",
+            "proposal_id": "prop-1",
+            "decision": "adopt",
+            "scope": {"composition": True, "appearance": True, "audio": True},
+            "note": "busy-gate-repro",
+        },
+    )
+    assert judged.status_code == 202
+    judgment_id = judged.json()["judgments"][-1]["judgment_id"]
+    before = load_sample_events(episode_dir)
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/samples",
+        json={
+            "consultation_id": "c1",
+            "judgment_id": judgment_id,
+            "operation_id": "op-busy-1",
+            "windows": [{"start_frame": 0, "end_frame": 30}],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "sample-rebuild-running"
+    assert calls == []
+    assert load_sample_events(episode_dir) == before
