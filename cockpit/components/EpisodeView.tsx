@@ -543,7 +543,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
         ) : null}
       </dl>
       {status !== null ? (
-        <RemakeEpisodeButton episodeId={episodeId} sourceFolder={null} />
+        <RemakeEpisodeButton episodeId={episodeId} sourceFolder={status.source_folder ?? null} />
       ) : null}
       {withFinishing ? <FinishingDomainPanel episodeId={episodeId} /> : null}
     </details>

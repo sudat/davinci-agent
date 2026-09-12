@@ -140,6 +140,10 @@ export type EpisodeStatus = {
   /** Latest 本人確認 record (status_view.py). null = never answered;
    *  absent = old backend without the field — renderers show nothing. */
   self_check?: SelfCheckRecord | null;
+  /** Create-time material folder (status_view.py reads intake.json).
+   *  Present → one-click remake; absent (old episodes) → plain-link
+   *  fallback. Never null — the backend omits the key when unknown. */
+  source_folder?: string;
 };
 
 /** One flagged review item. `at_seconds` is optional: the task-44 flags

@@ -172,6 +172,20 @@ def intake_created_at(episode_dir: Path) -> str | None:
         return None
 
 
+def intake_source_folder(episode_dir: Path) -> str | None:
+    """The material folder recorded at create time (None = unknown).
+
+    Callers omit the payload key when this is None (old episodes predate
+    the record) — never null, so old payloads stay byte-identical."""
+
+    try:
+        return IntakeRecordV1.model_validate_json(
+            (episode_dir / "intake.json").read_bytes()
+        ).source_folder
+    except (OSError, ValidationError):
+        return None
+
+
 def intake_applied_style(episode_dir: Path) -> dict[str, object] | None:
     """The 工程3 style pin recorded at create time (None = unpinned)."""
 
@@ -239,6 +253,9 @@ def build_status_payload(snapshot: JobSnapshot, episode_dir: Path) -> dict[str, 
     created_at = intake_created_at(episode_dir)
     if created_at is not None:
         payload["intake_created_at"] = created_at
+    source_folder = intake_source_folder(episode_dir)
+    if source_folder is not None:
+        payload["source_folder"] = source_folder
     payload["applied_style"] = intake_applied_style(episode_dir)
     latest = latest_self_check(episode_dir)
     payload["self_check"] = latest.model_dump(mode="json") if latest is not None else None
@@ -259,6 +276,7 @@ __all__ = [
     "build_status_payload",
     "derive_current_run",
     "intake_applied_style",
+    "intake_source_folder",
     "last_worker_report",
     "load_rebuild_entries",
     "pending_rebuild",

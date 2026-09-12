@@ -516,6 +516,28 @@ describe("IntakeForm（編集許可の明示 F）", () => {
   });
 });
 
+function episodeViewFetch(statusPayload: Record<string, unknown>) {
+  return (input: RequestInfo | URL): Promise<Response> => {
+    const url = String(input);
+    if (url.includes("/consultation")) {
+      return Promise.resolve(jsonResponse({ consultations: [] }));
+    }
+    if (url.endsWith("/flags")) {
+      return Promise.resolve(jsonResponse({ flags: [], not_yet_generated: true }));
+    }
+    if (url.endsWith("/outputs")) {
+      return Promise.resolve(new Response("{}", { status: 404 }));
+    }
+    if (url.includes("/preview")) {
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }
+    if (url.endsWith("/episodes/ep-ux")) {
+      return Promise.resolve(jsonResponse(statusPayload));
+    }
+    return Promise.resolve(new Response("{}", { status: 404 }));
+  };
+}
+
 describe("RemakeEpisodeButton（G-UI）", () => {
   it("素材フォルダ不明では/new-episodeへの plain リンクになる", () => {
     render(<RemakeEpisodeButton episodeId="ep-ux" sourceFolder={null} />);
@@ -555,6 +577,47 @@ describe("RemakeEpisodeButton（G-UI）", () => {
       "同じ素材の作り直しはまだ受け付けていません",
     );
     expect(screen.queryByText(/削除/)).toBeNull();
+  });
+
+  it("statusにsource_folderがあれば作り直しはワンクリックボタンになる", async () => {
+    vi.stubGlobal(
+      "fetch",
+      episodeViewFetch({
+        episode_id: "ep-ux",
+        job_id: "ep-ux",
+        status: "PREVIEW_READY",
+        current_stage: "preview",
+        created_at_seq: 1,
+        updated_at_seq: 1,
+        stage_runs: [],
+        source_folder: "/tmp/a",
+      }),
+    );
+    render(<EpisodeView episodeId="ep-ux" />);
+    const record = await screen.findByTestId("episode-details");
+    fireEvent.click(record.querySelector("summary") as HTMLElement);
+    expect(screen.getByTestId("episode-remake").tagName).toBe("BUTTON");
+  });
+
+  it("statusにsource_folderがなければ作り直しはplainリンクのまま", async () => {
+    vi.stubGlobal(
+      "fetch",
+      episodeViewFetch({
+        episode_id: "ep-ux",
+        job_id: "ep-ux",
+        status: "PREVIEW_READY",
+        current_stage: "preview",
+        created_at_seq: 1,
+        updated_at_seq: 1,
+        stage_runs: [],
+      }),
+    );
+    render(<EpisodeView episodeId="ep-ux" />);
+    const record = await screen.findByTestId("episode-details");
+    fireEvent.click(record.querySelector("summary") as HTMLElement);
+    const remake = screen.getByTestId("episode-remake");
+    expect(remake.tagName).toBe("A");
+    expect(remake.getAttribute("href")).toBe("/new-episode");
   });
 });
 

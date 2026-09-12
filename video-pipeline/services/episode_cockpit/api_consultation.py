@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, Annotated, Final, Literal, NamedTuple
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BeforeValidator, Field, ValidationError, model_validator
+from pydantic_core import PydanticCustomError
 
 from services.compile.sample_projection import sample_total_seconds
 from services.contracts.primitives import Identifier, StrictModel
@@ -91,6 +92,7 @@ from services.episode_cockpit.consultation_store import (
 from services.episode_cockpit.episode_files import review_store_location
 from services.episode_cockpit.errors import (
     CockpitConflictError,
+    CockpitError,
     CockpitNotFoundError,
     CockpitUnprocessableError,
 )
@@ -112,6 +114,8 @@ from services.media_intelligence.sample_observation import SampleObservationErro
 from services.review_command.store import load_head
 
 if TYPE_CHECKING:
+    from services.contracts.primitives import RecordFrameSpan
+    from services.contracts.timeline_ir import TimelineIr0C
     from services.job_runner.state_models import JobSnapshot
 
 # Same-package reuse of the review-interpreter transport seams (config
@@ -1721,6 +1725,52 @@ def _schedule_adoption_rebuild(  # noqa: PLR0913, PLR0917 (extraction keeps the 
     )
 
 
+def _sample_windows(
+    full_ir: TimelineIr0C,
+    episode_dir: Path,
+    episode_id: str,
+    request: ConsultationSampleRequestV1,
+) -> tuple[list[RecordFrameSpan], str | None]:
+    """Explicit windows, or server-picked observation windows (windows=None).
+
+    Every observation failure is a typed 422 — strict-model surprises and
+    late transport failures fail closed, never a 500 after clip side effects.
+    """
+
+    if request.windows is not None:
+        windows = list(request.windows)
+        if any(window.end_frame <= window.start_frame for window in windows):
+            raise CockpitUnprocessableError(
+                "sample-windows-invalid",
+                "試し動画の区間は開始より後ろで終わるものにしてください。",
+            )
+        return windows, None
+    from services.episode_cockpit.sample_observation_router import (  # noqa: PLC0415 (live observation assembled only on the server-pick path)
+        resolve_routed_sample_windows,
+    )
+
+    try:
+        picked, observation = resolve_routed_sample_windows(
+            full_ir, episode_dir, episode_id, route_override=request.route
+        )
+    except SampleObservationError as error:
+        raise CockpitUnprocessableError(error.code, error.detail) from error
+    except (PydanticCustomError, ValidationError) as error:
+        raise CockpitUnprocessableError(
+            "sample-observation-unavailable",
+            "試し映像の候補区間を確かめられないため、試し動画を作れませんでした。",
+        ) from error
+    except CockpitError:
+        raise
+    except Exception as error:  # fail-closed: typed 422, never a 500 after clip side effects
+        _LOGGER.exception("consultation: sample observation failed untyped")
+        raise CockpitUnprocessableError(
+            "sample-observation-unavailable",
+            "試し映像の確認中に想定外の問題が起きたため、試し動画を作れませんでした。",
+        ) from error
+    return list(picked), observation
+
+
 @router.post("/episodes/{episode_id}/consultation/samples")
 def consultation_sample_request(
     episode_id: str, request: ConsultationSampleRequestV1, workspace: Workspace
@@ -1753,30 +1803,12 @@ def consultation_sample_request(
     try:
         full_ir_sha = sha256_file(ir_path)
         full_ir = store_ir(ir_path)
-    except OSError as error:
+    except (OSError, ValueError) as error:  # ValueError = malformed JSON/IR bytes
         raise CockpitUnprocessableError(
             "sample-base-unreadable",
             f"編集の版が読めないため、試し動画を作れませんでした: {error}",
         ) from error
-    if request.windows is None:
-        from services.episode_cockpit.sample_observation_router import (  # noqa: PLC0415 (live observation assembled only on the server-pick path)
-            resolve_routed_sample_windows,
-        )
-
-        try:
-            windows, observation = resolve_routed_sample_windows(
-                full_ir, episode_dir, episode_id, route_override=request.route
-            )
-        except SampleObservationError as error:
-            raise CockpitUnprocessableError(error.code, error.detail) from error
-    else:
-        observation = None
-        windows = list(request.windows)
-        if any(window.end_frame <= window.start_frame for window in windows):
-            raise CockpitUnprocessableError(
-                "sample-windows-invalid",
-                "試し動画の区間は開始より後ろで終わるものにしてください。",
-            )
+    windows, observation = _sample_windows(full_ir, episode_dir, episode_id, request)
     policy = latest_adopted_policy(episode_dir)
     try:
         identity = SampleRequestIdentityV1(
