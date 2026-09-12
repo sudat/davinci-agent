@@ -7,9 +7,15 @@ from fractions import Fraction
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
+import services.cli.preview_render as cli_preview_render
+import services.preview.render as preview_render_module
+from services.cli.preview_render import _bindings
 from services.contracts.primitives import RationalFrameRate, RecordFrameSpan
+from services.foundation_io import sha256_file
 from services.preview.binding import initial_bindings, initial_timeline_ir
-from services.preview.render import render_preview
+from services.preview.render import _require_binding, extract_layout, render_preview
 from services.preview.srt import cue_from_record_span, parse_srt
 from services.preview.tools import demux_subtitle
 
@@ -145,3 +151,47 @@ def test_cue_from_record_span_rounds_off_lattice_at_30fps() -> None:
         "a",
     )
     assert two.end_ms == 67
+
+
+def test_bindings_and_verification_hash_each_unique_path_once(
+    manifest: Phase0AFixtureManifest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """File hashes are computed once per unique path, not once per item.
+
+    A multi-item IR binds every A/V item to one mezzanine and every
+    subtitle item to one table; both the binding step and the render-side
+    verification must hash 2 paths even for 9 items, with values
+    identical to hashing each file directly.
+    """
+
+    ir = initial_timeline_ir(manifest)
+    item_count = sum(len(track.items) for track in ir.tracks)
+    assert item_count > 2
+    mezzanine = tmp_path / "edit-source.mov"
+    mezzanine.write_bytes(b"fake-mezzanine" * 1000)
+
+    bind_calls: list[str] = []
+
+    def counting_bind(path: Path) -> str:
+        bind_calls.append(str(path))
+        return sha256_file(path)
+
+    monkeypatch.setattr(cli_preview_render, "sha256_file", counting_bind)
+    bindings = _bindings(ir, mezzanine, tmp_path / "media")
+    assert len(bindings.items) == item_count
+    assert len(bind_calls) == 2
+    for item in bindings.items:
+        assert item.binding.sha256 == sha256_file(Path(item.binding.media_path))
+
+    verify_calls: list[str] = []
+
+    def counting_verify(path: Path) -> str:
+        verify_calls.append(str(path))
+        return sha256_file(path)
+
+    monkeypatch.setattr(preview_render_module, "sha256_file", counting_verify)
+    layout = extract_layout(ir)
+    memo: dict[str, str] = {}
+    for item in (*layout.video_items, *layout.audio_items, *layout.subtitle_items):
+        _require_binding(bindings, item.item_id, item.kind, memo)
+    assert len(verify_calls) == 2

@@ -59,6 +59,15 @@ def _bindings(
         item for track in ir.tracks if track.track.kind == "subtitle" for item in track.items
     )
     table = _subtitle_table(ir, media_dir, subtitle_wrap_chars) if subtitle_items else None
+    hashes: dict[str, str] = {}
+
+    def _hash(path: Path) -> str:
+        key = str(path)
+        digest = hashes.get(key)
+        if digest is None:
+            digest = hashes[key] = sha256_file(path)
+        return digest
+
     items: list[ItemBinding] = []
     for track in ir.tracks:
         for item in track.items:
@@ -70,7 +79,7 @@ def _bindings(
             items.append(
                 ItemBinding(
                     item_id=item.item_id,
-                    binding=MediaBinding(media_path=str(media), sha256=sha256_file(media)),
+                    binding=MediaBinding(media_path=str(media), sha256=_hash(media)),
                 )
             )
     return PreviewMediaBindings(items=tuple(items), bgm=None)

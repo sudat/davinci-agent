@@ -178,14 +178,26 @@ def _check_decision_plan_agreement(
         )
 
 
-def _require_binding(bindings: PreviewMediaBindings, item_id: str, kind: str) -> MediaBinding:
+def _require_binding(
+    bindings: PreviewMediaBindings,
+    item_id: str,
+    kind: str,
+    _hashes: dict[str, str] | None = None,
+) -> MediaBinding:
     binding = bindings.binding_for(item_id)
     if binding is None:
         raise PreviewBindingError(f"missing media binding for {kind} item {item_id}")
     path = Path(binding.media_path)
     if not path.is_file():
         raise PreviewBindingError(f"bound media file missing: {path}")
-    if sha256_file(path) != binding.sha256:
+    key = str(path)
+    if _hashes is not None and key in _hashes:
+        actual = _hashes[key]
+    else:
+        actual = sha256_file(path)
+        if _hashes is not None:
+            _hashes[key] = actual
+    if actual != binding.sha256:
         raise PreviewBindingError(f"media sha256 drift for {item_id}: {path}")
     return binding
 
@@ -195,11 +207,12 @@ def _verify_av_media(
     bindings: PreviewMediaBindings,
     tools: PinnedTools,
     timeout_seconds: float | None = None,
+    _hashes: dict[str, str] | None = None,
 ) -> None:
     rate_fraction = Fraction(layout.rate.num, layout.rate.den)
     probed: set[str] = set()
     for item in (*layout.video_items, *layout.audio_items):
-        path = Path(_require_binding(bindings, item.item_id, item.kind).media_path)
+        path = Path(_require_binding(bindings, item.item_id, item.kind, _hashes).media_path)
         if str(path) in probed:
             continue
         probed.add(str(path))
@@ -225,11 +238,12 @@ def _verify_subtitle_binding(
     layout: PreviewLayout,
     bindings: PreviewMediaBindings,
     subtitle_wrap_chars: int | None = None,
+    _hashes: dict[str, str] | None = None,
 ) -> None:
     if not layout.subtitle_items:
         return
     subtitle_paths = {
-        _require_binding(bindings, item.item_id, "subtitle").media_path
+        _require_binding(bindings, item.item_id, "subtitle", _hashes).media_path
         for item in layout.subtitle_items
     }
     if len(subtitle_paths) != 1:
@@ -282,10 +296,13 @@ def render_preview(  # noqa: PLR0913 (brief-mandated adapter signature)
             presentation.subtitle_max_chars_per_line,
             "vertical" if output_id == "vertical" else "landscape",
         )
+    # Per-invocation memo: many items share one medium, so hash each unique
+    # path once. Pure de-duplication — values identical, no threads here.
+    verified: dict[str, str] = {}
     for item in (*layout.video_items, *layout.audio_items, *layout.subtitle_items):
-        _require_binding(media_bindings, item.item_id, item.kind)
-    _verify_av_media(layout, media_bindings, tools, timeout_seconds)
-    _verify_subtitle_binding(layout, media_bindings, subtitle_wrap_chars)
+        _require_binding(media_bindings, item.item_id, item.kind, verified)
+    _verify_av_media(layout, media_bindings, tools, timeout_seconds, verified)
+    _verify_subtitle_binding(layout, media_bindings, subtitle_wrap_chars, verified)
     out_dir.mkdir(parents=True, exist_ok=True)
     preview_width, preview_height = preview_size_for(output_id)
     output = out_dir / preview_name_for(output_id)
