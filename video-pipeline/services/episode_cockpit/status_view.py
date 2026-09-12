@@ -16,8 +16,11 @@ from typing import TYPE_CHECKING, Final
 
 from pydantic import ValidationError
 
-from services.cli.real_policy import load_episode_grant
-from services.episode_cockpit.models import IntakeRecordV1, RebuildRequestEntry
+from services.episode_cockpit.models import (
+    EpisodeEditorialGrantV1,
+    IntakeRecordV1,
+    RebuildRequestEntry,
+)
 from services.episode_cockpit.preview_binding import published_target_version
 from services.episode_cockpit.review_proposals import (
     latest_unconsumed_set,
@@ -207,13 +210,17 @@ def editorial_granted(episode_dir: Path) -> bool:
     The one-click remake reads this to carry the SAME material's consent
     into the new episode. Deny-by-default: no file, a malformed file, or a
     revoked grant reads False — never inferred from intake or anything else.
+    Grant read kept inline (mirroring the constant's owner, real_policy's
+    ``editorial-grant.json``) so this module never imports its consumers.
     """
 
     try:
-        grant = load_episode_grant(episode_dir)
+        grant = EpisodeEditorialGrantV1.model_validate_json(
+            (episode_dir / "editorial-grant.json").read_bytes()
+        )
     except (OSError, ValidationError):
         return False
-    return grant is not None and grant.granted
+    return grant.granted
 
 
 def stage_row(run: StageRunRow) -> dict[str, object]:
