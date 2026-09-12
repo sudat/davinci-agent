@@ -264,3 +264,84 @@ def test_rebuild_linkage_chain_readable_after_reload(
     chain = [(entry["sequence"], entry["spawned"], entry["run_id"])
              for entry in status["rebuild_requests"]]
     assert chain == [(1, False, None), (2, True, spawned_run)]
+
+
+# --- source_folder: one-click remake reads it from the status payload ----
+
+
+def test_status_carries_source_folder_from_intake(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, _ = _initial_run(
+        client, workspace, source_folder, monkeypatch, run_id="run-init"
+    )
+
+    status = client.get(f"/episodes/{episode_id}").json()
+
+    assert status["source_folder"] == str(source_folder)
+
+
+def test_status_omits_source_folder_when_intake_unknown(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _initial_run(
+        client, workspace, source_folder, monkeypatch, run_id="run-init"
+    )
+    (episode_dir / "intake.json").unlink()
+
+    status = client.get(f"/episodes/{episode_id}").json()
+
+    assert "source_folder" not in status
+
+
+# --- editorial_granted: the one-click remake carries the grant forward ----
+
+
+def test_status_carries_editorial_granted_true(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, episode_dir = _initial_run(
+        client, workspace, source_folder, monkeypatch, run_id="run-init"
+    )
+    (episode_dir / "editorial-grant.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "episode-editorial-grant-v1",
+                "episode_id": episode_id,
+                "granted": True,
+                "data_class": "transcript",
+                "stage": "editorial_direct",
+                "granted_at": TS2,
+                "note": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    status = client.get(f"/episodes/{episode_id}").json()
+
+    assert status["editorial_granted"] is True
+
+
+def test_status_editorial_granted_is_false_without_grant_file(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    episode_id, _ = _initial_run(
+        client, workspace, source_folder, monkeypatch, run_id="run-init"
+    )
+
+    status = client.get(f"/episodes/{episode_id}").json()
+
+    assert status["editorial_granted"] is False

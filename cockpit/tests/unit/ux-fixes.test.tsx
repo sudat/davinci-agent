@@ -619,6 +619,82 @@ describe("RemakeEpisodeButton（G-UI）", () => {
     expect(remake.tagName).toBe("A");
     expect(remake.getAttribute("href")).toBe("/new-episode");
   });
+
+  it("同意済みの同じ素材ではeditorial_grant付きで作り直す", async () => {
+    const { fetchImpl, calls } = recordingFetch((url: string) => {
+      if (url.endsWith("/brief")) {
+        return jsonResponse({
+          episode_id: "ep-ux",
+          brief_text: "元のbrief",
+          status: "draft",
+        });
+      }
+      return jsonResponse({
+        episode_id: "ep-new",
+        job_id: "ep-new",
+        status: "CREATED",
+        brief_status: "ok",
+        pipeline: "started",
+      });
+    });
+    render(
+      <RemakeEpisodeButton
+        episodeId="ep-ux"
+        sourceFolder="/tmp/a"
+        editorialGranted={true}
+        fetchImpl={fetchImpl}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("episode-remake"));
+    await waitFor(() => {
+      expect(calls.filter((call) => call.url.endsWith("/episodes"))).toHaveLength(1);
+    });
+    const posts = calls.filter((call) => call.url.endsWith("/episodes"));
+    expect(JSON.parse(String(posts[0]!.init.body))).toEqual({
+      source_folder: "/tmp/a",
+      brief_text: "元のbrief",
+      editorial_grant: {
+        granted: true,
+        data_class: "transcript",
+        stage: "editorial_direct",
+        note: "",
+      },
+    });
+  });
+
+  it("未同意の同じ素材ではgrantなしで作り直す", async () => {
+    const { fetchImpl, calls } = recordingFetch((url: string) => {
+      if (url.endsWith("/brief")) {
+        return jsonResponse({
+          episode_id: "ep-ux",
+          brief_text: "元のbrief",
+          status: "draft",
+        });
+      }
+      return jsonResponse({
+        episode_id: "ep-new",
+        job_id: "ep-new",
+        status: "CREATED",
+        brief_status: "ok",
+        pipeline: "started",
+      });
+    });
+    render(
+      <RemakeEpisodeButton
+        episodeId="ep-ux"
+        sourceFolder="/tmp/a"
+        editorialGranted={false}
+        fetchImpl={fetchImpl}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("episode-remake"));
+    await waitFor(() => {
+      expect(calls.filter((call) => call.url.endsWith("/episodes"))).toHaveLength(1);
+    });
+    const posts = calls.filter((call) => call.url.endsWith("/episodes"));
+    const sent = JSON.parse(String(posts[0]!.init.body)) as Record<string, unknown>;
+    expect("editorial_grant" in sent).toBe(false);
+  });
 });
 
 describe("EpisodeView（H: preview待ち→自動遷移 / G-UI: 作り直し表示）", () => {

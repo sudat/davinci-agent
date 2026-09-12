@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Final
 
 from pydantic import ValidationError
 
+from services.cli.real_policy import load_episode_grant
 from services.episode_cockpit.models import IntakeRecordV1, RebuildRequestEntry
 from services.episode_cockpit.preview_binding import published_target_version
 from services.episode_cockpit.review_proposals import (
@@ -200,6 +201,21 @@ def intake_applied_style(episode_dir: Path) -> dict[str, object] | None:
     return {"channel": record.channel, "version": record.style_version}
 
 
+def editorial_granted(episode_dir: Path) -> bool:
+    """True iff the persisted operator grant says granted=true.
+
+    The one-click remake reads this to carry the SAME material's consent
+    into the new episode. Deny-by-default: no file, a malformed file, or a
+    revoked grant reads False — never inferred from intake or anything else.
+    """
+
+    try:
+        grant = load_episode_grant(episode_dir)
+    except (OSError, ValidationError):
+        return False
+    return grant is not None and grant.granted
+
+
 def stage_row(run: StageRunRow) -> dict[str, object]:
     row: dict[str, object] = {
         "stage_name": run.stage_name,
@@ -256,6 +272,7 @@ def build_status_payload(snapshot: JobSnapshot, episode_dir: Path) -> dict[str, 
     source_folder = intake_source_folder(episode_dir)
     if source_folder is not None:
         payload["source_folder"] = source_folder
+    payload["editorial_granted"] = editorial_granted(episode_dir)
     payload["applied_style"] = intake_applied_style(episode_dir)
     latest = latest_self_check(episode_dir)
     payload["self_check"] = latest.model_dump(mode="json") if latest is not None else None

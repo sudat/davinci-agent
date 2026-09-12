@@ -144,6 +144,10 @@ export type EpisodeStatus = {
    *  Present → one-click remake; absent (old episodes) → plain-link
    *  fallback. Never null — the backend omits the key when unknown. */
   source_folder?: string;
+  /** True iff the episode's persisted editorial grant says granted=true
+   *  (status_view.py). Absent (old backend) = unknown — treated as
+   *  not granted, never guessed. */
+  editorial_granted?: boolean;
 };
 
 /** One flagged review item. `at_seconds` is optional: the task-44 flags

@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic_core import PydanticCustomError
 
 from services.cli import sample_render
 from services.compile.sample_projection import (
@@ -381,3 +382,98 @@ def test_sample_windows_none_blocked_is_typed_422(
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "sample-observation-unavailable"
     assert calls == []
+
+
+def test_sample_windows_none_strict_model_failure_is_typed_422_not_500(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A strict-model failure on the server-pick path (e.g. the window
+    widener refusing an empty track) fails typed — never a 500 after the
+    observation clips already landed (2026-09-12 acceptance 500)."""
+    episode_id = _create_episode(client, source_folder)
+    episode_dir = _seed_episode(workspace, episode_id)
+    calls: list[str] = []
+    _install_fake_render(monkeypatch, calls)
+
+    def strict_fails(
+        full_ir: Any, root: Path, eid: str, route_override: Any = None,
+    ) -> tuple[list[Any], str]:
+        raise PydanticCustomError("sample-empty-track", "no video interval")
+
+    monkeypatch.setattr(
+        sample_observation_router, "resolve_routed_sample_windows", strict_fails
+    )
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/samples",
+        json=_payload_without_windows(operation_id="op-strict"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "sample-observation-unavailable"
+    assert calls == []
+    assert load_sample_events(episode_dir) == []
+
+
+def test_sample_windows_none_unexpected_failure_is_typed_422_not_500(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A late observation surprise (transport/env failure outside the typed
+    seam) fails closed typed — never a 500 after side effects."""
+    episode_id = _create_episode(client, source_folder)
+    episode_dir = _seed_episode(workspace, episode_id)
+    calls: list[str] = []
+    _install_fake_render(monkeypatch, calls)
+
+    def explodes(
+        full_ir: Any, root: Path, eid: str, route_override: Any = None,
+    ) -> tuple[list[Any], str]:
+        raise RuntimeError("transport exploded")
+
+    monkeypatch.setattr(
+        sample_observation_router, "resolve_routed_sample_windows", explodes
+    )
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/samples",
+        json=_payload_without_windows(operation_id="op-boom"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "sample-observation-unavailable"
+    assert calls == []
+    assert load_sample_events(episode_dir) == []
+
+
+def test_sample_post_bodies_serialize_as_json(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Published + stored POST bodies are plain JSON (the 500's response
+    path stays serializable on every state)."""
+    episode_id = _create_episode(client, source_folder)
+    _seed_episode(workspace, episode_id)
+    calls: list[str] = []
+    _install_fake_render(monkeypatch, calls)
+
+    first = client.post(
+        f"/episodes/{episode_id}/consultation/samples", json=_payload()
+    )
+    second = client.post(
+        f"/episodes/{episode_id}/consultation/samples", json=_payload()
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    for body in (first.json(), second.json()):
+        assert set(body) == {"state", "sample_id", "manifest"}
+        assert json.loads(json.dumps(body)) == body
+        assert body["manifest"]["sample_id"] == body["sample_id"]
