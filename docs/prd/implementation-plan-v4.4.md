@@ -1923,3 +1923,11 @@ GUI自動化は各ステップ後の状態検証（スクリーンショット+�
 同じ調査で観測（look_atの呼び出しが通知を誘発する場合あり）。
 
 Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)
+
+---
+
+## Decision addendum: V44-0 disposition and subtitle fallback (2026-09-12, codex ruling)
+
+- V44-0 editorial-feasibility evidence complete (diagnostic lane; recall 77/77, catastrophic 0, operator continuation YES). Auto-ASR FAIL recorded as-is (whisper CER 0.1147 > 0.10; Gemini timing human-approved; exploration terminated per asr-argv-experiment-outcome / asr-whisper-upgrade-v1 / asr-cloud-transcribe-v1 / asr-cut-hybrid-proof).
+- First-publish bootstrap proceeds with the operator-verified vNext corrected transcript (existing corrected-transcript input path, no new provider/framework/artifact). Correction time counts toward Bootstrap AHT. Steady-state auto-subtitle improvement is post-publish tracking.
+- Next: proceed to §6-8 (V44-1 Cockpit real vertical slice) with this fallback in place.

@@ -1742,3 +1742,11 @@ It asks whether the existing architecture can finally disappear behind the exper
 > I give it my footage and tell it what this episode is about. It understands what matters, makes a strong first edit in my taste, finishes it properly in DaVinci Resolve, lets me correct it in ordinary language, and gets it ready for YouTube without turning me into the pipeline operator.
 
 Every v4.4 implementation decision should shorten the distance to that statement.
+
+---
+
+# 29. Decision addendum: first-publish subtitle fallback (2026-09-12, codex ruling)
+
+V44-0 measured state (evidence: capabilities/v4.4/product-proof/v44-0/): editorial judgment diagnostic evidence is valid (must-keep recall 77/77, catastrophic 0, operator continuation YES — r5-diagnostic-summary.json); fully-automatic ASR is UNSOLVED against the frozen bars (best auto text = full-audio whisper CER 0.1147 > 0.10; best timing = Gemini word intervals, operator-approved full-episode, p95 0.0 in the interval-locked proof — asr-cut-hybrid-proof.json). Numeric thresholds are UNCHANGED and auto-ASR remains recorded as FAIL.
+
+Decision: for the First Publish bootstrap ONLY, the operator-verified vNext subtitle source (operator-confirmed texts + raw Gemini utterance times, display padding ±0.5s kept separate from measurement anchors — reference-vnext-scoring.json) is adopted as an explicit human-corrected fallback via the existing corrected-transcript input path. No new provider, framework, or artifact type. The human time spent on this correction counts toward Bootstrap Active Human Time. Steady-state automatic-subtitle improvement is a post-First-Publish tracking item (§26). V44-1/V44-2 production routes proceed.
