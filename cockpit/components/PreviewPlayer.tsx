@@ -1,7 +1,9 @@
 "use client";
 
+import { useRef } from "react";
 import type { RefObject } from "react";
 import { previewVideoSrc, type OutputId } from "@/lib/api";
+import TaskProgress from "@/components/TaskProgress";
 
 /** Low-resolution preview canvas per output (backend
  *  services/outputs/geometry.py::preview_size_for): landscape 640x360,
@@ -42,11 +44,13 @@ export default function PreviewPlayer({
   videoRef,
   output = "landscape",
 }: PreviewPlayerProps) {
+  const waitStartedAtRef = useRef<number | null>(null);
+  if (waitStartedAtRef.current === null) waitStartedAtRef.current = Date.now();
   if (state === "checking") {
     return (
-      <p data-testid="preview-checking" className="empty-note">
-        プレビューの有無を確認しています…
-      </p>
+      <div data-testid="preview-checking">
+        <TaskProgress taskName="プレビューの有無を確認しています" startedAt={waitStartedAtRef.current} />
+      </div>
     );
   }
   if (state === "not_generated") {
@@ -56,6 +60,7 @@ export default function PreviewPlayer({
         <p className="field-hint">
           編集判断用の低解像度プレビューが生成されると、ここに再生画面が表示されます。
         </p>
+        <TaskProgress taskName="プレビューを準備中" startedAt={waitStartedAtRef.current} />
       </div>
     );
   }

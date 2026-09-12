@@ -182,7 +182,7 @@ describe("ConsultationPanel — 全編許可後も新しい採用は独自の試
         ],
       });
     });
-    renderPanel(fetchImpl);
+    renderPanel(fetchImpl, previewReadyStatus("selection"));
     await waitFor(() => {
       expect(screen.getByTestId("sample-request")).toBeVisible();
     });
@@ -192,14 +192,18 @@ describe("ConsultationPanel — 全編許可後も新しい採用は独自の試
 const payloadOneJudged: ConsultationPayload = { consultations: [entryOneJudged] };
 const payloadEmpty: ConsultationPayload = { consultations: [] };
 
-function renderPanel(fetchImpl: typeof fetch) {
+function renderPanel(fetchImpl: typeof fetch, status: EpisodeStatus = stageStatus("selection")) {
   return render(
     <ConsultationPanel
       episodeId="ep-c01"
-      status={stageStatus("selection")}
+      status={status}
       fetchImpl={fetchImpl}
     />,
   );
+}
+
+function previewReadyStatus(stage: string): EpisodeStatus {
+  return { ...stageStatus(stage), status: "PREVIEW_READY" };
 }
 
 afterEach(() => {
@@ -991,12 +995,15 @@ describe("ConsultationPanel（UX 2.5 slice-2：採用→再編集の反映）", 
       }
       return jsonResponse(adopted);
     });
-    const first = renderPanel(adoptedFetch.fetchImpl);
+    const first = renderPanel(adoptedFetch.fetchImpl, previewReadyStatus("selection"));
     await waitFor(() => {
       expect(screen.getByTestId("sample-request")).toBeVisible();
     });
     expect(screen.getByTestId("sample-request").textContent).toContain(
       "試し動画を作る",
+    );
+    expect(screen.getByTestId("sample-ready-line").textContent).toContain(
+      "できたらここで確認できます",
     );
     first.unmount();
 
@@ -1061,7 +1068,7 @@ describe("ConsultationPanel（P4: 採用先行・samples後続でも中間hint�
     render(
       <ConsultationPanel
         episodeId="ep-c01"
-        status={stageStatus("selection")}
+        status={previewReadyStatus("selection")}
         fetchImpl={fetchImpl}
         onStageHint={(hint) => {
           hints.push(hint);

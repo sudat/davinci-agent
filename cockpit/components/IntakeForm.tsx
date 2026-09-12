@@ -59,6 +59,7 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
   const [restored, setRestored] = useState<{ target: number; version: number } | null>(null);
   const [restoreError, setRestoreError] = useState<ApiErrorState | null>(null);
   const [targetLengthMode, setTargetLengthMode] = useState("auto");
+  const [editorialGrant, setEditorialGrant] = useState(false);
   const [references, setReferences] = useState<string[]>([]);
   const [dropActive, setDropActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -172,6 +173,16 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
           style.current !== null
             ? { style_version: style.current }
             : {}),
+          ...(editorialGrant
+            ? {
+                editorial_grant: {
+                  granted: true,
+                  data_class: "transcript" as const,
+                  stage: "editorial_direct" as const,
+                  note: "",
+                },
+              }
+            : {}),
         },
         fetchImpl ?? fetch,
       );
@@ -266,6 +277,23 @@ export default function IntakeForm({ fetchImpl }: IntakeFormProps) {
             </p>
           </div>
         ) : null}
+
+        <div className="field">
+          <label>
+            <input
+              type="checkbox"
+              checked={editorialGrant}
+              onChange={(event) => setEditorialGrant(event.target.checked)}
+              data-testid="editorial-grant"
+            />{" "}
+            映像の解析と編集判断のために、素材の音声・映像の一部を外部のAIサービスへ送信して処理することに同意する
+          </label>
+          {!editorialGrant ? (
+            <p className="field-hint" data-testid="editorial-grant-hint">
+              編集判断にはこの同意が必要です。同意しない場合も作成はできますが、編集判断の段階で止まります。
+            </p>
+          ) : null}
+        </div>
       </section>
 
       <div className="p1-cta">

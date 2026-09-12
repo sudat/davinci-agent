@@ -36,6 +36,7 @@ import ConsultationSampleSection, {
 } from "@/components/ConsultationSampleSection";
 import StyleSaveButton from "@/components/StyleSaveButton";
 import ErrorNotice from "@/components/ErrorNotice";
+import TaskProgress from "@/components/TaskProgress";
 import { isConsultationStage } from "@/lib/stageGroups";
 import type { StageHint } from "@/lib/stage-steps";
 import { useNow } from "@/components/useNow";
@@ -212,6 +213,7 @@ export default function ConsultationPanel({
   const [notFound, setNotFound] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sendTaskStartedAt, setSendTaskStartedAt] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [generationOpen, setGenerationOpen] = useState(false);
@@ -390,6 +392,7 @@ export default function ConsultationPanel({
     const trimmed = message.trim();
     if (trimmed === "" || busy) return;
     setBusy(true);
+    setSendTaskStartedAt(Date.now());
     setError(null);
     try {
       const entry = await postConsultationMessage(episodeId, { message: trimmed }, fetchImpl);
@@ -400,6 +403,7 @@ export default function ConsultationPanel({
       recordFailure(cause, "相談を送信できませんでした");
     } finally {
       setBusy(false);
+      setSendTaskStartedAt(null);
     }
   };
 
@@ -407,6 +411,7 @@ export default function ConsultationPanel({
     const trimmed = message.trim();
     if (trimmed === "" || busy) return;
     setBusy(true);
+    setSendTaskStartedAt(Date.now());
     setError(null);
     setGenerationError(null);
     try {
@@ -427,6 +432,7 @@ export default function ConsultationPanel({
       recordGenerationFailure(cause);
     } finally {
       setBusy(false);
+      setSendTaskStartedAt(null);
     }
   };
 
@@ -434,6 +440,7 @@ export default function ConsultationPanel({
     const trimmed = message.trim();
     if (trimmed === "" || busy) return;
     setBusy(true);
+    setSendTaskStartedAt(Date.now());
     setError(null);
     try {
       const entry = await postConsultationMessage(episodeId, { message: trimmed }, fetchImpl);
@@ -445,6 +452,7 @@ export default function ConsultationPanel({
       recordFailure(cause, "相談を送信できませんでした");
     } finally {
       setBusy(false);
+      setSendTaskStartedAt(null);
     }
   };
 
@@ -713,6 +721,9 @@ export default function ConsultationPanel({
         </button>
       </div>
       <p className="field-hint">希望を送ると、編集案が自動で届きます。</p>
+      {sendTaskStartedAt !== null ? (
+        <TaskProgress taskName="AIに相談中" startedAt={sendTaskStartedAt} />
+      ) : null}
     </>
   );
 
@@ -805,6 +816,7 @@ export default function ConsultationPanel({
         feedback={feedback}
         recordJournal={hasPublishedSample ? sampleRecordJournal : null}
         recordBudget={hasPublishedSample ? sampleRecordBudget : null}
+        trialReady={status?.status === "PREVIEW_READY"}
         onSamplesChange={({ hasPublished }: { hasPublished: boolean }) =>
           setHasPublishedSample(hasPublished)
         }
@@ -863,21 +875,32 @@ export default function ConsultationPanel({
     <section className="card direction-stage p2-stage" data-testid="consultation-panel">
       <header className="p2-stage-header">
         <h2 className="p2-stage-title">編集の方向を決める</h2>
-        <p className="page-subtitle">
-          やりたいイメージを教えてください。提案の中から選ぶか、言葉で直してください。
-        </p>
       </header>
       {noticeBlock}
       <div className="p2-stage-grid">
         <div className="p2-main">
-          <ConsultationEntryList
-            payload={payload}
-            busy={busy}
-            episodeId={episodeId}
-            onJudgment={submitJudgment}
-            onPanelRetry={sendPanelRetry}
-            onQuickAdopt={quickAdopt}
-          />
+          {hasProposal ? (
+            <section aria-label="AIの提案" data-testid="consultation-proposals">
+              <h3 className="section-title">AIの提案</h3>
+              <ConsultationEntryList
+                payload={payload}
+                busy={busy}
+                episodeId={episodeId}
+                onJudgment={submitJudgment}
+                onPanelRetry={sendPanelRetry}
+                onQuickAdopt={quickAdopt}
+              />
+            </section>
+          ) : (
+            <ConsultationEntryList
+              payload={payload}
+              busy={busy}
+              episodeId={episodeId}
+              onJudgment={submitJudgment}
+              onPanelRetry={sendPanelRetry}
+              onQuickAdopt={quickAdopt}
+            />
+          )}
           {hasProposal ? (
             <details data-testid="consultation-new-details">
               <summary>少し変えたい・新しい相談を始める</summary>

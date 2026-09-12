@@ -1999,3 +1999,54 @@ body:has(.sample-stage) {
 /* P2-10: REMOVED per image review (P2 82→90 gate): the desktop
    workspace stretch (min-height + bottom-pinned record) inflated density.
    Page height is the natural content height (P2-8 content-hug above). */
+
+/* Shared waiting display (TaskProgress): indeterminate animated bar +
+   plain task name + live mm:ss elapsed. No percentages anywhere — progress
+   is unmeasured. Tokens only (no new hex). */
+.task-progress {
+  margin: var(--space-3) 0;
+}
+.task-progress-track {
+  height: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.task-progress-bar {
+  width: 40%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius);
+  animation: task-progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes task-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+.task-progress-line {
+  font-size: var(--font-size-body);
+  margin: var(--space-2) 0 0;
+}
+.task-progress-details {
+  margin-top: var(--space-2);
+}
+.task-progress-details > summary {
+  cursor: pointer;
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 0 var(--space-1);
+}
+.task-progress-details > summary:hover {
+  color: var(--text);
+  background: #f3efe7;
+}

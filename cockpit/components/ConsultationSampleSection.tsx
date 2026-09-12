@@ -17,6 +17,7 @@ import {
   type ConsultationScope,
 } from "@/lib/api";
 import ErrorNotice from "@/components/ErrorNotice";
+import TaskProgress from "@/components/TaskProgress";
 
 const SAMPLE_POLL_INTERVAL_MS = 2000;
 
@@ -135,6 +136,17 @@ export function sampleCheckItemsOf(source: SampleCheckSource): string[] {
   return [];
 }
 
+/** The typed review-store error codes that mean "not ready yet" — they
+ *  never surface as errors in normal UI; the preparing line covers them. */
+const REVIEW_STORE_NOT_READY_CODES = [
+  "review-store-not-initialized",
+  "store_not_initialized",
+];
+
+function isReviewStoreNotReady(code: string): boolean {
+  return (REVIEW_STORE_NOT_READY_CODES as readonly string[]).includes(code);
+}
+
 export type SampleFeedback = {
   text: string;
   busy: boolean;
@@ -154,6 +166,7 @@ export default function ConsultationSampleSection({
   feedback = null,
   recordJournal = null,
   recordBudget = null,
+  trialReady,
   onSamplesChange,
 }: {
   episodeId: string;
@@ -167,6 +180,10 @@ export default function ConsultationSampleSection({
   feedback?: SampleFeedback | null;
   recordJournal?: ReactNode;
   recordBudget?: ReactNode;
+  /** True once the backend can actually make a trial video (episode
+   *  PREVIEW_READY). False hides the request button behind the
+   *  preparing line — the primary action appears only when ready. */
+  trialReady?: boolean;
   onSamplesChange?: (info: { hasPublished: boolean }) => void;
 }) {
   const [samples, setSamples] = useState<ConsultationSample[] | null>(null);
@@ -186,6 +203,9 @@ export default function ConsultationSampleSection({
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const onSamplesChangeRef = useRef(onSamplesChange);
   onSamplesChangeRef.current = onSamplesChange;
+  const ready = trialReady ?? true;
+  const preparingStartedAtRef = useRef<number | null>(null);
+  if (preparingStartedAtRef.current === null) preparingStartedAtRef.current = Date.now();
 
   const load = useCallback(async () => {
     try {
@@ -311,14 +331,20 @@ export default function ConsultationSampleSection({
         <p className="field-hint">この試し動画を見て、編集の方向を確認してください</p>
       </header>
       {displayed === null ? (
-        <>
-          <p className="field-hint">採用した方向で短い試し動画を作れます。尺はサーバーが確定します。</p>
-          <div className="actions">
-            <button type="button" className="btn-primary" onClick={requestSample} disabled={requestBusy} data-testid="sample-request">
-              {requestBusy ? "作成中…" : "試し動画を作る"}
-            </button>
+        ready ? (
+          <>
+            <p className="field-hint" data-testid="sample-ready-line">できたらここで確認できます</p>
+            <div className="actions">
+              <button type="button" className="btn-primary" onClick={requestSample} disabled={requestBusy} data-testid="sample-request">
+                {requestBusy ? "作成中…" : "試し動画を作る"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div data-testid="sample-preparing">
+            <TaskProgress taskName="短い試し動画を準備します" startedAt={preparingStartedAtRef.current} />
           </div>
-        </>
+        )
       ) : (
         <div className="sample-stage-grid">
           <div className="sample-stage-player">
@@ -415,10 +441,16 @@ export default function ConsultationSampleSection({
         <p className="field-hint" data-testid="sample-request-state">{statusLineOf(requestState)}</p>
       ) : null}
       {requestError !== null ? (
-        <div data-testid="sample-request-error">
-          <ErrorNotice code={requestError.code} detail={requestError.detail} />
-          <p className="field-hint">相談を続けられます</p>
-        </div>
+        isReviewStoreNotReady(requestError.code) ? (
+          <div data-testid="sample-preparing">
+            <TaskProgress taskName="短い試し動画を準備します" startedAt={preparingStartedAtRef.current} />
+          </div>
+        ) : (
+          <div data-testid="sample-request-error">
+            <ErrorNotice code={requestError.code} detail={requestError.detail} />
+            <p className="field-hint">相談を続けられます</p>
+          </div>
+        )
       ) : null}
       {working.map((sample) => (
         <p className="field-hint" key={sample.sample_id} data-testid="consultation-sample-status">{statusLineOf(sample.status)}</p>

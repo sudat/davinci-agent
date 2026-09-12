@@ -30,6 +30,7 @@ import FlagList from "@/components/FlagList";
 import BeforeAfterSummary from "@/components/BeforeAfterSummary";
 import FinishingDomainPanel from "@/components/FinishingDomainPanel";
 import ConsultationPanel from "@/components/ConsultationPanel";
+import RemakeEpisodeButton from "@/components/RemakeEpisodeButton";
 import ReviewChatPanel from "@/components/ReviewChatPanel";
 import SelfCheckSection from "@/components/SelfCheckSection";
 import { useNow } from "@/components/useNow";
@@ -135,6 +136,8 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   if (openedAtRef.current === null) openedAtRef.current = Date.now();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const requeryRef = useRef<(() => void) | null>(null);
+  const previewAnchorRef = useRef<HTMLDivElement | null>(null);
+  const prevPlayerStateRef = useRef<PreviewAvailability>(playerState);
   const statusRef = useRef<EpisodeStatus | null>(null);
   const probeKnownAbsentRef = useRef(false);
   const probeAbsentSigRef = useRef<string | null>(null);
@@ -289,6 +292,20 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeId]);
 
+  // H: the preview waiting panel already polls — when the poll flips to
+  // available the player appears inline with no manual refresh. Scroll it
+  // into view so the operator lands on the video.
+  useEffect(() => {
+    const prev = prevPlayerStateRef.current;
+    prevPlayerStateRef.current = playerState;
+    if (playerState === "available" && prev !== "available") {
+      const el = previewAnchorRef.current;
+      if (el !== null && typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }, [playerState]);
+
   // 工程5: switching outputs drops the previous output's probe binding —
   // the binding line must never show 横版's claim under 縦版's player.
   useEffect(() => {
@@ -368,7 +385,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
   ) : null;
 
   const footageSlot = (hideUndeterminedBinding: boolean) => (
-    <>
+    <div ref={previewAnchorRef} data-testid="preview-player-anchor">
       <PreviewPlayer
         episodeId={episodeId}
         state={playerState}
@@ -400,7 +417,7 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
           {previewBindingLine(binding)}
         </p>
       )}
-    </>
+    </div>
   );
 
   const previewSection = (heading: string) => (
@@ -527,6 +544,9 @@ export default function EpisodeView({ episodeId }: EpisodeViewProps) {
       <Link href="/new-episode" className="top-link">
         ← 新しいエピソード
       </Link>
+      {status !== null ? (
+        <RemakeEpisodeButton episodeId={episodeId} sourceFolder={null} />
+      ) : null}
       {error !== null ? <ErrorNotice code={error.code} detail={error.detail} /> : null}
       {stale ? (
         <div className="card" data-testid="stale-banner">

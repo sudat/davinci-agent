@@ -17,6 +17,15 @@ export type EpisodeCreateInput = {
   /** 工程3: pinned style version — omitted unless explicitly chosen
    *  together with channel. */
   style_version?: number;
+  /** Operator-supplied editorial grant (backend EpisodeCreateRequest
+   *  editorial_grant: transcript → editorial_direct ONLY). Omitted unless
+   *  the operator explicitly agreed — absent means local_only. */
+  editorial_grant?: {
+    granted: boolean;
+    data_class: "transcript";
+    stage: "editorial_direct";
+    note: string;
+  };
 };
 
 export type EpisodeCreateResult = {
@@ -168,6 +177,49 @@ export async function getEpisodeStatus(
     { method: "GET" },
     fetchImpl,
   );
+}
+
+export type EpisodeBrief = {
+  episode_id: string;
+  brief_text: string;
+  status: string;
+};
+
+/** GET /episodes/{id}/brief — the saved natural-language brief. Unknown
+ *  shapes throw unexpected-response (never fabricated). */
+export async function getEpisodeBrief(
+  episodeId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<EpisodeBrief> {
+  const body = await request<unknown>(
+    `/episodes/${encodeURIComponent(episodeId)}/brief`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  if (typeof body !== "object" || body === null) {
+    throw new CockpitApiError(
+      "unexpected-response",
+      200,
+      "作りたい動画の記録の形式が期待と違います",
+    );
+  }
+  const record = body as { episode_id?: unknown; brief_text?: unknown; status?: unknown };
+  if (
+    typeof record.episode_id !== "string" ||
+    typeof record.brief_text !== "string" ||
+    typeof record.status !== "string"
+  ) {
+    throw new CockpitApiError(
+      "unexpected-response",
+      200,
+      "作りたい動画の記録の形式が期待と違います",
+    );
+  }
+  return {
+    episode_id: record.episode_id,
+    brief_text: record.brief_text,
+    status: record.status,
+  };
 }
 
 export async function getEpisodeFlags(
