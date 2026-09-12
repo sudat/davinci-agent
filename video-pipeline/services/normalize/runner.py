@@ -41,7 +41,11 @@ from services.normalize.toolchain_guard import (
     recipe_args_sha256,
     verify_pinned_binary,
 )
-from services.normalize.verify import OutputExpectation, verify_output
+from services.normalize.verify import (
+    OutputExpectation,
+    expected_scaled_width,
+    verify_output,
+)
 
 if TYPE_CHECKING:
     from services.conform.rate_model import CfrConversionReport
@@ -134,6 +138,7 @@ def normalize_one(
     context: NormalizeContext,
     *,
     declared_video_pix_fmt: str | None = None,
+    declared_scale_height: int | None = None,
 ) -> NormalizeRecord:
     """Produce one CFR Edit Mezzanine and commit its NormalizeRecord."""
 
@@ -174,6 +179,16 @@ def normalize_one(
         if declared_video_pix_fmt is not None
         else ()
     )
+    if declared_scale_height is not None:
+        source_video = input_facts.video
+        scaled_width = expected_scaled_width(
+            source_video.width, source_video.height, declared_scale_height
+        )
+        conversion = (
+            f"scale:{source_video.width}x{source_video.height}"
+            f"->{scaled_width}x{declared_scale_height}"
+        )
+        declared_conversions += (conversion,)
     verify_output(
         output_facts,
         OutputExpectation(
@@ -181,6 +196,7 @@ def normalize_one(
             source=input_facts,
             expected_output_frames=prediction.output_frames,
             declared_video_pix_fmt=declared_video_pix_fmt,
+            declared_scale_height=declared_scale_height,
             declared_conversions=declared_conversions,
         ),
     )
@@ -202,6 +218,7 @@ def normalize_one(
                     context.ffmpeg, output, frame_hint=output_facts.video.nb_read_frames
                 ),
                 declared_video_pix_fmt=declared_video_pix_fmt,
+                declared_scale_height=declared_scale_height,
                 declared_conversions=declared_conversions,
             )
         )

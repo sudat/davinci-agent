@@ -190,9 +190,16 @@ def test_run_advances_episode_to_preview_ready(
     client: TestClient,
     workspace: dict[str, Path],
     source_folder: Path,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("EDITORIAL_RUNTIME_CONFIG", raising=False)
+    heuristic = tmp_path / "editorial-runtime-heuristic.json"
+    heuristic.write_text(
+        json.dumps(
+            {"schema_version": "editorial-runtime-v1", "mode": "heuristic_diagnostic"}
+        )
+    )
+    monkeypatch.setenv("EDITORIAL_RUNTIME_CONFIG", str(heuristic))
     # Leaked credentials must never turn a config-absent diagnostic run live.
     monkeypatch.setenv("EDITORIAL_DIRECTOR_API_KEY", "sk-leaked-must-be-stripped")
     monkeypatch.setenv("EDITORIAL_DIRECTOR_NETWORK_ENABLED", "1")
@@ -405,7 +412,8 @@ def test_production_mode_with_gate_but_missing_provider_module_blocks(
 
 # ---------------------------------------------------------------------------
 # (3a) crash containment: a hard os._exit(137) mid-chain leaves the last
-#      StateStore-recorded stage standing; a re-POST 409s (no double runner).
+#      StateStore-recorded stage standing; a re-POST mints a fresh episode
+#      (same-folder retry) rather than 409ing.
 # ---------------------------------------------------------------------------
 
 CRASH_BOOTSTRAP = textwrap.dedent(
@@ -482,9 +490,9 @@ def test_hard_crash_leaves_last_recorded_stage_and_prevents_double_runner(
         "/episodes",
         json={"source_folder": str(source_folder), "brief_text": "again"},
     )
-    assert repeat.status_code == 409
-    assert repeat.json()["error"]["code"] == "episode-exists"
-    assert len(runner_spawn_calls) == 1  # the 409 guard IS the double-spawn guard
+    assert repeat.status_code == 200
+    assert str(repeat.json()["episode_id"]) != episode_id
+    assert len(runner_spawn_calls) == 2  # retry mints a fresh episode + runner
 
 
 # ---------------------------------------------------------------------------

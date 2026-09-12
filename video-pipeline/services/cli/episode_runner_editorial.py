@@ -1,7 +1,8 @@
 """Editorial runtime mode gate for the episode runner (task 7).
 
 Fail-fast preflight BEFORE the chain: resolve the editorial-runtime
-mode + transport (flag > ``EDITORIAL_RUNTIME_CONFIG`` env > absent), and
+mode + transport (flag > ``EDITORIAL_RUNTIME_CONFIG`` env > repo-default
+``config/editorial-runtime.json`` > absent), and
 when the mode is ``production_model`` require the transport's own gate —
 ``openai-api`` needs the env credentials, ``codex-exec`` (the DEFAULT per
 the owner decision, v4.4 delta) needs the codex CLI installed and logged
@@ -46,6 +47,8 @@ ZAI_KEY_ENV: Final = "ZAI_API_KEY"
 ZAI_NETWORK_ENV: Final = "ZAI_NETWORK_ENABLED"
 PRODUCTION_RUNTIME_MODULE: Final = "services.editorial_v2.model_provider"
 PRODUCTION_UNAVAILABLE: Final = "production-model-unavailable"
+DEFAULT_RUNTIME_RELATIVE: Final = Path("config") / "editorial-runtime.json"
+_PIPELINE_ROOT: Final = Path(__file__).resolve().parents[2]
 
 
 class EditorialGateError(Exception):
@@ -74,10 +77,18 @@ def sanitized_env() -> dict[str, str]:
 
 
 def _resolve_config_path(config_path: Path | None) -> Path | None:
+    """Explicit arg > ``EDITORIAL_RUNTIME_CONFIG`` env > repo default.
+
+    The repo default (``config/editorial-runtime.json``) applies only when
+    it exists; an absent default keeps the historical diagnostic fallback.
+    """
     if config_path is not None:
         return config_path
     from_env = os.environ.get(EDITORIAL_RUNTIME_ENV)
-    return Path(from_env) if from_env else None
+    if from_env:
+        return Path(from_env)
+    default = _PIPELINE_ROOT / DEFAULT_RUNTIME_RELATIVE
+    return default if default.is_file() else None
 
 
 def _read_runtime_raw(config_path: Path | None) -> object | None:

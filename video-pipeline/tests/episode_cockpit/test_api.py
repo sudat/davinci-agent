@@ -92,7 +92,7 @@ def test_create_episode_persists_job_row_in_state_store(
     assert snapshot.job.current_stage == "intake"
 
 
-def test_create_episode_is_idempotent_per_source_and_conflicts_on_second_create(
+def test_create_episode_same_folder_retry_mints_fresh_episode(
     client: TestClient, source_folder: Path
 ) -> None:
     first = _create_episode(client, source_folder)
@@ -102,10 +102,8 @@ def test_create_episode_is_idempotent_per_source_and_conflicts_on_second_create(
         json={"source_folder": str(source_folder), "brief_text": "different brief"},
     )
 
-    assert repeat.status_code == 409
-    error = repeat.json()["error"]
-    assert error["code"] == "episode-exists"
-    assert first["episode_id"]
+    assert repeat.status_code == 200
+    assert repeat.json()["episode_id"] != first["episode_id"]
 
 
 def test_create_episode_rejects_unknown_source_folder(

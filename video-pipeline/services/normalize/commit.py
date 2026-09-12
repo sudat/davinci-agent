@@ -50,6 +50,7 @@ class VerifiedRun:
     output_facts: MediaFacts
     decoded_video_sha256: str
     declared_video_pix_fmt: str | None = None
+    declared_scale_height: int | None = None
     declared_conversions: tuple[str, ...] = ()
 
 
@@ -88,6 +89,7 @@ def build_normalize_record(run: VerifiedRun) -> NormalizeRecord:
             color="preserve-or-explicit-v1",
         ),
         declared_video_pix_fmt=run.declared_video_pix_fmt,
+        declared_scale_height=run.declared_scale_height,
         declared_conversions=run.declared_conversions,
         drop_dup=DropDupAccounting(
             expected=DropDupExpectation(

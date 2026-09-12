@@ -1,10 +1,12 @@
 """Job-state operations: intake, listing, status, publish-status read path.
 
-Episode identity is deterministic (``ep-`` + sha256 of the resolved source
-folder path), one job row per episode, and the job-runner StateStore is
-the ONLY authority — listing reads the same schema through a read-only
-SQLite connection rather than a cockpit-side index. Task 47 adds the
-applied-review-command rebuild resolution read (lineage-derived stage set).
+Episode identity is unique per creation (``ep-`` + sha256 of the resolved
+source folder path plus a creation-unique ``time_ns`` suffix), so the same
+folder can be re-submitted for a fresh episode; one job row per episode,
+and the job-runner StateStore is the ONLY authority — listing reads the
+same schema through a read-only SQLite connection rather than a
+cockpit-side index. Task 47 adds the applied-review-command rebuild
+resolution read (lineage-derived stage set).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -115,7 +118,9 @@ class JobOps(WorkspaceContext):
                 self._episodes_root, channel=channel, style_version=style_version
             )
             pinned_version = style_version if style_version is not None else record.current
-        episode_id = "ep-" + hashlib.sha256(str(folder.resolve()).encode()).hexdigest()[:16]
+        episode_id = "ep-" + hashlib.sha256(
+            f"{folder.resolve()}:{time.time_ns()}".encode()
+        ).hexdigest()[:16]
         try:
             with StateStore.open(self._state_store_path) as store:
                 store.create_job(

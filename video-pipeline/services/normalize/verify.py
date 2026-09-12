@@ -30,11 +30,17 @@ class OutputExpectation:
     source: MediaFacts
     expected_output_frames: int
     declared_video_pix_fmt: str | None = None
+    declared_scale_height: int | None = None
     declared_conversions: tuple[str, ...] = ()
 
 
 def _loss(field: str, detail: str) -> NormalizeVerificationError:
     return NormalizeVerificationError("silent_metadata_loss", f"{field}: {detail}")
+
+
+def expected_scaled_width(source_width: int, source_height: int, scale_height: int) -> int:
+    """Even width ffmpeg's ``scale=-2:<height>`` produces for a source frame."""
+    return 2 * round(source_width * scale_height / (2 * source_height))
 
 
 def _require_rate(facts: MediaFacts, field: str, num: int, den: int) -> None:
@@ -58,6 +64,35 @@ def _verify_audio(facts: MediaFacts, expectation: OutputExpectation) -> None:
         raise _loss("channels", "audio channel count changed")
 
 
+def _verify_dimensions(facts: MediaFacts, expectation: OutputExpectation) -> None:
+    video = facts.video
+    source_video = expectation.source.video
+    if expectation.declared_scale_height is None:
+        if (video.width, video.height) != (source_video.width, source_video.height):
+            raise _loss(
+                "dimensions",
+                f"expected {source_video.width}x{source_video.height}, "
+                f"found {video.width}x{video.height}",
+            )
+        return
+    expected_width = expected_scaled_width(
+        source_video.width, source_video.height, expectation.declared_scale_height
+    )
+    expected_height = expectation.declared_scale_height
+    if (video.width, video.height) != (expected_width, expected_height):
+        raise _loss(
+            "dimensions",
+            f"expected declared scale {expected_width}x{expected_height}, "
+            f"found {video.width}x{video.height}",
+        )
+    conversion = (
+        f"scale:{source_video.width}x{source_video.height}"
+        f"->{expected_width}x{expected_height}"
+    )
+    if conversion not in expectation.declared_conversions:
+        raise _loss("dimensions", f"declared conversion record missing {conversion}")
+
+
 def _verify_video_shape(facts: MediaFacts, expectation: OutputExpectation) -> None:
     video = facts.video
     source_video = expectation.source.video
@@ -66,12 +101,7 @@ def _verify_video_shape(facts: MediaFacts, expectation: OutputExpectation) -> No
         raise _loss("video codec", f"expected h264, found {video.codec_name}")
     _require_rate(facts, "r_frame_rate", target.frame_rate.num, target.frame_rate.den)
     _require_rate(facts, "avg_frame_rate", target.frame_rate.num, target.frame_rate.den)
-    if (video.width, video.height) != (source_video.width, source_video.height):
-        raise _loss(
-            "dimensions",
-            f"expected {source_video.width}x{source_video.height}, "
-            f"found {video.width}x{video.height}",
-        )
+    _verify_dimensions(facts, expectation)
     declared = expectation.declared_video_pix_fmt
     if declared is None:
         if video.pix_fmt != source_video.pix_fmt:
