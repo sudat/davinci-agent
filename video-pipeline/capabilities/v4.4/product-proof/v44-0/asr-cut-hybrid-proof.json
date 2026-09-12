@@ -1,0 +1,34 @@
+{
+ "schema_version": "v44-0-asr-cut-hybrid-proof-v1",
+ "run_label": "gemini-cut-retranscribe-2026-09-12",
+ "recorded_at": "2026-09-12",
+ "codex_directive": "2026-09-11T23:56Z: final minimal offline proof — cut the wav into the 93 saved Gemini intervals, re-transcribe each with the pinned local whisper-cli, timing = raw Gemini interval, text = in-interval whisper after existing kana normalization, one frozen scoring vs vNext; on ANY failure terminate ASR exploration and report 4 numbers + empty-interval count + representative errors",
+ "method": {
+  "cut": "pinned ffmpeg -ss/-to stream-copy of /tmp/argv-exp/asr-16k.wav at the 93 Gemini gap-segments (700ms rule)",
+  "transcribe": "pinned whisper-cli (frozen argv template) per clip, serial, 346s total wall",
+  "compose": "one hybrid segment per interval: (gemini_start, gemini_end, concatenated whisper text); production substitution layer applied; scored once vs reference vNext"
+ },
+ "frozen_scoring_result": {
+  "transcript_cer": 0.22933333333333333,
+  "timestamp_error_p95_ms": 0.0,
+  "omitted_utterances": 21,
+  "duplicated_utterances": 3,
+  "pairs_over_500ms": "2/72",
+  "empty_intervals": 0,
+  "verdict": "FAIL on CER (0.2293 > 0.10) and omitted (21 > 5); timing PASSES PERFECTLY (p95 0.0ms) — ASR exploration TERMINATED per directive"
+ },
+ "representative_errors": [
+  "R[はじめまーす] H[始めます] — orthography (long-vowel)",
+  "R[スクワットのやつつけるの] H[スクワットのやつつけるのを間違っ] — clip-boundary bleed (trailing words of the next utterance inside the interval)",
+  "R[でも俺カメラ出した時なぁ] H[俺このカメラ出したときな] — dropped leading word + orthography",
+  "R[言いたくないんだけどー] H[お得ないんだけど] — context-deprived true misrecognition (full-audio whisper transcribes this correctly)",
+  "R[どこ行ったかな] H[どこをいたか] — context-deprived true misrecognition (full-audio whisper correct)"
+ ],
+ "interpretation": {
+  "timing_concept_proven": "interval-locked timing yields p95 0.0ms against the operator-approved reference — the timing half of the hybrid is fully solved by the Gemini interval structure",
+  "text_quality_ranking": "per-interval whisper 0.2293 < full-audio whisper 0.1147 < Gemini verbatim 0.1667 vs the 0.10 bar — no tried text engine meets the frozen CER bar against the operator's colloquial orthography; isolated short clips degrade whisper via context loss",
+  "omitted_note": "21 omitted includes the structural 6 from vNext group-splits (11 reference lines inside 5 intervals pair against 5 hybrid segments) plus text-divergence losses"
+ },
+ "asr_exploration_terminal_state": "all routes measured and closed: whisper argv (7deafcc), whisper.cpp upgrade (0a7f1f4), Gemini Transcribe verbatim (593ee71), sentence-level hybrid (hybrid-offline-proof.json), interval-cut hybrid (this record). Timing solved (operator-approved Gemini intervals, p95 0.0); text CER bar 0.10 unmet by every engine against operator orthography. Further moves are product decisions (codex/suda)",
+ "artifacts": "/tmp/gemini-cut-retranscribe/ (93 clips + 93 whisper outputs + hybrid.json), /tmp/gemini-cut-proof.py"
+}
