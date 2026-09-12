@@ -1,0 +1,42 @@
+{
+  "removed_operations_v3": [
+    {
+      "operation_id": "script_plugin.execute",
+      "row": {
+        "category": "guarded_mutation",
+        "evidence": [
+          "vendor:src/server.py:script_plugin.execute",
+          ".omo/plans/mcp-complete-parity.md"
+        ],
+        "operation_id": "script_plugin.execute",
+        "owner": "task15-guarded-mapping",
+        "reason": "guarded vendor operation without an operator-approved product route yet",
+        "route": {
+          "kind": "planned",
+          "target": "task15:guarded-handler"
+        },
+        "status": "deferred",
+        "target_phase": "phase4 task15"
+      }
+    },
+    {
+      "operation_id": "script_plugin.run_inline",
+      "row": {
+        "category": "guarded_mutation",
+        "evidence": [
+          "vendor:src/server.py:script_plugin.run_inline",
+          ".omo/plans/mcp-complete-parity.md"
+        ],
+        "operation_id": "script_plugin.run_inline",
+        "owner": "task15-guarded-mapping",
+        "reason": "guarded vendor operation without an operator-approved product route yet",
+        "route": {
+          "kind": "planned",
+          "target": "task15:guarded-handler"
+        },
+        "status": "deferred",
+        "target_phase": "phase4 task15"
+      }
+    }
+  ]
+}

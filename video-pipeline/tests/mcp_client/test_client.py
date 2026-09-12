@@ -43,7 +43,7 @@ def test_launch_initialize_returns_typed_server_info() -> None:
     with _client() as client:
         identity = client.connect()
         assert identity.name == "DaVinciResolveMCP"
-        assert identity.version == "1.29.1"
+        assert identity.version == "1.30.0"
         assert client.get_server_info() == identity
 
 

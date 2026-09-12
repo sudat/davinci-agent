@@ -2,23 +2,23 @@
   {
     "capability": "project-timeline-creation",
     "fixture": "v43-project-timeline-creation-01",
-    "readback": "project 'v43-probe-113456' created+current with timelineFrameRate=30 set as a string on the fresh project (verified live: SetSetting is refused once any timeline exists); empty timeline 'v43-probe-tl-01' id=385ebf03-09f4-486b-b16c-7ca17f3db48a created+current",
+    "readback": "project 'v43-probe-144950' created+current with timelineFrameRate=30 set as a string on the fresh project (verified live: SetSetting is refused once any timeline exists); empty timeline 'v43-probe-tl-01' id=092da7f2-7b58-4d9e-bb30-f48c1f4fbcc0 created+current",
     "status": "accepted",
     "steps": [
       {
         "action": "create",
-        "elapsed_ms": 834.1,
+        "elapsed_ms": 597.9,
         "ok": true,
         "params": {
-          "name": "v43-probe-113456"
+          "name": "v43-probe-144950"
         },
         "response": {
           "_operation": {
-            "duration_ms": 815,
-            "execution_id": "exec_bfa677d770be",
+            "duration_ms": 584,
+            "execution_id": "exec_3732b52d0b0f",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 815,
+                "duration_ms": 584,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -31,7 +31,7 @@
               "status": "unverified"
             }
           },
-          "name": "v43-probe-113456",
+          "name": "v43-probe-144950",
           "success": true
         },
         "status": "ok",
@@ -39,7 +39,7 @@
       },
       {
         "action": "set_setting",
-        "elapsed_ms": 4.8,
+        "elapsed_ms": 11.1,
         "ok": true,
         "params": {
           "name": "timelineFrameRate",
@@ -47,11 +47,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 0,
-            "execution_id": "exec_4b6cba665092",
+            "duration_ms": 6,
+            "execution_id": "exec_404f5525b4b8",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 0,
+                "duration_ms": 6,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -71,13 +71,13 @@
       },
       {
         "action": "get_current",
-        "elapsed_ms": 4.6,
+        "elapsed_ms": 4.7,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 0,
-            "execution_id": "exec_776714325b42",
+            "execution_id": "exec_b3c1b92aeffd",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 0,
@@ -93,26 +93,31 @@
               "status": "unverified"
             }
           },
-          "id": "29899281-77f9-42df-a27c-c7f7c0741762",
-          "name": "v43-probe-113456"
+          "id": "6bb40600-3d19-439a-a1df-330579acc368",
+          "name": "v43-probe-144950"
         },
         "status": "ok",
         "tool": "project_manager"
       },
       {
         "action": "create_timeline",
-        "elapsed_ms": 1287.5,
+        "elapsed_ms": 941.9,
         "ok": true,
         "params": {
           "name": "v43-probe-tl-01"
         },
         "response": {
           "_operation": {
-            "duration_ms": 1247,
-            "execution_id": "exec_7a8f7fba5676",
+            "duration_ms": 933,
+            "execution_id": "exec_9361d50b219f",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_d5a0e66331ec",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 1247,
+                "duration_ms": 933,
                 "execution_id": null,
                 "risk_level": "low"
               },
@@ -123,7 +128,7 @@
               }
             },
             "operation": "media_pool.create_timeline",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -132,14 +137,14 @@
             }
           },
           "_versioning": {
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "category": "media_pool",
             "initiator": "auto"
           },
           "created_new": true,
-          "id": "385ebf03-09f4-486b-b16c-7ca17f3db48a",
+          "id": "092da7f2-7b58-4d9e-bb30-f48c1f4fbcc0",
           "name": "v43-probe-tl-01",
-          "operation_id": "op_3c6e8cada804",
+          "operation_id": "op_d5a0e66331ec",
           "requested_name": "v43-probe-tl-01",
           "security": {
             "blocked": false,
@@ -155,18 +160,18 @@
       },
       {
         "action": "set_current",
-        "elapsed_ms": 110.0,
+        "elapsed_ms": 105.8,
         "ok": true,
         "params": {
           "name": "v43-probe-tl-01"
         },
         "response": {
           "_operation": {
-            "duration_ms": 83,
-            "execution_id": "exec_8650d1106809",
+            "duration_ms": 72,
+            "execution_id": "exec_6cdbf392d9e2",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 83,
+                "duration_ms": 72,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -186,13 +191,13 @@
       },
       {
         "action": "get_current",
-        "elapsed_ms": 10.0,
+        "elapsed_ms": 5.3,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_7a51cf130cf1",
+            "execution_id": "exec_96bbdf206efb",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -209,7 +214,7 @@
             }
           },
           "end_frame": 108000,
-          "id": "385ebf03-09f4-486b-b16c-7ca17f3db48a",
+          "id": "092da7f2-7b58-4d9e-bb30-f48c1f4fbcc0",
           "name": "v43-probe-tl-01",
           "start_frame": 108000,
           "start_timecode": "01:00:00:00"
@@ -219,13 +224,13 @@
       },
       {
         "action": "get_current",
-        "elapsed_ms": 6.7,
+        "elapsed_ms": 5.1,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_957d85b6107d",
+            "execution_id": "exec_e398d35c588e",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -242,7 +247,7 @@
             }
           },
           "end_frame": 108000,
-          "id": "385ebf03-09f4-486b-b16c-7ca17f3db48a",
+          "id": "092da7f2-7b58-4d9e-bb30-f48c1f4fbcc0",
           "name": "v43-probe-tl-01",
           "start_frame": 108000,
           "start_timecode": "01:00:00:00"
@@ -251,7 +256,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 2.258
+    "wall_seconds": 1.673
   },
   {
     "capability": "import-media",
@@ -261,22 +266,22 @@
     "steps": [
       {
         "action": "safe_import_media",
-        "elapsed_ms": 196.3,
+        "elapsed_ms": 173.9,
         "ok": true,
         "params": {
           "paths": [
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4"
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4"
           ]
         },
         "response": {
           "_operation": {
-            "duration_ms": 190,
-            "execution_id": "exec_515f4c841302",
+            "duration_ms": 169,
+            "execution_id": "exec_c312248ba869",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 190,
+                "duration_ms": 169,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -292,25 +297,25 @@
           "clips": [
             {
               "duration": "00:00:06:00",
-              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
-              "id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
-              "media_id": "547778b6-9ea0-4b86-a1e7-7998b0fd93c5",
+              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
+              "id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
+              "media_id": "c0f10c66-17e5-409e-b635-0d9fe807eac3",
               "name": "parity-src-001.mp4",
               "type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa"
             },
             {
               "duration": "00:00:05:00",
-              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
-              "id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
-              "media_id": "9d16d49a-93fc-4bdc-b911-f61eed66ac48",
+              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
+              "id": "e4b28034-867c-4140-9dce-31f6aa43574e",
+              "media_id": "00d2e65b-e793-4de6-8657-7ef622bd93c9",
               "name": "parity-src-002.mp4",
               "type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa"
             },
             {
               "duration": "00:00:05:00",
-              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
-              "id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
-              "media_id": "7ae09ed5-1716-4f62-9c14-d214a0cf474e",
+              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
+              "id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
+              "media_id": "f6546238-0f60-4299-bca2-bd9d43ab4979",
               "name": "parity-src-003.mp4",
               "type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa"
             }
@@ -322,7 +327,7 @@
         "tool": "media_pool"
       }
     ],
-    "wall_seconds": 0.196
+    "wall_seconds": 0.174
   },
   {
     "capability": "exact-source-range-placement",
@@ -332,18 +337,23 @@
     "steps": [
       {
         "action": "create_timeline",
-        "elapsed_ms": 171.6,
+        "elapsed_ms": 135.7,
         "ok": true,
         "params": {
           "name": "v43-probe-place-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 160,
-            "execution_id": "exec_f1f69d57b2fd",
+            "duration_ms": 128,
+            "execution_id": "exec_e4d4ebcb06fe",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_231bbb62fd7c",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 160,
+                "duration_ms": 128,
                 "execution_id": null,
                 "risk_level": "low"
               },
@@ -354,7 +364,7 @@
               }
             },
             "operation": "media_pool.create_timeline",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -363,14 +373,14 @@
             }
           },
           "_versioning": {
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "category": "media_pool",
             "initiator": "auto"
           },
           "created_new": true,
-          "id": "8eb5a2b6-7474-4cca-9a01-dcbd0dff78fd",
+          "id": "9dddf010-5e9d-4e7c-b905-61315367c839",
           "name": "v43-probe-place-tl",
-          "operation_id": "op_430b5bd471d2",
+          "operation_id": "op_231bbb62fd7c",
           "requested_name": "v43-probe-place-tl",
           "security": {
             "blocked": false,
@@ -386,18 +396,18 @@
       },
       {
         "action": "set_current",
-        "elapsed_ms": 116.5,
+        "elapsed_ms": 99.8,
         "ok": true,
         "params": {
           "name": "v43-probe-place-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 87,
-            "execution_id": "exec_f176ad09704e",
+            "duration_ms": 71,
+            "execution_id": "exec_bd06c6c9610c",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 87,
+                "duration_ms": 71,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -417,16 +427,16 @@
       },
       {
         "action": "get_current",
-        "elapsed_ms": 10.1,
+        "elapsed_ms": 7.4,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 4,
-            "execution_id": "exec_0d9757f490aa",
+            "duration_ms": 1,
+            "execution_id": "exec_5d69d809e898",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 4,
+                "duration_ms": 1,
                 "execution_id": null,
                 "risk_level": "low"
               }
@@ -440,7 +450,7 @@
             }
           },
           "end_frame": 108000,
-          "id": "8eb5a2b6-7474-4cca-9a01-dcbd0dff78fd",
+          "id": "9dddf010-5e9d-4e7c-b905-61315367c839",
           "name": "v43-probe-place-tl",
           "start_frame": 108000,
           "start_timecode": "01:00:00:00"
@@ -450,12 +460,12 @@
       },
       {
         "action": "append_to_timeline",
-        "elapsed_ms": 34.1,
+        "elapsed_ms": 37.4,
         "ok": true,
         "params": {
           "clip_infos": [
             {
-              "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "end_frame": 70,
               "media_type": 1,
               "record_frame": 108000,
@@ -464,7 +474,7 @@
               "track_index": 1
             },
             {
-              "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "end_frame": 70,
               "media_type": 2,
               "record_frame": 108000,
@@ -473,7 +483,7 @@
               "track_index": 1
             },
             {
-              "clip_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+              "clip_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
               "end_frame": 60,
               "media_type": 1,
               "record_frame": 108060,
@@ -482,7 +492,7 @@
               "track_index": 1
             },
             {
-              "clip_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+              "clip_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
               "end_frame": 60,
               "media_type": 2,
               "record_frame": 108060,
@@ -491,7 +501,7 @@
               "track_index": 1
             },
             {
-              "clip_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+              "clip_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
               "end_frame": 50,
               "media_type": 1,
               "record_frame": 108120,
@@ -500,7 +510,7 @@
               "track_index": 1
             },
             {
-              "clip_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+              "clip_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
               "end_frame": 50,
               "media_type": 2,
               "record_frame": 108120,
@@ -512,8 +522,8 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 25,
-            "execution_id": "exec_0db74e46937c",
+            "duration_ms": 31,
+            "execution_id": "exec_d55ccb772767",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -522,8 +532,13 @@
                 ],
                 "duration_delta_frames": 150
               },
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_55e58f7fbe05",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 25,
+                "duration_ms": 31,
                 "execution_id": null,
                 "risk_level": "medium"
               },
@@ -534,7 +549,7 @@
               }
             },
             "operation": "media_pool.append_to_timeline",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -543,7 +558,7 @@
             }
           },
           "_versioning": {
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "category": "media_pool",
             "initiator": "auto"
           },
@@ -551,30 +566,30 @@
           "items": [
             {
               "name": "parity-src-001.mp4",
-              "timeline_item_id": "696d2d1a-8bb6-4339-b561-6823227a9968"
+              "timeline_item_id": "05e81d2b-07d4-4552-aec7-082f9aa03dab"
             },
             {
               "name": "parity-src-001.mp4",
-              "timeline_item_id": "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d"
+              "timeline_item_id": "a7eb4171-8772-461e-9042-5b18128db90f"
             },
             {
               "name": "parity-src-002.mp4",
-              "timeline_item_id": "1d9edbde-ed2f-4269-bc5b-154e34c7801b"
+              "timeline_item_id": "4d835e56-d812-4104-8452-ed71e3fdbb6b"
             },
             {
               "name": "parity-src-002.mp4",
-              "timeline_item_id": "b32e63d0-0d84-4e46-922b-e436cee8d3b2"
+              "timeline_item_id": "c3f8b780-ec02-4233-908c-646d507a2504"
             },
             {
               "name": "parity-src-003.mp4",
-              "timeline_item_id": "cda858e0-8e9d-4d09-ae22-c78567e8070f"
+              "timeline_item_id": "5e338987-5965-43eb-a9ee-2aa922f7d95a"
             },
             {
               "name": "parity-src-003.mp4",
-              "timeline_item_id": "61a8085c-6eb9-47c7-b476-3b0604e6c67a"
+              "timeline_item_id": "cc91aeff-0fa9-49ef-92cd-74a63ffeea52"
             }
           ],
-          "operation_id": "op_ef25e972da08",
+          "operation_id": "op_55e58f7fbe05",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -606,7 +621,7 @@
                 "available": true,
                 "item_count": 6,
                 "timeline": {
-                  "id": "8eb5a2b6-7474-4cca-9a01-dcbd0dff78fd",
+                  "id": "9dddf010-5e9d-4e7c-b905-61315367c839",
                   "name": "v43-probe-place-tl"
                 },
                 "tracks": {
@@ -616,9 +631,9 @@
                       {
                         "item_count": 3,
                         "item_ids": [
-                          "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d",
-                          "b32e63d0-0d84-4e46-922b-e436cee8d3b2",
-                          "61a8085c-6eb9-47c7-b476-3b0604e6c67a"
+                          "a7eb4171-8772-461e-9042-5b18128db90f",
+                          "c3f8b780-ec02-4233-908c-646d507a2504",
+                          "cc91aeff-0fa9-49ef-92cd-74a63ffeea52"
                         ],
                         "track_index": 1
                       }
@@ -634,9 +649,9 @@
                       {
                         "item_count": 3,
                         "item_ids": [
-                          "696d2d1a-8bb6-4339-b561-6823227a9968",
-                          "1d9edbde-ed2f-4269-bc5b-154e34c7801b",
-                          "cda858e0-8e9d-4d09-ae22-c78567e8070f"
+                          "05e81d2b-07d4-4552-aec7-082f9aa03dab",
+                          "4d835e56-d812-4104-8452-ed71e3fdbb6b",
+                          "5e338987-5965-43eb-a9ee-2aa922f7d95a"
                         ],
                         "track_index": 1
                       }
@@ -650,7 +665,7 @@
                 "available": true,
                 "item_count": 0,
                 "timeline": {
-                  "id": "8eb5a2b6-7474-4cca-9a01-dcbd0dff78fd",
+                  "id": "9dddf010-5e9d-4e7c-b905-61315367c839",
                   "name": "v43-probe-place-tl"
                 },
                 "tracks": {
@@ -699,7 +714,7 @@
       },
       {
         "action": "probe_timeline_structure",
-        "elapsed_ms": 58.1,
+        "elapsed_ms": 29.7,
         "ok": true,
         "params": {
           "include_markers": false,
@@ -711,11 +726,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 46,
-            "execution_id": "exec_ff581e75b67c",
+            "duration_ms": 22,
+            "execution_id": "exec_3785238cbb0b",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 46,
+                "duration_ms": 22,
                 "execution_id": null,
                 "risk_level": "low"
               }
@@ -729,7 +744,7 @@
             }
           },
           "end_frame": 108150,
-          "id": "8eb5a2b6-7474-4cca-9a01-dcbd0dff78fd",
+          "id": "9dddf010-5e9d-4e7c-b905-61315367c839",
           "item_count": 6,
           "markers": {},
           "name": "v43-probe-place-tl",
@@ -746,9 +761,9 @@
                       "duration": 60,
                       "end": 108060,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                       "item_index": 0,
-                      "media_pool_item_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                      "media_pool_item_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                       "media_pool_item_name": "parity-src-001.mp4",
                       "media_status": "Online",
                       "name": "parity-src-001.mp4",
@@ -758,7 +773,7 @@
                       "source_start": 10,
                       "source_start_seconds": 0.333,
                       "start": 108000,
-                      "timeline_item_id": "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d",
+                      "timeline_item_id": "a7eb4171-8772-461e-9042-5b18128db90f",
                       "track_index": 1,
                       "track_type": "audio"
                     },
@@ -766,9 +781,9 @@
                       "duration": 60,
                       "end": 108120,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
                       "item_index": 1,
-                      "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+                      "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
                       "media_pool_item_name": "parity-src-002.mp4",
                       "media_status": "Online",
                       "name": "parity-src-002.mp4",
@@ -778,7 +793,7 @@
                       "source_start": 0,
                       "source_start_seconds": 0.0,
                       "start": 108060,
-                      "timeline_item_id": "b32e63d0-0d84-4e46-922b-e436cee8d3b2",
+                      "timeline_item_id": "c3f8b780-ec02-4233-908c-646d507a2504",
                       "track_index": 1,
                       "track_type": "audio"
                     },
@@ -786,9 +801,9 @@
                       "duration": 30,
                       "end": 108150,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
                       "item_index": 2,
-                      "media_pool_item_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+                      "media_pool_item_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
                       "media_pool_item_name": "parity-src-003.mp4",
                       "media_status": "Online",
                       "name": "parity-src-003.mp4",
@@ -798,7 +813,7 @@
                       "source_start": 20,
                       "source_start_seconds": 0.667,
                       "start": 108120,
-                      "timeline_item_id": "61a8085c-6eb9-47c7-b476-3b0604e6c67a",
+                      "timeline_item_id": "cc91aeff-0fa9-49ef-92cd-74a63ffeea52",
                       "track_index": 1,
                       "track_type": "audio"
                     }
@@ -821,9 +836,9 @@
                       "duration": 60,
                       "end": 108060,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                       "item_index": 0,
-                      "media_pool_item_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                      "media_pool_item_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                       "media_pool_item_name": "parity-src-001.mp4",
                       "media_status": "Online",
                       "name": "parity-src-001.mp4",
@@ -833,7 +848,7 @@
                       "source_start": 10,
                       "source_start_seconds": 0.333,
                       "start": 108000,
-                      "timeline_item_id": "696d2d1a-8bb6-4339-b561-6823227a9968",
+                      "timeline_item_id": "05e81d2b-07d4-4552-aec7-082f9aa03dab",
                       "track_index": 1,
                       "track_type": "video"
                     },
@@ -841,9 +856,9 @@
                       "duration": 60,
                       "end": 108120,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
                       "item_index": 1,
-                      "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+                      "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
                       "media_pool_item_name": "parity-src-002.mp4",
                       "media_status": "Online",
                       "name": "parity-src-002.mp4",
@@ -853,7 +868,7 @@
                       "source_start": 0,
                       "source_start_seconds": 0.0,
                       "start": 108060,
-                      "timeline_item_id": "1d9edbde-ed2f-4269-bc5b-154e34c7801b",
+                      "timeline_item_id": "4d835e56-d812-4104-8452-ed71e3fdbb6b",
                       "track_index": 1,
                       "track_type": "video"
                     },
@@ -861,9 +876,9 @@
                       "duration": 30,
                       "end": 108150,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
                       "item_index": 2,
-                      "media_pool_item_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+                      "media_pool_item_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
                       "media_pool_item_name": "parity-src-003.mp4",
                       "media_status": "Online",
                       "name": "parity-src-003.mp4",
@@ -873,7 +888,7 @@
                       "source_start": 20,
                       "source_start_seconds": 0.667,
                       "start": 108120,
-                      "timeline_item_id": "cda858e0-8e9d-4d09-ae22-c78567e8070f",
+                      "timeline_item_id": "5e338987-5965-43eb-a9ee-2aa922f7d95a",
                       "track_index": 1,
                       "track_type": "video"
                     }
@@ -888,7 +903,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.391
+    "wall_seconds": 0.311
   },
   {
     "capability": "source-record-readback",
@@ -898,7 +913,7 @@
     "steps": [
       {
         "action": "probe_timeline_structure",
-        "elapsed_ms": 45.7,
+        "elapsed_ms": 42.3,
         "ok": true,
         "params": {
           "include_markers": false,
@@ -910,11 +925,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 38,
-            "execution_id": "exec_ca04a9d91085",
+            "duration_ms": 18,
+            "execution_id": "exec_0a5319b99960",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 38,
+                "duration_ms": 18,
                 "execution_id": null,
                 "risk_level": "low"
               }
@@ -928,7 +943,7 @@
             }
           },
           "end_frame": 108150,
-          "id": "8eb5a2b6-7474-4cca-9a01-dcbd0dff78fd",
+          "id": "9dddf010-5e9d-4e7c-b905-61315367c839",
           "item_count": 6,
           "markers": {},
           "name": "v43-probe-place-tl",
@@ -945,9 +960,9 @@
                       "duration": 60,
                       "end": 108060,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                       "item_index": 0,
-                      "media_pool_item_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                      "media_pool_item_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                       "media_pool_item_name": "parity-src-001.mp4",
                       "media_status": "Online",
                       "name": "parity-src-001.mp4",
@@ -957,7 +972,7 @@
                       "source_start": 10,
                       "source_start_seconds": 0.333,
                       "start": 108000,
-                      "timeline_item_id": "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d",
+                      "timeline_item_id": "a7eb4171-8772-461e-9042-5b18128db90f",
                       "track_index": 1,
                       "track_type": "audio"
                     },
@@ -965,9 +980,9 @@
                       "duration": 60,
                       "end": 108120,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
                       "item_index": 1,
-                      "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+                      "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
                       "media_pool_item_name": "parity-src-002.mp4",
                       "media_status": "Online",
                       "name": "parity-src-002.mp4",
@@ -977,7 +992,7 @@
                       "source_start": 0,
                       "source_start_seconds": 0.0,
                       "start": 108060,
-                      "timeline_item_id": "b32e63d0-0d84-4e46-922b-e436cee8d3b2",
+                      "timeline_item_id": "c3f8b780-ec02-4233-908c-646d507a2504",
                       "track_index": 1,
                       "track_type": "audio"
                     },
@@ -985,9 +1000,9 @@
                       "duration": 30,
                       "end": 108150,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
                       "item_index": 2,
-                      "media_pool_item_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+                      "media_pool_item_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
                       "media_pool_item_name": "parity-src-003.mp4",
                       "media_status": "Online",
                       "name": "parity-src-003.mp4",
@@ -997,7 +1012,7 @@
                       "source_start": 20,
                       "source_start_seconds": 0.667,
                       "start": 108120,
-                      "timeline_item_id": "61a8085c-6eb9-47c7-b476-3b0604e6c67a",
+                      "timeline_item_id": "cc91aeff-0fa9-49ef-92cd-74a63ffeea52",
                       "track_index": 1,
                       "track_type": "audio"
                     }
@@ -1020,9 +1035,9 @@
                       "duration": 60,
                       "end": 108060,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                       "item_index": 0,
-                      "media_pool_item_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                      "media_pool_item_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                       "media_pool_item_name": "parity-src-001.mp4",
                       "media_status": "Online",
                       "name": "parity-src-001.mp4",
@@ -1032,7 +1047,7 @@
                       "source_start": 10,
                       "source_start_seconds": 0.333,
                       "start": 108000,
-                      "timeline_item_id": "696d2d1a-8bb6-4339-b561-6823227a9968",
+                      "timeline_item_id": "05e81d2b-07d4-4552-aec7-082f9aa03dab",
                       "track_index": 1,
                       "track_type": "video"
                     },
@@ -1040,9 +1055,9 @@
                       "duration": 60,
                       "end": 108120,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
                       "item_index": 1,
-                      "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+                      "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
                       "media_pool_item_name": "parity-src-002.mp4",
                       "media_status": "Online",
                       "name": "parity-src-002.mp4",
@@ -1052,7 +1067,7 @@
                       "source_start": 0,
                       "source_start_seconds": 0.0,
                       "start": 108060,
-                      "timeline_item_id": "1d9edbde-ed2f-4269-bc5b-154e34c7801b",
+                      "timeline_item_id": "4d835e56-d812-4104-8452-ed71e3fdbb6b",
                       "track_index": 1,
                       "track_type": "video"
                     },
@@ -1060,9 +1075,9 @@
                       "duration": 30,
                       "end": 108150,
                       "file_exists": true,
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
                       "item_index": 2,
-                      "media_pool_item_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+                      "media_pool_item_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
                       "media_pool_item_name": "parity-src-003.mp4",
                       "media_status": "Online",
                       "name": "parity-src-003.mp4",
@@ -1072,7 +1087,7 @@
                       "source_start": 20,
                       "source_start_seconds": 0.667,
                       "start": 108120,
-                      "timeline_item_id": "cda858e0-8e9d-4d09-ae22-c78567e8070f",
+                      "timeline_item_id": "5e338987-5965-43eb-a9ee-2aa922f7d95a",
                       "track_index": 1,
                       "track_type": "video"
                     }
@@ -1088,16 +1103,16 @@
       },
       {
         "action": "source_range_report",
-        "elapsed_ms": 37.2,
+        "elapsed_ms": 21.0,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 30,
-            "execution_id": "exec_39672bd535c7",
+            "duration_ms": 16,
+            "execution_id": "exec_1aeb5c3ca65b",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 30,
+                "duration_ms": 16,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -1114,12 +1129,12 @@
           "merged": true,
           "occurrences": [
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
               "source_range": [
                 10,
                 70
               ],
-              "timeline_item_id": "696d2d1a-8bb6-4339-b561-6823227a9968",
+              "timeline_item_id": "05e81d2b-07d4-4552-aec7-082f9aa03dab",
               "timeline_range": [
                 108000,
                 108060
@@ -1128,12 +1143,12 @@
               "track_type": "video"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
               "source_range": [
                 0,
                 60
               ],
-              "timeline_item_id": "1d9edbde-ed2f-4269-bc5b-154e34c7801b",
+              "timeline_item_id": "4d835e56-d812-4104-8452-ed71e3fdbb6b",
               "timeline_range": [
                 108060,
                 108120
@@ -1142,12 +1157,12 @@
               "track_type": "video"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
               "source_range": [
                 20,
                 50
               ],
-              "timeline_item_id": "cda858e0-8e9d-4d09-ae22-c78567e8070f",
+              "timeline_item_id": "5e338987-5965-43eb-a9ee-2aa922f7d95a",
               "timeline_range": [
                 108120,
                 108150
@@ -1156,12 +1171,12 @@
               "track_type": "video"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
               "source_range": [
                 10,
                 70
               ],
-              "timeline_item_id": "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d",
+              "timeline_item_id": "a7eb4171-8772-461e-9042-5b18128db90f",
               "timeline_range": [
                 108000,
                 108060
@@ -1170,12 +1185,12 @@
               "track_type": "audio"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
               "source_range": [
                 0,
                 60
               ],
-              "timeline_item_id": "b32e63d0-0d84-4e46-922b-e436cee8d3b2",
+              "timeline_item_id": "c3f8b780-ec02-4233-908c-646d507a2504",
               "timeline_range": [
                 108060,
                 108120
@@ -1184,12 +1199,12 @@
               "track_type": "audio"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
               "source_range": [
                 20,
                 50
               ],
-              "timeline_item_id": "61a8085c-6eb9-47c7-b476-3b0604e6c67a",
+              "timeline_item_id": "cc91aeff-0fa9-49ef-92cd-74a63ffeea52",
               "timeline_range": [
                 108120,
                 108150
@@ -1199,19 +1214,19 @@
             }
           ],
           "ranges": {
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4": [
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4": [
               [
                 10,
                 70
               ]
             ],
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4": [
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4": [
               [
                 0,
                 60
               ]
             ],
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4": [
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4": [
               [
                 20,
                 50
@@ -1223,7 +1238,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.083
+    "wall_seconds": 0.064
   },
   {
     "capability": "subtitle-capability",
@@ -1233,16 +1248,16 @@
     "steps": [
       {
         "action": "subtitle_generation_probe",
-        "elapsed_ms": 7.0,
+        "elapsed_ms": 4.1,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 1,
-            "execution_id": "exec_48eeaee245ae",
+            "duration_ms": 0,
+            "execution_id": "exec_6ddd1ea19f70",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 1,
+                "duration_ms": 0,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -1265,7 +1280,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.007
+    "wall_seconds": 0.004
   },
   {
     "capability": "title-text-plus",
@@ -1275,15 +1290,15 @@
     "steps": [
       {
         "action": "create_timeline",
-        "elapsed_ms": 170.8,
+        "elapsed_ms": 135.2,
         "ok": true,
         "params": {
           "name": "v43-probe-title-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 159,
-            "execution_id": "exec_c92e18b2651b",
+            "duration_ms": 129,
+            "execution_id": "exec_7102ecd3fbf1",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -1292,8 +1307,13 @@
                 ],
                 "duration_delta_frames": -150
               },
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_e136c41d9fb1",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 159,
+                "duration_ms": 129,
                 "execution_id": null,
                 "risk_level": "low"
               },
@@ -1304,7 +1324,7 @@
               }
             },
             "operation": "media_pool.create_timeline",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -1313,14 +1333,14 @@
             }
           },
           "_versioning": {
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "category": "media_pool",
             "initiator": "auto"
           },
           "created_new": true,
-          "id": "1c6b16cc-8b0a-423e-893b-8987f87bb319",
+          "id": "d2ec3577-973f-46f8-90fb-aeff23b1ede4",
           "name": "v43-probe-title-tl",
-          "operation_id": "op_21359569b0aa",
+          "operation_id": "op_e136c41d9fb1",
           "requested_name": "v43-probe-title-tl",
           "security": {
             "blocked": false,
@@ -1336,18 +1356,18 @@
       },
       {
         "action": "set_current",
-        "elapsed_ms": 111.3,
+        "elapsed_ms": 95.9,
         "ok": true,
         "params": {
           "name": "v43-probe-title-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 84,
-            "execution_id": "exec_f33c3c905fbb",
+            "duration_ms": 70,
+            "execution_id": "exec_fe025be4354d",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 84,
+                "duration_ms": 70,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -1367,13 +1387,13 @@
       },
       {
         "action": "get_current",
-        "elapsed_ms": 7.1,
+        "elapsed_ms": 7.5,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_af0ba7a9c723",
+            "execution_id": "exec_1755693df009",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -1390,7 +1410,7 @@
             }
           },
           "end_frame": 108000,
-          "id": "1c6b16cc-8b0a-423e-893b-8987f87bb319",
+          "id": "d2ec3577-973f-46f8-90fb-aeff23b1ede4",
           "name": "v43-probe-title-tl",
           "start_frame": 108000,
           "start_timecode": "01:00:00:00"
@@ -1400,7 +1420,7 @@
       },
       {
         "action": "insert_fusion_title",
-        "elapsed_ms": 372.0,
+        "elapsed_ms": 345.5,
         "ok": true,
         "params": {
           "name": "Text+"
@@ -1411,8 +1431,8 @@
               "archived_version": 1,
               "timeline_archived": true
             },
-            "duration_ms": 366,
-            "execution_id": "exec_946431a9a8c0",
+            "duration_ms": 340,
+            "execution_id": "exec_5f915c7987f8",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -1421,8 +1441,13 @@
                 ],
                 "duration_delta_frames": 150
               },
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_8df846e684be",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 366,
+                "duration_ms": 340,
                 "execution_id": null,
                 "risk_level": "medium"
               },
@@ -1433,7 +1458,7 @@
               }
             },
             "operation": "timeline.insert_fusion_title",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -1443,13 +1468,13 @@
           },
           "_versioning": {
             "after_value": null,
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "archived": true,
             "archived_version": 1,
             "before_value": null,
             "metric": null
           },
-          "operation_id": "op_8c4a7807f503",
+          "operation_id": "op_8df846e684be",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -1463,7 +1488,7 @@
       },
       {
         "action": "set_title_text",
-        "elapsed_ms": 51.4,
+        "elapsed_ms": 29.6,
         "ok": true,
         "params": {
           "readback": true,
@@ -1476,11 +1501,16 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 45,
-            "execution_id": "exec_c2a195957d16",
+            "duration_ms": 25,
+            "execution_id": "exec_e9cd72afd41f",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_f424450bdadf",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 45,
+                "duration_ms": 25,
                 "execution_id": null,
                 "risk_level": "low"
               },
@@ -1491,7 +1521,7 @@
               }
             },
             "operation": "timeline.set_title_text",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -1501,7 +1531,7 @@
           },
           "_versioning": {
             "after_value": null,
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "archived": false,
             "archived_version": null,
             "before_value": null,
@@ -1555,7 +1585,7 @@
             }
           ],
           "mode": "fusion_comp",
-          "operation_id": "op_7b0a8c3f6754",
+          "operation_id": "op_f424450bdadf",
           "property_key": "StyledText",
           "security": {
             "blocked": false,
@@ -1564,14 +1594,14 @@
             "safe_mode": false
           },
           "success": true,
-          "timeline_item_id": "37850c8a-5b30-4746-81e1-31fb06a9ff95"
+          "timeline_item_id": "4d5b0973-ac71-4fd7-804e-1553b19073f1"
         },
         "status": "ok",
         "tool": "timeline"
       },
       {
         "action": "get_comp_count",
-        "elapsed_ms": 7.0,
+        "elapsed_ms": 4.0,
         "ok": true,
         "params": {
           "item_index": 0,
@@ -1580,11 +1610,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 1,
-            "execution_id": "exec_e5523924c840",
+            "duration_ms": 0,
+            "execution_id": "exec_79093c286251",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 1,
+                "duration_ms": 0,
                 "execution_id": null,
                 "risk_level": "low"
               }
@@ -1603,7 +1633,7 @@
         "tool": "timeline_item_fusion"
       }
     ],
-    "wall_seconds": 0.72
+    "wall_seconds": 0.618
   },
   {
     "capability": "fusion-template-insertion",
@@ -1613,15 +1643,15 @@
     "steps": [
       {
         "action": "create_timeline",
-        "elapsed_ms": 212.0,
+        "elapsed_ms": 132.9,
         "ok": true,
         "params": {
           "name": "v43-probe-fusion-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 199,
-            "execution_id": "exec_0d1cc284be62",
+            "duration_ms": 126,
+            "execution_id": "exec_4d663536dd06",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -1630,8 +1660,13 @@
                 ],
                 "duration_delta_frames": -150
               },
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_b2a6ab175d52",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 199,
+                "duration_ms": 126,
                 "execution_id": null,
                 "risk_level": "low"
               },
@@ -1642,7 +1677,7 @@
               }
             },
             "operation": "media_pool.create_timeline",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -1651,14 +1686,14 @@
             }
           },
           "_versioning": {
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "category": "media_pool",
             "initiator": "auto"
           },
           "created_new": true,
-          "id": "3d479a37-5078-4b25-a54e-5631832f32d1",
+          "id": "6aa027cd-b35d-45a1-93c1-9556c4993834",
           "name": "v43-probe-fusion-tl",
-          "operation_id": "op_ecfde4e4ddd2",
+          "operation_id": "op_b2a6ab175d52",
           "requested_name": "v43-probe-fusion-tl",
           "security": {
             "blocked": false,
@@ -1674,18 +1709,18 @@
       },
       {
         "action": "set_current",
-        "elapsed_ms": 117.0,
+        "elapsed_ms": 96.6,
         "ok": true,
         "params": {
           "name": "v43-probe-fusion-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 89,
-            "execution_id": "exec_8d19fff52dbb",
+            "duration_ms": 71,
+            "execution_id": "exec_dc785eb1e8d7",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 89,
+                "duration_ms": 71,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -1705,13 +1740,13 @@
       },
       {
         "action": "get_current",
-        "elapsed_ms": 8.0,
+        "elapsed_ms": 5.1,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_6f805e35d982",
+            "execution_id": "exec_029959212f00",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -1728,7 +1763,7 @@
             }
           },
           "end_frame": 108000,
-          "id": "3d479a37-5078-4b25-a54e-5631832f32d1",
+          "id": "6aa027cd-b35d-45a1-93c1-9556c4993834",
           "name": "v43-probe-fusion-tl",
           "start_frame": 108000,
           "start_timecode": "01:00:00:00"
@@ -1738,7 +1773,7 @@
       },
       {
         "action": "insert_fusion_composition",
-        "elapsed_ms": 338.6,
+        "elapsed_ms": 266.1,
         "ok": true,
         "params": {},
         "response": {
@@ -1747,8 +1782,8 @@
               "archived_version": 1,
               "timeline_archived": true
             },
-            "duration_ms": 332,
-            "execution_id": "exec_986ec112acf1",
+            "duration_ms": 262,
+            "execution_id": "exec_ab79d9eca285",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -1757,8 +1792,13 @@
                 ],
                 "duration_delta_frames": 150
               },
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_d890e0428b5b",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 332,
+                "duration_ms": 262,
                 "execution_id": null,
                 "risk_level": "medium"
               },
@@ -1769,7 +1809,7 @@
               }
             },
             "operation": "timeline.insert_fusion_composition",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -1779,13 +1819,13 @@
           },
           "_versioning": {
             "after_value": null,
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "archived": true,
             "archived_version": 1,
             "before_value": null,
             "metric": null
           },
-          "operation_id": "op_c78bde10ebfb",
+          "operation_id": "op_d890e0428b5b",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -1799,7 +1839,7 @@
       },
       {
         "action": "get_comp_count",
-        "elapsed_ms": 6.6,
+        "elapsed_ms": 4.6,
         "ok": true,
         "params": {
           "item_index": 0,
@@ -1808,11 +1848,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 1,
-            "execution_id": "exec_2869c1409d3e",
+            "duration_ms": 0,
+            "execution_id": "exec_321a6bfa21dd",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 1,
+                "duration_ms": 0,
                 "execution_id": null,
                 "risk_level": "low"
               }
@@ -1831,7 +1871,7 @@
         "tool": "timeline_item_fusion"
       }
     ],
-    "wall_seconds": 0.683
+    "wall_seconds": 0.506
   },
   {
     "capability": "clip-transform-punch-in",
@@ -1841,18 +1881,18 @@
     "steps": [
       {
         "action": "set_current",
-        "elapsed_ms": 163.0,
+        "elapsed_ms": 121.0,
         "ok": true,
         "params": {
           "name": "v43-probe-place-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 102,
-            "execution_id": "exec_6e02ee87ff0d",
+            "duration_ms": 77,
+            "execution_id": "exec_aa638ac2b4e4",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 102,
+                "duration_ms": 77,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -1872,7 +1912,7 @@
       },
       {
         "action": "set_transform",
-        "elapsed_ms": 1363.6,
+        "elapsed_ms": 332.9,
         "ok": true,
         "params": {
           "Pan": 0.05,
@@ -1891,11 +1931,16 @@
               "archived_version": 1,
               "timeline_archived": true
             },
-            "duration_ms": 1357,
-            "execution_id": "exec_a7144299aa7b",
+            "duration_ms": 328,
+            "execution_id": "exec_d0a8a229d884",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_119854a0410a",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 1357,
+                "duration_ms": 328,
                 "execution_id": null,
                 "risk_level": "low"
               },
@@ -1906,7 +1951,7 @@
               }
             },
             "operation": "timeline_item.set_transform",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -1916,13 +1961,13 @@
           },
           "_versioning": {
             "after_value": null,
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "archived": true,
             "archived_version": 1,
             "before_value": null,
             "metric": null
           },
-          "operation_id": "op_15e08412579b",
+          "operation_id": "op_119854a0410a",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -1936,7 +1981,7 @@
       },
       {
         "action": "get_transform",
-        "elapsed_ms": 9.6,
+        "elapsed_ms": 5.2,
         "ok": true,
         "params": {
           "item_index": 0,
@@ -1957,11 +2002,11 @@
           "ZoomX": 1.25,
           "ZoomY": 1.25,
           "_operation": {
-            "duration_ms": 3,
-            "execution_id": "exec_37c131f78fd8",
+            "duration_ms": 1,
+            "execution_id": "exec_17808fc0c7bb",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 3,
+                "duration_ms": 1,
                 "execution_id": null,
                 "risk_level": "low"
               }
@@ -1979,7 +2024,7 @@
         "tool": "timeline_item"
       }
     ],
-    "wall_seconds": 1.536
+    "wall_seconds": 0.459
   },
   {
     "capability": "transition-path",
@@ -1989,13 +2034,13 @@
     "steps": [
       {
         "action": "edit_kernel_capabilities",
-        "elapsed_ms": 5.9,
+        "elapsed_ms": 5.0,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 0,
-            "execution_id": "exec_16a35a590ca4",
+            "execution_id": "exec_61c3e3f1fefe",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 0,
@@ -2085,7 +2130,7 @@
       },
       {
         "action": "duplicate_clips",
-        "elapsed_ms": 44.0,
+        "elapsed_ms": 28.9,
         "ok": false,
         "params": {
           "copy_properties": [
@@ -2095,11 +2140,16 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 38,
-            "execution_id": "exec_98763da0ceb2",
+            "duration_ms": 24,
+            "execution_id": "exec_fdf3e1525915",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_cf8288d292e3",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 38,
+                "duration_ms": 24,
                 "execution_id": null,
                 "risk_level": "medium"
               },
@@ -2110,7 +2160,7 @@
               }
             },
             "operation": "timeline.duplicate_clips",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "failed",
             "verification": {
               "checks": [],
@@ -2120,7 +2170,7 @@
           },
           "_versioning": {
             "after_value": null,
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "archived": false,
             "archived_version": null,
             "before_value": null,
@@ -2132,7 +2182,7 @@
             "message": "selected=True did not resolve any timeline items",
             "retryable": true
           },
-          "operation_id": "op_157eb6d81d63",
+          "operation_id": "op_cf8288d292e3",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -2144,7 +2194,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.05
+    "wall_seconds": 0.034
   },
   {
     "capability": "audio-property-operation",
@@ -2154,18 +2204,18 @@
     "steps": [
       {
         "action": "set_current",
-        "elapsed_ms": 973.5,
+        "elapsed_ms": 102.2,
         "ok": true,
         "params": {
           "name": "v43-probe-place-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 942,
-            "execution_id": "exec_e4c1fdc4105e",
+            "duration_ms": 73,
+            "execution_id": "exec_6be7352c7e41",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 942,
+                "duration_ms": 73,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -2185,7 +2235,7 @@
       },
       {
         "action": "safe_set_audio_properties",
-        "elapsed_ms": 7.2,
+        "elapsed_ms": 5.8,
         "ok": true,
         "params": {
           "item_index": 0,
@@ -2198,7 +2248,7 @@
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_d1d5e0cb8810",
+            "execution_id": "exec_2bf2b9daee0a",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -2229,7 +2279,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.981
+    "wall_seconds": 0.108
   },
   {
     "capability": "voice-isolation",
@@ -2239,7 +2289,7 @@
     "steps": [
       {
         "action": "voice_isolation_capabilities",
-        "elapsed_ms": 6.7,
+        "elapsed_ms": 5.8,
         "ok": true,
         "params": {
           "track_index": 1
@@ -2247,7 +2297,7 @@
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_a919c0a9efaf",
+            "execution_id": "exec_c2cc42fa890f",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -2285,7 +2335,7 @@
       },
       {
         "action": "set_voice_isolation_state",
-        "elapsed_ms": 47.3,
+        "elapsed_ms": 354.2,
         "ok": true,
         "params": {
           "state": {
@@ -2296,11 +2346,16 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 41,
-            "execution_id": "exec_6fab23240f66",
+            "duration_ms": 349,
+            "execution_id": "exec_0f3e5d7cb001",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_d152d7822cf0",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 41,
+                "duration_ms": 349,
                 "execution_id": null,
                 "risk_level": "medium"
               },
@@ -2311,7 +2366,7 @@
               }
             },
             "operation": "timeline.set_voice_isolation_state",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -2321,13 +2376,13 @@
           },
           "_versioning": {
             "after_value": null,
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "archived": false,
             "archived_version": null,
             "before_value": null,
             "metric": null
           },
-          "operation_id": "op_4150c7645970",
+          "operation_id": "op_d152d7822cf0",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -2341,7 +2396,7 @@
       },
       {
         "action": "get_voice_isolation_state",
-        "elapsed_ms": 6.2,
+        "elapsed_ms": 5.6,
         "ok": true,
         "params": {
           "track_index": 1
@@ -2349,7 +2404,7 @@
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_71f051e2b209",
+            "execution_id": "exec_4f2798601aba",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -2373,7 +2428,7 @@
       },
       {
         "action": "set_voice_isolation_state",
-        "elapsed_ms": 45.9,
+        "elapsed_ms": 32.8,
         "ok": true,
         "params": {
           "state": {
@@ -2384,11 +2439,16 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 40,
-            "execution_id": "exec_34566e18c4bd",
+            "duration_ms": 28,
+            "execution_id": "exec_ff352ba14078",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_7373ea988d35",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 40,
+                "duration_ms": 28,
                 "execution_id": null,
                 "risk_level": "medium"
               },
@@ -2399,7 +2459,7 @@
               }
             },
             "operation": "timeline.set_voice_isolation_state",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -2409,13 +2469,13 @@
           },
           "_versioning": {
             "after_value": null,
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "archived": false,
             "archived_version": null,
             "before_value": null,
             "metric": null
           },
-          "operation_id": "op_81d167b71630",
+          "operation_id": "op_7373ea988d35",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -2428,7 +2488,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.106
+    "wall_seconds": 0.399
   },
   {
     "capability": "bgm-track-ducking",
@@ -2438,16 +2498,16 @@
     "steps": [
       {
         "action": "audio_mix_capability_report",
-        "elapsed_ms": 44.7,
+        "elapsed_ms": 31.7,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 39,
-            "execution_id": "exec_f8b8612421d3",
+            "duration_ms": 27,
+            "execution_id": "exec_f27137e5d207",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 39,
+                "duration_ms": 27,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -2466,9 +2526,9 @@
                 "audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{\"1\":{\"channel_idx\":[1],\"mute\":false,\"type\":\"mono\"}}}",
                 "summary": {
                   "duration": "00:00:06:00",
-                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
-                  "id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
-                  "media_id": "547778b6-9ea0-4b86-a1e7-7998b0fd93c5",
+                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
+                  "id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
+                  "media_id": "c0f10c66-17e5-409e-b635-0d9fe807eac3",
                   "name": "parity-src-001.mp4",
                   "type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa"
                 }
@@ -2477,9 +2537,9 @@
                 "audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{\"1\":{\"channel_idx\":[1],\"mute\":false,\"type\":\"mono\"}}}",
                 "summary": {
                   "duration": "00:00:05:00",
-                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
-                  "id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
-                  "media_id": "9d16d49a-93fc-4bdc-b911-f61eed66ac48",
+                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
+                  "id": "e4b28034-867c-4140-9dce-31f6aa43574e",
+                  "media_id": "00d2e65b-e793-4de6-8657-7ef622bd93c9",
                   "name": "parity-src-002.mp4",
                   "type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa"
                 }
@@ -2488,9 +2548,9 @@
                 "audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{\"1\":{\"channel_idx\":[1],\"mute\":false,\"type\":\"mono\"}}}",
                 "summary": {
                   "duration": "00:00:05:00",
-                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
-                  "id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
-                  "media_id": "7ae09ed5-1716-4f62-9c14-d214a0cf474e",
+                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
+                  "id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
+                  "media_id": "f6546238-0f60-4299-bca2-bd9d43ab4979",
                   "name": "parity-src-003.mp4",
                   "type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa"
                 }
@@ -2501,7 +2561,7 @@
                 "duration": 60,
                 "end": 108060,
                 "item_index": 0,
-                "media_pool_item_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                "media_pool_item_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                 "media_pool_item_name": "parity-src-001.mp4",
                 "name": "parity-src-001.mp4",
                 "source_audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{}}",
@@ -2511,7 +2571,7 @@
                 "source_start": 10,
                 "source_start_seconds": 0.333,
                 "start": 108000,
-                "timeline_item_id": "696d2d1a-8bb6-4339-b561-6823227a9968",
+                "timeline_item_id": "05e81d2b-07d4-4552-aec7-082f9aa03dab",
                 "track_index": 1,
                 "track_type": "video"
               },
@@ -2519,7 +2579,7 @@
                 "duration": 60,
                 "end": 108120,
                 "item_index": 1,
-                "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+                "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
                 "media_pool_item_name": "parity-src-002.mp4",
                 "name": "parity-src-002.mp4",
                 "source_audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{}}",
@@ -2529,7 +2589,7 @@
                 "source_start": 0,
                 "source_start_seconds": 0.0,
                 "start": 108060,
-                "timeline_item_id": "1d9edbde-ed2f-4269-bc5b-154e34c7801b",
+                "timeline_item_id": "4d835e56-d812-4104-8452-ed71e3fdbb6b",
                 "track_index": 1,
                 "track_type": "video"
               },
@@ -2537,7 +2597,7 @@
                 "duration": 30,
                 "end": 108150,
                 "item_index": 2,
-                "media_pool_item_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+                "media_pool_item_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
                 "media_pool_item_name": "parity-src-003.mp4",
                 "name": "parity-src-003.mp4",
                 "source_audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{}}",
@@ -2547,7 +2607,7 @@
                 "source_start": 20,
                 "source_start_seconds": 0.667,
                 "start": 108120,
-                "timeline_item_id": "cda858e0-8e9d-4d09-ae22-c78567e8070f",
+                "timeline_item_id": "5e338987-5965-43eb-a9ee-2aa922f7d95a",
                 "track_index": 1,
                 "track_type": "video"
               },
@@ -2555,7 +2615,7 @@
                 "duration": 60,
                 "end": 108060,
                 "item_index": 0,
-                "media_pool_item_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                "media_pool_item_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                 "media_pool_item_name": "parity-src-001.mp4",
                 "name": "parity-src-001.mp4",
                 "source_audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{\"1\":{\"channel_idx\":[1],\"mute\":false,\"type\":\"mono\"}}}",
@@ -2565,7 +2625,7 @@
                 "source_start": 10,
                 "source_start_seconds": 0.333,
                 "start": 108000,
-                "timeline_item_id": "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d",
+                "timeline_item_id": "a7eb4171-8772-461e-9042-5b18128db90f",
                 "track_index": 1,
                 "track_type": "audio"
               },
@@ -2573,7 +2633,7 @@
                 "duration": 60,
                 "end": 108120,
                 "item_index": 1,
-                "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+                "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
                 "media_pool_item_name": "parity-src-002.mp4",
                 "name": "parity-src-002.mp4",
                 "source_audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{\"1\":{\"channel_idx\":[1],\"mute\":false,\"type\":\"mono\"}}}",
@@ -2583,7 +2643,7 @@
                 "source_start": 0,
                 "source_start_seconds": 0.0,
                 "start": 108060,
-                "timeline_item_id": "b32e63d0-0d84-4e46-922b-e436cee8d3b2",
+                "timeline_item_id": "c3f8b780-ec02-4233-908c-646d507a2504",
                 "track_index": 1,
                 "track_type": "audio"
               },
@@ -2591,7 +2651,7 @@
                 "duration": 30,
                 "end": 108150,
                 "item_index": 2,
-                "media_pool_item_id": "bf15e758-5fd3-4620-aaff-2b0f57af0db7",
+                "media_pool_item_id": "ceec531f-64f4-4a0f-9023-fc33516f3ebe",
                 "media_pool_item_name": "parity-src-003.mp4",
                 "name": "parity-src-003.mp4",
                 "source_audio_mapping": "{\"embedded_audio_channels\":1,\"linked_audio\":{},\"track_mapping\":{\"1\":{\"channel_idx\":[1],\"mute\":false,\"type\":\"mono\"}}}",
@@ -2601,7 +2661,7 @@
                 "source_start": 20,
                 "source_start_seconds": 0.667,
                 "start": 108120,
-                "timeline_item_id": "61a8085c-6eb9-47c7-b476-3b0604e6c67a",
+                "timeline_item_id": "cc91aeff-0fa9-49ef-92cd-74a63ffeea52",
                 "track_index": 1,
                 "track_type": "audio"
               }
@@ -2668,7 +2728,7 @@
             "summary": {
               "duration": 60,
               "end": 108060,
-              "media_pool_item_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "media_pool_item_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "media_pool_item_name": "parity-src-001.mp4",
               "name": "parity-src-001.mp4",
               "source_end": 70,
@@ -2677,7 +2737,7 @@
               "source_start": 10,
               "source_start_seconds": 0.333,
               "start": 108000,
-              "timeline_item_id": "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d",
+              "timeline_item_id": "a7eb4171-8772-461e-9042-5b18128db90f",
               "track_index": 1,
               "track_type": "audio"
             },
@@ -2759,7 +2819,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.045
+    "wall_seconds": 0.032
   },
   {
     "capability": "color-grade-preset-drx",
@@ -2769,18 +2829,18 @@
     "steps": [
       {
         "action": "set_current",
-        "elapsed_ms": 119.8,
+        "elapsed_ms": 107.9,
         "ok": true,
         "params": {
           "name": "v43-probe-place-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 90,
-            "execution_id": "exec_b60e51010cc6",
+            "duration_ms": 76,
+            "execution_id": "exec_a102bd0ddd2e",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 90,
+                "duration_ms": 76,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -2800,23 +2860,23 @@
       },
       {
         "action": "safe_apply_drx",
-        "elapsed_ms": 7.5,
+        "elapsed_ms": 5.9,
         "ok": true,
         "params": {
           "dry_run": true,
           "grade_mode": 0,
           "item_index": 0,
-          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-281ndui4/node-color-blue.drx",
+          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-a7r0_tkg/node-color-blue.drx",
           "track_index": 1,
           "track_type": "video"
         },
         "response": {
           "_operation": {
-            "duration_ms": 2,
-            "execution_id": "exec_b0649ae11bce",
+            "duration_ms": 1,
+            "execution_id": "exec_c4a8ae53d62a",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 2,
+                "duration_ms": 1,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -2830,7 +2890,7 @@
             }
           },
           "grade_mode": 0,
-          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-281ndui4/node-color-blue.drx",
+          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-a7r0_tkg/node-color-blue.drx",
           "source": "item",
           "success": true,
           "would_apply": true
@@ -2840,20 +2900,20 @@
       },
       {
         "action": "safe_apply_drx",
-        "elapsed_ms": 7.0,
+        "elapsed_ms": 5.6,
         "ok": false,
         "params": {
           "dry_run": false,
           "grade_mode": 0,
           "item_index": 0,
-          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-281ndui4/node-color-blue.drx",
+          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-a7r0_tkg/node-color-blue.drx",
           "track_index": 1,
           "track_type": "video"
         },
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_c2417b7f8f5b",
+            "execution_id": "exec_15d66d00fb08",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -2869,19 +2929,19 @@
               "status": "unverified"
             }
           },
-          "confirm_token": "7b27b48f967c43ab85bb1e6337d94421",
+          "confirm_token": "4955468cd77b4f8994c60777edfe3d45",
           "error": {
             "category": "pending_user_decision",
             "code": "CONFIRMATION_REQUIRED",
             "message": "This action is destructive. Re-call with confirm_token to proceed.",
-            "remediation": "Re-call safe_apply_drx with params.confirm_token='7b27b48f967c43ab85bb1e6337d94421'; token expires in 300s.",
+            "remediation": "Re-call safe_apply_drx with params.confirm_token='4955468cd77b4f8994c60777edfe3d45'; token expires in 300s.",
             "retryable": false
           },
-          "expires_at_epoch": 1788748805.441678,
+          "expires_at_epoch": 1789192496.0419688,
           "preview": {
             "grade_mode": 0,
             "operation": "safe_apply_drx",
-            "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-281ndui4/node-color-blue.drx",
+            "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-a7r0_tkg/node-color-blue.drx",
             "source": "item",
             "warning": "REPLACES the target graph entirely. There is no append mode."
           },
@@ -2893,24 +2953,24 @@
       },
       {
         "action": "safe_apply_drx",
-        "elapsed_ms": 176.5,
+        "elapsed_ms": 507.5,
         "ok": true,
         "params": {
-          "confirm_token": "7b27b48f967c43ab85bb1e6337d94421",
+          "confirm_token": "4955468cd77b4f8994c60777edfe3d45",
           "dry_run": false,
           "grade_mode": 0,
           "item_index": 0,
-          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-281ndui4/node-color-blue.drx",
+          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-a7r0_tkg/node-color-blue.drx",
           "track_index": 1,
           "track_type": "video"
         },
         "response": {
           "_operation": {
-            "duration_ms": 138,
-            "execution_id": "exec_e3708cbc2cbb",
+            "duration_ms": 388,
+            "execution_id": "exec_90b15a6ea4b7",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 138,
+                "duration_ms": 388,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -2923,7 +2983,7 @@
               "status": "unverified"
             }
           },
-          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-281ndui4/node-color-blue.drx",
+          "path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-drx-a7r0_tkg/node-color-blue.drx",
           "source": "item",
           "success": true
         },
@@ -2931,7 +2991,7 @@
         "tool": "timeline_item_color"
       }
     ],
-    "wall_seconds": 0.312
+    "wall_seconds": 0.628
   },
   {
     "capability": "render-configuration",
@@ -2941,7 +3001,7 @@
     "steps": [
       {
         "action": "set_format_and_codec",
-        "elapsed_ms": 216.2,
+        "elapsed_ms": 327.9,
         "ok": true,
         "params": {
           "codec": "h264",
@@ -2949,11 +3009,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 174,
-            "execution_id": "exec_b00e302d8592",
+            "duration_ms": 202,
+            "execution_id": "exec_a118aab5129d",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 174,
+                "duration_ms": 202,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -2975,7 +3035,7 @@
       },
       {
         "action": "set_settings",
-        "elapsed_ms": 65.2,
+        "elapsed_ms": 69.8,
         "ok": true,
         "params": {
           "settings": {
@@ -2991,7 +3051,7 @@
         "response": {
           "_operation": {
             "duration_ms": 59,
-            "execution_id": "exec_5b1b12ec89d5",
+            "execution_id": "exec_8b749b7aedd9",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 59,
@@ -3014,7 +3074,7 @@
       },
       {
         "action": "validate_render_settings",
-        "elapsed_ms": 6.6,
+        "elapsed_ms": 8.1,
         "ok": true,
         "params": {
           "settings": {
@@ -3028,7 +3088,7 @@
         "response": {
           "_operation": {
             "duration_ms": 0,
-            "execution_id": "exec_4bc0a11c2709",
+            "execution_id": "exec_663ead2e9b9a",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 0,
@@ -3061,13 +3121,13 @@
       },
       {
         "action": "get_format_and_codec",
-        "elapsed_ms": 6.0,
+        "elapsed_ms": 5.5,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 0,
-            "execution_id": "exec_0f67517bb46f",
+            "execution_id": "exec_72d4d7007c4a",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 0,
@@ -3090,26 +3150,26 @@
         "tool": "render"
       }
     ],
-    "wall_seconds": 0.294
+    "wall_seconds": 0.412
   },
   {
     "capability": "render-job-lifecycle",
     "fixture": "v43-render-job-lifecycle-01",
-    "readback": "job 825ecd47-1673-41da-a082-979e6ea57adb: add -> start -> CompletionPercentage=100 (JobStatus='\u5b8c\u4e86') -> list(1 jobs) -> delete ok=True",
+    "readback": "job 23561aaf-26f3-4195-b2a2-f6ff9cd18f99: add -> start -> CompletionPercentage=100 (JobStatus='\u5b8c\u4e86') -> list(1 jobs) -> delete ok=True",
     "status": "accepted",
     "steps": [
       {
         "action": "add_job",
-        "elapsed_ms": 123.2,
+        "elapsed_ms": 130.2,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 116,
-            "execution_id": "exec_dc66a464876c",
+            "duration_ms": 118,
+            "execution_id": "exec_e319dc174f3c",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 116,
+                "duration_ms": 118,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3122,27 +3182,27 @@
               "status": "unverified"
             }
           },
-          "job_id": "825ecd47-1673-41da-a082-979e6ea57adb"
+          "job_id": "23561aaf-26f3-4195-b2a2-f6ff9cd18f99"
         },
         "status": "ok",
         "tool": "render"
       },
       {
         "action": "start",
-        "elapsed_ms": 153.0,
+        "elapsed_ms": 168.4,
         "ok": true,
         "params": {
           "job_ids": [
-            "825ecd47-1673-41da-a082-979e6ea57adb"
+            "23561aaf-26f3-4195-b2a2-f6ff9cd18f99"
           ]
         },
         "response": {
           "_operation": {
-            "duration_ms": 145,
-            "execution_id": "exec_f45b051bfa12",
+            "duration_ms": 147,
+            "execution_id": "exec_b980b78a14f3",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 145,
+                "duration_ms": 147,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3162,10 +3222,10 @@
       },
       {
         "action": "get_job_status",
-        "elapsed_ms": 6.1,
+        "elapsed_ms": 5.5,
         "ok": true,
         "params": {
-          "job_id": "825ecd47-1673-41da-a082-979e6ea57adb"
+          "job_id": "23561aaf-26f3-4195-b2a2-f6ff9cd18f99"
         },
         "response": {
           "CompletionPercentage": 0,
@@ -3173,7 +3233,7 @@
           "JobStatus": "\u30ec\u30f3\u30c0\u30ea\u30f3\u30b0",
           "_operation": {
             "duration_ms": 0,
-            "execution_id": "exec_fc28bb8fb570",
+            "execution_id": "exec_a61d6b3fb103",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 0,
@@ -3195,18 +3255,18 @@
       },
       {
         "action": "get_job_status",
-        "elapsed_ms": 8.7,
+        "elapsed_ms": 15.1,
         "ok": true,
         "params": {
-          "job_id": "825ecd47-1673-41da-a082-979e6ea57adb"
+          "job_id": "23561aaf-26f3-4195-b2a2-f6ff9cd18f99"
         },
         "response": {
           "CompletionPercentage": 100,
           "JobStatus": "\u5b8c\u4e86",
-          "TimeTakenToRenderInMs": 1277,
+          "TimeTakenToRenderInMs": 1185,
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_6a3ed75b81dd",
+            "execution_id": "exec_ec2f5e51e73c",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -3228,13 +3288,13 @@
       },
       {
         "action": "list_jobs",
-        "elapsed_ms": 6.4,
+        "elapsed_ms": 10.1,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_f3e197d264c0",
+            "execution_id": "exec_c01fafd09678",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -3263,7 +3323,7 @@
               "FrameRate": "30",
               "IsExportAudio": true,
               "IsExportVideo": true,
-              "JobId": "825ecd47-1673-41da-a082-979e6ea57adb",
+              "JobId": "23561aaf-26f3-4195-b2a2-f6ff9cd18f99",
               "MarkIn": 108000,
               "MarkOut": 108149,
               "MultiPassEncode": false,
@@ -3286,18 +3346,23 @@
       },
       {
         "action": "delete_job",
-        "elapsed_ms": 7.7,
+        "elapsed_ms": 19.7,
         "ok": true,
         "params": {
-          "job_id": "825ecd47-1673-41da-a082-979e6ea57adb"
+          "job_id": "23561aaf-26f3-4195-b2a2-f6ff9cd18f99"
         },
         "response": {
           "_operation": {
-            "duration_ms": 2,
-            "execution_id": "exec_19b05c4bd916",
+            "duration_ms": 7,
+            "execution_id": "exec_eedce1725abe",
             "lifecycle": {
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_54b9c75309f8",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 2,
+                "duration_ms": 7,
                 "execution_id": null,
                 "risk_level": "high"
               },
@@ -3315,13 +3380,25 @@
               "status": "unverified"
             }
           },
+          "_versioning": {
+            "analysis_run_id": null,
+            "archived": false,
+            "skipped_reason": "not_a_timeline_mutation"
+          },
+          "operation_id": "op_54b9c75309f8",
+          "security": {
+            "blocked": false,
+            "risk_established": true,
+            "risk_level": "high",
+            "safe_mode": false
+          },
           "success": true
         },
         "status": "ok",
         "tool": "render"
       }
     ],
-    "wall_seconds": 2.306
+    "wall_seconds": 2.355
   },
   {
     "capability": "gaps-overlaps-missing-media",
@@ -3331,15 +3408,15 @@
     "steps": [
       {
         "action": "create_timeline",
-        "elapsed_ms": 250.5,
+        "elapsed_ms": 324.5,
         "ok": true,
         "params": {
           "name": "v43-probe-gaps-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 240,
-            "execution_id": "exec_11436c005bde",
+            "duration_ms": 315,
+            "execution_id": "exec_b29596dad5ad",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -3348,8 +3425,13 @@
                 ],
                 "duration_delta_frames": -150
               },
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_51f67fd01426",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 240,
+                "duration_ms": 315,
                 "execution_id": null,
                 "risk_level": "low"
               },
@@ -3360,7 +3442,7 @@
               }
             },
             "operation": "media_pool.create_timeline",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -3369,14 +3451,14 @@
             }
           },
           "_versioning": {
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "category": "media_pool",
             "initiator": "auto"
           },
           "created_new": true,
-          "id": "953a03b5-0503-4638-bfd9-b6542f545116",
+          "id": "3b608570-a5de-4508-87e7-bddf8ca5ee88",
           "name": "v43-probe-gaps-tl",
-          "operation_id": "op_4d233439da0d",
+          "operation_id": "op_51f67fd01426",
           "requested_name": "v43-probe-gaps-tl",
           "security": {
             "blocked": false,
@@ -3392,18 +3474,18 @@
       },
       {
         "action": "set_current",
-        "elapsed_ms": 112.3,
+        "elapsed_ms": 104.7,
         "ok": true,
         "params": {
           "name": "v43-probe-gaps-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 85,
-            "execution_id": "exec_eb495423d25b",
+            "duration_ms": 73,
+            "execution_id": "exec_e3d77f6b546d",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 85,
+                "duration_ms": 73,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3423,13 +3505,13 @@
       },
       {
         "action": "get_current",
-        "elapsed_ms": 7.0,
+        "elapsed_ms": 10.0,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_e96ddcabe71b",
+            "execution_id": "exec_53ea23103827",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -3446,7 +3528,7 @@
             }
           },
           "end_frame": 108000,
-          "id": "953a03b5-0503-4638-bfd9-b6542f545116",
+          "id": "3b608570-a5de-4508-87e7-bddf8ca5ee88",
           "name": "v43-probe-gaps-tl",
           "start_frame": 108000,
           "start_timecode": "01:00:00:00"
@@ -3456,12 +3538,12 @@
       },
       {
         "action": "append_to_timeline",
-        "elapsed_ms": 36.3,
+        "elapsed_ms": 33.5,
         "ok": true,
         "params": {
           "clip_infos": [
             {
-              "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "end_frame": 60,
               "media_type": 1,
               "record_frame": 108000,
@@ -3470,7 +3552,7 @@
               "track_index": 1
             },
             {
-              "clip_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+              "clip_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
               "end_frame": 60,
               "media_type": 1,
               "record_frame": 108120,
@@ -3482,8 +3564,8 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 30,
-            "execution_id": "exec_7ebb8ba20f7e",
+            "duration_ms": 16,
+            "execution_id": "exec_8bc8c2731410",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -3492,8 +3574,13 @@
                 ],
                 "duration_delta_frames": 180
               },
+              "operation_log": {
+                "logged": true,
+                "operation_id": "op_5aa5df80c733",
+                "path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/operation-log.jsonl"
+              },
               "provenance_trace": {
-                "duration_ms": 30,
+                "duration_ms": 16,
                 "execution_id": null,
                 "risk_level": "medium"
               },
@@ -3504,7 +3591,7 @@
               }
             },
             "operation": "media_pool.append_to_timeline",
-            "run_id": "run_90f162a134f8",
+            "run_id": "run_5abcbf838478",
             "status": "success",
             "verification": {
               "checks": [],
@@ -3513,7 +3600,7 @@
             }
           },
           "_versioning": {
-            "analysis_run_id": "run_90f162a134f8",
+            "analysis_run_id": "run_5abcbf838478",
             "category": "media_pool",
             "initiator": "auto"
           },
@@ -3521,14 +3608,14 @@
           "items": [
             {
               "name": "parity-src-001.mp4",
-              "timeline_item_id": "6cab91a4-12c5-44e5-933d-ed2544bb561f"
+              "timeline_item_id": "d8ece44c-c84a-4dd0-b5d9-a4a4069aac3d"
             },
             {
               "name": "parity-src-002.mp4",
-              "timeline_item_id": "e0ad9637-5845-4c4b-9529-b2beb9563c85"
+              "timeline_item_id": "7d4593f5-810a-475d-98b1-176bb23426f3"
             }
           ],
-          "operation_id": "op_d27e404de4fa",
+          "operation_id": "op_5aa5df80c733",
           "security": {
             "blocked": false,
             "risk_established": true,
@@ -3560,7 +3647,7 @@
                 "available": true,
                 "item_count": 2,
                 "timeline": {
-                  "id": "953a03b5-0503-4638-bfd9-b6542f545116",
+                  "id": "3b608570-a5de-4508-87e7-bddf8ca5ee88",
                   "name": "v43-probe-gaps-tl"
                 },
                 "tracks": {
@@ -3584,8 +3671,8 @@
                       {
                         "item_count": 2,
                         "item_ids": [
-                          "6cab91a4-12c5-44e5-933d-ed2544bb561f",
-                          "e0ad9637-5845-4c4b-9529-b2beb9563c85"
+                          "d8ece44c-c84a-4dd0-b5d9-a4a4069aac3d",
+                          "7d4593f5-810a-475d-98b1-176bb23426f3"
                         ],
                         "track_index": 1
                       }
@@ -3599,7 +3686,7 @@
                 "available": true,
                 "item_count": 0,
                 "timeline": {
-                  "id": "953a03b5-0503-4638-bfd9-b6542f545116",
+                  "id": "3b608570-a5de-4508-87e7-bddf8ca5ee88",
                   "name": "v43-probe-gaps-tl"
                 },
                 "tracks": {
@@ -3648,16 +3735,16 @@
       },
       {
         "action": "detect_gaps_overlaps",
-        "elapsed_ms": 17.5,
+        "elapsed_ms": 20.1,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 10,
-            "execution_id": "exec_274205994b0f",
+            "duration_ms": 13,
+            "execution_id": "exec_7edd4b349414",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 10,
+                "duration_ms": 13,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3673,8 +3760,8 @@
           "gap_count": 1,
           "gaps": [
             {
-              "after": "6cab91a4-12c5-44e5-933d-ed2544bb561f",
-              "before": "e0ad9637-5845-4c4b-9529-b2beb9563c85",
+              "after": "d8ece44c-c84a-4dd0-b5d9-a4a4069aac3d",
+              "before": "7d4593f5-810a-475d-98b1-176bb23426f3",
               "duration": 60,
               "end": 108120,
               "start": 108060,
@@ -3690,16 +3777,16 @@
       },
       {
         "action": "detect_missing_media",
-        "elapsed_ms": 15.7,
+        "elapsed_ms": 21.2,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 10,
-            "execution_id": "exec_c15d060f18ff",
+            "duration_ms": 13,
+            "execution_id": "exec_ef84918be418",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 10,
+                "duration_ms": 13,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3733,16 +3820,16 @@
       },
       {
         "action": "detect_missing_media",
-        "elapsed_ms": 15.5,
+        "elapsed_ms": 14.8,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 10,
-            "execution_id": "exec_4d6f61600d14",
+            "duration_ms": 9,
+            "execution_id": "exec_ede0ed5e788f",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 10,
+                "duration_ms": 9,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3784,12 +3871,12 @@
             "unique_media_pool_items": [
               {
                 "file_path_sanitized": "/.../parity-src-002.mp4",
-                "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+                "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
                 "media_pool_item_name": "parity-src-002.mp4",
                 "timeline_occurrence_count": 1,
                 "track_refs": [
                   {
-                    "timeline_item_id": "e0ad9637-5845-4c4b-9529-b2beb9563c85",
+                    "timeline_item_id": "7d4593f5-810a-475d-98b1-176bb23426f3",
                     "track_index": 1,
                     "track_type": "video"
                   }
@@ -3802,12 +3889,12 @@
           "missing": [
             {
               "file_exists": false,
-              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
-              "media_pool_item_id": "ba6dd5f1-8ade-45a9-bbe6-54c40eff25e9",
+              "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
+              "media_pool_item_id": "e4b28034-867c-4140-9dce-31f6aa43574e",
               "media_pool_item_name": "parity-src-002.mp4",
               "media_status": "Online",
               "name": "parity-src-002.mp4",
-              "timeline_item_id": "e0ad9637-5845-4c4b-9529-b2beb9563c85",
+              "timeline_item_id": "7d4593f5-810a-475d-98b1-176bb23426f3",
               "track_index": 1,
               "track_type": "video"
             }
@@ -3821,7 +3908,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.456
+    "wall_seconds": 0.53
   },
   {
     "capability": "conform-source-ranges",
@@ -3831,15 +3918,15 @@
     "steps": [
       {
         "action": "set_current",
-        "elapsed_ms": 185.1,
+        "elapsed_ms": 149.6,
         "ok": true,
         "params": {
           "name": "v43-probe-place-tl"
         },
         "response": {
           "_operation": {
-            "duration_ms": 114,
-            "execution_id": "exec_6b9e2170a4e3",
+            "duration_ms": 90,
+            "execution_id": "exec_56805e624af4",
             "lifecycle": {
               "drift_detection": {
                 "drift_detected": true,
@@ -3849,7 +3936,7 @@
                 "duration_delta_frames": -30
               },
               "provenance_trace": {
-                "duration_ms": 114,
+                "duration_ms": 90,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3869,16 +3956,16 @@
       },
       {
         "action": "source_range_report",
-        "elapsed_ms": 38.6,
+        "elapsed_ms": 36.5,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 32,
-            "execution_id": "exec_b0721463b09e",
+            "duration_ms": 27,
+            "execution_id": "exec_5afa7f5e60cf",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 32,
+                "duration_ms": 27,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -3895,12 +3982,12 @@
           "merged": true,
           "occurrences": [
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
               "source_range": [
                 10,
                 70
               ],
-              "timeline_item_id": "696d2d1a-8bb6-4339-b561-6823227a9968",
+              "timeline_item_id": "05e81d2b-07d4-4552-aec7-082f9aa03dab",
               "timeline_range": [
                 108000,
                 108060
@@ -3909,12 +3996,12 @@
               "track_type": "video"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
               "source_range": [
                 0,
                 60
               ],
-              "timeline_item_id": "1d9edbde-ed2f-4269-bc5b-154e34c7801b",
+              "timeline_item_id": "4d835e56-d812-4104-8452-ed71e3fdbb6b",
               "timeline_range": [
                 108060,
                 108120
@@ -3923,12 +4010,12 @@
               "track_type": "video"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
               "source_range": [
                 20,
                 50
               ],
-              "timeline_item_id": "cda858e0-8e9d-4d09-ae22-c78567e8070f",
+              "timeline_item_id": "5e338987-5965-43eb-a9ee-2aa922f7d95a",
               "timeline_range": [
                 108120,
                 108150
@@ -3937,12 +4024,12 @@
               "track_type": "video"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
               "source_range": [
                 10,
                 70
               ],
-              "timeline_item_id": "26b6989e-d8d6-4be5-bf0a-e4c66c998d6d",
+              "timeline_item_id": "a7eb4171-8772-461e-9042-5b18128db90f",
               "timeline_range": [
                 108000,
                 108060
@@ -3951,12 +4038,12 @@
               "track_type": "audio"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4",
               "source_range": [
                 0,
                 60
               ],
-              "timeline_item_id": "b32e63d0-0d84-4e46-922b-e436cee8d3b2",
+              "timeline_item_id": "c3f8b780-ec02-4233-908c-646d507a2504",
               "timeline_range": [
                 108060,
                 108120
@@ -3965,12 +4052,12 @@
               "track_type": "audio"
             },
             {
-              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4",
+              "key": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4",
               "source_range": [
                 20,
                 50
               ],
-              "timeline_item_id": "61a8085c-6eb9-47c7-b476-3b0604e6c67a",
+              "timeline_item_id": "cc91aeff-0fa9-49ef-92cd-74a63ffeea52",
               "timeline_range": [
                 108120,
                 108150
@@ -3980,19 +4067,19 @@
             }
           ],
           "ranges": {
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4": [
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4": [
               [
                 10,
                 70
               ]
             ],
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-002.mp4": [
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-002.mp4": [
               [
                 0,
                 60
               ]
             ],
-            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-003.mp4": [
+            "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-003.mp4": [
               [
                 20,
                 50
@@ -4004,7 +4091,7 @@
         "tool": "timeline"
       }
     ],
-    "wall_seconds": 0.224
+    "wall_seconds": 0.186
   },
   {
     "capability": "analysis-standard-pass",
@@ -4014,10 +4101,10 @@
     "steps": [
       {
         "action": "analyze_clip",
-        "elapsed_ms": 70.9,
+        "elapsed_ms": 82.7,
         "ok": true,
         "params": {
-          "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+          "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
           "dry_run": true,
           "include_transcription": false,
           "sampling_mode": "adaptive_capped",
@@ -4026,11 +4113,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 65,
-            "execution_id": "exec_bff0eda82ffe",
+            "duration_ms": 78,
+            "execution_id": "exec_e27729bdaf9d",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 65,
+                "duration_ms": 78,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -4086,33 +4173,33 @@
                     "provider": "host_chat_paths"
                   }
                 },
-                "signature_hash": "b5256b364d16",
+                "signature_hash": "696d09bcfb11",
                 "source_file": {
                   "exists": true,
-                  "mtime_ns": 1788748497861087829,
-                  "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                  "mtime_ns": 1789192191310660867,
+                  "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                   "size_bytes": 124228
                 }
               },
               "artifacts": {
-                "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
-                "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79",
-                "frames_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames",
-                "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/clip_analysis_markers.json",
-                "motion_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/motion.json",
-                "technical_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/technical.json",
-                "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/visual.json"
+                "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
+                "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f",
+                "frames_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames",
+                "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/clip_analysis_markers.json",
+                "motion_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/motion.json",
+                "technical_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/technical.json",
+                "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/visual.json"
               },
               "cache_status": "miss",
               "record": {
                 "bin_path": null,
-                "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                 "clip_name": "parity-src-001.mp4",
                 "clip_properties_error": null,
                 "duration": "00:00:06:00",
-                "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                 "fps": 30.0,
-                "media_id": "547778b6-9ea0-4b86-a1e7-7998b0fd93c5",
+                "media_id": "c0f10c66-17e5-409e-b635-0d9fe807eac3",
                 "media_type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa",
                 "resolution": "320x180"
               },
@@ -4147,14 +4234,15 @@
             "analysis_version": "0.2",
             "base_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis",
             "errors": [],
-            "project_directory": "v43-probe-113456-9dbe94f00e",
-            "project_id": "29899281-77f9-42df-a27c-c7f7c0741762",
-            "project_name": "v43-probe-113456",
-            "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+            "project_directory": "v43-probe-144950-ec641bdcb4",
+            "project_id": "6bb40600-3d19-439a-a1df-330579acc368",
+            "project_name": "v43-probe-144950",
+            "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
             "success": true
           },
           "partial_success": false,
           "related_project_roots": [
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
             "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112930-0dbc30d003",
             "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112847-6e594da9eb",
             "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112818-0e1f79d066",
@@ -4174,8 +4262,9 @@
           "reuse_blocked_clip_count": 0,
           "reuse_existing": true,
           "reuse_policy": "compatible",
-          "reuse_project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+          "reuse_project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
           "reuse_project_roots": [
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
             "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
             "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112930-0dbc30d003",
             "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112847-6e594da9eb",
@@ -4224,7 +4313,7 @@
           "stale_or_incomplete_clip_count": 0,
           "success": true,
           "target": {
-            "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+            "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
             "selected": false,
             "type": "clip"
           }
@@ -4234,10 +4323,10 @@
       },
       {
         "action": "analyze_clip",
-        "elapsed_ms": 1572.5,
+        "elapsed_ms": 872.4,
         "ok": true,
         "params": {
-          "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+          "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
           "dry_run": false,
           "include_transcription": false,
           "sampling_mode": "adaptive_capped",
@@ -4246,11 +4335,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 1565,
-            "execution_id": "exec_de17d496cb89",
+            "duration_ms": 867,
+            "execution_id": "exec_2f173c8c6f41",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 1565,
+                "duration_ms": 867,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -4267,13 +4356,13 @@
             "analysis_registry": {
               "analysis_version": "0.2",
               "base_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis",
-              "entry_count": 15,
+              "entry_count": 16,
               "failed_report_count": 0,
               "failed_reports": [],
               "registry_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/analysis_registry.json",
               "schema_version": 1,
               "success": true,
-              "updated_at": "2026-09-07T02:35:10Z",
+              "updated_at": "2026-09-12T05:50:00Z",
               "updated_count": 1
             },
             "analysis_version": "0.2",
@@ -4281,46 +4370,46 @@
             "clip_count": 1,
             "clips": [
               {
-                "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
+                "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
                 "artifacts": {
-                  "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
-                  "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79",
-                  "frames_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames",
-                  "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/clip_analysis_markers.json",
-                  "motion_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/motion.json",
-                  "technical_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/technical.json",
-                  "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/visual.json"
+                  "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
+                  "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f",
+                  "frames_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames",
+                  "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/clip_analysis_markers.json",
+                  "motion_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/motion.json",
+                  "technical_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/technical.json",
+                  "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/visual.json"
                 },
                 "marker_count": 3,
-                "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/clip_analysis_markers.json",
+                "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/clip_analysis_markers.json",
                 "record": {
                   "bin_path": null,
-                  "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                  "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                   "clip_name": "parity-src-001.mp4",
                   "clip_properties_error": null,
                   "duration": "00:00:06:00",
-                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                   "fps": 30.0,
-                  "media_id": "547778b6-9ea0-4b86-a1e7-7998b0fd93c5",
+                  "media_id": "c0f10c66-17e5-409e-b635-0d9fe807eac3",
                   "media_type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa",
                   "resolution": "320x180"
                 },
                 "success": true,
                 "vision_status": "pending_host_analysis",
-                "vision_token": "a2d73a914cce7be4",
+                "vision_token": "890d2e25a359e723",
                 "visual": {
                   "clip": {
-                    "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                    "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                     "clip_name": "parity-src-001.mp4",
-                    "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4"
+                    "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4"
                   },
                   "commit_action": {
                     "action": "commit_vision",
                     "params": {
-                      "analysis_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
-                      "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
-                      "vision_token": "a2d73a914cce7be4",
+                      "analysis_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
+                      "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
+                      "vision_token": "890d2e25a359e723",
                       "visual": "<host chat: fill this with JSON matching `schema`>"
                     },
                     "tool": "media_analysis"
@@ -4365,7 +4454,7 @@
                       "boundary_role": "first_frame_in_shot",
                       "delta_from_previous": null,
                       "frame_index": 1,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0001.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0001.jpg",
                       "selection_reason": "shot_start",
                       "shot_end": 2.0,
                       "shot_index": 1,
@@ -4375,14 +4464,14 @@
                     {
                       "delta_from_previous": 0.065093954248366,
                       "frame_index": 2,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0002.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0002.jpg",
                       "selection_reason": "first_usable",
                       "time_seconds": 0.3
                     },
                     {
                       "delta_from_previous": 0.07714687726942629,
                       "frame_index": 3,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0003.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0003.jpg",
                       "selection_reason": "shot_representative",
                       "shot_end": 2.0,
                       "shot_index": 1,
@@ -4393,7 +4482,7 @@
                       "boundary_role": "last_frame_in_shot",
                       "delta_from_previous": 0.07287430404260468,
                       "frame_index": 4,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0004.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0004.jpg",
                       "selection_reason": "shot_end",
                       "shot_end": 2.0,
                       "shot_index": 1,
@@ -4406,7 +4495,7 @@
                       "cut_time_seconds": 2.0,
                       "delta_from_previous": 0.47578496933752923,
                       "frame_index": 5,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0005.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0005.jpg",
                       "motion_peak": true,
                       "motion_peak_source_reason": "cut_before",
                       "selection_reason": "cut_before",
@@ -4418,7 +4507,7 @@
                       "cut_time_seconds": 2.0,
                       "delta_from_previous": 0.0,
                       "frame_index": 6,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0006.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0006.jpg",
                       "selection_reason": "cut_after",
                       "time_seconds": 2.033
                     },
@@ -4426,7 +4515,7 @@
                       "boundary_role": "first_frame_in_shot",
                       "delta_from_previous": 0.0,
                       "frame_index": 7,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0007.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0007.jpg",
                       "selection_reason": "shot_start",
                       "shot_end": 4.0,
                       "shot_index": 2,
@@ -4436,7 +4525,7 @@
                     {
                       "delta_from_previous": 0.0,
                       "frame_index": 8,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0008.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0008.jpg",
                       "selection_reason": "shot_representative",
                       "shot_end": 4.0,
                       "shot_index": 2,
@@ -4447,7 +4536,7 @@
                       "boundary_role": "last_frame_in_shot",
                       "delta_from_previous": 0.0,
                       "frame_index": 9,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0009.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0009.jpg",
                       "selection_reason": "shot_end",
                       "shot_end": 4.0,
                       "shot_index": 2,
@@ -4460,7 +4549,7 @@
                       "cut_time_seconds": 4.0,
                       "delta_from_previous": 0.4098725086742516,
                       "frame_index": 10,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0010.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0010.jpg",
                       "selection_reason": "cut_before",
                       "time_seconds": 3.967
                     },
@@ -4470,7 +4559,7 @@
                       "cut_time_seconds": 4.0,
                       "delta_from_previous": 0.00011977527636569031,
                       "frame_index": 11,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0011.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0011.jpg",
                       "selection_reason": "cut_after",
                       "time_seconds": 4.033
                     },
@@ -4478,7 +4567,7 @@
                       "boundary_role": "first_frame_in_shot",
                       "delta_from_previous": 1.4877350117001534e-05,
                       "frame_index": 12,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0012.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0012.jpg",
                       "selection_reason": "shot_start",
                       "shot_end": 6.0,
                       "shot_index": 3,
@@ -4488,7 +4577,7 @@
                     {
                       "delta_from_previous": 4.3623416444767206e-05,
                       "frame_index": 13,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0013.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0013.jpg",
                       "selection_reason": "shot_representative",
                       "shot_end": 6.0,
                       "shot_index": 3,
@@ -4498,7 +4587,7 @@
                     {
                       "delta_from_previous": 3.025901718712176e-06,
                       "frame_index": 14,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0014.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0014.jpg",
                       "selection_reason": "last_usable",
                       "time_seconds": 5.7
                     },
@@ -4506,7 +4595,7 @@
                       "boundary_role": "last_frame_in_shot",
                       "delta_from_previous": 1.4373033163882837e-05,
                       "frame_index": 15,
-                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0015.jpg",
+                      "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0015.jpg",
                       "selection_reason": "shot_end",
                       "shot_end": 6.0,
                       "shot_index": 3,
@@ -4515,33 +4604,33 @@
                     }
                   ],
                   "frame_paths": [
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0001.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0002.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0003.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0004.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0005.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0006.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0007.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0008.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0009.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0010.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0011.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0012.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0013.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0014.jpg",
-                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0015.jpg"
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0001.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0002.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0003.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0004.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0005.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0006.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0007.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0008.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0009.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0010.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0011.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0012.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0013.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0014.jpg",
+                    "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0015.jpg"
                   ],
                   "host_tool_choice_hint": {
                     "name": "media_analysis",
                     "params_template": {
                       "action": "commit_vision",
-                      "analysis_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
-                      "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
-                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
-                      "vision_token": "a2d73a914cce7be4",
+                      "analysis_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
+                      "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
+                      "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
+                      "vision_token": "890d2e25a359e723",
                       "visual": "<host chat: fill this with JSON matching `schema`>"
                     },
-                    "rationale": "Pending visual analysis on clip b0cc2cdb-15a3-4ae0-92c1-e990b5167d70. Reading frame_paths and calling commit_vision is the only correct next action; skipping it leaves the run in pending_host_vision_analysis.",
+                    "rationale": "Pending visual analysis on clip 8cf9b5a9-9250-4428-9c85-abc71e4ac4a9. Reading frame_paths and calling commit_vision is the only correct next action; skipping it leaves the run in pending_host_vision_analysis.",
                     "type": "tool"
                   },
                   "instructions": "Read every file under frame_paths as a local image using your client's image-reading capability (Claude Code's Read tool handles JPG/PNG natively). Produce a single JSON object that matches the structure of `prompt`/`schema` (no markdown fences, no prose outside JSON). The response MUST include a `shot_descriptions` entry for every `shot_index` listed in `shot_table` \u2014 each description should be grounded in the frames whose indices appear in `shot_table[i].frame_indices`, never in unrelated shots. Then call the tool in `commit_action` with `visual` set to that JSON object \u2014 the server will merge it into the analysis report, rebuild Media Pool clip markers, and publish vision-dependent metadata to Resolve. Non-vision layers (technical/loudness/scenes/motion/transcription) are already persisted under the clip's analysis directory; commit_vision finishes the run.",
@@ -4606,13 +4695,13 @@
                   "source_trust": "auto",
                   "status": "pending_host_analysis",
                   "success": true,
-                  "vision_token": "a2d73a914cce7be4"
+                  "vision_token": "890d2e25a359e723"
                 }
               }
             ],
-            "completed_at": "2026-09-07T02:35:10Z",
+            "completed_at": "2026-09-12T05:50:00Z",
             "completed_clip_ids": [
-              "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70"
+              "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9"
             ],
             "depth": "standard",
             "failed_clip_count": 0,
@@ -4621,16 +4710,16 @@
               "analysis_registry": {
                 "analysis_version": "0.2",
                 "base_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis",
-                "entry_count": 15,
+                "entry_count": 16,
                 "failed_report_count": 0,
                 "failed_reports": [],
                 "registry_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/analysis_registry.json",
                 "schema_version": 1,
                 "success": true,
-                "updated_at": "2026-09-07T02:35:10Z",
+                "updated_at": "2026-09-12T05:50:00Z",
                 "updated_count": 1
               },
-              "built_at": "2026-09-07T02:35:10Z",
+              "built_at": "2026-09-12T05:50:00Z",
               "counts": {
                 "analysis_keyframes": 15,
                 "clips": 1,
@@ -4644,8 +4733,8 @@
               "failed_reports": [],
               "fts_enabled": true,
               "image_blob_policy": "excluded",
-              "index_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/index.sqlite",
-              "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+              "index_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/index.sqlite",
+              "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
               "report_sources": {
                 "db": 1,
                 "json": 0
@@ -4663,7 +4752,7 @@
               "tool": "media_analysis"
             },
             "persistent": true,
-            "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+            "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
             "reuse_summary": {
               "blocked_clip_count": 0,
               "checked": true,
@@ -4675,11 +4764,11 @@
               "stale_or_incomplete_clip_count": 0
             },
             "session_only": false,
-            "started_at": "2026-09-07T02:35:08Z",
+            "started_at": "2026-09-12T05:50:00Z",
             "success": true,
             "successful_clip_count": 1,
             "target": {
-              "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "selected": false,
               "type": "clip"
             },
@@ -4736,33 +4825,33 @@
                       "provider": "host_chat_paths"
                     }
                   },
-                  "signature_hash": "b5256b364d16",
+                  "signature_hash": "696d09bcfb11",
                   "source_file": {
                     "exists": true,
-                    "mtime_ns": 1788748497861087829,
-                    "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                    "mtime_ns": 1789192191310660867,
+                    "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                     "size_bytes": 124228
                   }
                 },
                 "artifacts": {
-                  "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
-                  "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79",
-                  "frames_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames",
-                  "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/clip_analysis_markers.json",
-                  "motion_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/motion.json",
-                  "technical_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/technical.json",
-                  "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/visual.json"
+                  "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
+                  "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f",
+                  "frames_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames",
+                  "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/clip_analysis_markers.json",
+                  "motion_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/motion.json",
+                  "technical_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/technical.json",
+                  "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/visual.json"
                 },
                 "cache_status": "miss",
                 "record": {
                   "bin_path": null,
-                  "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                  "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                   "clip_name": "parity-src-001.mp4",
                   "clip_properties_error": null,
                   "duration": "00:00:06:00",
-                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                  "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                   "fps": 30.0,
-                  "media_id": "547778b6-9ea0-4b86-a1e7-7998b0fd93c5",
+                  "media_id": "c0f10c66-17e5-409e-b635-0d9fe807eac3",
                   "media_type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa",
                   "resolution": "320x180"
                 },
@@ -4795,13 +4884,14 @@
               "analysis_version": "0.2",
               "base_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis",
               "errors": [],
-              "project_directory": "v43-probe-113456-9dbe94f00e",
-              "project_id": "29899281-77f9-42df-a27c-c7f7c0741762",
-              "project_name": "v43-probe-113456",
-              "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+              "project_directory": "v43-probe-144950-ec641bdcb4",
+              "project_id": "6bb40600-3d19-439a-a1df-330579acc368",
+              "project_name": "v43-probe-144950",
+              "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
               "success": true
             },
             "related_project_roots": [
+              "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
               "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112930-0dbc30d003",
               "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112847-6e594da9eb",
               "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112818-0e1f79d066",
@@ -4821,8 +4911,9 @@
             "reuse_blocked_clip_count": 0,
             "reuse_existing": true,
             "reuse_policy": "compatible",
-            "reuse_project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+            "reuse_project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
             "reuse_project_roots": [
+              "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
               "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
               "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112930-0dbc30d003",
               "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-112847-6e594da9eb",
@@ -4871,7 +4962,7 @@
             "stale_or_incomplete_clip_count": 0,
             "success": true,
             "target": {
-              "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "selected": false,
               "type": "clip"
             }
@@ -4895,10 +4986,10 @@
       },
       {
         "action": "commit_vision",
-        "elapsed_ms": 157.0,
+        "elapsed_ms": 113.3,
         "ok": true,
         "params": {
-          "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+          "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
           "visual": {
             "clip_summary": "Synthetic calibration clip (ffmpeg testsrc2) for capability probes.",
             "clip_summary_oneliner": "Synthetic test pattern clip.",
@@ -5072,11 +5163,11 @@
         },
         "response": {
           "_operation": {
-            "duration_ms": 149,
-            "execution_id": "exec_800b823affae",
+            "duration_ms": 107,
+            "execution_id": "exec_cce77ef28e4d",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 149,
+                "duration_ms": 107,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -5089,29 +5180,29 @@
               "status": "unverified"
             }
           },
-          "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
+          "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
           "analysis_registry": {
             "analysis_version": "0.2",
             "base_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis",
-            "entry_count": 15,
+            "entry_count": 16,
             "failed_report_count": 0,
             "failed_reports": [],
             "registry_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/analysis_registry.json",
             "schema_version": 1,
             "success": true,
-            "updated_at": "2026-09-07T02:35:10Z",
+            "updated_at": "2026-09-12T05:50:01Z",
             "updated_count": 1
           },
-          "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79",
+          "clip_dir": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f",
           "corrections": {
             "applied": [],
             "changelog_added": 0,
-            "corrections_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/corrections.json",
+            "corrections_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/corrections.json",
             "preserved_count": 0,
             "skipped": []
           },
           "db_ingest": {
-            "clip_uuid": "6ea371976b79",
+            "clip_uuid": "3c070b09f81f",
             "shot_count": 3,
             "subjective_fields_preserved_human": 0,
             "subjective_fields_written": 106,
@@ -5122,16 +5213,16 @@
             "analysis_registry": {
               "analysis_version": "0.2",
               "base_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis",
-              "entry_count": 15,
+              "entry_count": 16,
               "failed_report_count": 0,
               "failed_reports": [],
               "registry_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/analysis_registry.json",
               "schema_version": 1,
               "success": true,
-              "updated_at": "2026-09-07T02:35:10Z",
+              "updated_at": "2026-09-12T05:50:01Z",
               "updated_count": 1
             },
-            "built_at": "2026-09-07T02:35:10Z",
+            "built_at": "2026-09-12T05:50:01Z",
             "counts": {
               "analysis_keyframes": 15,
               "clips": 1,
@@ -5145,8 +5236,8 @@
             "failed_reports": [],
             "fts_enabled": true,
             "image_blob_policy": "excluded",
-            "index_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/index.sqlite",
-            "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+            "index_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/index.sqlite",
+            "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
             "report_sources": {
               "db": 1,
               "json": 0
@@ -5157,21 +5248,21 @@
             "success": true
           },
           "marker_count": 3,
-          "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/clip_analysis_markers.json",
+          "marker_plan_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/clip_analysis_markers.json",
           "metadata_publish": {
             "analysis_manifest": {
               "clips": [
                 {
-                  "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
+                  "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
                   "record": {
                     "bin_path": null,
-                    "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                    "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                     "clip_name": "parity-src-001.mp4",
                     "clip_properties_error": null,
                     "duration": "00:00:06:00",
-                    "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                    "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                     "fps": 30.0,
-                    "media_id": "547778b6-9ea0-4b86-a1e7-7998b0fd93c5",
+                    "media_id": "c0f10c66-17e5-409e-b635-0d9fe807eac3",
                     "media_type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa",
                     "resolution": "320x180"
                   },
@@ -5193,10 +5284,10 @@
             "marker_writeback_enabled": false,
             "results": [
               {
-                "analysis_report": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
+                "analysis_report": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
                 "auto_dry_run_flip": false,
                 "auto_dry_run_flip_reason": null,
-                "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                 "clip_name": "parity-src-001.mp4",
                 "dry_run": false,
                 "evidence": {
@@ -5208,7 +5299,7 @@
                   "slate_visual_required": true,
                   "summary": "Synthetic calibration clip (ffmpeg testsrc2) for capability probes.",
                   "sync_event": {
-                    "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                    "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                     "clip_name": "parity-src-001.mp4",
                     "confidence": 0.45,
                     "crest_factor": 1.494,
@@ -5332,7 +5423,7 @@
                   "status": "skipped",
                   "success": true,
                   "sync_event": {
-                    "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                    "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                     "clip_name": "parity-src-001.mp4",
                     "confidence": 0.45,
                     "crest_factor": 1.494,
@@ -5362,18 +5453,18 @@
                 "success": true,
                 "third_party_metadata_error": null,
                 "third_party_metadata_writes": {
-                  "davinci_resolve_mcp.analysis_report_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
-                  "davinci_resolve_mcp.analysis_signature": "b5256b364d16",
+                  "davinci_resolve_mcp.analysis_report_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
+                  "davinci_resolve_mcp.analysis_signature": "696d09bcfb11",
                   "davinci_resolve_mcp.analysis_version": "0.2",
                   "davinci_resolve_mcp.changed_fields": "Comments,Description,Keywords",
-                  "davinci_resolve_mcp.published_at": "2026-09-07T02:35:10Z",
-                  "davinci_resolve_mcp.publisher_version": "2.210.0"
+                  "davinci_resolve_mcp.published_at": "2026-09-12T05:50:01Z",
+                  "davinci_resolve_mcp.publisher_version": "3.2.0"
                 },
                 "timed_marker_decision": {
                   "choice": "ask",
                   "enabled": false,
                   "note": "V2 architecture disables machine marker writeback to Resolve (per-shot, qc_warning, best_moment). Clip-level metadata (Description, Keywords, Comments) still writes. See the V2 shot schema spec \u00a79.1 for rationale.",
-                  "preferences_path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp/logs/media-analysis-preferences.json",
+                  "preferences_path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/media-analysis-preferences.json",
                   "prompt_required": false,
                   "saved_default": null,
                   "source": "v2_disabled"
@@ -5409,25 +5500,25 @@
                   "Offsets are advisory; verify sync visually and audibly in Resolve before converting to a native multicam clip."
                 ],
                 "reference": {
-                  "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                  "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                   "clip_name": "parity-src-001.mp4",
                   "confidence": 0.45,
                   "event_frame": 0,
                   "event_time_seconds": 0.0,
                   "event_type": "slate_clap",
-                  "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4"
+                  "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4"
                 },
                 "success": true,
                 "suggestions": [
                   {
-                    "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                    "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                     "clip_name": "parity-src-001.mp4",
                     "confidence": 0.45,
                     "event_frame": 0,
                     "event_time_seconds": 0.0,
                     "event_type": "slate_clap",
                     "index": 0,
-                    "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                    "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                     "suggested_record_offset_frames": 0,
                     "suggested_record_offset_seconds": 0.0
                   }
@@ -5467,7 +5558,7 @@
               },
               "files": [
                 {
-                  "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                  "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                   "clip_name": "parity-src-001.mp4",
                   "events": [
                     {
@@ -5497,7 +5588,7 @@
                   ],
                   "marker_suggestions": [
                     {
-                      "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+                      "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
                       "clip_name": "parity-src-001.mp4",
                       "confidence": 0.45,
                       "eligible": true,
@@ -5506,7 +5597,7 @@
                       "event_type": "slate_clap",
                       "marker": {
                         "color": "Yellow",
-                        "custom_data": "mcp.sync_event:b0cc2cdb-15a3-4ae0-92c1-e990b5167d70:slate_clap:0",
+                        "custom_data": "mcp.sync_event:8cf9b5a9-9250-4428-9c85-abc71e4ac4a9:slate_clap:0",
                         "duration": 1,
                         "frame": 0,
                         "name": "Sync: slate clap",
@@ -5545,7 +5636,7 @@
                       }
                     ]
                   },
-                  "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+                  "path": "/private/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
                   "scan": {
                     "audio_stream_index": 0,
                     "event_types": [
@@ -5580,7 +5671,7 @@
               "writes_media": false
             },
             "target": {
-              "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "selected": false,
               "type": "clip"
             },
@@ -5588,7 +5679,7 @@
               "choice": "ask",
               "enabled": false,
               "note": "V2 architecture disables machine marker writeback to Resolve (per-shot, qc_warning, best_moment). Clip-level metadata (Description, Keywords, Comments) still writes. See the V2 shot schema spec \u00a79.1 for rationale.",
-              "preferences_path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp/logs/media-analysis-preferences.json",
+              "preferences_path": "/Users/stc/Developer/davinci-agent/private/vendor/davinci-resolve-mcp-v3.2.0/logs/media-analysis-preferences.json",
               "prompt_required": false,
               "saved_default": null,
               "source": "v2_disabled"
@@ -5598,24 +5689,24 @@
           },
           "record": {
             "bin_path": null,
-            "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+            "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
             "clip_name": "parity-src-001.mp4",
             "clip_properties_error": null,
             "duration": "00:00:06:00",
-            "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4",
+            "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4",
             "fps": 30.0,
-            "media_id": "547778b6-9ea0-4b86-a1e7-7998b0fd93c5",
+            "media_id": "c0f10c66-17e5-409e-b635-0d9fe807eac3",
             "media_type": "\u30d3\u30c7\u30aa + \u30aa\u30fc\u30c7\u30a3\u30aa",
             "resolution": "320x180"
           },
           "success": true,
-          "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/visual.json"
+          "visual_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/visual.json"
         },
         "status": "ok",
         "tool": "media_analysis"
       }
     ],
-    "wall_seconds": 1.801
+    "wall_seconds": 1.069
   },
   {
     "capability": "deep-shot-analysis",
@@ -5625,18 +5716,18 @@
     "steps": [
       {
         "action": "deepen",
-        "elapsed_ms": 8.3,
+        "elapsed_ms": 11.3,
         "ok": true,
         "params": {
-          "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70"
+          "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9"
         },
         "response": {
           "_operation": {
-            "duration_ms": 2,
-            "execution_id": "exec_eccb36dd2a11",
+            "duration_ms": 6,
+            "execution_id": "exec_6257165042ce",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 2,
+                "duration_ms": 6,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -5649,10 +5740,10 @@
               "status": "unverified"
             }
           },
-          "confirm_token": "a62c095e3f3e66d0",
+          "confirm_token": "2bf8b79e4a63f7ae",
           "estimate": {
             "clip_name": "parity-src-001.mp4",
-            "clip_uuid": "6ea371976b79",
+            "clip_uuid": "3c070b09f81f",
             "estimated_vision_tokens": 15000,
             "frame_count": 15,
             "shot_count": 3,
@@ -5667,16 +5758,16 @@
       },
       {
         "action": "deepen",
-        "elapsed_ms": 7.4,
+        "elapsed_ms": 5.2,
         "ok": true,
         "params": {
-          "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
-          "confirm_token": "a62c095e3f3e66d0"
+          "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
+          "confirm_token": "2bf8b79e4a63f7ae"
         },
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_bf88e0770ba0",
+            "execution_id": "exec_66c873b66704",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -5693,18 +5784,18 @@
             }
           },
           "clip": {
-            "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+            "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
             "clip_name": "parity-src-001.mp4",
-            "clip_uuid": "6ea371976b79",
-            "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-8pc3wupb/parity-src-001.mp4"
+            "clip_uuid": "3c070b09f81f",
+            "file_path": "/var/folders/_n/4gmb7lr14sdcvl4mzlmr82300000gn/T/v43-probes-media-_hc4zji1/parity-src-001.mp4"
           },
           "commit_action": {
             "action": "commit_shot_vision",
             "params": {
-              "analysis_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
-              "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+              "analysis_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
+              "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
               "shots": "<host chat: [{shot_index, ...deep_shot_schema groups...}]>",
-              "vision_token": "438836a8fb7b61f8"
+              "vision_token": "889b6419c72687fd"
             },
             "tool": "media_analysis"
           },
@@ -5778,7 +5869,7 @@
           },
           "estimate": {
             "clip_name": "parity-src-001.mp4",
-            "clip_uuid": "6ea371976b79",
+            "clip_uuid": "3c070b09f81f",
             "estimated_vision_tokens": 15000,
             "frame_count": 15,
             "shot_count": 3,
@@ -5788,126 +5879,126 @@
           "frame_metadata": [
             {
               "frame_index": 2,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0002.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0002.jpg",
               "selection_reason": "first_usable",
               "shot_index": 1,
               "time_seconds": 0.3
             },
             {
               "frame_index": 3,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0003.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0003.jpg",
               "selection_reason": "shot_representative",
               "shot_index": 1,
               "time_seconds": 1.0
             },
             {
               "frame_index": 4,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0004.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0004.jpg",
               "selection_reason": "shot_end",
               "shot_index": 1,
               "time_seconds": 1.933
             },
             {
               "frame_index": 5,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0005.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0005.jpg",
               "selection_reason": "cut_before",
               "shot_index": 1,
               "time_seconds": 1.967
             },
             {
               "frame_index": 6,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0006.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0006.jpg",
               "selection_reason": "cut_after",
               "shot_index": 2,
               "time_seconds": 2.033
             },
             {
               "frame_index": 7,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0007.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0007.jpg",
               "selection_reason": "shot_start",
               "shot_index": 2,
               "time_seconds": 2.067
             },
             {
               "frame_index": 8,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0008.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0008.jpg",
               "selection_reason": "shot_representative",
               "shot_index": 2,
               "time_seconds": 3.0
             },
             {
               "frame_index": 9,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0009.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0009.jpg",
               "selection_reason": "shot_end",
               "shot_index": 2,
               "time_seconds": 3.933
             },
             {
               "frame_index": 10,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0010.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0010.jpg",
               "selection_reason": "cut_before",
               "shot_index": 2,
               "time_seconds": 3.967
             },
             {
               "frame_index": 1,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0001.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0001.jpg",
               "selection_reason": "shot_start",
               "shot_index": 3,
               "time_seconds": 0.067
             },
             {
               "frame_index": 11,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0011.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0011.jpg",
               "selection_reason": "cut_after",
               "shot_index": 3,
               "time_seconds": 4.033
             },
             {
               "frame_index": 12,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0012.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0012.jpg",
               "selection_reason": "shot_start",
               "shot_index": 3,
               "time_seconds": 4.067
             },
             {
               "frame_index": 13,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0013.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0013.jpg",
               "selection_reason": "shot_representative",
               "shot_index": 3,
               "time_seconds": 5.0
             },
             {
               "frame_index": 14,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0014.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0014.jpg",
               "selection_reason": "last_usable",
               "shot_index": 3,
               "time_seconds": 5.7
             },
             {
               "frame_index": 15,
-              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0015.jpg",
+              "frame_path": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0015.jpg",
               "selection_reason": "shot_end",
               "shot_index": 3,
               "time_seconds": 5.933
             }
           ],
           "frame_paths": [
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0002.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0003.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0004.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0005.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0006.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0007.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0008.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0009.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0010.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0001.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0011.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0012.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0013.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0014.jpg",
-            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/frames/sampled_0015.jpg"
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0002.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0003.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0004.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0005.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0006.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0007.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0008.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0009.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0010.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0001.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0011.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0012.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0013.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0014.jpg",
+            "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/frames/sampled_0015.jpg"
           ],
           "instructions": "Read every file under frame_paths as a local image. For each entry in shot_table, produce one object in `shots` with its shot_index and the deep_shot_schema field groups, grounded ONLY in the frames listed in that shot's frame_indices. Then call the tool in commit_action with `shots` set to that array. Skipping the commit leaves the deep pass incomplete \u2014 surface that rather than silently stopping.",
           "mode": "deep_shots",
@@ -5924,7 +6015,7 @@
                 5
               ],
               "shot_index": 1,
-              "shot_uuid": "16967cb27588",
+              "shot_uuid": "320a108f9f30",
               "time_seconds_end": 2.0,
               "time_seconds_start": 0.0
             },
@@ -5938,7 +6029,7 @@
                 10
               ],
               "shot_index": 2,
-              "shot_uuid": "309da211fc23",
+              "shot_uuid": "5c74b8fcb299",
               "time_seconds_end": 4.0,
               "time_seconds_start": 2.0
             },
@@ -5953,24 +6044,24 @@
                 15
               ],
               "shot_index": 3,
-              "shot_uuid": "7ec2b5694794",
+              "shot_uuid": "7f0f9d1cdbd6",
               "time_seconds_end": 6.0,
               "time_seconds_start": 4.0
             }
           ],
           "status": "pending_host_analysis",
           "success": true,
-          "vision_token": "438836a8fb7b61f8"
+          "vision_token": "889b6419c72687fd"
         },
         "status": "ok",
         "tool": "media_analysis"
       },
       {
         "action": "commit_shot_vision",
-        "elapsed_ms": 11.8,
+        "elapsed_ms": 7.6,
         "ok": true,
         "params": {
-          "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+          "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
           "shots": [
             {
               "confidence": {
@@ -6016,7 +6107,7 @@
                 5
               ],
               "shot_index": 1,
-              "shot_uuid": "16967cb27588",
+              "shot_uuid": "320a108f9f30",
               "visual": {
                 "camera_motion": "locked",
                 "framing": "abstract",
@@ -6068,7 +6159,7 @@
                 10
               ],
               "shot_index": 2,
-              "shot_uuid": "309da211fc23",
+              "shot_uuid": "5c74b8fcb299",
               "visual": {
                 "camera_motion": "locked",
                 "framing": "abstract",
@@ -6121,7 +6212,7 @@
                 15
               ],
               "shot_index": 3,
-              "shot_uuid": "7ec2b5694794",
+              "shot_uuid": "7f0f9d1cdbd6",
               "visual": {
                 "camera_motion": "locked",
                 "framing": "abstract",
@@ -6129,15 +6220,15 @@
               }
             }
           ],
-          "vision_token": "438836a8fb7b61f8"
+          "vision_token": "889b6419c72687fd"
         },
         "response": {
           "_operation": {
-            "duration_ms": 6,
-            "execution_id": "exec_76c6e39828bd",
+            "duration_ms": 3,
+            "execution_id": "exec_ba41af9553ec",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 6,
+                "duration_ms": 3,
                 "execution_id": null,
                 "risk_level": "medium"
               }
@@ -6150,8 +6241,8 @@
               "status": "unverified"
             }
           },
-          "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e/clips/parity-src-001.mp4-6ea371976b79/analysis.json",
-          "clip_uuid": "6ea371976b79",
+          "analysis_json": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4/clips/parity-src-001.mp4-3c070b09f81f/analysis.json",
+          "clip_uuid": "3c070b09f81f",
           "shots_updated": 3,
           "source": "vision_deep_v1",
           "subjective_fields_preserved_human": 0,
@@ -6162,7 +6253,7 @@
         "tool": "media_analysis"
       }
     ],
-    "wall_seconds": 0.028
+    "wall_seconds": 0.024
   },
   {
     "capability": "edit-engine-selects",
@@ -6172,7 +6263,7 @@
     "steps": [
       {
         "action": "plan_selects",
-        "elapsed_ms": 7.5,
+        "elapsed_ms": 4.9,
         "ok": true,
         "params": {
           "timeline_name": "v43-probe-place-tl"
@@ -6180,7 +6271,7 @@
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_f2bee3844863",
+            "execution_id": "exec_0b0565c79705",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -6203,7 +6294,7 @@
         "tool": "edit_engine"
       }
     ],
-    "wall_seconds": 0.008
+    "wall_seconds": 0.005
   },
   {
     "capability": "alternate-shot-similarity",
@@ -6213,10 +6304,10 @@
     "steps": [
       {
         "action": "build_embeddings",
-        "elapsed_ms": 7.6,
+        "elapsed_ms": 5.2,
         "ok": true,
         "params": {
-          "clip_id": "b0cc2cdb-15a3-4ae0-92c1-e990b5167d70",
+          "clip_id": "8cf9b5a9-9250-4428-9c85-abc71e4ac4a9",
           "kinds": [
             "text"
           ]
@@ -6224,7 +6315,7 @@
         "response": {
           "_operation": {
             "duration_ms": 1,
-            "execution_id": "exec_c1ad239f1d01",
+            "execution_id": "exec_b5e4ec9b99ab",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 1,
@@ -6243,7 +6334,7 @@
           "kinds": [
             "text"
           ],
-          "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-113456-9dbe94f00e",
+          "project_root": "/Users/stc/Documents/davinci-resolve-mcp-analysis/v43-probe-144950-ec641bdcb4",
           "success": false,
           "text": {
             "error": "No text-embedding backend available",
@@ -6255,7 +6346,7 @@
         "tool": "media_analysis"
       }
     ],
-    "wall_seconds": 0.008
+    "wall_seconds": 0.005
   },
   {
     "capability": "advanced-delivery-qc",
@@ -6265,16 +6356,16 @@
     "steps": [
       {
         "action": "export_render_boundary_report",
-        "elapsed_ms": 335.0,
+        "elapsed_ms": 256.7,
         "ok": true,
         "params": {},
         "response": {
           "_operation": {
-            "duration_ms": 316,
-            "execution_id": "exec_646aece8c6c7",
+            "duration_ms": 246,
+            "execution_id": "exec_0c6001d4b7b4",
             "lifecycle": {
               "provenance_trace": {
-                "duration_ms": 316,
+                "duration_ms": 246,
                 "execution_id": null,
                 "risk_level": "low"
               }
@@ -28050,7 +28141,7 @@
       },
       {
         "action": "validate_render_settings",
-        "elapsed_ms": 5.8,
+        "elapsed_ms": 3.3,
         "ok": true,
         "params": {
           "settings": {
@@ -28062,7 +28153,7 @@
         "response": {
           "_operation": {
             "duration_ms": 0,
-            "execution_id": "exec_082ff3d2e103",
+            "execution_id": "exec_679b5a00e7f1",
             "lifecycle": {
               "provenance_trace": {
                 "duration_ms": 0,
@@ -28092,6 +28183,6 @@
         "tool": "render"
       }
     ],
-    "wall_seconds": 0.344
+    "wall_seconds": 0.262
   }
 ]

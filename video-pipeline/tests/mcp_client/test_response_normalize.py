@@ -158,7 +158,7 @@ def test_server_info_fixture_round_trips() -> None:
     payload = _load_fixture(SERVER_INFO)
     identity = normalize_server_info(payload)
     assert identity.name == "DaVinciResolveMCP"
-    assert identity.version == "1.29.1"
+    assert identity.version == "1.30.0"
     _assert_round_trip(normalize_server_info, payload, identity)
 
 

@@ -7,9 +7,9 @@ After ``initialize`` the client compares the server's reported identity
 Two distinct version surfaces (live-verified against the pinned deployment):
 
 - ``serverInfo.version`` is the ``mcp`` library version frozen in the pinned
-  venv (``1.29.1``) — FastMCP advertises the library version, NOT the
+  venv (``1.30.0``) — FastMCP advertises the library version, NOT the
   provider's own VERSION constant. This is what the handshake can check.
-- the provider version ``2.207.0`` is the vendored ``src/server.py``
+- the provider version ``3.2.0`` is the vendored ``src/server.py``
   ``VERSION`` constant (the capability fit matrix's ``provider_version``);
   it is carried as :data:`PINNED_PROVIDER_VERSION` for downstream execution
   call artifacts (task 8+), not for the handshake check.
@@ -45,7 +45,7 @@ class ServerHandshake(StrictModel):
 
 
 PINNED_SERVER_NAME: Final = "DaVinciResolveMCP"
-PINNED_HANDSHAKE_VERSION: Final = "1.29.1"
+PINNED_HANDSHAKE_VERSION: Final = "1.30.0"
 PINNED_PROVIDER_VERSION: Final = EXPECTED_PROVIDER_VERSION
 PINNED_SERVER_IDENTITY: Final[ServerIdentity] = ServerIdentity(
     name=PINNED_SERVER_NAME, version=PINNED_HANDSHAKE_VERSION

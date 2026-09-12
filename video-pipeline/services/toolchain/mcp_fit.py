@@ -11,7 +11,7 @@ from typing import Any, Final
 
 EXPECTED_SCHEMA_VERSION: Final = "mcp-fit-v1"
 EXPECTED_PROVIDER: Final = "davinci-resolve-mcp"
-EXPECTED_PROVIDER_VERSION: Final = "2.210.0"
+EXPECTED_PROVIDER_VERSION: Final = "3.2.0"
 EXPECTED_RESOLVE_BUILD: Final = "21.0.4.5"
 EXPECTED_ROW_COUNT: Final = 22
 

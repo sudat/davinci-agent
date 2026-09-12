@@ -128,10 +128,28 @@ class ToolsList(StrictModel):
 # ---------------------------------------------------------------------------
 
 
+class UnavailableOnThisBuildEntry(StrictModel):
+    """One v3 ``build.unavailable_on_this_build`` drift-report entry.
+
+    v3.0.0 turned the flat symbol strings into typed objects (symbol, the
+    Resolve build that introduced the gate, the evidence source, an optional
+    upstream issue number, and a note). Strict on purpose: a shape change on
+    this surface is provider drift and must fail closed at session open.
+    """
+
+    symbol: str
+    introduced_in: str
+    source: str
+    note: str
+    issue: int | None = None
+
+
 class ResolveBuildInfo(StrictModel):
     """The ``build`` block of the live get_version payload."""
 
-    unavailable_on_this_build: Annotated[tuple[str, ...], BeforeValidator(to_tuple)]
+    unavailable_on_this_build: Annotated[
+        tuple[UnavailableOnThisBuildEntry, ...], BeforeValidator(to_tuple)
+    ]
     known_gates: int
     note: str
 

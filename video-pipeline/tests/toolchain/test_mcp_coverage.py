@@ -77,7 +77,7 @@ from services.toolchain.mcp_vendor_surface import (
     parse_vendor_surface,
 )
 
-COMMIT = "4c42f429298ec63fd793e7a9d16bd7994d16f307"
+COMMIT = "c8fbe1887324de9d897e6036efcde60417e33e8c"
 OTHER_SHA = "1111111111111111111111111111111111111111"
 
 SERVER_TEMPLATE = """\
@@ -512,7 +512,7 @@ def test_committed_inventory_exists_and_matches_drift_guards() -> None:
         "kernel_actions": EXPECTED_KERNEL_ACTIONS,
     }
     assert payload["pin"]["commit"] == COMMIT
-    assert payload["pin"]["provider_version"] == "2.210.0"
+    assert payload["pin"]["provider_version"] == "3.2.0"
     assert payload["pin"]["server_mode"] == "compound"
 
 
@@ -1173,13 +1173,13 @@ def test_committed_dispositions_validate_in_rollout_mode() -> None:
     if not REAL_DISPOSITIONS.is_file():  # pragma: no cover - generation ran first
         pytest.skip("dispositions not generated yet")
     report = validate_dispositions_files(REAL_INVENTORY, REAL_DISPOSITIONS)
-    assert report.total_operations == 1028
+    assert report.total_operations == 1090
     assert report.mapped == REAL_MAPPED
-    assert report.deferred == 1028 - REAL_MAPPED
-    assert report.coverage == REAL_MAPPED / 1028
+    assert report.deferred == 1090 - REAL_MAPPED
+    assert report.coverage == REAL_MAPPED / 1090
     assert report.unmapped == 0
     assert report.refused_vendor_supported == 0
-    assert len(report.deferred_by_domain) == 37
+    assert len(report.deferred_by_domain) == 39
     assert "project" in report.deferred_by_domain
     assert sum(report.deferred_by_domain.values()) == report.deferred
     assert set(report.deferred_by_category) == {
@@ -1193,7 +1193,7 @@ def test_strict_mode_fails_today_because_deferred_rows_remain() -> None:
     with pytest.raises(DispositionsParityError) as excinfo:
         validate_dispositions_files(REAL_INVENTORY, REAL_DISPOSITIONS, strict=True)
     assert excinfo.value.code == "parity-deferred-remaining"
-    assert str(1028 - REAL_MAPPED) in excinfo.value.detail
+    assert str(1090 - REAL_MAPPED) in excinfo.value.detail
     assert "timeline" in excinfo.value.detail
 
 
