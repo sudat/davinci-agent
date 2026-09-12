@@ -16,6 +16,7 @@ from services.normalize.models import (
     OutputSemantics,
     ReplayPolicy,
     ToolIdentity,
+    VerificationLevel,
 )
 from services.normalize.verify import target_profile_from_lock
 
@@ -48,7 +49,8 @@ class VerifiedRun:
     lock_sha256: str
     prediction: CfrConversionReport
     output_facts: MediaFacts
-    decoded_video_sha256: str
+    decoded_video_sha256: str | None = None
+    verification: VerificationLevel = "full_decode"
     declared_video_pix_fmt: str | None = None
     declared_scale_height: int | None = None
     declared_conversions: tuple[str, ...] = ()
@@ -103,6 +105,7 @@ def build_normalize_record(run: VerifiedRun) -> NormalizeRecord:
             decoded_video_sha256=run.decoded_video_sha256,
             observed_output_frames=run.output_facts.video.nb_read_frames,
         ),
+        verification=run.verification,
         replay=ReplayPolicy(
             determinism="semantic-equivalence-h264-videotoolbox", note=REPLAY_NOTE
         ),

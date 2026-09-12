@@ -59,7 +59,7 @@ from services.validate.selection_models import (
 )
 
 if TYPE_CHECKING:
-    from services.normalize.models import NormalizeRecord
+    from services.normalize.models import NormalizeRecord, VerificationLevel
 
 if TYPE_CHECKING:
     from services.cli.real_pool import SpeechSegment
@@ -89,7 +89,12 @@ def _advance(state: StateStore, target: str, artifact: str) -> None:
 
 
 def _normalize(
-    source_manifest: Path, ffmpeg: Path, ffprobe: Path, out_dir: Path
+    source_manifest: Path,
+    ffmpeg: Path,
+    ffprobe: Path,
+    out_dir: Path,
+    *,
+    verification: VerificationLevel = "standard",
 ) -> tuple[NormalizeRecord, Path]:
     source = SourceManifest.model_validate_json(source_manifest.read_bytes())
     record = normalize_one(
@@ -102,6 +107,7 @@ def _normalize(
             output_dir=out_dir / "media",
             record_out=out_dir / "normalize-record.json",
         ),
+        verification=verification,
         declared_video_pix_fmt="yuv420p",
         declared_scale_height=1080,
     )

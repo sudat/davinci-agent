@@ -68,7 +68,11 @@ def run_arm_stages(
         manifest, workspace, ffprobe, workspace
     )
     normalize_record, mezzanine = _normalize(
-        workspace / "source-manifest.json", ffmpeg, ffprobe, workspace
+        workspace / "source-manifest.json",
+        ffmpeg,
+        ffprobe,
+        workspace,
+        verification="full_decode",
     )
     total_frames = normalize_record.drop_dup.expected.output_frames
     source_id = f"{episode_id}-edit-source"

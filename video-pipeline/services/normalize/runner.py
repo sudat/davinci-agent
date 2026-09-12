@@ -7,8 +7,14 @@ INPUT's probe facts (decode-level or honestly-derived, see
 ``VideoFacts.frame_count_source``) via ``services.conform`` -> guard the argv (network
 refusal, absolute IO, never over the original) -> run pinned ffmpeg with a
 bounded 600s timeout -> re-hash the source (immutability) -> verify the output
-(decodability, exact CFR rate, 48 kHz, rotation/color policy, frame count
-EXACTLY equal to the prediction) -> seal and atomically commit the record.
+ (decodability, exact CFR rate, 48 kHz, rotation/color policy, frame count
+ EXACTLY equal to the prediction) -> seal and atomically commit the record.
+
+ ``verification`` selects the evidence depth: ``"standard"`` verifies with
+ the encoded file sha256, ffprobe facts, and the bounded head-decode sanity
+ probe only (product runs pass this); ``"full_decode"`` additionally hashes
+ the fully decoded raw video frames (gate/proof runs; this is the default,
+ preserving the pre-split behavior for existing callers).
 """
 
 from __future__ import annotations
@@ -32,7 +38,11 @@ from services.normalize.errors import (
     NormalizeRecipeError,
     NormalizeVerificationError,
 )
-from services.normalize.models import NormalizeRecord, seal_normalize_record
+from services.normalize.models import (
+    NormalizeRecord,
+    VerificationLevel,
+    seal_normalize_record,
+)
 from services.normalize.probe import decoded_video_sha256, probe_media_facts
 from services.normalize.toolchain_guard import (
     build_argv,
@@ -132,11 +142,12 @@ def _recipe_for(lock: Phase0BToolchainLock, recipe_id: str) -> NormalizeRecipe:
     return lookup_recipe(lock.normalization, recipe_id)
 
 
-def normalize_one(
+def normalize_one(  # noqa: PLR0913 (verification is a keyword-only evidence-depth switch)
     source_manifest: SourceManifest,
     target_profile: str,
     context: NormalizeContext,
     *,
+    verification: VerificationLevel = "full_decode",
     declared_video_pix_fmt: str | None = None,
     declared_scale_height: int | None = None,
 ) -> NormalizeRecord:
@@ -201,6 +212,13 @@ def normalize_one(
         ),
     )
 
+    decoded_hash = (
+        decoded_video_sha256(
+            context.ffmpeg, output, frame_hint=output_facts.video.nb_read_frames
+        )
+        if verification == "full_decode"
+        else None
+    )
     sealed = seal_normalize_record(
         build_normalize_record(
             VerifiedRun(
@@ -214,9 +232,8 @@ def normalize_one(
                 lock_sha256=lock_sha256,
                 prediction=prediction,
                 output_facts=output_facts,
-                decoded_video_sha256=decoded_video_sha256(
-                    context.ffmpeg, output, frame_hint=output_facts.video.nb_read_frames
-                ),
+                decoded_video_sha256=decoded_hash,
+                verification=verification,
                 declared_video_pix_fmt=declared_video_pix_fmt,
                 declared_scale_height=declared_scale_height,
                 declared_conversions=declared_conversions,

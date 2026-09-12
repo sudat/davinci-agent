@@ -1931,3 +1931,8 @@ Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)
 - V44-0 editorial-feasibility evidence complete (diagnostic lane; recall 77/77, catastrophic 0, operator continuation YES). Auto-ASR FAIL recorded as-is (whisper CER 0.1147 > 0.10; Gemini timing human-approved; exploration terminated per asr-argv-experiment-outcome / asr-whisper-upgrade-v1 / asr-cloud-transcribe-v1 / asr-cut-hybrid-proof).
 - First-publish bootstrap proceeds with the operator-verified vNext corrected transcript (existing corrected-transcript input path, no new provider/framework/artifact). Correction time counts toward Bootstrap AHT. Steady-state auto-subtitle improvement is post-publish tracking.
 - Next: proceed to §6-8 (V44-1 Cockpit real vertical slice) with this fallback in place.
+
+## Decision addendum: normalize verification levels, standard vs full-decode (2026-09-12, codex ruling)
+
+- Why: full-file decoded-video sha256 measured ~50.3s on the 282s 1080p mezzanine (~10.7 min/hr at 1-hour scale) per normal product run. `normalize_one` gains a `verification` level (default `full_decode`, preserving gate behavior); `real_chain._normalize` passes `standard`, the arm/gate path (`v44_arm_stages`) passes `full_decode`.
+- Integrity: `standard` = encoded sha256 + ffprobe facts + head-frame sanity check (all already computed); the record carries no decoded hash and the schema refuses a mismatched level. Old records read as `full_decode` (they carry the hash); schema_version stays v1 (defaulted fields, read-compatible).

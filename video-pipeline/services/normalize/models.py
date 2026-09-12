@@ -30,6 +30,15 @@ from services.foundation_io import canonical_model_bytes, sha256_file
 PATH_ANNOTATION = Annotated[str, StringConstraints(min_length=1)]
 FrameIndex = Annotated[int, Field(ge=0, strict=True)]
 
+VerificationLevel = Literal["standard", "full_decode"]
+"""Normalize verification depth, recorded honestly on the record.
+
+- ``"standard"``: encoded file sha256 + ffprobe duration/frame-count/codec
+  fields + the bounded head-packet/frame sanity probe (no full decode).
+- ``"full_decode"``: additionally the sha256 over fully decoded raw video
+  frames (``OutputSemantics.decoded_video_sha256`` is present).
+"""
+
 
 class FileIdentity(StrictModel):
     path: PATH_ANNOTATION
@@ -69,7 +78,7 @@ class DropDupAccounting(StrictModel):
 
 
 class OutputSemantics(StrictModel):
-    decoded_video_sha256: Sha256
+    decoded_video_sha256: Sha256 | None = None
     observed_output_frames: int = Field(ge=0)
 
 
@@ -96,6 +105,7 @@ class NormalizeRecord(StrictModel):
     declared_conversions: tuple[str, ...] = ()
     drop_dup: DropDupAccounting
     output_semantics: OutputSemantics
+    verification: VerificationLevel = "full_decode"
     replay: ReplayPolicy
 
     @model_validator(mode="after")
@@ -108,6 +118,21 @@ class NormalizeRecord(StrictModel):
                 "hash_confusion",
                 "output hash equals the source hash; a re-encoded mezzanine "
                 "cannot be byte-identical to its original",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def require_honest_verification_level(self) -> NormalizeRecord:
+        decoded = self.output_semantics.decoded_video_sha256
+        if self.verification == "standard" and decoded is not None:
+            raise PydanticCustomError(
+                "verification_mismatch",
+                "verification 'standard' must not carry a decoded-video hash",
+            )
+        if self.verification == "full_decode" and decoded is None:
+            raise PydanticCustomError(
+                "verification_mismatch",
+                "verification 'full_decode' requires the decoded-video hash",
             )
         return self
 
