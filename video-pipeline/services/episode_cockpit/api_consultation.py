@@ -1683,21 +1683,41 @@ def consultation_judgment(
         and policy.judgment_id == judgment_id
         and not selection_rebuild_active(episode_dir, snapshot.stage_runs)
     ):
-        try:
-            workspace.record_consultation_rebuild(episode_id, judgment_id=judgment_id)
-        except CockpitConflictError:
-            pass
-        else:
-            refreshed = workspace._require_snapshot(episode_id)  # noqa: SLF001
-            return JSONResponse(
-                status_code=202,
-                content=consultation_view(
-                    episode_dir, record, limits, snapshot=refreshed
-                ),
-            )
+        scheduled = _schedule_adoption_rebuild(
+            workspace, episode_id, judgment_id, episode_dir, record, limits
+        )
+        if scheduled is not None:
+            return scheduled
     return JSONResponse(
         status_code=200,
         content=consultation_view(episode_dir, record, limits, snapshot=snapshot),
+    )
+
+
+def _schedule_adoption_rebuild(  # noqa: PLR0913, PLR0917 (extraction keeps the caller's own parameter bundle)
+    workspace: Workspace,
+    episode_id: str,
+    judgment_id: str,
+    episode_dir: Path,
+    record: ConsultationRecordV1,
+    limits: ConsultationBudgetLimits,
+) -> JSONResponse | None:
+    """Schedule the adoption rebuild; None = not scheduled (judgment stands)."""
+
+    try:
+        workspace.record_consultation_rebuild(episode_id, judgment_id=judgment_id)
+    except CockpitConflictError:
+        return None
+    except CockpitUnprocessableError as error:
+        # 提案採用は初回preview前に起こる設計どおり: 判断は記録し、
+        # rebuildは試し動画要求がPREVIEW_READY後に予約する。
+        if error.code != "episode-not-preview-ready":
+            raise
+        return None
+    refreshed = workspace._require_snapshot(episode_id)  # noqa: SLF001
+    return JSONResponse(
+        status_code=202,
+        content=consultation_view(episode_dir, record, limits, snapshot=refreshed),
     )
 
 
