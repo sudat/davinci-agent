@@ -494,6 +494,12 @@ def test_sample_post_bodies_serialize_as_json(
 def _fast_forward_to_preview_ready(
     workspace: dict[str, Path], episode_id: str
 ) -> None:
+    _fast_forward_to(workspace, episode_id, "PREVIEW_READY")
+
+
+def _fast_forward_to(workspace: dict[str, Path], episode_id: str, target: str) -> None:
+    """Walk the job to the target status (candidate F pins PLAN_COMMITTED)."""
+
     gated = {
         "EDITORIAL_APPROVED": APPROVAL_PURPOSE_EDITORIAL,
         "FINAL_APPROVED": APPROVAL_PURPOSE_FINAL,
@@ -502,7 +508,7 @@ def _fast_forward_to_preview_ready(
         while True:
             current = current_job_state(store, episode_id)
             position = MAIN_PATH.index(current.status)
-            if position >= MAIN_PATH.index("PREVIEW_READY"):
+            if position >= MAIN_PATH.index(target):
                 return
             nxt = MAIN_PATH[position + 1]
             payload = (
@@ -578,3 +584,34 @@ def test_sample_while_rebuild_active_is_typed_busy_without_render(
     assert response.json()["error"]["code"] == "sample-rebuild-running"
     assert calls == []
     assert load_sample_events(episode_dir) == before
+
+
+def test_sample_request_succeeds_from_plan_committed(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Candidate F: the trial renders from the committed plan + mezzanine.
+
+    The first pass stops at PLAN_COMMITTED (no full preview yet), so the
+    sample POST must succeed exactly there — the sample path truncates at
+    compile like the adoption rebuild, never waiting for PREVIEW_READY.
+    """
+    episode_id = _create_episode(client, source_folder)
+    _seed_episode(workspace, episode_id)
+    _fast_forward_to(workspace, episode_id, "PLAN_COMMITTED")
+    calls: list[str] = []
+    _install_fake_render(monkeypatch, calls)
+
+    with StateStore.open(workspace["state_store"]) as store:
+        assert current_job_state(store, episode_id).status == "PLAN_COMMITTED"
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/samples", json=_payload()
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "published"
+    assert body["sample_id"].startswith("sample-")
+    assert len(calls) == 1

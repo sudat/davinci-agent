@@ -91,17 +91,17 @@ def _create_episode(client: TestClient, source_folder: Path) -> str:
     return str(response.json()["episode_id"])
 
 
-def _fast_forward_to_preview_ready(
-    workspace: dict[str, Path], episode_id: str
+def _fast_forward_to(
+    workspace: dict[str, Path], episode_id: str, target: str
 ) -> None:
-    """Walk the job to PREVIEW_READY (P1 reservations schedule only there)."""
+    """Walk the job to the target status (candidate F pins PLAN_COMMITTED)."""
 
-    target = MAIN_PATH.index("PREVIEW_READY")
+    stop = MAIN_PATH.index(target)
     with StateStore.open(workspace["state_store"]) as store:
         while True:
             current = current_job_state(store, episode_id)
             position = MAIN_PATH.index(current.status)
-            if position >= target:
+            if position >= stop:
                 return
             apply_transition(
                 store,
@@ -112,6 +112,14 @@ def _fast_forward_to_preview_ready(
                 new_artifact_hash="0" * 64,
                 payload=None,
             )
+
+
+def _fast_forward_to_preview_ready(
+    workspace: dict[str, Path], episode_id: str
+) -> None:
+    """Walk the job to PREVIEW_READY (P1 reservations schedule only there)."""
+
+    _fast_forward_to(workspace, episode_id, "PREVIEW_READY")
 
 
 def _consultation_id(client: TestClient, episode_id: str) -> str:
@@ -322,3 +330,43 @@ def test_judgment_consumes_no_consultation_budget(
         == before["consultations"][0]["budget"]["llm_calls_used"]
     )
     assert after["consultations"][0]["policy"]["adopted"] is not None
+
+
+def test_adopt_at_plan_committed_schedules_selection_rebuild(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    llm_calls: list[str],
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    """Candidate F: adoption at the new first-pass boundary schedules work.
+
+    The first pass stops at PLAN_COMMITTED (sample before full preview),
+    so an adoptable judgment there must schedule the selection rebuild
+    (202) exactly like the PREVIEW_READY path — truncated at compile.
+    """
+    episode_id = _create_episode(client, source_folder)
+    _fast_forward_to(workspace, episode_id, "PLAN_COMMITTED")
+    consultation_id = _consultation_id(client, episode_id)
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json={
+            "consultation_id": consultation_id,
+            "proposal_id": "prop-1",
+            "decision": "adopt",
+            "scope": {"composition": True, "appearance": False, "audio": False},
+            "note": "構成だけ採用",
+        },
+    )
+
+    assert response.status_code == 202
+    view = response.json()
+    adopted = view["policy"]["adopted"]
+    assert adopted is not None
+    assert view["rebuild"]["status"] in ("requested", "running")
+    assert len(runner_spawn_calls) == 2  # intake spawn + selection rebuild spawn
+    argv = cast("list[str]", runner_spawn_calls[1]["argv"])
+    assert argv[argv.index("--stop") + 1] == "PREVIEW_READY"
+    assert argv[argv.index("--from-stage") + 1] == "selection"
+    assert argv[argv.index("--stop-stage") + 1] == "compile"

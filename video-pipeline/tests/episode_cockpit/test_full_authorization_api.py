@@ -2,16 +2,20 @@
 
 Service level: the first 全編へ send binds and returns 200; a re-send
 of the same authorization returns the same row with zero downstream
-work (no render, no budget write, no spawn, no commit); a moved target
-under the same operation id is a typed 409. Revert level: inside an
+work (no second render, no budget write, no second spawn, no commit);
+a moved target under the same operation id is a typed 409. Candidate F:
+the first send spawns the deferred full preview render once (the
+resend reuses that recorded spawn). Revert level: inside an
 open consultation the revert stops typed BEFORE any head change; with
 a bound authorization (or no consultation) it proceeds as before.
 """
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +29,9 @@ from services.episode_cockpit.consultation_store import (
     full_render_authorized,
     now_stamp,
 )
+from services.job_runner.cas import apply_transition, current_job_state
+from services.job_runner.state_store import StateStore
+from services.job_runner.transitions import MAIN_PATH
 from services.review_command.store import initialize_store, load_head
 from tests.episode_cockpit.test_full_authorization_binding import (
     _DETAILS,
@@ -327,3 +334,81 @@ def test_judgment_endpoint_other_consultation_sample_is_422(
         response.json()["error"]["code"] == "consultation-authorization-no-sample"
     )
     assert full_render_authorized(episode_dir) is False
+
+
+def _fast_forward_to(workspace: dict[str, Path], episode_id: str, target: str) -> None:
+    stop = MAIN_PATH.index(target)
+    with StateStore.open(workspace["state_store"]) as store:
+        while True:
+            current = current_job_state(store, episode_id)
+            position = MAIN_PATH.index(current.status)
+            if position >= stop:
+                return
+            apply_transition(
+                store,
+                episode_id,
+                expected_status=current.status,
+                expected_parent_hash=current.adopted_artifact_hash,
+                new_status=MAIN_PATH[position + 1],
+                new_artifact_hash="0" * 64,
+                payload=None,
+            )
+
+
+def test_full_authorized_spawns_preview_continuation_once(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    runner_spawn_calls: list[dict[str, object]],
+) -> None:
+    """Candidate F: approval moves the deferred full preview render.
+
+    The first 全編へ send spawns one ordinary compile→preview re-entry
+    (--stop PREVIEW_READY); the resend reuses the recorded spawn with no
+    new row and no new spawn.
+    """
+    episode_id = _create_episode(client, source_folder)
+    episode_dir = _seed_store(workspace, episode_id)
+    _seed_policy_episode(episode_dir)
+    manifest = seed_viewed_sample(episode_dir)
+    _fast_forward_to(workspace, episode_id, "PLAN_COMMITTED")
+
+    first = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_authorize_payload("op-api-full-1", manifest.sample_id),
+    )
+    assert first.status_code == 200, first.text
+    judgments = first.json()["judgments"]
+    assert judgments[-1]["decision"] == "full_authorized"
+    assert full_render_authorized(episode_dir) is True
+
+    assert len(runner_spawn_calls) == 2  # intake spawn + preview continuation
+    argv = cast("list[str]", runner_spawn_calls[1]["argv"])
+    assert argv[:7] == [
+        sys.executable,
+        "-m",
+        "services.cli.episode_runner",
+        "--episode-root",
+        str(episode_dir),
+        "--stop",
+        "PREVIEW_READY",
+    ]
+    assert argv[argv.index("--from-stage") + 1] == "compile"
+    assert "--stop-stage" not in argv  # full stop: the preview renders
+    marker = argv[argv.index("--applied-command") + 1]
+    assert marker == (
+        f"review-command:full-authorized-{judgments[-1]['judgment_id']}"
+    )
+    rebuild_log = (episode_dir / "rebuild-requests.jsonl").read_text(encoding="utf-8")
+    assert marker in rebuild_log
+
+    snapshot_before = _journal_snapshot(episode_dir)
+    second = client.post(
+        f"/episodes/{episode_id}/consultation/judgment",
+        json=_authorize_payload("op-api-full-1", manifest.sample_id),
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["judgments"][-1]["judgment_id"] == judgments[-1]["judgment_id"]
+    assert _journal_snapshot(episode_dir) == snapshot_before
+    assert len(runner_spawn_calls) == 2
+    assert full_render_authorized(episode_dir) is True

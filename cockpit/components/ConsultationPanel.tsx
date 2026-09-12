@@ -45,6 +45,21 @@ import { useNow } from "@/components/useNow";
 const POLL_INTERVAL_MS = 2000;
 const STALE_AFTER_MS = 15000;
 
+/** 試し動画を作れる段階（PLAN_COMMITTED 以降 — 全編preview待ちではない）。 */
+const TRIAL_READY_STATUSES: readonly string[] = [
+  "PLAN_COMMITTED",
+  "PREVIEW_READY",
+  "EDITORIAL_APPROVED",
+  "RESOLVE_BUILT",
+  "QC_PASSED",
+  "FINAL_APPROVED",
+  "FROZEN",
+];
+
+function isTrialReady(status: EpisodeStatus | null | undefined): boolean {
+  return status != null && TRIAL_READY_STATUSES.includes(status.status);
+}
+
 type ConsultationPanelProps = {
   episodeId: string;
   status: EpisodeStatus | null;
@@ -856,7 +871,7 @@ export default function ConsultationPanel({
         feedback={feedback}
         recordJournal={hasPublishedSample ? sampleRecordJournal : null}
         recordBudget={hasPublishedSample ? sampleRecordBudget : null}
-        trialReady={status?.status === "PREVIEW_READY"}
+        trialReady={isTrialReady(status)}
         onSamplesChange={({ hasPublished }: { hasPublished: boolean }) =>
           setHasPublishedSample(hasPublished)
         }

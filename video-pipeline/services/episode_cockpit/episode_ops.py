@@ -50,6 +50,12 @@ RUNNER_LOG_NAME = "runner.log"
 RUNNER_LOCK_NAME = "runner.lock"
 RUNNER_MODULE = "services.cli.episode_runner"
 RUNNER_STOP = "PREVIEW_READY"
+# Candidate F (sample-before-preview): NEW episodes stop at PLAN_COMMITTED
+# with the review store mirrored (sample path inputs ready) — the full
+# preview render waits for the operator's explicit 全編へ authorization,
+# which spawns the PREVIEW_READY continuation. RUNNER_STOP stays the
+# re-entry stop (the runner refuses any other --stop with --from-stage).
+INITIAL_RUNNER_STOP = "PLAN_COMMITTED"
 _PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -162,7 +168,7 @@ class JobOps(WorkspaceContext):
                     "--episode-root",
                     str(self._episode_dir(episode_id)),
                     "--stop",
-                    RUNNER_STOP,
+                    INITIAL_RUNNER_STOP,
                     "--state-store",
                     str(self._state_store_path),
                 ],
@@ -294,6 +300,7 @@ class JobOps(WorkspaceContext):
 
 __all__ = [
     "BRIEF_NAME",
+    "INITIAL_RUNNER_STOP",
     "INTAKE_NAME",
     "INTAKE_STAGE",
     "PUBLISH_PACKAGE_RELATIVE",

@@ -344,6 +344,21 @@ def _reentry_exit(store: StateStore, ctx: RunContext, call: RunnerInvocation, lo
         raise RunnerBlockedError(error.code, error.detail) from error
 
 
+def _mirror_first_pass_outputs(call: RunnerInvocation, log: BinaryIO, run_id: str) -> None:
+    """Mirror the review store (+ publish the preview at its own stop).
+
+    Candidate F: the PLAN_COMMITTED first pass already carries the review
+    store (the sample path's inputs), so it is mirrored without publishing
+    any full preview; only the PREVIEW_READY pass publishes.
+    """
+
+    if call.stop not in ("PLAN_COMMITTED", "PREVIEW_READY"):
+        return
+    mirror_review_store(call.episode_root, log)
+    if call.stop == "PREVIEW_READY":
+        publish_preview(call.episode_root, log, run_id=run_id)
+
+
 def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
     started_fields: dict[str, object] = {
         "run_id": run_id,
@@ -403,9 +418,7 @@ def _run_inner(call: RunnerInvocation, run_id: str, log: BinaryIO) -> int:
         )
         _advance_chain(store, ctx, call.episode_root, chain_env, call.editorial_runtime)
         _verify_reached(store, ctx)
-        if call.stop == "PREVIEW_READY":
-            publish_preview(call.episode_root, log, run_id=run_id)
-            mirror_review_store(call.episode_root, log)
+        _mirror_first_pass_outputs(call, log, run_id)
         log_event(log, "chain_finished", run_id=run_id, stop=call.stop)
         return EXIT_SUCCESS
 

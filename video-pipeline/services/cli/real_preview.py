@@ -34,9 +34,13 @@ from services.foundation_io import atomic_write, canonical_model_bytes, sha256_f
 from services.preview.tools import PinnedTools, load_pinned_tools
 
 if TYPE_CHECKING:
+    from services.cli.project import ReviewPlane
+    from services.compile.production_compiler import CompileProductionResult
+    from services.contracts.timeline_ir import TimelineIr0C
     from services.editorial.candidate_models import CandidatePool, SelectionPlanProposal
     from services.editorial.reconcile import ReconciliationResult
     from services.job_runner.state_store import StateStore
+    from services.validate.edit_commit_models import EditCommitOutcome
     from services.validate.selection_models import (
         CommittedEpisodeRecord,
         EditSourceFacts,
@@ -46,6 +50,73 @@ if TYPE_CHECKING:
 REPORT_NAME = "run-report.json"
 BUNDLE_NAME = "review-bundle.json"
 PREVIEW_TOOLS_LOCK = Path("config/toolchains/phase-0c-v2.json")
+
+
+def compile_review_store(  # noqa: PLR0913 (the compile tail wires every committed artifact)
+    *,
+    state: StateStore,
+    out_dir: Path,
+    facts: RunFacts,
+    pool: CandidatePool,
+    selection: SelectionPlanProposal,
+    reconciled: ReconciliationResult,
+    episode_record: CommittedEpisodeRecord,
+    edit_facts: EditSourceFacts,
+    selection_outcome: SelectionCommitOutcome,
+    speech: tuple[SpeechSegment, ...],
+) -> tuple[EditCommitOutcome, CompileProductionResult, ReviewPlane, TimelineIr0C]:
+    """Edit-plan commit → production compile → review-plane projection → review store.
+
+    Candidate F (sample-before-preview): the PLAN_COMMITTED chain stop runs
+    exactly this far — the committed plan + review store (the sample path's
+    inputs, rendered from the mezzanine on demand) exist without the full
+    preview render, which waits for the operator's explicit 全編へ
+    authorization. The PREVIEW_READY tail below reuses this verbatim, then
+    renders the full preview.
+    """
+
+    edit_outcome, plan = commit_edit_plan(
+        state=state,
+        artifacts=ArtifactStore(out_dir / "artifacts"),
+        registry=ArtifactRegistry(out_dir / "registry"),
+        out_dir=out_dir,
+        selection=selection,
+        pool=pool,
+        reconciled=reconciled,
+        facts=edit_facts,
+        episode=episode_record,
+        selection_outcome=selection_outcome,
+    )
+    production = compile_ir(
+        plan,
+        source_id=edit_facts.source_id,
+        total_frames=edit_facts.total_frames,
+        cue_source=cue_source_for(speech),
+        policy=qc_policy(),
+        episode_id=facts.episode_id,
+    )
+    plane = project_plan(
+        plan,
+        reconciled,
+        episode_id=facts.episode_id,
+        source_id=edit_facts.source_id,
+        total_frames=edit_facts.total_frames,
+        rate=RationalFrameRate(num=30, den=1),
+        subtitles=tuple(
+            ReviewSubtitle(
+                subtitle_id=f"st{position}",
+                segment_id=segment.segment_id,
+                text=segment.text,
+                start_frame=segment.start_frame,
+                end_frame=segment.end_frame,
+            )
+            for position, segment in enumerate(speech, start=1)
+        ),
+    )
+    store_dir = out_dir / "review-store"
+    init_review_store(plane.plan, store_dir)
+    ir_v1 = store_ir(store_dir / "ir-v1.json")
+    return edit_outcome, production, plane, ir_v1
 
 
 def render_preview_tail(  # noqa: PLR0913 (the preview tail wires every committed artifact)
@@ -64,47 +135,19 @@ def render_preview_tail(  # noqa: PLR0913 (the preview tail wires every committe
     policy_file: Path,
 ) -> RealRunOutcome:
     try:
-        edit_outcome, plan = commit_edit_plan(
+        edit_outcome, production, plane, ir_v1 = compile_review_store(
             state=state,
-            artifacts=ArtifactStore(out_dir / "artifacts"),
-            registry=ArtifactRegistry(out_dir / "registry"),
             out_dir=out_dir,
-            selection=selection,
+            facts=facts,
             pool=pool,
+            selection=selection,
             reconciled=reconciled,
-            facts=edit_facts,
-            episode=episode_record,
+            episode_record=episode_record,
+            edit_facts=edit_facts,
             selection_outcome=selection_outcome,
-        )
-        production = compile_ir(
-            plan,
-            source_id=edit_facts.source_id,
-            total_frames=edit_facts.total_frames,
-            cue_source=cue_source_for(speech),
-            policy=qc_policy(),
-            episode_id=facts.episode_id,
-        )
-        plane = project_plan(
-            plan,
-            reconciled,
-            episode_id=facts.episode_id,
-            source_id=edit_facts.source_id,
-            total_frames=edit_facts.total_frames,
-            rate=RationalFrameRate(num=30, den=1),
-            subtitles=tuple(
-                ReviewSubtitle(
-                    subtitle_id=f"st{position}",
-                    segment_id=segment.segment_id,
-                    text=segment.text,
-                    start_frame=segment.start_frame,
-                    end_frame=segment.end_frame,
-                )
-                for position, segment in enumerate(speech, start=1)
-            ),
+            speech=speech,
         )
         store_dir = out_dir / "review-store"
-        init_review_store(plane.plan, store_dir)
-        ir_v1 = store_ir(store_dir / "ir-v1.json")
         tools: PinnedTools = load_pinned_tools(PREVIEW_TOOLS_LOCK)
         preview_dir = out_dir / "preview-v1"
         render_review_preview(plane.plan, ir_v1, mezzanine, preview_dir, tools=tools)
@@ -149,4 +192,4 @@ def render_preview_tail(  # noqa: PLR0913 (the preview tail wires every committe
 
 
 
-__all__ = ["BUNDLE_NAME", "render_preview_tail"]
+__all__ = ["BUNDLE_NAME", "compile_review_store", "render_preview_tail"]

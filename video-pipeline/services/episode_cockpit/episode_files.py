@@ -1010,10 +1010,10 @@ class FileOps(WorkspaceContext):
                 "job-frozen",
                 "この動画は確定済みのため、作り直しを行いませんでした。",
             )
-        if snapshot.job.status != "PREVIEW_READY":
+        if snapshot.job.status not in ("PLAN_COMMITTED", "PREVIEW_READY"):
             raise CockpitUnprocessableError(
                 "episode-not-preview-ready",
-                "selection rebuild needs a PREVIEW_READY job; "
+                "selection rebuild needs a PLAN_COMMITTED or PREVIEW_READY job; "
                 f"job is at {snapshot.job.status}",
             )
         policy = policy_for_judgment(episode_dir, judgment_id)
@@ -1124,6 +1124,123 @@ class FileOps(WorkspaceContext):
             "run_id": run_id,
             "judgment_id": judgment_id,
             "reservation_sequence": reservation.sequence,
+        }
+
+    def record_full_preview_continuation(
+        self, episode_id: str, *, judgment_id: str
+    ) -> dict[str, object]:
+        """Spawn the post-approval full preview render (candidate F ordering).
+
+        The explicit 全編へ authorization moves the deferred full render:
+        an ordinary re-entry from compile to PREVIEW_READY over the CURRENT
+        head (no reservation pin — the bound authorization the runner's own
+        guard verifies is the pin). The marker is ordinary
+        (``review-command:``), never sample-flow, so the runner's
+        unauthorized-preview refusal cannot misfire; re-entry still
+        requires a PLAN_COMMITTED-or-later job. A recorded spawn for the
+        same judgment is reused without a new row or spawn; a spawn
+        failure appends a terminal failed row (never an orphan) and raises
+        so the authorization route can report it while the judgment stands.
+        """
+
+        snapshot = self._require_snapshot(episode_id)
+        episode_dir = self._episode_dir(snapshot.job.episode_id)
+        if snapshot.job.status == "FROZEN":
+            raise CockpitUnprocessableError(
+                "job-frozen",
+                "この動画は確定済みのため、全編の生成を行いませんでした。",
+            )
+        if snapshot.job.status not in ("PLAN_COMMITTED", "PREVIEW_READY"):
+            raise CockpitUnprocessableError(
+                "episode-not-preview-ready",
+                "full preview needs a PLAN_COMMITTED or PREVIEW_READY job; "
+                f"job is at {snapshot.job.status}",
+            )
+        marker = f"{_ORDINARY_REBUILD_MARKER_PREFIX}full-authorized-{judgment_id}"
+        log_path = episode_dir / REBUILD_LOG_NAME
+        if log_path.is_file():
+            for line in log_path.read_bytes().splitlines():
+                try:
+                    entry = RebuildRequestEntry.model_validate_json(line)
+                except ValidationError:
+                    continue
+                if entry.marker == marker and entry.spawned:
+                    return {
+                        "stage_hint": entry.stage_hint,
+                        "scheduled": True,
+                        "stages": ["compile", "preview"],
+                        "judgment_id": judgment_id,
+                        "reused": True,
+                    }
+        run_id = uuid.uuid4().hex[:12]
+        try:
+            _spawn_runner(
+                [
+                    sys.executable,
+                    "-m",
+                    RUNNER_MODULE,
+                    "--episode-root",
+                    str(episode_dir),
+                    "--stop",
+                    RUNNER_STOP,
+                    "--from-stage",
+                    "compile",
+                    "--applied-command",
+                    marker,
+                    "--run-id",
+                    run_id,
+                    "--state-store",
+                    str(self._state_store_path),
+                ],
+                cwd=_PIPELINE_ROOT,
+                log_path=episode_dir / RUNNER_LOG_NAME,
+            )
+        except CockpitConflictError:
+            self._append_jsonl(
+                log_path,
+                RebuildRequestEntry(
+                    sequence=self._next_sequence(log_path),
+                    stage_hint="compile",
+                    marker=marker,
+                    judgment_id=None,
+                    failure_code="runner-active",
+                    detail="実行中の処理があるため、全編の生成を始めませんでした。",
+                ),
+            )
+            raise
+        except OSError as error:
+            self._append_jsonl(
+                log_path,
+                RebuildRequestEntry(
+                    sequence=self._next_sequence(log_path),
+                    stage_hint="compile",
+                    marker=marker,
+                    judgment_id=None,
+                    failure_code="runner-spawn-failed",
+                    detail="全編の生成の起動に失敗しました。もう一度送るとやり直せます。",
+                ),
+            )
+            raise CockpitUnprocessableError(
+                "runner-spawn-failed", f"cannot start the full preview runner: {error}"
+            ) from error
+        self._append_jsonl(
+            log_path,
+            RebuildRequestEntry(
+                sequence=self._next_sequence(log_path),
+                stage_hint="compile",
+                marker=marker,
+                spawned=True,
+                run_id=run_id,
+            ),
+        )
+        return {
+            "stage_hint": "compile",
+            "scheduled": True,
+            "stages": ["compile", "preview"],
+            "runner_log": str(episode_dir / RUNNER_LOG_NAME),
+            "applied_command": marker,
+            "run_id": run_id,
+            "judgment_id": judgment_id,
         }
 
     def _load_brief(self, episode_id: str) -> BriefDraft:

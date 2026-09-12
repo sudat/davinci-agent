@@ -181,8 +181,10 @@ export default function ConsultationSampleSection({
   recordJournal?: ReactNode;
   recordBudget?: ReactNode;
   /** True once the backend can actually make a trial video (episode
-   *  PREVIEW_READY). False hides the request button behind the
-   *  preparing line — the primary action appears only when ready. */
+   *  PLAN_COMMITTED or later — the sample renders from the committed
+   *  plan, ahead of the deferred full preview). False hides the request
+   *  button behind the preparing line — the primary action appears only
+   *  when ready. */
   trialReady?: boolean;
   onSamplesChange?: (info: { hasPublished: boolean }) => void;
 }) {

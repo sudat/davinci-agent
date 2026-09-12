@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Final
 
 from services.artifact_registry.registry import ArtifactRegistry
 from services.artifact_store.store import ArtifactStore
+from services.cli.project import plan_sha256
 from services.cli.real_analyze import RealAnalyzerError, run_real_analyzers
 from services.cli.real_commit import commit_selection
 from services.cli.real_director import RealDirectorError, select_and_reconcile_with_retry
@@ -34,7 +35,10 @@ from services.cli.real_pool import (
     RealPoolError,
     pool_for,
 )
-from services.cli.real_preview import render_preview_tail
+from services.cli.real_preview import (
+    compile_review_store,
+    render_preview_tail,
+)
 from services.cli.real_report import (
     RealChainError,
     RealChainReport,
@@ -56,6 +60,12 @@ from services.validate.selection_models import (
 
 if TYPE_CHECKING:
     from services.normalize.models import NormalizeRecord
+
+if TYPE_CHECKING:
+    from services.cli.real_pool import SpeechSegment
+    from services.editorial.candidate_models import CandidatePool, SelectionPlanProposal
+    from services.editorial.reconcile import ReconciliationResult
+    from services.validate.selection_models import SelectionCommitOutcome
 
 JOB_ID: Final = "job-real-episode-run"
 REPORT_NAME: Final = "run-report.json"
@@ -231,7 +241,18 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
         selection=selection_outcome,
     )
     if stop == "PLAN_COMMITTED":
-        return _finish(build_report(facts, stop), out_dir, None)
+        return _finish_plan_committed(
+            state=state,
+            out_dir=out_dir,
+            facts=facts,
+            pool=pool,
+            selection=selection,
+            reconciled=reconciled,
+            episode_record=episode_record,
+            edit_facts=edit_facts,
+            selection_outcome=selection_outcome,
+            speech=speech,
+        )
 
     return render_preview_tail(
         state=state,
@@ -247,6 +268,49 @@ def run_real_chain(  # noqa: C901, PLR0915, PLR0913 (chain wiring: root/stop/out
         mezzanine=mezzanine,
         policy_file=policy_file,
     )
+
+
+def _finish_plan_committed(  # noqa: PLR0913 (compile-tail wiring mirrors render_preview_tail)
+    *,
+    state: StateStore,
+    out_dir: Path,
+    facts: RunFacts,
+    pool: CandidatePool,
+    selection: SelectionPlanProposal,
+    reconciled: ReconciliationResult,
+    episode_record: CommittedEpisodeRecord,
+    edit_facts: EditSourceFacts,
+    selection_outcome: SelectionCommitOutcome,
+    speech: tuple[SpeechSegment, ...],
+) -> RealRunOutcome:
+    # Candidate F: first pass ends with plan + review store ready for
+    # the sample path; the full preview render waits for 全編へ approval.
+    try:
+        edit_outcome, production, plane, _ir_v1 = compile_review_store(
+            state=state,
+            out_dir=out_dir,
+            facts=facts,
+            pool=pool,
+            selection=selection,
+            reconciled=reconciled,
+            episode_record=episode_record,
+            edit_facts=edit_facts,
+            selection_outcome=selection_outcome,
+            speech=speech,
+        )
+    except (RealPlanError, ValueError, OSError) as error:
+        raise RealChainError("plan_or_preview_failed", str(error)) from error
+    _advance(state, "PLAN_COMMITTED", selection_outcome.plan_sha256)
+    committed_report = build_report(facts, "PLAN_COMMITTED").model_copy(
+        update={
+            "edit_plan_version": edit_outcome.version,
+            "edit_plan_sha256": edit_outcome.plan_sha256,
+            "production_ir_sha256": production.ir_sha256(),
+            "review_plan_sha256": plan_sha256(plane.plan),
+            "review_ir_sha256": sha256_file(out_dir / "review-store" / "ir-v1.json"),
+        }
+    )
+    return _finish(committed_report, out_dir, None)
 
 
 def _finish(report: RealChainReport, out_dir: Path, bundle: Path | None) -> RealRunOutcome:

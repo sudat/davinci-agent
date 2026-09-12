@@ -37,6 +37,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Annotated, Final, Literal, NamedTuple
@@ -1563,12 +1564,13 @@ def _consultation_full_authorization(
     request: ConsultationJudgmentRequest,
     workspace: Workspace,
 ) -> JSONResponse:
-    """One bound 全編へ authorization with a zero-downstream resend (P1-2).
+    """One bound 全編へ authorization with a once-only preview continuation.
 
     The first send binds the authorization to the current head + adopted
-    policy + the EXPLICITLY NAMED sample; a re-send of the same
-    authorization returns the existing row with no render, no budget
-    write, no spawn, and no commit. A moved target under the same
+    policy + the EXPLICITLY NAMED sample and spawns the deferred full
+    preview render (compile→preview re-entry); a re-send of the same
+    authorization returns the existing row and reuses the recorded spawn
+    (no second render). A moved target under the same
     operation id surfaces as the store's typed 409. An unspecified,
     nonexistent, or other-consultation sample_id is a typed 422.
     """
@@ -1578,7 +1580,7 @@ def _consultation_full_authorization(
             "consultation-judgment-proposal-unexpected",
             "全編への承認は相談全体への判断です。proposal_idを指定せずに送ってください。",
         )
-    append_full_authorization_once(
+    judgment, _created = append_full_authorization_once(
         episode_dir,
         consultation_id=request.consultation_id,
         sample_id=request.sample_id,
@@ -1586,6 +1588,15 @@ def _consultation_full_authorization(
         note=request.note,
         operation_id=request.operation_id,
     )
+    # Candidate F: the approval moves the deferred full preview render. The
+    # spawn dedupes on its own marker, so a resend retries an un-launched
+    # continuation and no-ops once launched; a busy runner leaves the
+    # recorded judgment standing (the adoption path's unscheduled-200
+    # precedent) for the operator to resend.
+    with suppress(CockpitConflictError, CockpitUnprocessableError):
+        workspace.record_full_preview_continuation(
+            episode_id, judgment_id=judgment.judgment_id
+        )
     limits = load_budget_limits()
     snapshot = workspace._require_snapshot(episode_id)  # noqa: SLF001 (mixin convention)
     return JSONResponse(
@@ -1613,8 +1624,9 @@ def consultation_judgment(
     recorded and the view returns unchanged-shape 200. The rebuild
     consumes no consultation LLM budget. The explicit 全編へ
     (``full_authorized``) binds to the current head + adopted policy +
-    the explicitly named sample instead, and its re-send returns the
-    existing row with zero downstream work (200).
+    the explicitly named sample and spawns the deferred full preview
+    render once instead, and its re-send returns the
+    existing row with the recorded spawn reused (200).
     """
 
     episode_dir = _episode_dir(workspace, episode_id)
@@ -1713,8 +1725,8 @@ def _schedule_adoption_rebuild(  # noqa: PLR0913, PLR0917 (extraction keeps the 
     except CockpitConflictError:
         return None
     except CockpitUnprocessableError as error:
-        # 提案採用は初回preview前に起こる設計どおり: 判断は記録し、
-        # rebuildは試し動画要求がPREVIEW_READY後に予約する。
+        # Adoption before the first pass reaches PLAN_COMMITTED: the
+        # judgment is recorded and the rebuild waits for a later trigger.
         if error.code != "episode-not-preview-ready":
             raise
         return None

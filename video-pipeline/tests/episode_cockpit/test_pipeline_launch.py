@@ -164,7 +164,7 @@ def test_post_create_spawns_detached_runner_with_expected_args(
         "--episode-root",
         str(episode_dir),
         "--stop",
-        "PREVIEW_READY",
+        "PLAN_COMMITTED",
         "--state-store",
         str(workspace["state_store"]),
     ]

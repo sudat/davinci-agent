@@ -290,7 +290,7 @@ def assert_reservation_fresh(  # noqa: C901 (one linear pin checklist; each chec
             "job-frozen",
             "この動画は確定済みのため、作り直しを行いませんでした。",
         )
-    if job_status is not None and job_status != REQUIRED_STATUS:
+    if job_status is not None and job_status not in ("PLAN_COMMITTED", REQUIRED_STATUS):
         raise RebuildStageError(
             "episode-not-preview-ready",
             f"rebuild re-entry needs {REQUIRED_STATUS}, job is at {job_status}",
@@ -1383,7 +1383,7 @@ def run_reentry(store: StateStore, ctx: RunContext, call: RunnerInvocation, log:
             "job-frozen",
             "この動画は確定済みのため、作り直しを行いませんでした。",
         )
-    if snapshot.job.status != REQUIRED_STATUS:
+    if snapshot.job.status not in ("PLAN_COMMITTED", REQUIRED_STATUS):
         raise RebuildStageError(
             "episode-not-preview-ready",
             f"rebuild re-entry needs {REQUIRED_STATUS}, job is at {snapshot.job.status}",
