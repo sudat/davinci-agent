@@ -9,6 +9,7 @@ shared-ledger budget sequence. No budget writes, no rendering here.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,10 +29,15 @@ from services.episode_cockpit.sample_identity import SampleRequestIdentityV1
 from services.foundation_io import sha256_file
 
 if TYPE_CHECKING:
+    from services.cli.bundle import ReviewBundle
     from services.contracts.primitives import RecordFrameSpan
     from services.contracts.timeline_ir import TimelineIr0C
     from services.episode_cockpit.presentation_overrides import PresentationOverrideSet
     from services.outputs.geometry import OutputId
+
+#: The chain's synthesized edit source under run/ (the path the review
+#: bundle pins as ``media/edit-source.mov``; deterministic per episode).
+_PRE_RENDER_MEZZANINE_RELATIVE = ("run", "media", "edit-source.mov")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +66,58 @@ def _stage_error(code: str, detail: str) -> Exception:
     return RebuildStageError(code, detail)
 
 
+def pre_render_inputs_ready(episode_root: Path) -> bool:
+    """Fail-fast check for the sample render entry (no locks, no writes).
+
+    True when the sample path can resolve its media: either the review
+    bundle exists or the PLAN_COMMITTED pre-render set does (the chain
+    manifest plus the synthesized edit source).
+    """
+
+    from services.cli.episode_runner_rebuild import (  # noqa: PLC0415 (lazy: rebuild owns these)
+        BUNDLE_NAME,
+        RUN_DIR_NAME,
+    )
+    from services.cli.real_episode import EPISODE_MANIFEST_NAME  # noqa: PLC0415 (manifest constant)
+
+    if (episode_root / RUN_DIR_NAME / BUNDLE_NAME).is_file():
+        return True
+    manifest = episode_root / RUN_DIR_NAME / EPISODE_MANIFEST_NAME
+    mezzanine = episode_root.joinpath(*_PRE_RENDER_MEZZANINE_RELATIVE)
+    return manifest.is_file() and mezzanine.is_file()
+
+
+def pre_render_episode_inputs(
+    episode_root: Path, bundle_file: Path, bundle: ReviewBundle | None
+) -> tuple[str, Path] | None:
+    """(episode_id, mezzanine) from the bundle, else the PLAN_COMMITTED set.
+
+    Candidate F: the first pass stops at PLAN_COMMITTED, and the review
+    bundle is a PREVIEW_READY artifact (its target pins the rendered
+    preview hashes), so it cannot exist there yet. The compiled pre-render
+    inputs do exist — resolve them directly instead of failing; ``None``
+    means neither source is available and the caller keeps its typed
+    refusal.
+    """
+
+    from services.cli.episode_runner_rebuild import (  # noqa: PLC0415 (lazy: rebuild owns these)
+        RUN_DIR_NAME,
+    )
+    from services.cli.real_episode import EPISODE_MANIFEST_NAME  # noqa: PLC0415 (manifest constant)
+
+    if bundle is not None:
+        return bundle.episode_id, mezzanine_for(bundle_file, bundle)
+    manifest = episode_root / RUN_DIR_NAME / EPISODE_MANIFEST_NAME
+    mezzanine = episode_root.joinpath(*_PRE_RENDER_MEZZANINE_RELATIVE)
+    if not (manifest.is_file() and mezzanine.is_file()):
+        return None
+    try:
+        episode_id = str(json.loads(manifest.read_bytes())["episode_id"])
+    except (OSError, ValueError, KeyError):
+        return None
+    return episode_id, mezzanine
+
+
 def default_sample_context(
     episode_root: Path, identity: SampleRequestIdentityV1
 ) -> SampleRenderContext:
@@ -74,11 +132,13 @@ def default_sample_context(
 
     bundle_file = episode_root / RUN_DIR_NAME / BUNDLE_NAME
     bundle = _bundle_or_none(bundle_file)
-    if bundle is None:
+    resolved = pre_render_episode_inputs(episode_root, bundle_file, bundle)
+    if resolved is None:
         raise _stage_error(
             "sample-bundle-unreadable",
             "編集記録が読めず、試し動画を作れませんでした。",
         )
+    _episode_id, mezzanine = resolved
     head = stage_plan(episode_root)
     head_entry = head.index.versions.get(str(head.version))
     if (
@@ -132,7 +192,7 @@ def default_sample_context(
         full_ir_sha256=full_ir_sha,
         sample_ir=sample_ir,
         total_seconds=sample_total_seconds(identity.windows, ir.rate),
-        mezzanine=mezzanine_for(bundle_file, bundle),
+        mezzanine=mezzanine,
         presentation=None if presentation.is_empty() else presentation,
     )
 
@@ -162,11 +222,13 @@ def build_sample_identity(  # noqa: PLR0913 (identity-build contract: one slot p
 
     bundle_file = episode_root / RUN_DIR_NAME / BUNDLE_NAME
     bundle = _bundle_or_none(bundle_file)
-    if bundle is None:
+    resolved = pre_render_episode_inputs(episode_root, bundle_file, bundle)
+    if resolved is None:
         raise _stage_error(
             "sample-bundle-unreadable",
             "編集記録が読めず、試し動画を作れませんでした。",
         )
+    episode_id, _mezzanine = resolved
     head = stage_plan(episode_root)
     head_entry = head.index.versions.get(str(head.version))
     if head_entry is None:
@@ -184,7 +246,7 @@ def build_sample_identity(  # noqa: PLR0913 (identity-build contract: one slot p
             f"編集の版が読めないため、試し動画を作れませんでした: {error}",
         ) from error
     return SampleRequestIdentityV1(
-        episode_id=bundle.episode_id,
+        episode_id=episode_id,
         consultation_id=consultation_id,
         judgment_id=judgment_id,
         base_version=f"v{head.version}",

@@ -615,3 +615,45 @@ def test_sample_request_succeeds_from_plan_committed(
     assert body["state"] == "published"
     assert body["sample_id"].startswith("sample-")
     assert len(calls) == 1
+
+
+def test_sample_request_resolves_pre_render_inputs_at_plan_committed(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E2E cf50732 regression: the sample POST succeeds at PLAN_COMMITTED
+    through the REAL resolver. The review bundle is a PREVIEW_READY artifact
+    and cannot exist there, so the pre-render set (chain manifest +
+    synthesized edit source) feeds the request instead."""
+    episode_id = _create_episode(client, source_folder)
+    episode_dir = _seed_episode(workspace, episode_id)
+    _fast_forward_to(workspace, episode_id, "PLAN_COMMITTED")
+    run_dir = episode_dir / "run"
+    (run_dir / "media").mkdir(parents=True, exist_ok=True)
+    (run_dir / "episode.json").write_text(
+        json.dumps({"episode_id": episode_id}), encoding="utf-8"
+    )
+    (run_dir / "media" / "edit-source.mov").write_bytes(b"fake-mezzanine")
+    assert not (run_dir / "review-bundle.json").exists()
+
+    def fake_default_render(
+        _sample_ir: TimelineIr0C,
+        _mezzanine: Path,
+        out_dir: Path,
+        **_kwargs: object,
+    ) -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / SAMPLE_PREVIEW_NAME).write_bytes(b"plan-committed-sample")
+
+    monkeypatch.setattr(sample_render, "default_sample_render", fake_default_render)
+
+    response = client.post(
+        f"/episodes/{episode_id}/consultation/samples", json=_payload()
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["state"] == "published"
+    assert body["sample_id"].startswith("sample-")

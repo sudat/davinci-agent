@@ -26,6 +26,7 @@ from services.cli.sample_resolve import (
     SampleRenderFn,
     SampleResolveFn,
     default_sample_context,
+    pre_render_inputs_ready,
 )
 from services.episode_cockpit.consultation_selection_budget import (
     BudgetResult,
@@ -188,6 +189,19 @@ def render_sample_now(
             "sample-output-unsupported",
             "試し動画は landscape のみ対応しています。"
             f"要求された出力 ({identity.output_id}) には対応していません。",
+        )
+    if resolve_fn is None and not pre_render_inputs_ready(episode_root):
+        # Fail fast BEFORE the blocking episode render lock: inputs that can
+        # never resolve must be a visible typed 4xx, never an infinite wait.
+        _settle_budget("failed", "sample-bundle-unreadable")
+        settle_sample_failed(
+            episode_root, identity,
+            "sample-bundle-unreadable: 編集記録が読めず、試し動画を作れませんでした。",
+            sample_attempt_id=sample_attempt_id,
+        )
+        raise RebuildStageError(
+            "sample-bundle-unreadable",
+            "編集記録が読めず、試し動画を作れませんでした。",
         )
     claim = _join_request(episode_root, identity, sample_id, sample_attempt_id)
     entry = EntryContext(episode_root, identity, sample_id, digest, claim)

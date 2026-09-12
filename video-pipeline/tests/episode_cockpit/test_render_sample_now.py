@@ -30,7 +30,11 @@ from services.cli.sample_owned import (
     _clamp_render_timeout,
 )
 from services.cli.sample_render import render_sample_now
-from services.cli.sample_resolve import SampleRenderContext, build_sample_identity
+from services.cli.sample_resolve import (
+    SampleRenderContext,
+    build_sample_identity,
+    pre_render_inputs_ready,
+)
 from services.compile.sample_projection import project_sample_ir
 from services.contracts.primitives import RecordFrameSpan
 from services.episode_cockpit.consultation_selection_budget import (
@@ -247,6 +251,41 @@ def test_success_path_publishes_end_to_end(tmp_path: Path) -> None:
     assert _sample_children(tmp_path) == [
         derive_sample_id(identity)
     ]  # no temp leftovers
+
+
+def test_missing_inputs_fail_fast_before_the_render_lock(tmp_path: Path) -> None:
+    """E2E cf50732 wedge: no bundle AND no pre-render inputs must be a typed
+    refusal BEFORE the blocking episode render lock — never an infinite wait
+    with render.lock created and no renderer work."""
+    identity = _identity(tmp_path)
+    request = request_sample(tmp_path, identity)
+    fake = _FakeRender()
+    with pytest.raises(RebuildStageError, match="sample-bundle-unreadable"):
+        render_sample_now(
+            tmp_path,
+            identity,
+            sample_attempt_id=request["sample_attempt_id"],
+            render_fn=fake,
+        )
+    assert fake.calls == []
+    journal = (tmp_path / "consultation" / "samples.jsonl").read_bytes()
+    assert journal.count(b"sample_reserved") == 1
+    assert journal.count(b"sample_failed") == 1
+
+
+def test_pre_render_inputs_ready_accepts_the_plan_committed_set(tmp_path: Path) -> None:
+    """Candidate F: at PLAN_COMMITTED the bundle is absent by design — the
+    guard must accept the chain manifest + synthesized edit source instead."""
+    assert pre_render_inputs_ready(tmp_path) is False
+    run_dir = tmp_path / "run"
+    (run_dir / "media").mkdir(parents=True)
+    (run_dir / "episode.json").write_text(
+        json.dumps({"episode_id": "ep-r1"}), encoding="utf-8"
+    )
+    (run_dir / "media" / "edit-source.mov").write_bytes(b"fake-mezzanine")
+    assert pre_render_inputs_ready(tmp_path) is True
+    (run_dir / "review-bundle.json").write_bytes(b"{}")
+    assert pre_render_inputs_ready(tmp_path) is True
 
 
 def test_second_render_over_published_is_stored_with_zero_work(tmp_path: Path) -> None:

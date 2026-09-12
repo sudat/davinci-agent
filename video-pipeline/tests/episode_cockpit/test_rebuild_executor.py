@@ -16,6 +16,7 @@ import fcntl
 import io
 import json
 import os
+import shutil
 import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -871,6 +872,62 @@ def test_stage_preview_repoints_bundle_at_cockpit_review_store(
     assert published["target_version"] == "v2"
     assert published["content_hash"] == sha256_file(
         episode_dir / "previews" / "preview.mp4"
+    )
+
+
+def test_stage_preview_first_render_bootstraps_bundle_at_plan_committed(
+    client: TestClient,
+    workspace: dict[str, Path],
+    source_folder: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """E2E cf50732: the 全編へ continuation from PLAN_COMMITTED renders the
+    first preview WITHOUT a bundle (it can only exist post-render), then
+    bootstraps it at the head version repointed at the cockpit store."""
+    episode_id, episode_dir = _initial_preview_ready(client, workspace, source_folder,
+                                                     monkeypatch)
+    run_dir = episode_dir / "run"
+    (run_dir / "review-bundle.json").unlink()
+    shutil.rmtree(run_dir / "preview-v1")
+    (run_dir / "episode.json").write_text(
+        json.dumps({"episode_id": episode_id}), encoding="utf-8"
+    )
+    (run_dir / "source-manifest.json").write_text("{}")
+    (run_dir / "resolved-policy.json").write_text("{}")
+    orchestration = run_dir / "episode" / "analyze-state"
+    orchestration.mkdir(parents=True, exist_ok=True)
+    (orchestration / "orchestration-state.json").write_text(
+        json.dumps({"bindings": {"a": {"edit_source_sha256": "b" * 64}}})
+    )
+    log_path = episode_dir / "review" / "events.jsonl"
+    plan_dir = episode_dir / "review" / "store"
+    head = load_head(log_path, plan_dir)
+    assert head.version == 1
+    plan = store_plan(plan_dir / "plan-v1.json")
+    ir = store_ir(plan_dir / "ir-v1.json")
+
+    def fake_render(*_args: object, **_kwargs: object) -> None:
+        preview_dir = run_dir / "preview-v1"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        (preview_dir / PREVIEW_NAME).write_bytes(b"first-full-preview")
+        (preview_dir / TRACE_NAME).write_text('{"note": "fake trace"}')
+
+    monkeypatch.setattr(episode_runner_rebuild, "render_review_preview", fake_render)
+    monkeypatch.setattr(episode_runner_rebuild, "load_tools", object)
+
+    log = io.BytesIO()
+    preview_sha = episode_runner_rebuild.stage_preview(
+        episode_dir, head, plan, ir, log, run_id="run-firstrender1"
+    )
+
+    bundle = load_bundle(run_dir / "review-bundle.json")
+    assert bundle.episode_id == episode_id
+    assert bundle.current.plan_version == "v1"
+    assert bundle.current.preview_dir == "preview-v1"
+    assert bundle.store_dir == "../review/store"
+    assert preview_sha == sha256_file(run_dir / "preview-v1" / PREVIEW_NAME)
+    assert (episode_dir / "previews" / "preview.mp4").read_bytes() == (
+        b"first-full-preview"
     )
 
 

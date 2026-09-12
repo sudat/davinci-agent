@@ -889,6 +889,65 @@ def stage_compile(episode_root: Path, head: HeadState) -> tuple[EditPlan0C, Time
         raise RebuildStageError("ir-unreadable", str(error)) from error
 
 
+def _load_or_bootstrap_bundle(bundle_file: Path, log: BinaryIO) -> ReviewBundle | None:
+    """Load the review bundle; bootstrap it when a render skipped its write.
+
+    ``None`` means the bundle genuinely does not exist (the PLAN_COMMITTED
+    first-render state) — no preview on disk for the bootstrap to pin.
+    """
+
+    try:
+        return load_bundle(bundle_file)
+    except BundleDriftError as error:
+        if error.code != "bundle_unreadable":
+            raise
+        bundle = _bootstrap_bundle(bundle_file)
+        if bundle is not None:
+            log_event(log, "review_bundle_bootstrapped", bundle=str(bundle_file))
+        return None
+
+
+def _render_inputs_and_decision(
+    episode_root: Path,
+    bundle_file: Path,
+    bundle: ReviewBundle | None,
+    head: HeadState,
+    run_id: str,
+) -> tuple[Path, AppliedDecision | None]:
+    """(mezzanine, decision) for one stage_preview render.
+
+    A PLAN_COMMITTED first pass never built the bundle (a PREVIEW_READY
+    artifact: its target pins rendered preview hashes), so the 全編へ
+    continuation's first render resolves its mezzanine from the pre-render
+    set and carries NO decision — there is no prior preview to diff
+    against.
+    """
+
+    if bundle is None:
+        from services.cli.sample_resolve import (  # noqa: PLC0415 (shared pre-render resolver)
+            pre_render_episode_inputs,
+        )
+
+        resolved = pre_render_episode_inputs(episode_root, bundle_file, None)
+        if resolved is None:
+            raise RebuildStageError(
+                "preview-failed",
+                "編集の元素材が読めず、全編の描画を始められませんでした。",
+            )
+        return resolved[1], None
+    head_entry = head.index.versions.get(str(head.version))
+    decision = AppliedDecision(
+        # r9d fix: run-id suffix — intent-only applies never bump the head version.
+        decision_id=rebuild_decision_id(bundle.episode_id, head.version, run_id),
+        case_id=bundle.episode_id,
+        classification="clear",
+        plan_version_after=f"v{head.version}",
+        plan_sha256=head_entry.plan_sha256 if head_entry is not None else None,
+        previous_trace=previous_trace(bundle_file, bundle),
+    )
+    return mezzanine_for(bundle_file, bundle), decision
+
+
 def stage_preview(  # noqa: PLR0913 (preview stage: budget-gate classification + render + settle in one stage fn, like stage_selection)
     episode_root: Path,
     head: HeadState,
@@ -936,28 +995,14 @@ def stage_preview(  # noqa: PLR0913 (preview stage: budget-gate classification +
     run_dir = episode_root / RUN_DIR_NAME
     bundle_file = run_dir / BUNDLE_NAME
     try:
-        try:
-            bundle = load_bundle(bundle_file)
-        except BundleDriftError as error:
-            if error.code != "bundle_unreadable":
-                raise
-            bundle = _bootstrap_bundle(bundle_file)
-            if bundle is None:
-                raise
-            log_event(log, "review_bundle_bootstrapped", bundle=str(bundle_file))
+        bundle = _load_or_bootstrap_bundle(bundle_file, log)
+        first_render = bundle is None
         preview_dir = run_dir / f"preview-v{head.version}"
-        head_entry = head.index.versions.get(str(head.version))
-        decision = AppliedDecision(
-            # r9d fix: run-id suffix — intent-only applies never bump the head version.
-            decision_id=rebuild_decision_id(bundle.episode_id, head.version, run_id),
-            case_id=bundle.episode_id,
-            classification="clear",
-            plan_version_after=f"v{head.version}",
-            plan_sha256=head_entry.plan_sha256 if head_entry is not None else None,
-            previous_trace=previous_trace(bundle_file, bundle),
+        mezzanine, decision = _render_inputs_and_decision(
+            episode_root, bundle_file, bundle, head, run_id
         )
         render_review_preview(
-            plan, ir, mezzanine_for(bundle_file, bundle), preview_dir,
+            plan, ir, mezzanine, preview_dir,
             tools=load_tools(), decision=decision,
             timeout_seconds=preview_timeout_seconds,
             presentation=presentation.to_render_settings() if presentation is not None else None,
@@ -985,7 +1030,16 @@ def stage_preview(  # noqa: PLR0913 (preview stage: budget-gate classification +
             result="succeeded",
         )
     preview_sha = sha256_file(run_dir / f"preview-v{head.version}" / PREVIEW_NAME)
-    _update_bundle(bundle_file, bundle, head, preview_sha)
+    if first_render:
+        bootstrapped = _bootstrap_bundle(bundle_file, version=head.version)
+        if bootstrapped is None:
+            raise RebuildStageError(
+                "preview-failed",
+                "全編の描画後に編集記録を書けませんでした。",
+            )
+        _update_bundle(bundle_file, bootstrapped, head, preview_sha)
+    else:
+        _update_bundle(bundle_file, bundle, head, preview_sha)
     publish_preview(episode_root, log, source_dir=f"preview-v{head.version}", run_id=run_id)
     return preview_sha
 
@@ -1082,34 +1136,36 @@ def _update_bundle(
     )
 
 
-def _bootstrap_bundle(bundle_file: Path) -> ReviewBundle | None:  # noqa: C901, PLR0912
+def _bootstrap_bundle(bundle_file: Path, version: int = 1) -> ReviewBundle | None:  # noqa: C901, PLR0912
     """Bootstrap run/review-bundle.json when a manual render skipped its write.
 
     Mirrors the review-store bootstrap's resilience class: render_preview_tail's
     save_bundle was bypassed, so the rebuild re-entry reconstructs the bundle
-    with identical assemble_real_bundle semantics from the on-disk v1 artifacts.
+    with identical assemble_real_bundle semantics from the on-disk artifacts.
+    ``version`` selects which preview-vN/plan-vN/ir-vN triple the target pins
+    (the first-render path bootstraps at the head version, not always v1).
     """
 
     run_dir = bundle_file.parent
     episode_dir = run_dir.parent
     mezzanine = run_dir / "media" / "edit-source.mov"
-    preview_v1_dir = run_dir / "preview-v1"
-    preview_v1 = preview_v1_dir / PREVIEW_NAME
-    trace_v1 = preview_v1_dir / TRACE_NAME
+    preview_dir = run_dir / f"preview-v{version}"
+    preview = preview_dir / PREVIEW_NAME
+    trace = preview_dir / TRACE_NAME
     episode_manifest = run_dir / "episode.json"
     resolved_policy = run_dir / "resolved-policy.json"
     source_manifest = run_dir / "source-manifest.json"
     orchestration = run_dir / "episode" / "analyze-state" / "orchestration-state.json"
-    cockpit_plan_v1 = episode_dir / "review" / "store" / "plan-v1.json"
-    cockpit_ir_v1 = episode_dir / "review" / "store" / "ir-v1.json"
+    cockpit_plan = episode_dir / "review" / "store" / f"plan-v{version}.json"
+    cockpit_ir = episode_dir / "review" / "store" / f"ir-v{version}.json"
     for required in (
         mezzanine,
-        preview_v1,
-        trace_v1,
+        preview,
+        trace,
         episode_manifest,
         source_manifest,
-        cockpit_plan_v1,
-        cockpit_ir_v1,
+        cockpit_plan,
+        cockpit_ir,
     ):
         if not required.is_file():
             return None
@@ -1149,12 +1205,12 @@ def _bootstrap_bundle(bundle_file: Path) -> ReviewBundle | None:  # noqa: C901, 
         return None
     try:
         target = ReviewTarget(
-            plan_version="v1",
-            plan_sha256=sha256_file(cockpit_plan_v1),
-            ir_sha256=sha256_file(cockpit_ir_v1),
-            preview_dir="preview-v1",
-            preview_sha256=sha256_file(preview_v1),
-            trace_sha256=sha256_file(trace_v1),
+            plan_version=f"v{version}",
+            plan_sha256=sha256_file(cockpit_plan),
+            ir_sha256=sha256_file(cockpit_ir),
+            preview_dir=f"preview-v{version}",
+            preview_sha256=sha256_file(preview),
+            trace_sha256=sha256_file(trace),
         )
         bundle = assemble_real_bundle(
             episode_id=episode_id,
