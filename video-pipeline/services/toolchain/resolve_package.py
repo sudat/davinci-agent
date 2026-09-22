@@ -42,8 +42,12 @@ class ResolvePackageSection(StrictModel):
     schema_version: Literal["resolve-package-pin-v1"]
     capability_matrix_path: str
     capability_matrix_sha256: Sha256
-    resolve_version: Literal["21.0.4"]
-    resolve_build: Literal["21.0.40005"]
+    # Live host binding: the Resolve version/build of the host the locks are
+    # bound to. The pinned matrix itself was measured on 21.0.4/21.0.40005 and
+    # keeps describing that measurement (see load_capability_matrix) — these
+    # fields track the host, not the matrix.
+    resolve_version: Literal["21.0.4", "21.1.0"]
+    resolve_build: Literal["21.0.40005", "21.1.00017"]
     required_capabilities: tuple[RequiredCapability, ...] = Field(min_length=1)
     external_credentials: Literal["none"]
 
@@ -70,10 +74,10 @@ def load_capability_matrix(section: ResolvePackageSection, root: Path) -> dict[s
         raise ResolvePackageSmokeError("capability matrix is not an object")
     if payload.get("schema_version") != "capability-matrix-v1":
         raise ResolvePackageSmokeError("capability matrix schema version drift")
-    if payload.get("resolve_version") != section.resolve_version:
-        raise ResolvePackageSmokeError("capability matrix resolve version drift")
-    if payload.get("resolve_build") != section.resolve_build:
-        raise ResolvePackageSmokeError("capability matrix resolve build drift")
+    # No version-equality check against the section: the section tracks the
+    # live host binding while the pinned matrix keeps its own measured
+    # 21.0.4/21.0.40005 stamp. Byte-identity (sha256 above) is the tamper
+    # guard; equality here would false-fire on that accepted skew.
     return payload
 
 

@@ -143,7 +143,7 @@ def test_live_build_report_stdout_contract(live_cli_run: LiveRun) -> None:
     assert "completion=CompletionPercentage" in result.stdout
     assert "build-report: render output=" in result.stdout
     assert "decode-exit=0" in result.stdout
-    assert "build-report: binding resolve=21.0.4" in result.stdout
+    assert "build-report: binding resolve=21.1.0" in result.stdout
     assert "code=strategy-subtitle-external" in result.stdout
 
 
