@@ -77,9 +77,8 @@ def _source_frames(
 ) -> tuple[int, int]:
     """Targeted independent source-span readback for ONE item, addressed
     by its position in the same track list the bounded scan read. Both
-    vendor actions are written literally on purpose: the dispositions
-    route-binding verifier re-derives literal (tool, action) pairs from
-    this source."""
+    vendor actions are written literally on purpose: literal (tool, action)
+    pairs keep the call sites greppable from the vendor surface."""
     address: dict[str, object] = {
         "track_type": track_type,
         "track_index": track_index,

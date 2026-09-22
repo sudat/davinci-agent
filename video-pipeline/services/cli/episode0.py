@@ -18,8 +18,8 @@ Subcommands:
                      density) → subtitle/audio/color plans (T33/T34/T35) →
                      kit selections (T37) → Timeline IR v2 → McpExecutionPlan
                      (T38) → T39 runner with a FAKE executor
-                     (``--executor live`` probes the pinned MCP server first
-                     and BLOCKS on refusal) → quality domains (T40) →
+                      (``--executor live`` probes the vendored MCP server first
+                      and BLOCKS on refusal) → quality domains (T40) →
                      editorial QC (T41) → presentation preview stub (T60) →
                      PublishabilityReview input scaffold (T42) → report +
                      Gate V43-3 checklist + legacy rollback leg.
@@ -218,7 +218,6 @@ if TYPE_CHECKING:
 DEFAULT_EPISODE_JSON = Path("private/reference-episodes/real-01/episode.json")
 DEFAULT_RUNS_ROOT = Path("private/reference-episodes/real-01/runs")
 DEFAULT_BACKENDS = Path("config/backends.json")
-DEFAULT_MCP_PIN = Path("config/toolchains/davinci-resolve-mcp.pin.json")
 ExecutorName = Literal["fake", "live"]
 _MIN_KEEPS_FOR_CORRECTION = 2
 PHASE_0C_LOCK = Path("config/toolchains/phase-0c-v2.json")
@@ -312,13 +311,7 @@ def _parser() -> argparse.ArgumentParser:
         choices=["fake", "live"],
         default="fake",
         help="full-build executor: fake (synthetic actuals, self-test) or live "
-        "(pinned MCP server; probed first, BLOCKED on refusal)",
-    )
-    run.add_argument(
-        "--pin",
-        type=Path,
-        default=DEFAULT_MCP_PIN,
-        help="davinci-resolve-mcp pin contract (live executor only)",
+        "(vendored MCP server; probed first, BLOCKED on refusal)",
     )
     run.add_argument(
         "--editorial-runtime",
@@ -1011,26 +1004,26 @@ class _FullBuildOutcome:
     gate: FullBuildGateCheckV1
 
 
-def _live_client_from_pin(pin_path: Path) -> McpClient:
-    """Seam for tests/other transports; production builds from the pin file."""
+def _live_client_from_defaults() -> McpClient:
+    """Seam for tests/other transports; production builds from the vendored checkout."""
 
-    return McpClient.from_pin(pin_path)
+    return McpClient.from_defaults()
 
 
-def _probe_live_executor(pin_path: Path) -> McpTransportFn:
-    """Connect the pinned server + Resolve, or raise a typed BLOCKED."""
+def _probe_live_executor() -> McpTransportFn:
+    """Connect the vendored server + Resolve, or raise a typed BLOCKED."""
 
-    client = _live_client_from_pin(pin_path)
+    client = _live_client_from_defaults()
     try:
         client.connect()
         client.resolve_get_version()
     except (McpClientError, OSError, ValueError) as exc:
         raise Episode0BlockedError(
             "mcp-server-unreachable",
-            f"live executor requested but the pinned MCP server / Resolve is not "
+            f"live executor requested but the vendored MCP server / Resolve is not "
             f"reachable ({type(exc).__name__}: {exc}). ESCALATION to operator: start "
-            f"DaVinci Resolve and the pinned davinci-resolve-mcp server (pin="
-            f"{pin_path}), then rerun. The full-build run was NOT started.",
+            f"DaVinci Resolve and the vendored davinci-resolve-mcp server, "
+            f"then rerun. The full-build run was NOT started.",
         ) from exc
 
     def executor(
@@ -1558,7 +1551,7 @@ def _run_full_build_stages(
                 "fake executor: no real media rendered; planned render/QC steps "
                 "completed with readback-verified synthetic actuals"
                 if executor_name == "fake"
-                else "live executor: render/QC steps completed via the pinned MCP server"
+                else "live executor: render/QC steps completed via the vendored MCP server"
             ),
         ),
     )
@@ -1723,7 +1716,7 @@ def _cmd_run_full_build(
     executor: McpTransportFn | None = None
     if executor_name == "live":
         try:
-            executor = _probe_live_executor(args.pin)
+            executor = _probe_live_executor()
         except Episode0BlockedError as exc:
             print(f"blocked: {exc.code}: {exc.detail}", file=sys.stderr)
             print(

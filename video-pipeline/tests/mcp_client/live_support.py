@@ -1,11 +1,11 @@
-"""Shared machinery for the task-11 live session (probes / parity / flags).
+"""Shared machinery for the live session (probes / parity / flags).
 
-Everything here runs ONLY under ``-m mcp_live`` against the real pinned
+Everything here runs ONLY under ``-m mcp_live`` against the real vendored
 server and a live Resolve.  The module provides:
 
 - media generation via :func:`services.qa.parity_mcp.generate_parity_media`
   (tiny ffmpeg ``testsrc2`` MP4s under /tmp — never inside the repo).
-- :class:`LiveSession` — one pinned server + typed :class:`McpOps` with the
+- :class:`LiveSession` — one vendored server + typed :class:`McpOps` with the
   task-8 recorder attached so every ``tools/call`` lands in the append-only
   call ledger, and a raw-step capture list for per-probe evidence logs.
 - :func:`run_probe` — one capability probe: bounded, evidence-logged, never
@@ -21,6 +21,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import subprocess
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -37,15 +38,28 @@ from services.mcp_client.ops import McpOps
 from services.mcp_client.ops_models import McpActionOutcome
 from services.mcp_client.transport import StdioJsonRpcTransport, StdioTransportConfig
 from services.qa.parity_mcp import generate_parity_media
-from services.toolchain.mcp_pin import load_mcp_pin
 
 VIDEO_PIPELINE_ROOT: Final = Path(__file__).resolve().parents[2]
-PIN_PATH: Final = VIDEO_PIPELINE_ROOT / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
+VENDOR_DIR: Final = VIDEO_PIPELINE_ROOT.parent / "private" / "vendor" / "davinci-resolve-mcp"
 V44_RUNS_DIR: Final = VIDEO_PIPELINE_ROOT / "capabilities" / "v4.4" / "runs"
 PROBES_DIR: Final = V44_RUNS_DIR / "probes"
 LEDGER_DIR: Final = PROBES_DIR / "ledger"
 MCP_FIT_PATH: Final = VIDEO_PIPELINE_ROOT / "capabilities" / "v4.4" / "mcp-fit.json"
 SNAPSHOT_PATH: Final = V44_RUNS_DIR / "mcp-capability-snapshot.json"
+
+
+def vendor_head() -> str:
+    """HEAD sha of the vendored checkout for evidence records (best-effort)."""
+    completed = subprocess.run(
+        ["git", "-C", str(VENDOR_DIR), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    head = completed.stdout.strip()
+    if completed.returncode != 0 or not head:
+        raise RuntimeError(f"cannot read vendored checkout HEAD at {VENDOR_DIR}")
+    return head
 
 
 def canonical_json_bytes(payload: object) -> bytes:
@@ -161,9 +175,8 @@ class _CapturingCallTool:
 
 
 def open_live_session(media_dir: Path, project_name: str) -> LiveSession:
-    """Spawn the pinned server, verify identity, attach recorder + capture."""
-    pin = load_mcp_pin(PIN_PATH)
-    config = StdioTransportConfig.from_pin(pin)
+    """Spawn the vendored server, verify identity, attach recorder + capture."""
+    config = StdioTransportConfig.from_defaults()
     client = McpClient(StdioJsonRpcTransport(config))
     client.connect()
     media = generate_parity_media(media_dir)
@@ -178,7 +191,7 @@ def open_live_session(media_dir: Path, project_name: str) -> LiveSession:
     recorder = McpCallRecorder(
         provider_version=version.mcp.version,
         resolve_version=version.version_string,
-        server_mode=pin.server_mode,
+        server_mode="compound",
     )
     client._call_tool = _CapturingCallTool(client._call_tool, session, recorder)
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
@@ -473,6 +486,7 @@ __all__ = [
     "PROBES_DIR",
     "SNAPSHOT_PATH",
     "V44_RUNS_DIR",
+    "VENDOR_DIR",
     "VIDEO_PIPELINE_ROOT",
     "LiveSession",
     "canonical_json_bytes",
@@ -483,5 +497,6 @@ __all__ = [
     "open_live_session",
     "run_probe",
     "standard_visual_from_manifest",
+    "vendor_head",
     "write_matrix_and_snapshot",
 ]

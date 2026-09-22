@@ -20,7 +20,7 @@ v4.4 is not a second architecture rebuild.
 
 v4.3 successfully built most of the intended platform surface:
 
-- pinned DaVinci Resolve MCP client and live capability probes,
+- vendored DaVinci Resolve MCP client and live capability probes,
 - MCP and legacy execution paths,
 - Media Intelligence v2 schemas and query surface,
 - progressive analysis scheduling,
@@ -283,13 +283,25 @@ The repository already has strong foundations that v4.4 should preserve:
 - job state and single-writer discipline,
 - proposal/validation/commit separation,
 - conform/time-coordinate handling,
-- MCP pinning and live probing,
+- vendored MCP server and live probing,
 - MCP execution plan/readback/fallback,
 - preview infrastructure,
 - Cockpit basic intake/status/review surfaces,
 - quality-domain reporting,
 - release/audit/security controls,
 - publication package/idempotency.
+
+2026-09-22 addendum (owner decision: MCP version pinning + committed-surface
+gate removed): the version-freeze contract on the DaVinci Resolve MCP
+deployment is removed — `config/toolchains/davinci-resolve-mcp.pin.json`,
+the handshake version refusal, and the committed-surface gate
+(`capabilities/mcp-coverage/`) no longer exist. The vendored MCP server
+(`private/vendor/davinci-resolve-mcp`) is tracked by checkout with no
+promotion ceremony; MCP updates are a plain vendored-checkout change. The
+client still refuses a foreign handshake server name, and the live
+capability evidence workflow (`capabilities/v4.4/mcp-fit.json` + probes) is
+unchanged. The two bullets above are edited accordingly; earlier dated
+records stay as history.
 
 ## 3.2 Implemented but not yet product-proven
 

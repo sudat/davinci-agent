@@ -1,9 +1,10 @@
-"""Launch-spec value objects for the pinned MCP server subprocess.
+"""Launch-spec value objects for the vendored MCP server subprocess.
 
 Split from :mod:`services.mcp_client.transport` (module LOC ceiling): the
-config side — the injectable command spec plus the typed pin provenance
-that makes a construction pin-backed and therefore surface-gated — while
-the transport module keeps the process/IO machinery.
+config side — the injectable command spec — while the transport module keeps
+the process/IO machinery. The server is tracked as a plain vendored checkout
+(``private/vendor/davinci-resolve-mcp``); there is no version-freeze contract,
+so construction carries no pin provenance and no surface gate.
 """
 
 from __future__ import annotations
@@ -11,33 +12,28 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
-
-if TYPE_CHECKING:
-    from services.toolchain.mcp_pin import McpPin
+from typing import Final
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS: Final = 10.0
 DEFAULT_KILL_GRACE_SECONDS: Final = 5.0
-#: Where the committed Task 9/10 coverage artifacts live; the surface gate
-#: validates every pin-backed connection against this tree by default.
-DEFAULT_SURFACE_COVERAGE_DIR: Final = (
-    Path(__file__).resolve().parents[2] / "capabilities" / "mcp-coverage"
-)
+#: Name of the vendored checkout directory under ``<repo>/private/vendor``.
+VENDOR_DIR_NAME: Final = "davinci-resolve-mcp"
+#: Env override that keeps the vendored server from self-updating at spawn.
+UPDATE_CHECK_OFF_ENV: Final = {"DAVINCI_RESOLVE_MCP_UPDATE_CHECK": "0"}
 
 
-@dataclass(frozen=True, slots=True)
-class PinSurfaceContext:
-    """Typed pin provenance carried by every pin-backed transport config.
+def default_vendor_dir() -> Path:
+    """The vendored checkout dir, derived from this file's location.
 
-    Presence of this context is what makes a client construction pin-backed:
-    :class:`services.mcp_client.client.McpClient` loads the committed
-    surface gate from it eagerly, so no pin-backed client can become usable
-    without committed-surface validation. Manual/test configs omit it.
+    ``video-pipeline/services/mcp_client/transport_config.py`` → ``parents[3]``
+    is the repo root, so no absolute path is hardcoded.
     """
-
-    pin: McpPin
-    clone_dir: Path
-    coverage_dir: Path
+    return (
+        Path(__file__).resolve().parents[3]
+        / "private"
+        / "vendor"
+        / VENDOR_DIR_NAME
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,53 +45,36 @@ class StdioTransportConfig:
     extra_env: Mapping[str, str] = field(default_factory=dict)
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS
     kill_grace_seconds: float = DEFAULT_KILL_GRACE_SECONDS
-    #: Set ONLY by :meth:`from_pin` (or explicitly by a test injecting fixture
-    #: artifacts): the pin provenance that auto-arms the surface gate.
-    surface: PinSurfaceContext | None = None
 
     @classmethod
-    def from_pin(
+    def from_defaults(
         cls,
-        pin: McpPin,
         *,
-        clone_dir: Path | None = None,
+        vendor_dir: Path | None = None,
         request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
-        coverage_dir: Path | None = None,
     ) -> StdioTransportConfig:
-        """Build the launch spec from the pin contract (task 2).
+        """Build the launch spec for the vendored server checkout.
 
-        ``clone_dir`` defaults to the pinned venv's grandparent directory
-        (``<clone>/venv/bin/python`` -> ``<clone>``), the layout the pin
-        records; pass it explicitly for any other deployment. The config
-        always carries the pin surface context, so every client built from
-        it validates against the committed coverage artifacts
-        (``coverage_dir`` defaults to the committed tree; tests inject a
-        fixture directory).
+        ``vendor_dir`` defaults to the repo's
+        ``private/vendor/davinci-resolve-mcp`` checkout (derived from this
+        file's location); pass it explicitly for any other deployment
+        (tests inject a fixture directory).
         """
-        venv_python = Path(pin.venv_python)
-        resolved_clone_dir = (
-            clone_dir if clone_dir is not None else venv_python.parent.parent.parent
-        )
+        resolved_vendor_dir = vendor_dir if vendor_dir is not None else default_vendor_dir()
+        venv_python = resolved_vendor_dir / "venv" / "bin" / "python"
         return cls(
-            command=(pin.venv_python, pin.server_entry_point),
-            cwd=resolved_clone_dir,
-            extra_env={"DAVINCI_RESOLVE_MCP_UPDATE_CHECK": "0"},
+            command=(str(venv_python), "src/server.py"),
+            cwd=resolved_vendor_dir,
+            extra_env=dict(UPDATE_CHECK_OFF_ENV),
             request_timeout_seconds=request_timeout_seconds,
-            surface=PinSurfaceContext(
-                pin=pin,
-                clone_dir=resolved_clone_dir,
-                coverage_dir=(
-                    coverage_dir if coverage_dir is not None
-                    else DEFAULT_SURFACE_COVERAGE_DIR
-                ),
-            ),
         )
 
 
 __all__ = [
     "DEFAULT_KILL_GRACE_SECONDS",
     "DEFAULT_REQUEST_TIMEOUT_SECONDS",
-    "DEFAULT_SURFACE_COVERAGE_DIR",
-    "PinSurfaceContext",
+    "UPDATE_CHECK_OFF_ENV",
+    "VENDOR_DIR_NAME",
     "StdioTransportConfig",
+    "default_vendor_dir",
 ]

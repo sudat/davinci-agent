@@ -1,10 +1,11 @@
 """McpClient contract against the fake stdio MCP server subprocess.
 
-Covers the task-7 acceptance surface: launch + initialize with typed server
+Covers the acceptance surface: launch + initialize with typed server
 info, tools/list discovery, typed tool-call round-trip, explicit per-request
-timeout (bounded wall clock, no hang), identity drift refusal BEFORE any
-tool call, and warning-free shutdown — ``filterwarnings = ["error"]`` turns
-any unclosed pipe into a test error, so clean close is enforced implicitly.
+timeout (bounded wall clock, no hang), foreign-server-name refusal BEFORE
+any tool call (the reported version is surfaced, never refused on), and
+warning-free shutdown — ``filterwarnings = ["error"]`` turns any unclosed
+pipe into a test error, so clean close is enforced implicitly.
 """
 
 from __future__ import annotations
@@ -17,13 +18,13 @@ from pathlib import Path
 import pytest
 
 from services.mcp_client.client import McpClient
+from services.mcp_client.discovery import McpServerNameError
 from services.mcp_client.transport import (
     McpTimeoutError,
     McpTransportError,
     StdioJsonRpcTransport,
     StdioTransportConfig,
 )
-from services.mcp_client.version_pin import McpVersionDriftError
 
 FAKE_SERVER_PATH = Path(__file__).resolve().parent / "fake_server.py"
 
@@ -82,13 +83,21 @@ def test_slow_tool_times_out_with_typed_error_and_bounded_wall_clock() -> None:
 
 def test_identity_mismatch_refuses_connection_before_any_tool_call() -> None:
     client = _client(env={"FAKE_MCP_SERVER_NAME": "rogue-server"})
-    with pytest.raises(McpVersionDriftError) as excinfo:
+    with pytest.raises(McpServerNameError) as excinfo:
         client.connect()
     assert excinfo.value.reported is not None
     assert excinfo.value.reported.name == "rogue-server"
-    assert excinfo.value.expected.name == "DaVinciResolveMCP"
+    assert excinfo.value.expected == "DaVinciResolveMCP"
     with pytest.raises(McpTransportError):
         client.resolve_get_version()
+
+
+def test_reported_version_is_surfaced_never_refused() -> None:
+    with _client(env={"FAKE_MCP_SERVER_VERSION": "9.9.9"}) as client:
+        identity = client.connect()
+        assert identity.name == "DaVinciResolveMCP"
+        assert identity.version == "9.9.9"
+        assert client.get_server_info().version == "9.9.9"
 
 
 def test_context_manager_shutdown_is_clean_without_resource_warnings() -> None:

@@ -48,7 +48,6 @@ if TYPE_CHECKING:
 EXIT_PASSED: Final = 0
 EXIT_BLOCKED: Final = 1
 EXIT_MALFORMED: Final = 2
-DEFAULT_MCP_PIN: Final = Path("config/toolchains/davinci-resolve-mcp.pin.json")
 DEFAULT_BACKENDS: Final = Path("config/backends.json")
 DEFAULT_RUNTIME: Final = Path("config/editorial-runtime.json")
 
@@ -88,9 +87,8 @@ def _parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--episode-root", type=Path, required=True)
     run_parser.add_argument(
         "--executor", choices=("fake", "live"), default="fake",
-        help="fake replays plan readbacks; live requires the pinned MCP server",
+        help="fake replays plan readbacks; live requires the vendored MCP server",
     )
-    run_parser.add_argument("--pin", type=Path, default=DEFAULT_MCP_PIN)
     run_parser.add_argument("--backends", type=Path, default=DEFAULT_BACKENDS)
     # Audit decision (external-call audit fix list item 6): this flag stays
     # flag-only (no EDITORIAL_RUNTIME_CONFIG env fallback) — the runtime is

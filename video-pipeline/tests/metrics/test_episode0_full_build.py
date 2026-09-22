@@ -340,7 +340,7 @@ def test_live_executor_refusal_is_typed_block_not_crash(
             raise McpClientError("stub transport refusal")
 
     monkeypatch.setattr(
-        "services.cli.episode0._live_client_from_pin", lambda _pin: _RefusingClient()
+        "services.cli.episode0._live_client_from_defaults", _RefusingClient
     )
     rc = main(
         workspace.argv(run_id="live-refused", backends=backends, extra=("--executor", "live"))

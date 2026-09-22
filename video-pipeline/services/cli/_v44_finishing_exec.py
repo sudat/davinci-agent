@@ -33,7 +33,6 @@ from services.mcp_execution.live_adapter import LiveMcpAdapter
 from services.mcp_execution.live_errors import LiveAdapterError
 from services.mcp_execution.native_render_media import load_ffprobe, probe_video_frame_count
 from services.mcp_execution.runner import McpExecutionRunnerV2
-from services.toolchain.mcp_pin import McpPinError
 
 if TYPE_CHECKING:
     from services.creative_plan.ir_models_v2 import TimelineIrV2
@@ -120,7 +119,7 @@ def resolve_executor(  # noqa: PLR0913
             if _probe is not None and _probe is not _probe_live_executor
             else _probe_live_executor
         )
-        raw = _probe_fn(args.pin)
+        raw = _probe_fn()
         live: McpTransportFn = LiveMcpAdapter(
             raw,
             media_paths=media_paths or {},
@@ -129,11 +128,9 @@ def resolve_executor(  # noqa: PLR0913
             render_dir=render_dir,
             frame_diff=frame_diff,  # type: ignore[arg-type]
         )
-        return live, f"live pinned MCP server (pin={args.pin})"  # noqa: TRY300
+        return live, "live vendored MCP server"  # noqa: TRY300
     except Episode0BlockedError as exc:
         raise FinishingError("mcp-server-unreachable", exc.detail) from exc
-    except McpPinError as exc:
-        raise FinishingError("mcp-server-unreachable", str(exc)) from exc
 
 
 def execute_plan(  # noqa: PLR0913

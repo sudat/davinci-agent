@@ -409,10 +409,10 @@ def test_missing_kit_selections_is_typed_blocked(episode_root: Path) -> None:
 def test_live_executor_without_server_blocks_at_the_seam(
     episode_root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def refuse(pin_path: Path) -> object:
+    def refuse() -> object:
         raise Episode0BlockedError(
             "mcp-server-unreachable",
-            f"stubbed probe: pinned MCP server not reachable ({pin_path})",
+            "stubbed probe: vendored MCP server not reachable",
         )
 
     monkeypatch.setattr(_v44_finishing_run, "_probe_live_executor", refuse)
@@ -430,7 +430,7 @@ def test_resolve_executor_live_wraps_with_media_mapping_and_fake_unaffected(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    def fake_probe(pin_path: Path) -> McpTransportFn:
+    def fake_probe() -> McpTransportFn:
         def raw(
             tool_name: str,
             action: str,
@@ -446,7 +446,7 @@ def test_resolve_executor_live_wraps_with_media_mapping_and_fake_unaffected(
 
     monkeypatch.setattr(exec_mod, "_media_frame_counts", lambda paths: {})
 
-    args_live = argparse.Namespace(executor="live", pin=Path("pin.json"))
+    args_live = argparse.Namespace(executor="live")
     dummy_plan = McpExecutionPlanV1.model_construct()
     media_paths = {
         "ep-457dfac97989568e-edit-source": str(tmp_path / "edit-source.mov")
@@ -458,7 +458,7 @@ def test_resolve_executor_live_wraps_with_media_mapping_and_fake_unaffected(
     # fake must stay unwrapped even when mapping is supplied
     sentinel = object()
     monkeypatch.setattr(_v44_finishing_run, "FakePlanExecutor", lambda plan: sentinel)
-    args_fake = argparse.Namespace(executor="fake", pin=Path("pin.json"))
+    args_fake = argparse.Namespace(executor="fake")
     executor2, note2 = _v44_finishing_run.resolve_executor(
         args_fake, dummy_plan, media_paths
     )
@@ -505,9 +505,9 @@ def test_probe_live_executor_forwards_operation_deadline_to_the_request(
         def resolve_get_version(self) -> object:
             return None
 
-    monkeypatch.setattr(episode0, "_live_client_from_pin", lambda _pin: _StubClient())
+    monkeypatch.setattr(episode0, "_live_client_from_defaults", _StubClient)
 
-    executor = episode0._probe_live_executor(Path("pin.json"))
+    executor = episode0._probe_live_executor()
 
     executor(
         "timeline",
@@ -936,7 +936,7 @@ def test_resolve_executor_probes_media_eof_into_the_live_adapter(
     media = tmp_path / "edit-source.mov"
     media.write_bytes(b"stub")
 
-    def fake_probe(pin: Path) -> object:
+    def fake_probe() -> object:
         def raw(*args: object, **kwargs: object) -> object:
             return {"success": True}
 
@@ -949,7 +949,7 @@ def test_resolve_executor_probes_media_eof_into_the_live_adapter(
 
     monkeypatch.setattr(exec_mod, "_media_frame_counts", fake_counts)
 
-    args_live = argparse.Namespace(executor="live", pin=Path("pin.json"))
+    args_live = argparse.Namespace(executor="live")
     dummy_plan = McpExecutionPlanV1.model_construct()
     executor, _note = _v44_finishing_run.resolve_executor(
         args_live, dummy_plan, {"ep-457dfac97989568e-edit-source": str(media)}
@@ -966,7 +966,7 @@ def test_resolve_executor_blocks_typed_when_media_eof_unprobeable(
     media = tmp_path / "edit-source.mov"
     media.write_bytes(b"stub")
 
-    def fake_probe(pin: Path) -> object:
+    def fake_probe() -> object:
         def raw(*args: object, **kwargs: object) -> object:
             return {"success": True}
 
@@ -979,7 +979,7 @@ def test_resolve_executor_blocks_typed_when_media_eof_unprobeable(
 
     monkeypatch.setattr(exec_mod, "_media_frame_counts", broken_counts)
 
-    args_live = argparse.Namespace(executor="live", pin=Path("pin.json"))
+    args_live = argparse.Namespace(executor="live")
     dummy_plan = McpExecutionPlanV1.model_construct()
 
     with pytest.raises(FinishingError) as exc:

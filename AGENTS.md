@@ -79,7 +79,7 @@ Gate V44-0のspikeが失敗したら、原則として次のstepへ進まず、E
 2. **ProposalとCommitの分離**：LLM出力は常にProposal。Schema/Semantic/Lock/Capability Validationを通過したものだけを新Versionとしてコミットする（PRD v4.4 §3.1）。
 3. **決定論的処理はコードへ、LLMは意味判断へ**：時刻変換、尺計算、Constraint solving、Track割当、配置、字幕分割、Build、Retry、検証はコードで書く。LLMは意味判断・候補評価・構成・例外原因の仮説生成に限定する。受け入れ済みの決定は検証後に決定論的に実行する（PRD v4.4 §23）。
 4. **単一Writer**：Resolve ProjectとJob Stateへの書き込みは一系統のみ。複数エージェントの並行mutationを禁止する（PRD v4.4 §3.1）。
-5. **公開された安定面を優先**：公式Scripting API／公開Interchange Format／事前生成Template／通常Media Fileを優先し、内部構造への直接編集をProduction必須経路にしない（v4.1期からの継承原則。MCP pinningとlive probingはPRD v4.4 §3.1が保持を明記）。
+5. **公開された安定面を優先**：公式Scripting API／公開Interchange Format／事前生成Template／通常Media Fileを優先し、内部構造への直接編集をProduction必須経路にしない（v4.1期からの継承原則。vendored MCPサーバとlive probingはPRD v4.4 §3.1が保持を明記。MCPサーバ自体にversion-freezeはしない）。
 6. **不確実性を早く見せる**：重いResolve Buildの前に低解像度Editorial Previewで編集判断を確定させる。real Editorial Preview の取得と自然言語修正からのpartial rebuildはGate V44-1の必須要素（PRD v4.4 §20）。
 7. **機能追加は実素材の失敗から**：想定機能を先回りして作らない。synthetic fixtureの成功は製品が良く編集できる証拠ではない（PRD v4.4 §2.3）。実装済みv4.3資産はまず再利用し、実素材がブロッカーを実測したときだけ修正する（PRD v4.4 §2.5、implementation-plan-v4.4 §3）。
 
@@ -174,7 +174,7 @@ cockpit/          # Episode Cockpit UI（Next.js）
 - Agentへ任意Shell、任意File Write、任意Network Accessを渡さない。Read-only Media Query Toolと検証済みCommand Toolを分離する。
 - APIキー・ライセンス情報・個人情報をログやプロンプトに含めない。
 - Cloudへ送るデータ種別はEpisode Configで明示する。
-- 依存関係・モデル・Adapter・TemplateはVersion Pinし、product-proof runでそのversionを記録する。
+- 依存関係・モデル・Adapter・TemplateはVersion Pinし、product-proof runでそのversionを記録する。ただしvendored MCPサーバはpin対象外とし、checkoutの更新はそのまま取り込む。
 - **撮影素材のgit保護**：ルート `.gitignore` の `private/` 規則により実素材置き場はignore済みである。素材・個人情報を絶対にcommitしないこと。representative episode（`private/reference-episodes/v44-real-01/`）は素材本体をprivate配下に置き、リポジトリへはmanifest・hash・protocolだけをcommitする（implementation-plan-v4.4 §2.4）。
 
 ## 9. 実装時によくある判断基準

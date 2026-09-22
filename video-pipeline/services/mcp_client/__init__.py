@@ -1,4 +1,4 @@
-"""Pinned stdio MCP client with a typed application surface (task 7)."""
+"""Vendored stdio MCP client with a typed application surface."""
 
 from __future__ import annotations
 
@@ -9,6 +9,13 @@ from services.mcp_client.client import (
     McpToolResult,
     ResolveVersionPayload,
 )
+from services.mcp_client.discovery import (
+    EXPECTED_SERVER_NAME,
+    McpServerNameError,
+    ServerHandshake,
+    ServerIdentity,
+    verify_server_name,
+)
 from services.mcp_client.errors import McpClientError
 from services.mcp_client.transport import (
     McpJsonRpcError,
@@ -17,29 +24,22 @@ from services.mcp_client.transport import (
     StdioJsonRpcTransport,
     StdioTransportConfig,
 )
-from services.mcp_client.version_pin import (
-    PINNED_PROVIDER_VERSION,
-    PINNED_SERVER_IDENTITY,
-    McpVersionDriftError,
-    ServerIdentity,
-    verify_server_identity,
-)
 
 __all__ = [
-    "PINNED_PROVIDER_VERSION",
-    "PINNED_SERVER_IDENTITY",
+    "EXPECTED_SERVER_NAME",
     "McpClient",
     "McpClientError",
     "McpJsonRpcError",
+    "McpServerNameError",
     "McpTimeoutError",
     "McpToolCallError",
     "McpToolInfo",
     "McpToolResult",
     "McpTransportError",
-    "McpVersionDriftError",
     "ResolveVersionPayload",
+    "ServerHandshake",
     "ServerIdentity",
     "StdioJsonRpcTransport",
     "StdioTransportConfig",
-    "verify_server_identity",
+    "verify_server_name",
 ]

@@ -1,9 +1,9 @@
 """Live fixture recorder for MCP contract fixtures (task 9/11).
 
 Marked ``mcp_live``: the recording test runs ONLY when pytest selects
-``-m mcp_live`` (task 11, operator environment with Resolve running).
+``-m mcp_live`` (operator environment with Resolve running).
 Normal runs skip with an explicit reason.  When selected, the recorder
-spawns the pinned server via the task-7 transport and is SELF-SUFFICIENT:
+spawns the vendored server via the stdio transport and is SELF-SUFFICIENT:
 it creates its own throwaway project, imports one synthetic clip, and
 places it on a timeline, so recording does not depend on whatever project
 Resolve happens to have open.
@@ -35,13 +35,9 @@ import pytest
 from services.mcp_client.client import McpClient
 from services.mcp_client.ops import McpOps
 from services.mcp_client.ops_models import McpActionOutcome
-from services.mcp_client.transport import StdioJsonRpcTransport, StdioTransportConfig
 from services.qa.parity_mcp import generate_parity_media
-from services.toolchain.mcp_pin import load_mcp_pin
 
 FIXTURES_DIR: Final = Path(__file__).resolve().parent / "fixtures"
-VIDEO_PIPELINE_ROOT: Final = Path(__file__).resolve().parents[2]
-PIN_PATH: Final = VIDEO_PIPELINE_ROOT / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
 RECORDING_META: Final = ".recording-meta.json"
 
 PLANNED_FIXTURES: Final = frozenset(
@@ -185,10 +181,8 @@ def _utc_now() -> str:
 
 
 def _record_all() -> None:
-    """Spawn the pinned server, run the recording flow, overwrite the fixtures."""
-    pin = load_mcp_pin(PIN_PATH)
-    config = StdioTransportConfig.from_pin(pin)
-    client = McpClient(StdioJsonRpcTransport(config))
+    """Spawn the vendored server, run the recording flow, overwrite the fixtures."""
+    client = McpClient.from_defaults()
     media_dir = Path(tempfile.mkdtemp(prefix="v43-record-media-"))
     project_name = f"v43-fixture-rec-{time.strftime('%H%M%S')}"
     try:

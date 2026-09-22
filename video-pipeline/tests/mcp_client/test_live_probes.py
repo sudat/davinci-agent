@@ -39,10 +39,10 @@ from tests.mcp_client.live_support import (
     open_live_session,
     run_probe,
     standard_visual_from_manifest,
+    vendor_head,
     write_matrix_and_snapshot,
 )
 
-PIN_PATH: Final = VIDEO_PIPELINE_ROOT / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
 VENDOR_DRX: Final = (
     VIDEO_PIPELINE_ROOT.parent
     / "private/vendor/davinci-resolve-mcp/resolve-advanced/test/fixtures/node-color-blue.drx"
@@ -642,7 +642,7 @@ def test_live_capability_probes_fill_matrix_and_snapshot(
     snapshot_path = write_matrix_and_snapshot(
         logs,
         provider_version=EXPECTED_PROVIDER_VERSION,
-        pin_commit=json.loads(PIN_PATH.read_bytes())["commit"],
+        pin_commit=vendor_head(),
         server_mode="compound",
         resolve_build=live.resolve_version_string,
     )

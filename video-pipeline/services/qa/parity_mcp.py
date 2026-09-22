@@ -3,7 +3,7 @@
 Registered as the ``"mcp``" backend in :mod:`services.qa.parity_harness`
 (task 11).  The builder generates real placeholder media (tiny ffmpeg
 ``testsrc2`` MP4s under the system temp dir — never the repo, never
-``private/reference-episodes``), drives the pinned server through the typed
+``private/reference-episodes``), drives the vendored server through the typed
 ops surface (project create → frame-rate setting → media import → exact
 source-range placement at absolute record frames → structure readback →
 render settings readback), and derives the SAME six-field parity structure
@@ -38,17 +38,12 @@ from typing import TYPE_CHECKING, Final
 from services.mcp_client.client import McpClient
 from services.mcp_client.ops import McpOps
 from services.mcp_client.ops_models import McpActionOutcome, StructureItem, StructureSnapshot
-from services.mcp_client.transport import StdioJsonRpcTransport, StdioTransportConfig
-from services.toolchain.mcp_pin import load_mcp_pin
 
 if TYPE_CHECKING:
     from services.contracts.timeline_ir import TimelineIrProduction
     from services.toolchain.render_qc import RenderPreset
 
 FRAME_ORIGIN: Final = 108000
-PIN_PATH: Final = (
-    Path(__file__).resolve().parents[2] / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
-)
 MEDIA_RATE: Final = 30
 MEDIA_DURATION_SECONDS: Final = 5
 MEDIA_FREQUENCY_BY_SOURCE: Final = {
@@ -269,8 +264,7 @@ def build_mcp_parity_structure(ir: TimelineIrProduction) -> dict[str, object]:
         raise TypeError(f"parity harness requires phase-2 lock at {lock_path}")
     preset = lock.render_qc.preset
 
-    pin = load_mcp_pin(PIN_PATH)
-    client = McpClient(StdioJsonRpcTransport(StdioTransportConfig.from_pin(pin)))
+    client = McpClient.from_defaults()
     with tempfile.TemporaryDirectory(prefix="parity-mcp-media-") as tmp:
         media = generate_parity_media(Path(tmp))
         project_name = f"parity-mcp-{time.strftime('%H%M%S')}"

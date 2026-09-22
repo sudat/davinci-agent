@@ -1,10 +1,11 @@
-"""Stdio JSON-RPC probe transport for the pinned davinci-resolve-mcp server.
+"""Stdio JSON-RPC probe transport for the vendored davinci-resolve-mcp server.
 
-Owns the process lifecycle concerns of one probe session: spawn the pinned
-entry point in its own process group with update checks disabled, send a
-JSON-RPC ``initialize``, then (only once the server answers) a
-``tools/call`` Resolve-version probe, reading LF-delimited replies under a
-hard deadline, and always tear the process group down afterwards.
+Owns the process lifecycle concerns of one probe session: spawn the
+vendored entry point in its own process group with update checks disabled,
+send a JSON-RPC ``initialize``, then (only once the server answers) a
+``tools/list`` capture and one ``tools/call`` Resolve-version probe,
+reading LF-delimited replies under a hard deadline, and always tear the
+process group down afterwards.
 """
 
 from __future__ import annotations
@@ -32,9 +33,10 @@ PROBE_ENV: Final = {
 
 @dataclass(frozen=True, slots=True)
 class StdioProbe:
-    """One probe session's observation; ``failure`` is "" when both replies arrived."""
+    """One probe session's observation; ``failure`` is "" when init answered."""
 
     initialize_response: JSONRPCMessage | None
+    tools_response: JSONRPCMessage | None
     resolve_response: JSONRPCMessage | None
     failure: Literal["", "exit", "timeout"]
     exit_code: int | None
@@ -97,7 +99,7 @@ def probe_stdio_server(
     resolve_tool: str,
     resolve_arguments: Mapping[str, object],
 ) -> StdioProbe:
-    """Send ``initialize`` then one Resolve-version tool call over stdio."""
+    """Send ``initialize``, then ``tools/list``, then one Resolve tool call."""
     env = {**os.environ, **PROBE_ENV}
     proc = subprocess.Popen(
         command,
@@ -112,7 +114,7 @@ def probe_stdio_server(
     stdout_pipe = proc.stdout
     if stdin_pipe is None or stdout_pipe is None:
         stop_process_group(proc)
-        return StdioProbe(None, None, "exit", proc.returncode, timeout_seconds)
+        return StdioProbe(None, None, None, "exit", proc.returncode, timeout_seconds)
     initialize_request = _request(
         "initialize",
         1,
@@ -130,14 +132,24 @@ def probe_stdio_server(
             failure: Literal["exit", "timeout"] = (
                 "exit" if proc.poll() is not None else "timeout"
             )
-            return StdioProbe(None, None, failure, proc.returncode, timeout_seconds)
+            return StdioProbe(None, None, None, failure, proc.returncode, timeout_seconds)
+        stdin_pipe.write(json.dumps(_request("tools/list", 2, {})).encode("utf-8") + b"\n")
+        stdin_pipe.flush()
+        tools_response = read_jsonrpc_line(stdout_pipe, time.monotonic() + timeout_seconds)
         resolve_request = _request(
-            "tools/call", 2, {"name": resolve_tool, "arguments": dict(resolve_arguments)}
+            "tools/call", 3, {"name": resolve_tool, "arguments": dict(resolve_arguments)}
         )
         stdin_pipe.write(json.dumps(resolve_request).encode("utf-8") + b"\n")
         stdin_pipe.flush()
         resolve_response = read_jsonrpc_line(stdout_pipe, time.monotonic() + timeout_seconds)
-        return StdioProbe(initialize_response, resolve_response or None, "", None, timeout_seconds)
+        return StdioProbe(
+            initialize_response,
+            tools_response or None,
+            resolve_response or None,
+            "",
+            None,
+            timeout_seconds,
+        )
     finally:
         stdin_pipe.close()
         stop_process_group(proc)

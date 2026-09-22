@@ -54,9 +54,10 @@ Run every command from `video-pipeline/` (the pipeline root). 実コマンド例
    仕上げプランなし＝`blocked`（品質ゲート却下）になる。** 公開可能判定を取るには
    3ドメインすべてでレシピを選ぶこと。意図的にスキップする場合は、その理由を後述の
    `record-publishability --dimension-comments` に残すこと。
-6. **Resolve + ピン留め MCP サーバ**: DaVinci Resolve Studio を起動し、ピン留め
-   `davinci-resolve-mcp` サーバ（`config/toolchains/davinci-resolve-mcp.pin.json`）を
-   利用可能にしておく（`--executor live` は起動時に接続を試み、失敗なら
+6. **Resolve + vendored MCP サーバ**: DaVinci Resolve Studio を起動し、vendored
+   `davinci-resolve-mcp` サーバ（`private/vendor/davinci-resolve-mcp` の checkout
+   をそのまま利用。pin ファイルなし、version-freeze なし）を利用可能にしておく
+   （`--executor live` は起動時に接続を試み、失敗なら
    `mcp-server-unreachable` で即ブロック。ハングしない）。
 7. **単一ライターの注意**: この CLI は手動実行サーフェスで、runner.lock を取らない。
    Cockpit の runner（初回パイプライン/部分リビルド）が同じエピソードで動いていないことを

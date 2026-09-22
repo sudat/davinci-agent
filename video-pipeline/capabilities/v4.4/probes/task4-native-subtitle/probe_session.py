@@ -1,7 +1,7 @@
 # noqa: INP001 (evidence tree is not an importable package by design)
 """Live session bootstrap and committed-cue fixtures for the Task 4 probe.
 
-Importing this module loads the live client stack (pinned MCP client,
+Importing this module loads the live client stack (vendored MCP client,
 recorder, parity media) — only the live run pulls it in. The committed
 cues below are the exact text/timing contract the native subtitle mutation
 must reproduce; ``params_for`` shapes them into the product payload.
@@ -17,9 +17,7 @@ from evidence_io import SCRATCH
 from services.mcp_client.call_models import McpCallRecorder
 from services.mcp_client.client import McpClient
 from services.mcp_client.ops import McpOps
-from services.mcp_client.transport import StdioJsonRpcTransport, StdioTransportConfig
 from services.qa.parity_mcp import generate_parity_media
-from services.toolchain.mcp_pin import load_mcp_pin
 
 if TYPE_CHECKING:
     from live_support import LiveSession
@@ -47,9 +45,7 @@ ProbeState = dict[str, Any]
 
 
 def open_session() -> LiveSession:
-    pin = load_mcp_pin(live_support.PIN_PATH)
-    config = StdioTransportConfig.from_pin(pin, request_timeout_seconds=60.0)
-    client = McpClient(StdioJsonRpcTransport(config))
+    client = McpClient.from_defaults(request_timeout_seconds=60.0)
     client.connect()
     media = generate_parity_media(SCRATCH)
     version = client.resolve_get_version()
@@ -64,7 +60,7 @@ def open_session() -> LiveSession:
     recorder = McpCallRecorder(
         provider_version=version.mcp.version,
         resolve_version=version.version_string,
-        server_mode=pin.server_mode,
+        server_mode="compound",
     )
     client._call_tool = live_support._CapturingCallTool(client._call_tool, session, recorder)  # noqa: SLF001 (evidence capture seam: the recorder must wrap the client's private call hook to ledger every vendor call)
     return session

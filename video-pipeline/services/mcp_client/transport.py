@@ -1,13 +1,13 @@
-"""Stdio JSON-RPC 2.0 transport for the pinned MCP server subprocess.
+"""Stdio JSON-RPC 2.0 transport for the vendored MCP server subprocess.
 
-Lifecycle lessons inherited from ``services/cli/mcp_probe.py`` (task 2):
-spawn in its own session (process group), read only under an explicit
-deadline, and tear the whole group down SIGTERM->SIGKILL with pipes closed
-in ``finally`` (``filterwarnings = ["error"]`` turns GC'd unclosed pipes
-into test failures). Unlike the probe this transport is parameterized:
-command, cwd, and env come from :class:`StdioTransportConfig` — buildable
-from the pin contract via :meth:`StdioTransportConfig.from_pin` — never
-hardwired to mcp-doctor.
+Lifecycle lessons inherited from ``services/cli/mcp_probe.py``: spawn in its
+own session (process group), read only under an explicit deadline, and tear
+the whole group down SIGTERM->SIGKILL with pipes closed in ``finally``
+(``filterwarnings = ["error"]`` turns GC'd unclosed pipes into test
+failures). Unlike the probe this transport is parameterized: command, cwd,
+and env come from :class:`StdioTransportConfig` — buildable for the vendored
+checkout via :meth:`StdioTransportConfig.from_defaults` — never hardwired to
+mcp-doctor.
 """
 
 from __future__ import annotations
@@ -25,8 +25,6 @@ from services.mcp_client.errors import McpJsonRpcError, McpTimeoutError, McpTran
 from services.mcp_client.transport_config import (
     DEFAULT_KILL_GRACE_SECONDS,
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    DEFAULT_SURFACE_COVERAGE_DIR,
-    PinSurfaceContext,
     StdioTransportConfig,
 )
 
@@ -53,7 +51,7 @@ class StdioJsonRpcTransport:
 
     @property
     def config(self) -> StdioTransportConfig:
-        """The launch spec (including any pin surface context) this transport owns."""
+        """The launch spec this transport owns."""
         return self._config
 
     @property
@@ -234,12 +232,10 @@ class StdioJsonRpcTransport:
 __all__ = [
     "DEFAULT_KILL_GRACE_SECONDS",
     "DEFAULT_REQUEST_TIMEOUT_SECONDS",
-    "DEFAULT_SURFACE_COVERAGE_DIR",
     "JSONRPCMessage",
     "McpJsonRpcError",
     "McpTimeoutError",
     "McpTransportError",
-    "PinSurfaceContext",
     "StdioJsonRpcTransport",
     "StdioTransportConfig",
 ]

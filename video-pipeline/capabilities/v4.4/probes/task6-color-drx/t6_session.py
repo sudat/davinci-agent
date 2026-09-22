@@ -1,7 +1,7 @@
 # noqa: INP001 (evidence tree is not an importable package by design)
 """Task 6 live-probe session bootstrap + calibrated synthetic media.
 
-Imports the live client stack (pinned MCP client, recorder, product
+Imports the live client stack (vendored MCP client, recorder, product
 adapter, pinned QC tools); only the live run pulls this module in.
 """
 
@@ -21,7 +21,6 @@ VIDEO_PIPELINE = EVIDENCE.parents[3]
 SCRATCH = EVIDENCE / ".scratch"
 RENDER_DIR = EVIDENCE / "render"
 LEDGER_DIR = EVIDENCE / "ledger"
-PIN_PATH = VIDEO_PIPELINE / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
 
 #: Per-run disposable project: a stale prior run can never be resumed.
 RUN_TOKEN = uuid4().hex[:6]
@@ -79,21 +78,14 @@ def open_session() -> ProbeState:
         append_call_record,
     )
     from services.mcp_client.client import McpClient  # noqa: PLC0415 (post-bootstrap)
-    from services.mcp_client.transport import (  # noqa: PLC0415 (post-bootstrap)
-        StdioJsonRpcTransport,
-        StdioTransportConfig,
-    )
-    from services.toolchain.mcp_pin import load_mcp_pin  # noqa: PLC0415 (post-bootstrap)
 
-    pin = load_mcp_pin(PIN_PATH)
-    config = StdioTransportConfig.from_pin(pin, request_timeout_seconds=60.0)
-    client = McpClient(StdioJsonRpcTransport(config))
+    client = McpClient.from_defaults(request_timeout_seconds=60.0)
     client.connect()
     version = client.resolve_get_version()
     recorder = McpCallRecorder(
         provider_version=version.mcp.version,
         resolve_version=version.version_string,
-        server_mode=pin.server_mode,
+        server_mode="compound",
     )
     original_call_tool = client._call_tool  # noqa: SLF001 (evidence capture seam)
 
@@ -147,7 +139,6 @@ def scrub_repo_prefixes() -> None:
 __all__ = [
     "EVIDENCE",
     "LEDGER_DIR",
-    "PIN_PATH",
     "PROJECT_NAME",
     "RENDER_DIR",
     "RUN_TOKEN",

@@ -31,12 +31,7 @@ import live_support  # noqa: E402 (path bootstrap must precede imports)
 from services.mcp_client.call_models import McpCallRecorder  # noqa: E402
 from services.mcp_client.client import McpClient  # noqa: E402
 from services.mcp_client.ops import McpOps  # noqa: E402
-from services.mcp_client.transport import (  # noqa: E402
-    StdioJsonRpcTransport,
-    StdioTransportConfig,
-)
 from services.qa.parity_mcp import generate_parity_media  # noqa: E402
-from services.toolchain.mcp_pin import load_mcp_pin  # noqa: E402
 
 if TYPE_CHECKING:
     from live_support import LiveSession
@@ -69,9 +64,7 @@ def must(payload: dict[str, object], label: str) -> dict[str, object]:
 
 
 def open_session() -> LiveSession:
-    pin = load_mcp_pin(live_support.PIN_PATH)
-    config = StdioTransportConfig.from_pin(pin, request_timeout_seconds=60.0)
-    client = McpClient(StdioJsonRpcTransport(config))
+    client = McpClient.from_defaults(request_timeout_seconds=60.0)
     client.connect()
     media = generate_parity_media(Path(tempfile.gettempdir()) / f"t4font-{int(time.time())}")
     version = client.resolve_get_version()
@@ -86,7 +79,7 @@ def open_session() -> LiveSession:
     recorder = McpCallRecorder(
         provider_version=version.mcp.version,
         resolve_version=version.version_string,
-        server_mode=pin.server_mode,
+        server_mode="compound",
     )
     client._call_tool = live_support._CapturingCallTool(client._call_tool, session, recorder)  # noqa: SLF001 (evidence capture seam: the recorder wraps the client's private call hook to ledger every vendor call)
     return session

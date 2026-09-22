@@ -1,12 +1,12 @@
 # noqa: INP001 (evidence tree is not an importable package by design)
 """Live wiring for the disposable auto-caption probe (loaded only for runs).
 
-Owns the pinned MCP session — ``McpClient.from_pin`` with the 900 s bound,
-the existing ``McpCallRecorder`` ledger seam (digests only, ledger under
-the private run dir), raw step capture, and the EXPLICIT ``close`` — plus
-the one-shot ``live_run`` that drives ``run_flow`` and disposes (cleanup
-first, close last) in a ``finally`` on every path. Importing this module
-pulls in the live client stack.
+Owns the vendored MCP session — ``McpClient.from_defaults`` with the 900 s
+bound, the existing ``McpCallRecorder`` ledger seam (digests only, ledger
+under the private run dir), raw step capture, and the EXPLICIT ``close`` —
+plus the one-shot ``live_run`` that drives ``run_flow`` and disposes
+(cleanup first, close last) in a ``finally`` on every path. Importing this
+module pulls in the live client stack.
 """
 
 from __future__ import annotations
@@ -45,14 +45,13 @@ from probe_seam import (  # noqa: E402 (path bootstrap first)
     project_name_for,
 )
 
-PIN_PATH = VIDEO_PIPELINE / "config" / "toolchains" / "davinci-resolve-mcp.pin.json"
 ASR_RUN_DIR = (REPO / "private" / "reference-episodes" / "v44-real-01" / "runs"
                / "probe-system-asr-r1")
 PRIVATE_RUNS_DIR = REPO / "private" / "reference-episodes" / "v44-real-01" / "runs"
 
 
 class LiveSession:
-    """Pinned MCP client + recorder seam; ``close`` is explicit and idempotent."""
+    """Vendored MCP client + recorder seam; ``close`` is explicit and idempotent."""
 
     def __init__(self, client: McpClient, recorder: McpCallRecorder,
                  ledger_dir: Path, identity: dict[str, object]) -> None:
@@ -113,13 +112,11 @@ class LiveSession:
 
 
 def open_live_session(run_dir: Path) -> LiveSession:
-    """Connect the pinned MCP server and arm the recorder seam."""
+    """Connect the vendored MCP server and arm the recorder seam."""
     from services.mcp_client.call_models import McpCallRecorder  # noqa: PLC0415 (live-only)
     from services.mcp_client.client import McpClient  # noqa: PLC0415 (live-only)
-    from services.toolchain.mcp_pin import load_mcp_pin  # noqa: PLC0415 (live-only)
 
-    pin = load_mcp_pin(PIN_PATH)
-    client = McpClient.from_pin(PIN_PATH, request_timeout_seconds=GENERATE_TIMEOUT_S)
+    client = McpClient.from_defaults(request_timeout_seconds=GENERATE_TIMEOUT_S)
     client.connect()
     try:
         version = client.resolve_get_version()
@@ -129,11 +126,11 @@ def open_live_session(run_dir: Path) -> LiveSession:
     recorder = McpCallRecorder(
         provider_version=version.mcp.version,
         resolve_version=version.version_string,
-        server_mode=pin.server_mode)
+        server_mode="compound")
     identity: dict[str, object] = {
         "resolve_version": version.version_string,
         "mcp_version": version.mcp.version,
-        "pin_commit": pin.commit, "server_mode": pin.server_mode}
+        "server_mode": "compound"}
     return LiveSession(client, recorder, run_dir / "ledger", identity)
 
 
