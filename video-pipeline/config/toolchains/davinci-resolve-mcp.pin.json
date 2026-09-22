@@ -1,7 +1,7 @@
 {
   "schema_version": "mcp-pin-v1",
   "source_url": "https://github.com/samuelgursky/davinci-resolve-mcp",
-  "commit": "c8fbe1887324de9d897e6036efcde60417e33e8c",
+  "commit": "52430524f39b6021351dd81f733651528246d7dc",
   "server_mode": "compound",
   "server_entry_point": "src/server.py",
   "server_protocol": "stdio",
@@ -20,5 +20,5 @@
     "enabled": false,
     "mechanism": "install.py --update-policy never persists update_mode=never in <clone>/logs/update-check.json; DAVINCI_RESOLVE_MCP_UPDATE_CHECK=0 exported during install and by every mcp-doctor server spawn"
   },
-  "pinned_date": "2026-09-12T05:38:03Z"
+  "pinned_date": "2026-09-22T00:21:29Z"
 }

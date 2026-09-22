@@ -23,6 +23,7 @@ from typing import Final
 
 from services.foundation_io import atomic_write
 from services.mcp_client.discovery import McpDiscoveryClient
+from services.mcp_client.version_pin import PINNED_PROVIDER_VERSION
 from services.release.manifest import MANIFEST_NAME, build_manifest, manifest_bytes
 from services.toolchain.mcp_coverage import (
     LiveTool,
@@ -32,7 +33,6 @@ from services.toolchain.mcp_coverage import (
     inventory_bytes,
     inventory_sha256,
 )
-from services.toolchain.mcp_fit import EXPECTED_PROVIDER_VERSION
 from services.toolchain.mcp_pin import McpPinError, load_mcp_pin
 from services.toolchain.mcp_vendor_surface import (
     VendorSurfaceError,
@@ -116,11 +116,11 @@ def generate_inventory(pin_path: Path, clone_dir: Path) -> tuple[bytes, str]:
         surface = parse_vendor_surface(clone_dir)
     except VendorSurfaceError as exc:
         raise InventoryCommandError(exc.code, exc.detail) from exc
-    if surface.provider_version != EXPECTED_PROVIDER_VERSION:
+    if surface.provider_version != PINNED_PROVIDER_VERSION:
         raise InventoryCommandError(
             "provider-version-mismatch",
             f"vendor VERSION {surface.provider_version} != expected"
-            f" {EXPECTED_PROVIDER_VERSION}",
+            f" {PINNED_PROVIDER_VERSION}",
         )
     _check_advanced(clone_dir, advanced_enabled=pin.advanced_server.enabled)
     handshake, live_tools = capture_live_tools(pin_path, clone_dir)

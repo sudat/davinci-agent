@@ -6,13 +6,16 @@ After ``initialize`` the client compares the server's reported identity
 
 Two distinct version surfaces (live-verified against the pinned deployment):
 
-- ``serverInfo.version`` is the ``mcp`` library version frozen in the pinned
-  venv (``1.30.0``) — FastMCP advertises the library version, NOT the
-  provider's own VERSION constant. This is what the handshake can check.
-- the provider version ``3.2.0`` is the vendored ``src/server.py``
-  ``VERSION`` constant (the capability fit matrix's ``provider_version``);
-  it is carried as :data:`PINNED_PROVIDER_VERSION` for downstream execution
-  call artifacts (task 8+), not for the handshake check.
+- ``serverInfo.version`` is the provider's own ``VERSION`` constant
+  (``4.8.15``) — since vendor v4.7.6 FastMCP instances set
+  ``_mcp_server.version = VERSION``, so the handshake now reports the
+  provider version, NOT the ``mcp`` library version. This is what the
+  handshake checks.
+- the provider version ``4.8.15`` is the vendored ``src/server.py``
+  ``VERSION`` constant; it is carried as :data:`PINNED_PROVIDER_VERSION`
+  for downstream execution call artifacts (task 8+), not for the handshake
+  check. It is decoupled from the capability fit matrix's
+  ``provider_version``: the fit matrix remains evidence measured at 3.2.0.
 """
 
 from __future__ import annotations
@@ -23,7 +26,6 @@ from pydantic import ConfigDict, Field, ValidationError
 
 from services.contracts.primitives import StrictModel
 from services.mcp_client.errors import McpClientError
-from services.toolchain.mcp_fit import EXPECTED_PROVIDER_VERSION
 
 
 class ServerIdentity(StrictModel):
@@ -45,8 +47,9 @@ class ServerHandshake(StrictModel):
 
 
 PINNED_SERVER_NAME: Final = "DaVinciResolveMCP"
-PINNED_HANDSHAKE_VERSION: Final = "1.30.0"
-PINNED_PROVIDER_VERSION: Final = EXPECTED_PROVIDER_VERSION
+PINNED_HANDSHAKE_VERSION: Final = "4.8.15"
+#: Deployed provider version; the fit matrix remains evidence measured at 3.2.0.
+PINNED_PROVIDER_VERSION: Final = "4.8.15"
 PINNED_SERVER_IDENTITY: Final[ServerIdentity] = ServerIdentity(
     name=PINNED_SERVER_NAME, version=PINNED_HANDSHAKE_VERSION
 )

@@ -68,7 +68,7 @@ for _line in _sys.stdin:
         _send({{"jsonrpc": "2.0", "id": _rid, "result": {{
             "protocolVersion": "2024-11-05",
             "capabilities": {{"tools": {{}}}},
-            "serverInfo": {{"name": "DaVinciResolveMCP", "version": "1.30.0"}},
+            "serverInfo": {{"name": "DaVinciResolveMCP", "version": "4.8.15"}},
         }}}})
     elif _method == "tools/list":
         _send({{"jsonrpc": "2.0", "id": _rid, "result": {{"tools": _TOOLS}}}})

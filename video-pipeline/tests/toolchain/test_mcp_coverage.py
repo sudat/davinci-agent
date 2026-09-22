@@ -5,7 +5,7 @@ spawn): a mini ``src/server.py`` with the real registration shapes (``_unknown``
 registries, module-level action lists with starred spreads, dispatch-chain-only
 tools, duplicate action entries, the annotations classifier, the confirm-token
 set), granular modules, and a ``docs/kernels/README.md`` catalog — all sized to
-the pinned drift guards (35 / 353 / 136) so drift fixtures can mutate one knob
+the pinned drift guards (37 / 389 / 136) so drift fixtures can mutate one knob
 at a time. Typed failures are asserted by error code, never by silent skips.
 """
 
@@ -77,7 +77,7 @@ from services.toolchain.mcp_vendor_surface import (
     parse_vendor_surface,
 )
 
-COMMIT = "c8fbe1887324de9d897e6036efcde60417e33e8c"
+COMMIT = "52430524f39b6021351dd81f733651528246d7dc"
 OTHER_SHA = "1111111111111111111111111111111111111111"
 
 SERVER_TEMPLATE = """\
@@ -498,7 +498,7 @@ def test_generation_code_issues_no_tool_calls() -> None:
 
 
 def test_committed_inventory_exists_and_matches_drift_guards() -> None:
-    """The committed real inventory carries the pinned 35/353/136 counts."""
+    """The committed real inventory carries the pinned 37/389/136 counts."""
     inventory_path = (
         Path(__file__).resolve().parents[2] / "capabilities" / "mcp-coverage" / "inventory.json"
     )
@@ -512,7 +512,7 @@ def test_committed_inventory_exists_and_matches_drift_guards() -> None:
         "kernel_actions": EXPECTED_KERNEL_ACTIONS,
     }
     assert payload["pin"]["commit"] == COMMIT
-    assert payload["pin"]["provider_version"] == "3.2.0"
+    assert payload["pin"]["provider_version"] == "4.8.15"
     assert payload["pin"]["server_mode"] == "compound"
 
 
@@ -1173,10 +1173,10 @@ def test_committed_dispositions_validate_in_rollout_mode() -> None:
     if not REAL_DISPOSITIONS.is_file():  # pragma: no cover - generation ran first
         pytest.skip("dispositions not generated yet")
     report = validate_dispositions_files(REAL_INVENTORY, REAL_DISPOSITIONS)
-    assert report.total_operations == 1090
+    assert report.total_operations == 1101
     assert report.mapped == REAL_MAPPED
-    assert report.deferred == 1090 - REAL_MAPPED
-    assert report.coverage == REAL_MAPPED / 1090
+    assert report.deferred == 1101 - REAL_MAPPED
+    assert report.coverage == REAL_MAPPED / 1101
     assert report.unmapped == 0
     assert report.refused_vendor_supported == 0
     assert len(report.deferred_by_domain) == 39
@@ -1193,7 +1193,7 @@ def test_strict_mode_fails_today_because_deferred_rows_remain() -> None:
     with pytest.raises(DispositionsParityError) as excinfo:
         validate_dispositions_files(REAL_INVENTORY, REAL_DISPOSITIONS, strict=True)
     assert excinfo.value.code == "parity-deferred-remaining"
-    assert str(1090 - REAL_MAPPED) in excinfo.value.detail
+    assert str(1101 - REAL_MAPPED) in excinfo.value.detail
     assert "timeline" in excinfo.value.detail
 
 

@@ -17,7 +17,7 @@ from services.contracts.primitives import Sha256, StrictModel
 
 INVENTORY_SCHEMA: Final = "mcp-inventory-v1"
 EXPECTED_COMPOUND_TOOLS: Final = 37
-EXPECTED_GRANULAR_TOOLS: Final = 384
+EXPECTED_GRANULAR_TOOLS: Final = 389
 EXPECTED_KERNEL_ACTIONS: Final = 136
 
 

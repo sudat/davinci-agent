@@ -57,7 +57,7 @@ RECORDED_FIXTURES: Final = (
     DEEP_SHOT_ANALYSIS_RECORDED,
 )
 
-# The pinned compound server (davinci-resolve-mcp 2.207.0) tools/list roster,
+# The pinned compound server (davinci-resolve-mcp 4.8.15) tools/list roster,
 # recorded live by the task-11 recorder.  A roster change means a server
 # version change: re-record and update this tuple together with the pin.
 PINNED_SERVER_TOOLS: Final = (
@@ -70,7 +70,9 @@ PINNED_SERVER_TOOLS: Final = (
     "gallery",
     "gallery_stills",
     "graph",
+    "knowledge",
     "layout_presets",
+    "lut",
     "media_analysis",
     "media_pool",
     "media_pool_item",
@@ -158,7 +160,7 @@ def test_server_info_fixture_round_trips() -> None:
     payload = _load_fixture(SERVER_INFO)
     identity = normalize_server_info(payload)
     assert identity.name == "DaVinciResolveMCP"
-    assert identity.version == "1.30.0"
+    assert identity.version == "4.8.15"
     _assert_round_trip(normalize_server_info, payload, identity)
 
 

@@ -25,7 +25,7 @@ import sys
 import time
 
 SERVER_NAME = os.environ.get("FAKE_MCP_SERVER_NAME", "DaVinciResolveMCP")
-SERVER_VERSION = os.environ.get("FAKE_MCP_SERVER_VERSION", "1.30.0")
+SERVER_VERSION = os.environ.get("FAKE_MCP_SERVER_VERSION", "4.8.15")
 TOOL_DELAY_SECONDS = float(os.environ.get("FAKE_MCP_DELAY_SECONDS", "0"))
 
 CANNED_TOOLS = [
